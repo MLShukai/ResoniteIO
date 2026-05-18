@@ -8,6 +8,8 @@ using BepInExResoniteShim;
 using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
+using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Loading;
 using ResoniteIO.Logging;
@@ -39,7 +41,16 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private CancellationTokenSource? _hostCts;
     private SessionHost? _sessionHost;
     private FrooxEngineSessionBridge? _sessionBridge;
-    private FrooxEngineCameraBridge? _cameraBridge;
+
+    // Camera v2: PushedFrameCameraBridge (Channel<CameraFrame>) + RendererFrameInterprocessReceiver
+    // (Wine renderer プロセスからの InterprocessLib push 受信)。型は IF に緩めて v1
+    // 退避ルートも温存する (FrooxEngineCameraBridge.cs はファイルとして残置、C11 で削除予定)。
+    private ICameraBridge? _cameraBridge;
+    private RendererFrameInterprocessReceiver? _frameReceiver;
+
+    // Display: engine 側 Settings 書き込み Bridge (C7)。SessionHost が DI に取り、
+    // DisplayService.Apply / Get の実装を提供する。
+    private IDisplayBridge? _displayBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -82,12 +93,29 @@ public sealed class ResoniteIOPlugin : BasePlugin
             // plugin folder 同梱の Core.dll / Google.Protobuf.dll が優先される。
             _logSink = new BepInExLogSink(Log);
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
-            _cameraBridge = new FrooxEngineCameraBridge(Engine.Current, _logSink);
+
+            // Camera v2 配線:
+            //   renderer plugin (別プロセス)
+            //     → InterprocessLib queue
+            //       → RendererFrameInterprocessReceiver (engine 側、本 Plugin で構築)
+            //         → PushedFrameCameraBridge.Push (Channel<CameraFrame>, latest-wins)
+            //           → CameraService.StreamFrames (任意スレッドから pull)
+            // v1 (FrooxEngineCameraBridge) ファイルは repo に残し、Wave 5 で E1 が
+            // 失敗したときに一時的に再 wire できる退避ルートとする (C11 で削除予定)。
+            var pushedBridge = new PushedFrameCameraBridge();
+            _cameraBridge = pushedBridge;
+            _frameReceiver = new RendererFrameInterprocessReceiver(pushedBridge, _logSink);
+            _frameReceiver.Start();
+
+            // Display: engine 側 Settings 書き込み Bridge (C7)。
+            _displayBridge = new FrooxEngineDisplayBridge(_logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
                 _sessionBridge,
-                _cameraBridge
+                _cameraBridge,
+                _displayBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -100,11 +128,22 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        // Camera Slot の Destroy は engine がまだ生きているうちに済ませる必要があるので
-        // Session host より先に dispose する。
+        // Dispose 順 (v2): Receiver → CameraBridge → SessionBridge → SessionHost。
+        //   - Receiver を先に止めないと残 frame が dead bridge に push される
+        //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し、
+        //     pending な CameraService.StreamFrames を CameraNotReadyException で抜けさせる
+        //   - SessionBridge は engine API (FocusedWorld 等) を読むだけなので engine
+        //     生存中に dispose しておくのが安全
+        //   - SessionHost.Dispose は Kestrel 停止 + UDS unlink まで含む
         try
         {
-            _cameraBridge?.Dispose();
+            _frameReceiver?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            (_cameraBridge as IDisposable)?.Dispose();
         }
         catch { }
 
@@ -113,6 +152,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
             _sessionBridge?.Dispose();
         }
         catch { }
+
+        // _displayBridge は engine API 直叩きで IDisposable 実装無し。明示 dispose 不要。
 
         try
         {
