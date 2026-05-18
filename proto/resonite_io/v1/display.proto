@@ -1,0 +1,40 @@
+// Display service: Renderite renderer 側の display 設定 (解像度 / fps 上限) を
+// engine 経由で読み書きする副産物の modality。
+//
+// Camera v2 (Renderite framebuffer 直取り) で実測する fps は Renderite の
+// `Application.targetFrameRate` (engine 側で設定) に頭打ちされる。本 service は
+// engine 側からその値を制御する gRPC API を提供し、Python 側で
+// `max_fps_foreground=120` のように上限を上げて Camera を 60fps で取り回す。
+//
+// "0 = 変更しない" のセマンティクスを採用する: Apply のフィールドが 0 / 空のとき
+// engine 側は当該フィールドを skip し、適用後の DisplayState 返値は engine 内の
+// 実際の値 (skip された field を含む) を返す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// Apply で渡す設定値。0 / 空はサーバ側で「変更しない」と解釈される。
+message DisplayConfig {
+  // 0 なら変更しない。1 以上は新しい renderer 解像度の希望値。
+  uint32 width = 1;
+  uint32 height = 2;
+  // 0.0 なら変更しない。1.0 以上は新しい Application.targetFrameRate。
+  float max_fps = 3;
+}
+
+// Get の placeholder request (将来 fields 追加に備える)。
+message DisplayGetRequest {}
+
+// engine 側で実際に適用された後の現値。
+message DisplayState {
+  uint32 width = 1;
+  uint32 height = 2;
+  float max_fps = 3;
+}
+
+service Display {
+  rpc Apply(DisplayConfig) returns (DisplayState);
+  rpc Get(DisplayGetRequest) returns (DisplayState);
+}

@@ -1,0 +1,141 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ResoniteIO.Renderer: Renderite.Renderer.exe (Wine + Unity Mono) で動作する
+    BepInEx 5 plugin。Camera v2 で OverlayCamera (max depth, screen 直描画) の
+    framebuffer を CommandBuffer + AsyncGPUReadback で capture し、
+    InterprocessLib.Messenger 経由で engine 側に push する。
+
+    本 plugin の実機検証は Wave 5 (E1) で行う。本 commit (C4) は build only:
+      - net472 (Unity Mono は .NET Framework 4.x 系のみ動作)
+      - HintPath は $(ResonitePath) (Renderite Unity DLL) と
+        $(GalePath) (Renderer 側 BepInEx 5 core / InterprocessLib) を解決
+      - 全 HintPath は Private=False (renderer プロセスが既に同梱する DLL)
+      - container 内では $(ResonitePath) が host から bind されているので
+        HintPath は host と同じ絶対 path で resolve できる。Resonite 未
+        インストール環境では Resonite.GameLibs NuGet にフォールバックする
+        余地もあるが、Renderer 側は Renderite Unity DLL 群が NuGet 提供
+        されていないため engine 側のような fallback は組まない (resolve
+        できる前提でクリーンに失敗する)。
+
+    PostBuild: $(GalePath)/Renderer/BepInEx/plugins/$(AssemblyName)/ に
+      DLL + PDB + RendererShared.dll + System.Memory.dll を deploy する。
+      Gale 未セットアップ環境では skip (Condition で防御)。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ResoniteIO.Renderer</RootNamespace>
+    <AssemblyName>ResoniteIO.Renderer</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <!--
+      BepInEx 5 plugin は隣接 DLL のみ AssemblyLoadContext で解決するため、
+      不要な transitive DLL を bin/ にコピーしない。RendererShared と
+      System.Memory のみ PostBuild で deploy する (deploy 対象は Target 側で明示)。
+    -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+
+    <!-- Resonite Renderer 側 Managed DLL dir 解決
+         (engine 側 ResoniteIO.csproj の $(GamePath) と同じ考え方)。 -->
+    <RendererManagedDir Condition="'$(ResonitePath)' != ''"
+      >$(ResonitePath)/Renderer/Renderite.Renderer_Data/Managed/</RendererManagedDir
+    >
+
+    <!-- Gale プロファイル解決 (engine 側 csproj と同じ pattern)。
+         Renderer 側 BepInEx 5 core は $(GalePath)/Renderer/BepInEx/core/ -->
+    <GalePath Condition="'$(GalePath)' != ''">$(GalePath)/</GalePath>
+    <GalePath Condition="'$(GalePath)' == ''">$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath>
+    <RendererBepInExDir>$(GalePath)Renderer/BepInEx/core/</RendererBepInExDir>
+    <InterprocessUnityDir>$(GalePath)Renderer/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepInEx/</InterprocessUnityDir>
+    <RendererPluginTargetDir>$(GalePath)Renderer/BepInEx/plugins/$(AssemblyName)/</RendererPluginTargetDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- net472 reference assemblies (.NET 10 SDK は同梱しないので NuGet 経由で取得)。
+         Wave 1 で実証済み: container build 可能 + Mono 依存を持ち込まない。 -->
+    <PackageReference
+      Include="Microsoft.NETFramework.ReferenceAssemblies"
+      Version="1.0.3"
+      PrivateAssets="all"
+    />
+    <ProjectReference Include="..\ResoniteIO.RendererShared\ResoniteIO.RendererShared.csproj" />
+  </ItemGroup>
+
+  <!-- BepInEx 5 (Renderer 側) + Unity + Renderite + InterprocessLib (Renderer 側) の
+       HintPath references。全て Private=False で renderer プロセス同梱版に委ねる。 -->
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(RendererBepInExDir)BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(RendererBepInExDir)0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- Unity (FrameCapture が使う型: Camera / CommandBuffer / RenderTexture /
+         AsyncGPUReadback / CameraEvent はすべて UnityEngine.CoreModule に居る) -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(RendererManagedDir)UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(RendererManagedDir)UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- Renderite 本体。InterprocessLib.Messenger ctor が
+         Renderite.Shared.IMemoryPackerEntityPool を受け取るため Shared は必須。
+         Unity は本 commit では未使用だが Wave 5+ で Camera 探索に使う可能性あり、
+         Private=False で deploy には乗らないのでコスト低。 -->
+    <Reference Include="Renderite.Shared">
+      <HintPath>$(RendererManagedDir)Renderite.Shared.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Renderite.Unity">
+      <HintPath>$(RendererManagedDir)Renderite.Unity.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- InterprocessLib (Renderer 側 = Unity 用 build。BepisLoader 用とは別 DLL) -->
+    <Reference Include="InterprocessLib.Unity">
+      <HintPath>$(InterprocessUnityDir)InterprocessLib.Unity.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- PostBuild: Gale Renderer profile の plugins/ResoniteIO.Renderer/ に
+       本 plugin DLL + RendererShared DLL + System.Memory polyfill を deploy する。
+       Gale 未セットアップ環境 (CI 等) では skip。 -->
+  <Target
+    Name="DeployRendererPlugin"
+    AfterTargets="Build"
+    Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
+  >
+    <ItemGroup>
+      <_RendererPluginFiles Include="$(TargetPath)" />
+      <_RendererPluginFiles
+        Include="$(TargetDir)$(TargetName).pdb"
+        Condition="Exists('$(TargetDir)$(TargetName).pdb')"
+      />
+      <_RendererPluginFiles
+        Include="$(TargetDir)ResoniteIO.RendererShared.dll"
+        Condition="Exists('$(TargetDir)ResoniteIO.RendererShared.dll')"
+      />
+      <_RendererPluginFiles
+        Include="$(TargetDir)System.Memory.dll"
+        Condition="Exists('$(TargetDir)System.Memory.dll')"
+      />
+    </ItemGroup>
+    <MakeDir Directories="$(RendererPluginTargetDir)" />
+    <Copy
+      SourceFiles="@(_RendererPluginFiles)"
+      DestinationFolder="$(RendererPluginTargetDir)"
+      SkipUnchangedFiles="true"
+    />
+    <Message
+      Text="Copied @(_RendererPluginFiles->Count()) renderer plugin file(s) to $(RendererPluginTargetDir)"
+      Importance="high"
+    />
+  </Target>
+</Project>

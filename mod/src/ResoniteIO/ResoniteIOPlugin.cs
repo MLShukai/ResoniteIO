@@ -8,6 +8,8 @@ using BepInExResoniteShim;
 using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
+using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Loading;
 using ResoniteIO.Logging;
@@ -39,7 +41,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private CancellationTokenSource? _hostCts;
     private SessionHost? _sessionHost;
     private FrooxEngineSessionBridge? _sessionBridge;
-    private FrooxEngineCameraBridge? _cameraBridge;
+
+    private ICameraBridge? _cameraBridge;
+    private RendererFrameInterprocessReceiver? _frameReceiver;
+    private IDisplayBridge? _displayBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -82,12 +87,20 @@ public sealed class ResoniteIOPlugin : BasePlugin
             // plugin folder 同梱の Core.dll / Google.Protobuf.dll が優先される。
             _logSink = new BepInExLogSink(Log);
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
-            _cameraBridge = new FrooxEngineCameraBridge(Engine.Current, _logSink);
+
+            var pushedBridge = new PushedFrameCameraBridge();
+            _cameraBridge = pushedBridge;
+            _frameReceiver = new RendererFrameInterprocessReceiver(pushedBridge, _logSink);
+            _frameReceiver.Start();
+
+            _displayBridge = new FrooxEngineDisplayBridge(_logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
                 _sessionBridge,
-                _cameraBridge
+                _cameraBridge,
+                _displayBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -100,11 +113,18 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        // Camera Slot の Destroy は engine がまだ生きているうちに済ませる必要があるので
-        // Session host より先に dispose する。
+        // Dispose 順: Receiver を先に止めて残 frame が dead bridge に push されるのを防ぐ。
+        // PushedFrameCameraBridge.Dispose は Channel writer を complete し、pending な
+        // CameraService.StreamFrames を CameraNotReadyException で抜けさせる。
         try
         {
-            _cameraBridge?.Dispose();
+            _frameReceiver?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            (_cameraBridge as IDisposable)?.Dispose();
         }
         catch { }
 

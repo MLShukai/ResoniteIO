@@ -5,6 +5,8 @@ metadata:
   type: reference
 ---
 
+> **Retired (2026-05-18)**: v1 `Camera.RenderToBitmap` 経路は Camera v2 移行 (HEAD `ff44bf8`、`FrooxEngineCameraBridge` 削除) で廃止された。後継アーキ・制約は [feedback_camera_v2_constraints.md](feedback_camera_v2_constraints.md) を参照。本ファイルは v1 時代の root cause 分析として歴史的に残置する。
+
 `Camera.World.Render.RenderToBitmap()` (`FrooxEngineCameraBridge.CaptureAsync`
 で呼ぶ engine 内 readback API) は **640×480 RGBA8 で p50 ~31ms / p95 ~32ms** で
 安定し、これ以上速くならない。30fps streaming の natural cap はここ。

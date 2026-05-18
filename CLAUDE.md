@@ -216,11 +216,26 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
    - `ResoniteModding-BepisLoader` (>=1.5.1)
    - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
    - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
+   - `ResoniteModding-BepInExRenderer` (>=5.4)      ← v2 で追加 (Renderer 側 BepInEx 5 framework)
+   - `ResoniteModding-RenderiteHook` (>=1.1.1)      ← v2 で追加 (engine → Renderer doorstop inject)
+   - `Nytra-InterprocessLib` (>=3.0.0)              ← v2 で追加 (engine ↔ Renderer shared-mem queue)
 3. Gale で Resonite を起動すると `LinuxBootstrap.sh` がプロファイル版に差し替わり、BepInEx が有効化される
 4. `just check-gale` (または `just init`) で必須 DLL の在中を検証
 5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される (deploy 先 dir は csproj の `<Copy>` が自動 mkdir する)
 
 ホスト Resonite を Vanilla で起動 (Gale を介さず Steam から直接起動) した場合は mod は読み込まれない。注意点: Gale 経由起動後にホスト Resonite ディレクトリへ `hookfxr.ini` (`enable=true`) 等が残る場合がある。Vanilla 復帰時は確認すること。
+
+##### Steam Launch Options (Camera v2 で必須)
+
+Steam で Resonite を選択 → Properties → Launch Options に以下を設定する:
+
+```text
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+```
+
+- **なぜ必須**: Wine は system 同梱 `winhttp.dll` を優先するため、RenderiteHook が deploy した hook 版 `winhttp.dll` (= doorstop) を読ませるには Launch Options で override が必要。これが無いと Renderer 側 BepInEx は永遠に起動せず、Camera v2 の renderer-side plugin が load されない
+- **debug が困難**: 真の原因が Steam Launch Options 漏れであることは `/proc/<pid>/environ` で確認できないと見抜けない (Wine プロセスの env を host から見るのが面倒)
+- **代替経路は無い**: `host_agent.py` から env で `WINEDLLOVERRIDES` を渡しても Steam が sanitize するため通らない。Steam Launch Options が唯一の経路
 
 実機での mod load 検証手順は [mod/tests/manual/load-verification.md](mod/tests/manual/load-verification.md) を参照。
 

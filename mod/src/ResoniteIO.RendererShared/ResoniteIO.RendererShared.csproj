@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ResoniteIO.RendererShared: engine 側 Mod (net10.0) と Renderer 側 plugin
+    (net472、Unity Mono) の双方が参照する **依存ゼロ** の純粋共有ライブラリ。
+
+    Camera v2 で engine ↔ Renderer 間の共有メモリ queue (InterprocessLib) を流れる
+    binary frame の schema 定数を集約する:
+      - FrameHeader   : 40 bytes LE binary header (Magic / Width / Height / ...)
+      - IpcSocketPaths: queue 名 / owner id / 容量等の定数
+
+    依存ゼロ + netstandard2.0 は両 target framework から無加工で参照できる
+    最小公倍数。BepInEx / Unity / Resonite に依存させない。
+    `System.Memory` は `Span<T>` / `BinaryPrimitives` を netstandard2.0 で
+    利用するための BCL polyfill (net10.0 / net472 双方の consumer 側に
+    transitive で配られる、追加 NuGet 解決は不要)。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>ResoniteIO.RendererShared</RootNamespace>
+    <AssemblyName>ResoniteIO.RendererShared</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ResoniteIO.Core.Tests" />
+  </ItemGroup>
+</Project>

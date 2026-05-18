@@ -105,21 +105,29 @@
       <HintPath>$(GamePath)Elements.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <!-- Camera.RenderToBitmap が返す Bitmap2D を扱うため Elements.Assets も参照する。
-         Private=False で Resonite 同梱版を実機ロード時に解決する。 -->
-    <Reference Include="Elements.Assets">
-      <HintPath>$(GamePath)Elements.Assets.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Renderite.Shared">
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
 
-  <!-- Core 層への参照。proto / Grpc / gRPC server lifecycle は Core が抱える -->
+  <!-- Camera v2: Gale プロファイルに install された InterprocessLib (engine 側 .NET 10 build) を
+       参照する。Renderer 側は別 DLL (InterprocessLib.Unity.dll、ResoniteIO.Renderer.csproj 側参照)。
+       namespace は両方とも `InterprocessLib` で同一、Messenger 型を共有する。
+       Private=False: Gale が renderer プロセス + engine プロセスの双方に install するため
+       Mod は二重 deploy しない。 -->
+  <ItemGroup Condition="Exists('$(GalePath)BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepisLoader/InterprocessLib.FrooxEngine.dll')">
+    <Reference Include="InterprocessLib.FrooxEngine">
+      <HintPath>$(GalePath)BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepisLoader/InterprocessLib.FrooxEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Core 層への参照。proto / Grpc / gRPC server lifecycle は Core が抱える。
+       RendererShared は engine ↔ renderer の IPC schema (FrameHeader / IpcSocketPaths)。 -->
   <ItemGroup>
     <ProjectReference Include="..\ResoniteIO.Core\ResoniteIO.Core.csproj" />
+    <ProjectReference Include="..\ResoniteIO.RendererShared\ResoniteIO.RendererShared.csproj" />
   </ItemGroup>
 
   <!-- テストアセンブリから internal な PluginMetadata を参照できるようにする
@@ -184,6 +192,13 @@
       <PluginFiles
         Include="$(TargetDir)ResoniteIO.Core.pdb"
         Condition="Exists('$(TargetDir)ResoniteIO.Core.pdb')"
+      />
+      <!-- RendererShared (engine ↔ renderer IPC schema)。
+           InterprocessLib 経由のフレーム受信に必要なので Mod に同梱する。 -->
+      <PluginFiles Include="$(TargetDir)ResoniteIO.RendererShared.dll" />
+      <PluginFiles
+        Include="$(TargetDir)ResoniteIO.RendererShared.pdb"
+        Condition="Exists('$(TargetDir)ResoniteIO.RendererShared.pdb')"
       />
       <PluginFiles Include="$(TargetDir)Google.Protobuf.dll" />
       <PluginFiles Include="$(TargetDir)Grpc.*.dll" />

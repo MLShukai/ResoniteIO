@@ -49,11 +49,17 @@ init:
         echo "    2. Gale GUI で 'Create profile' を選び、パスに <repo>/gale を指定" >&2; \
         echo "       (このディレクトリは空である必要があり、just init が用意した状態が" >&2; \
         echo "        まさにそれにあたる)" >&2; \
-        echo "    3. プロファイルに以下 3 つの mod を install:" >&2; \
+        echo "    3. プロファイルに以下 6 つの mod を install:" >&2; \
         echo "         - ResoniteModding-BepisLoader (>=1.5.1)" >&2; \
         echo "         - ResoniteModding-BepInExResoniteShim (>=0.9.3)" >&2; \
         echo "         - ResoniteModding-BepisResoniteWrapper (>=1.0.2)" >&2; \
-        echo "    4. 完了後 'just init' を再実行" >&2; \
+        echo "         - ResoniteModding-BepInExRenderer (>=5.4)   — Camera v2 用 Renderer 側 BepInEx 5" >&2; \
+        echo "         - ResoniteModding-RenderiteHook (>=1.1.1)   — Renderer プロセスへの doorstop inject" >&2; \
+        echo "         - Nytra-InterprocessLib (>=3.0.0)           — engine ↔ Renderer 共有メモリ queue" >&2; \
+        echo "    4. Steam で Resonite の Launch Options に以下を設定:" >&2; \
+        echo "         WINEDLLOVERRIDES=\"winhttp=n,b\" %command%" >&2; \
+        echo "       (これが無いと Renderer 側 BepInEx が永遠に起動しない)" >&2; \
+        echo "    5. 完了後 'just init' を再実行" >&2; \
         exit 1; \
     fi
     @just check-gale
@@ -154,12 +160,21 @@ deploy-mod: mod-build
 # Gale プロファイル (./gale/) に BepisLoader と必須プラグインが揃っているか検証する。
 # ホスト上で実行する想定 (container でも GalePath があれば動く)。
 # 検査対象 (実プロファイルの配置に追従):
-#   - $GALE_ROOT/BepisLoader.dll              (Gale が profile root に置く)
-#   - $GALE_ROOT/BepInEx/core/BepInEx.Core.dll
-#   - $GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll
-#   - $GALE_ROOT/BepInEx/core/0Harmony.dll
-#   - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/**/BepInExResoniteShim.dll
-#   - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/**/BepisResoniteWrapper.dll
+#   engine 側 (Linux .NET 10, BepInEx 6):
+#     - $GALE_ROOT/BepisLoader.dll              (Gale が profile root に置く)
+#     - $GALE_ROOT/BepInEx/core/BepInEx.Core.dll
+#     - $GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll
+#     - $GALE_ROOT/BepInEx/core/0Harmony.dll
+#     - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/**/BepInExResoniteShim.dll
+#     - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/**/BepisResoniteWrapper.dll
+#   Camera v2 用 (engine 側 plugins):
+#     - $GALE_ROOT/BepInEx/plugins/ResoniteModding-RenderiteHook*/RenderiteHook/RenderiteHook.dll
+#     - $GALE_ROOT/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepisLoader/InterprocessLib.FrooxEngine.dll
+#   Renderer 側 (Wine + Unity Mono, BepInEx 5; 詳細 plugin 検証は Wave 4/5):
+#     - $GALE_ROOT/Renderer/BepInEx/core/BepInEx.Preloader.dll
+#       (ResoniteModding-BepInExRenderer package が deploy する Renderer 側 core。
+#        この package 自体は profile 内に独立 plugin dir を作らず、
+#        Renderer/BepInEx/core/ 配下に framework を展開する)
 # 不足あれば非 0 exit。version 表示は best-effort。
 check-gale:
     @GALE_ROOT="${GalePath:-./gale}"; \
@@ -168,9 +183,9 @@ check-gale:
     check_file() { \
         local label="$1" path="$2"; \
         if [ -f "$path" ]; then \
-            printf "  %-40s ✓\n" "$label"; \
+            printf "  %-44s ✓\n" "$label"; \
         else \
-            printf "  %-40s ✗  (expected at %s)\n" "$label" "$path" >&2; \
+            printf "  %-44s ✗  (expected at %s)\n" "$label" "$path" >&2; \
             fail=1; \
         fi; \
     }; \
@@ -179,24 +194,33 @@ check-gale:
         local match; \
         match=$(find $pattern 2>/dev/null | head -n 1); \
         if [ -n "$match" ]; then \
-            printf "  %-40s ✓  (%s)\n" "$label" "$match"; \
+            printf "  %-44s ✓  (%s)\n" "$label" "$match"; \
         else \
-            printf "  %-40s ✗  (no match for %s)\n" "$label" "$pattern" >&2; \
+            printf "  %-44s ✗  (no match for %s)\n" "$label" "$pattern" >&2; \
             fail=1; \
         fi; \
     }; \
-    check_file "BepisLoader.dll"          "$GALE_ROOT/BepisLoader.dll"; \
-    check_file "BepInEx.Core.dll"         "$GALE_ROOT/BepInEx/core/BepInEx.Core.dll"; \
-    check_file "BepInEx.NET.Common.dll"   "$GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll"; \
-    check_file "0Harmony.dll"             "$GALE_ROOT/BepInEx/core/0Harmony.dll"; \
-    check_glob "BepInExResoniteShim.dll"  "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/BepInExResoniteShim/BepInExResoniteShim.dll"; \
-    check_glob "BepisResoniteWrapper.dll" "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/BepisResoniteWrapper/BepisResoniteWrapper.dll"; \
+    check_file "BepisLoader.dll"              "$GALE_ROOT/BepisLoader.dll"; \
+    check_file "BepInEx.Core.dll"             "$GALE_ROOT/BepInEx/core/BepInEx.Core.dll"; \
+    check_file "BepInEx.NET.Common.dll"       "$GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll"; \
+    check_file "0Harmony.dll"                 "$GALE_ROOT/BepInEx/core/0Harmony.dll"; \
+    check_glob "BepInExResoniteShim.dll"      "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/BepInExResoniteShim/BepInExResoniteShim.dll"; \
+    check_glob "BepisResoniteWrapper.dll"     "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/BepisResoniteWrapper/BepisResoniteWrapper.dll"; \
+    check_glob "RenderiteHook.dll"            "$GALE_ROOT/BepInEx/plugins/ResoniteModding-RenderiteHook*/RenderiteHook/RenderiteHook.dll"; \
+    check_file "InterprocessLib.FrooxEngine.dll" "$GALE_ROOT/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepisLoader/InterprocessLib.FrooxEngine.dll"; \
+    check_file "Renderer/BepInEx.Preloader.dll" "$GALE_ROOT/Renderer/BepInEx/core/BepInEx.Preloader.dll"; \
     if [ "$fail" -ne 0 ]; then \
         echo "[check-gale] ERROR: 必要な Gale 部品が見つかりません。" >&2; \
         echo "  Gale (https://github.com/Kesomannen/gale) で profile を更新し、" >&2; \
-        echo "  少なくとも ResoniteModding-BepisLoader,"  >&2; \
-        echo "  ResoniteModding-BepInExResoniteShim,"     >&2; \
-        echo "  ResoniteModding-BepisResoniteWrapper を install してください。" >&2; \
+        echo "  以下を install してください:"                    >&2; \
+        echo "    - ResoniteModding-BepisLoader"                 >&2; \
+        echo "    - ResoniteModding-BepInExResoniteShim"         >&2; \
+        echo "    - ResoniteModding-BepisResoniteWrapper"        >&2; \
+        echo "    - ResoniteModding-BepInExRenderer  (Camera v2)" >&2; \
+        echo "    - ResoniteModding-RenderiteHook    (Camera v2)" >&2; \
+        echo "    - Nytra-InterprocessLib            (Camera v2)" >&2; \
+        echo "  Renderer 側 core が無い場合は、Gale から Resonite を 1 度起動し" >&2; \
+        echo "  RenderiteHook が doorstop files を deploy するのを待ってください。" >&2; \
         exit 1; \
     fi; \
     echo "[check-gale] All required Gale components present."
@@ -283,8 +307,14 @@ container-clean:
 # foreground 起動する。Ctrl+C で停止、socket は自動 unlink。環境変数の検査は
 # host_agent.py 内で行う (DISPLAY / WAYLAND_DISPLAY / GaleBin が必要)。
 # **GUI session の端末から実行** (gale は --no-gui でもディスプレイを要求)。
+#
+# screenshot action のために host 側専用 `mss` を `scripts/.venv/` (uv venv 管理)
+# に入れる。venv は冪等に確保 + 同期し、最新 deps で agent を起動する。
+# scripts/.venv は host 専用 (container 側からは使わない、gitignore 済み)。
 host-agent:
-    python3 scripts/host_agent.py
+    @test -x scripts/.venv/bin/python || uv venv scripts/.venv --python 3.12
+    @uv pip install --python scripts/.venv/bin/python -r scripts/requirements.txt --quiet
+    scripts/.venv/bin/python scripts/host_agent.py
 
 # container 内 shell (または host) から host の Resonite を起動する。
 # profile 名は .env の GaleProfile を既定値とし、`--profile <name>` で override。
@@ -300,3 +330,16 @@ resonite-stop:
 # Resonite / Renderite の実行状態を JSON で表示する。
 resonite-status:
     python3 scripts/resonite_cli.py status
+
+# host_agent に screenshot RPC を投げて PNG を repo-relative path に書き出す。
+# 例: `just resonite-screenshot output=tmp/e2e/desktop.png`
+# `just resonite-screenshot output=tmp/e2e/desktop.png monitor=0`
+resonite-screenshot output monitor='1':
+    python3 scripts/resonite_cli.py screenshot --output {{ output }} --monitor {{ monitor }}
+
+# Camera v2 の e2e を回す。Resonite が起動済み + host-agent が稼働中前提。
+# Camera 未実装段階では `--skip-camera` で screenshot のみ撮る dry run が可能。
+# 例: `just e2e-camera-v2 --skip-camera`
+#     `just e2e-camera-v2 --frames=120 --duration=5`
+e2e-camera-v2 *args:
+    cd python && uv run python ../scripts/e2e_camera_v2.py {{ args }}

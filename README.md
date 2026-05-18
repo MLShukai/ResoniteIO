@@ -43,9 +43,27 @@ Gale プロファイル未設置時は手順を表示して exit する。表示
    - `ResoniteModding-BepisLoader` (>=1.5.1)
    - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
    - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
+   - `ResoniteModding-BepInExRenderer` (>=5.4) — Camera v2 (Renderite framebuffer 直取り) 用、Renderer 側 BepInEx 5 framework
+   - `ResoniteModding-RenderiteHook` (>=1.1.1) — engine 側から Renderer プロセスに doorstop を inject する
+   - `Nytra-InterprocessLib` (>=3.0.0) — engine ↔ Renderer 間の共有メモリ queue API
 4. Gale で Resonite を一度起動して `<repo>/gale/BepInEx/` の生成を確認
 
 > `./gale/` は `.gitignore` 済みで host 側の Gale が管理する。リポジトリにはコミットされない。
+
+### 1.1 Steam Launch Options (絶対必須)
+
+Steam で Resonite を選択 → 右クリック → Properties → Launch Options に以下を設定:
+
+```text
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+```
+
+これは Renderite renderer process 側に doorstop (BepInEx 5) を inject するために必須。
+これが無いと Camera v2 の renderer-side plugin が永遠に load されない。
+Wine は system 同梱 `winhttp.dll` を優先するため、override しないと
+RenderiteHook が deploy した hook 版 `winhttp.dll` が読まれない。
+`host_agent.py` から env で渡しても Steam が sanitize するため通らない
+(Steam Launch Options が唯一の経路)。
 
 ### 2. Docker image をビルド
 

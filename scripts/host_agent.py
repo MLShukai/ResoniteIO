@@ -2,24 +2,37 @@
 """Host-side debug bridge daemon.
 
 container 内 ``scripts/resonite_cli.py`` からの UDS リクエストを受け、host
-側で Gale CLI 経由で Resonite を起動 / 停止 / 状態取得する。Resonite と
-Gale は host の GUI session でしか動かないため、本デーモンは GUI session の
-端末から foreground で起動する。
+側で Gale CLI 経由で Resonite を起動 / 停止 / 状態取得し、また desktop
+framebuffer を ``mss`` で撮って **PNG bytes を base64 で response に乗せる**。
+file system に書かないので bind mount への依存がなく、container 側で任意
+path に書ける。Resonite と Gale は host の GUI session でしか動かないため、
+本デーモンは GUI session の端末から foreground で起動する。
 
 Protocol: UDS (AF_UNIX) 上で 1 リクエスト / 1 レスポンスの newline-delimited
 JSON、接続 close で終端。
 
 Request schema:
     {"action": "start" | "stop" | "status", "profile": str | null}
+    {"action": "screenshot",
+     "monitor": int (default=1, 0=all monitors),
+     "bbox": null | [x, y, w, h]}
 
 Response schema:
     {"ok": true,  "action": str, "data": dict}
     {"ok": false, "action": str, "error": str, "detail": str, "data": dict?}
+
+screenshot response data:
+    {"png_b64": str,         # base64 of PNG bytes
+     "width": int,
+     "height": int,
+     "monitor": int,
+     "payload_bytes": int}   # len(PNG bytes) (base64 前)、client 側の sanity check 用
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -280,6 +293,120 @@ def cmd_status() -> dict[str, Any]:
     )
 
 
+# ===== screenshot ===========================================================
+
+
+def _parse_bbox(bbox: Any) -> tuple[int, int, int, int] | None:
+    """``bbox`` をパースし ``(left, top, width, height)`` を返す。
+
+    None なら None を返す (full monitor を意味する)。
+    """
+    if bbox is None:
+        return None
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        raise ValueError(f"bbox must be a list of 4 integers, got: {bbox!r}")
+    coerced: list[int] = []
+    for i, v in enumerate(bbox):
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ValueError(f"bbox[{i}] must be an integer, got: {type(v).__name__}")
+        coerced.append(v)
+    left, top, width, height = coerced
+    if width <= 0 or height <= 0:
+        raise ValueError(f"bbox width/height must be positive, got: {bbox!r}")
+    return left, top, width, height
+
+
+def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
+    """``mss`` で desktop framebuffer を撮影し PNG bytes を base64 で返す。
+
+    host-local 書き出しはせず in-memory PNG を base64 で response に乗せる (client が
+    container 側で書き出す)。
+    """
+    if monitor is None:
+        monitor_idx = 1
+    elif isinstance(monitor, bool) or not isinstance(monitor, int):
+        return _error(
+            "screenshot",
+            "bad_request",
+            f"monitor must be an integer, got: {type(monitor).__name__}",
+        )
+    else:
+        monitor_idx = monitor
+
+    try:
+        bbox_tuple = _parse_bbox(bbox)
+    except ValueError as e:
+        return _error("screenshot", "bad_request", str(e))
+
+    # 遅延 import: venv 未 sync でも start/stop/status は動かしたい。
+    try:
+        import mss  # type: ignore[import-untyped]
+        import mss.tools  # type: ignore[import-untyped]
+    except ImportError as e:
+        return _error(
+            "screenshot",
+            "mss_unavailable",
+            f"mss is not installed in the host_agent venv: {e}. "
+            "Re-run `just host-agent` to provision scripts/.venv.",
+        )
+
+    try:
+        with mss.mss() as sct:
+            monitors = sct.monitors
+            if not (0 <= monitor_idx < len(monitors)):
+                return _error(
+                    "screenshot",
+                    "invalid_monitor",
+                    f"monitor index {monitor_idx} out of range "
+                    f"(available: 0..{len(monitors) - 1})",
+                )
+            if bbox_tuple is not None:
+                left, top, width, height = bbox_tuple
+                region = {
+                    "left": left,
+                    "top": top,
+                    "width": width,
+                    "height": height,
+                }
+                img = sct.grab(region)
+            else:
+                img = sct.grab(monitors[monitor_idx])
+            png_bytes = mss.tools.to_png(img.rgb, img.size, output=None)
+    except Exception as e:
+        return _error(
+            "screenshot",
+            "capture_failed",
+            f"mss capture failed: {type(e).__name__}: {e}",
+        )
+
+    if not isinstance(png_bytes, (bytes, bytearray)):
+        return _error(
+            "screenshot",
+            "capture_failed",
+            f"mss.tools.to_png did not return bytes: got {type(png_bytes).__name__}",
+        )
+
+    width, height = img.size
+    png_b64 = base64.b64encode(bytes(png_bytes)).decode("ascii")
+    LOG.info(
+        "Captured screenshot (%dx%d, monitor=%d, payload=%d bytes)",
+        width,
+        height,
+        monitor_idx,
+        len(png_bytes),
+    )
+    return _ok(
+        "screenshot",
+        {
+            "png_b64": png_b64,
+            "width": int(width),
+            "height": int(height),
+            "monitor": monitor_idx,
+            "payload_bytes": len(png_bytes),
+        },
+    )
+
+
 # ===== request dispatch =====================================================
 
 
@@ -305,6 +432,12 @@ def handle_request(raw: bytes, gale_bin: str) -> dict[str, Any]:
         return cmd_stop()
     if action == "status":
         return cmd_status()
+    if action == "screenshot":
+        # 旧 protocol の ``output`` field は無視 (PNG bytes を返す network 経路に移行済み)。
+        return cmd_screenshot(
+            msg.get("monitor"),
+            msg.get("bbox"),
+        )
     label = str(action) if isinstance(action, str) else "?"
     return _error(label, "bad_request", f"unknown action: {action!r}")
 

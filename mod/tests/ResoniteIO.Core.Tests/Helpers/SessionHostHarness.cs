@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using Grpc.Net.Client;
 using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Session;
 
 namespace ResoniteIO.Core.Tests.Helpers;
@@ -36,18 +37,21 @@ internal sealed class SessionHostHarness : IAsyncDisposable
 
     public static Task<SessionHostHarness> StartAsync(
         ISessionBridge? bridge = null,
-        ICameraBridge? cameraBridge = null
+        ICameraBridge? cameraBridge = null,
+        IDisplayBridge? displayBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
             bridge,
-            cameraBridge
+            cameraBridge,
+            displayBridge
         );
 
     public static async Task<SessionHostHarness> StartAsync(
         string socketPath,
         ISessionBridge? bridge = null,
-        ICameraBridge? cameraBridge = null
+        ICameraBridge? cameraBridge = null,
+        IDisplayBridge? displayBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -57,7 +61,13 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         SessionHost host;
         try
         {
-            host = SessionHost.Start(new NullLogSink(), cts.Token, bridge, cameraBridge);
+            host = SessionHost.Start(
+                new NullLogSink(),
+                cts.Token,
+                bridge,
+                cameraBridge,
+                displayBridge
+            );
         }
         catch
         {
