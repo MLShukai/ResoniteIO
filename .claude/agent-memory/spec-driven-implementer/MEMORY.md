@@ -10,3 +10,5 @@
 - [streaming fps_limit テストの tolerance](feedback_streaming_fps_limit_test_tolerance.md) — pacing 検証は理論値 +2 ぶんの上限スラックで書く。「+1 edge frame + 1 boundary slip」。
 - [Bridge での engine thread ディスパッチ](feedback_bridge_engine_thread_dispatch.md) — コンポーネントグラフ変更は World.RunSynchronously + TaskCompletionSource、純粋読みは任意スレッド。
 - [uv tool install resoio version skew](feedback_uv_tool_install_resoio.md) — `uv tool install --editable` ignores uv.lock; isolated env picks betterproto2 0.10 against compiler 0.9 stubs and ImportErrors.
+- [BepInExRenderer は framework 配置](feedback_bepinex_renderer_as_framework.md) — `ResoniteModding-BepInExRenderer` は plugin dir を作らず `Renderer/BepInEx/core/` に framework を deploy する。check-gale は `BepInEx.Preloader.dll` で確認。
+- [netstandard2.0 の polyfill 要件](feedback_netstandard20_polyfills.md) — Span/BinaryPrimitives は `System.Memory` NuGet、HashCode.Combine は無いので手組み hash で代替。
