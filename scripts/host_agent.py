@@ -46,6 +46,9 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+import mss
+import mss.tools
+
 LOG = logging.getLogger("host_agent")
 
 DEFAULT_SOCKET_REL = ".resonite-io-debug/host-agent.sock"
@@ -338,40 +341,28 @@ def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
     except ValueError as e:
         return _error("screenshot", "bad_request", str(e))
 
-    # 遅延 import: venv 未 sync でも start/stop/status は動かしたい。
     try:
-        import mss  # type: ignore[import-untyped]
-        import mss.tools  # type: ignore[import-untyped]
-    except ImportError as e:
-        return _error(
-            "screenshot",
-            "mss_unavailable",
-            f"mss is not installed in the host_agent venv: {e}. "
-            "Re-run `just host-agent` to provision scripts/.venv.",
-        )
-
-    try:
-        with mss.mss() as sct:
-            monitors = sct.monitors
-            if not (0 <= monitor_idx < len(monitors)):
-                return _error(
-                    "screenshot",
-                    "invalid_monitor",
-                    f"monitor index {monitor_idx} out of range "
-                    f"(available: 0..{len(monitors) - 1})",
-                )
-            if bbox_tuple is not None:
-                left, top, width, height = bbox_tuple
-                region = {
-                    "left": left,
-                    "top": top,
-                    "width": width,
-                    "height": height,
-                }
-                img = sct.grab(region)
-            else:
-                img = sct.grab(monitors[monitor_idx])
-            png_bytes = mss.tools.to_png(img.rgb, img.size, output=None)
+        sct = mss.MSS()
+        monitors = sct.monitors
+        if not (0 <= monitor_idx < len(monitors)):
+            return _error(
+                "screenshot",
+                "invalid_monitor",
+                f"monitor index {monitor_idx} out of range "
+                f"(available: 0..{len(monitors) - 1})",
+            )
+        if bbox_tuple is not None:
+            left, top, width, height = bbox_tuple
+            region = {
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height,
+            }
+            img = sct.grab(region)
+        else:
+            img = sct.grab(monitors[monitor_idx])
+        png_bytes = mss.tools.to_png(img.rgb, img.size, output=None)
     except Exception as e:
         return _error(
             "screenshot",
