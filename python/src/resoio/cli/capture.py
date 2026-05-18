@@ -1,14 +1,11 @@
-"""``resoio capture`` subcommand: stream Camera frames as Y4M.
-
-Heavy imports (numpy, the Camera client, the Y4M writer) are deferred to
-:func:`_run` so ``resoio capture --help`` and shell completion stay fast.
-"""
+"""``resoio capture`` subcommand: stream Camera frames as Y4M."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import sys
+import time
 from typing import BinaryIO
 
 
@@ -24,11 +21,7 @@ def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
-    """Register the ``capture`` subparser on the top-level parser.
-
-    ``common`` carries flags shared by every subcommand (e.g.
-    ``-s/--socket``) and is attached via ``parents=[common]``.
-    """
+    """Register the ``capture`` subparser on the top-level parser."""
     parser = subparsers.add_parser(
         "capture",
         parents=[common],
@@ -46,22 +39,13 @@ def register(
         help='Output file path; "-" writes to stdout (default: "-").',
     )
     parser.add_argument(
-        "--width",
-        type=int,
-        default=0,
-        help="Requested frame width (0 means server default).",
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        default=0,
-        help="Requested frame height (0 means server default).",
-    )
-    parser.add_argument(
         "--fps",
         type=_fps_arg,
         default=30.0,
-        help="Y4M frame rate header and server fps_limit request (default: 30.0).",
+        help=(
+            "Y4M output frame rate; faster game frames are dropped, slower "
+            "ones are duplicated to keep this rate constant (default: 30.0)."
+        ),
     )
     parser.add_argument(
         "--chroma",
@@ -88,65 +72,127 @@ def register(
 
 
 def _open_output(path: str) -> tuple[BinaryIO, bool]:
-    """Open the output sink.
-
-    Returns ``(stream, should_close)``: stdout must not be closed by us,
-    but a file we opened ourselves must be.
-    """
+    """Return ``(stream, should_close)``; the caller must not close stdout."""
     if path == "-":
         return sys.stdout.buffer, False
     return open(path, "wb"), True
 
 
 async def _capture_loop(args: argparse.Namespace, out: BinaryIO) -> int:
-    # Deferred imports: keep `resoio --help` and tab-completion snappy.
+    """Drop-oldest producer / fixed-rate consumer pacing loop.
+
+    Decouples the game's variable frame cadence from the Y4M header's fixed
+    rate: a slow producer yields duplicated frames, a fast one yields
+    dropped frames.
+    """
+    # Deferred to keep `resoio --help` and tab-completion snappy.
     import numpy as np
     from numpy.typing import NDArray
 
-    from resoio.camera import CameraClient
+    from resoio.camera import CameraClient, Frame
     from resoio.cli import y4m
 
     fps_num, fps_den = y4m.fps_to_fraction(args.fps)
     chroma: y4m.ChromaSubsampling = args.chroma
-    header_written = False
-    frame_count = 0
+    output_period = 1.0 / args.fps
 
     async with CameraClient(args.socket) as client:
-        async for frame in client.stream(
-            width=args.width,
-            height=args.height,
-            fps_limit=args.fps,
-        ):
-            pixels: NDArray[np.uint8] = frame.pixels
-            h, w = frame.height, frame.width
-            if chroma == "420":
-                h2, w2 = h & ~1, w & ~1
-                if (h2, w2) != (h, w):
+        latest_frame: Frame | None = None
+        first_frame_arrived = asyncio.Event()
+        producer_failure: BaseException | None = None
+
+        async def producer() -> None:
+            nonlocal latest_frame, producer_failure
+            try:
+                async for frame in client.stream():
+                    latest_frame = frame
+                    first_frame_arrived.set()
+            except BaseException as exc:
+                producer_failure = exc
+                first_frame_arrived.set()
+                raise
+
+        producer_task = asyncio.create_task(producer())
+        try:
+            await first_frame_arrived.wait()
+            if producer_failure is not None:
+                raise producer_failure
+            assert latest_frame is not None  # event-set invariant
+
+            header_written = False
+            header_w = 0
+            header_h = 0
+            frame_count = 0
+            next_emit = time.monotonic()
+
+            while True:
+                # Snapshot before use — the producer may rebind concurrently.
+                frame_to_emit: Frame = latest_frame
+                pixels: NDArray[np.uint8] = frame_to_emit.pixels
+                h, w = frame_to_emit.height, frame_to_emit.width
+                if chroma == "420":
+                    h2, w2 = h & ~1, w & ~1
+                    if (h2, w2) != (h, w):
+                        if args.verbose and not header_written:
+                            # Log only on the first crop: pacing duplicates the
+                            # latest frame, so subsequent iterations would log
+                            # the same crop 30+ times per second.
+                            print(
+                                f"frame {frame_to_emit.frame_id} cropped: "
+                                f"{w}x{h} -> {w2}x{h2}",
+                                file=sys.stderr,
+                            )
+                        pixels = pixels[:h2, :w2, :]
+                        h, w = h2, w2
+                if not header_written:
+                    y4m.write_header(out, w, h, fps_num, fps_den, chroma)
+                    header_written = True
+                    header_w, header_h = w, h
+                elif (w, h) != (header_w, header_h):
+                    # Y4M header is fixed; bail rather than emit mismatched frames.
                     if args.verbose:
                         print(
-                            f"frame {frame.frame_id} cropped: {w}x{h} -> {w2}x{h2}",
+                            f"frame {frame_to_emit.frame_id} resolution "
+                            f"changed: {header_w}x{header_h} -> {w}x{h}; "
+                            "stopping capture",
                             file=sys.stderr,
                         )
-                    pixels = pixels[:h2, :w2, :]
-                    h, w = h2, w2
-            if not header_written:
-                y4m.write_header(out, w, h, fps_num, fps_den, chroma)
-                header_written = True
+                    return 0
+                try:
+                    y4m.write_frame(out, pixels, chroma)
+                    out.flush()
+                except BrokenPipeError:
+                    # Downstream closed stdout (e.g. `... | head`) — clean exit.
+                    return 0
+                frame_count += 1
+                if args.verbose:
+                    print(
+                        f"frame {frame_to_emit.frame_id} {w}x{h} "
+                        f"unix_nanos={frame_to_emit.unix_nanos} "
+                        f"total={frame_count}",
+                        file=sys.stderr,
+                    )
+
+                next_emit += output_period
+                sleep_for = next_emit - time.monotonic()
+                if sleep_for > 0:
+                    await asyncio.sleep(sleep_for)
+                else:
+                    # Re-anchor to now: a long stall would otherwise emit a
+                    # burst of catch-up frames on recovery.
+                    next_emit = time.monotonic()
+
+                if producer_task.done():
+                    exc = producer_task.exception()
+                    if exc is not None:
+                        raise exc
+                    return 0
+        finally:
+            producer_task.cancel()
             try:
-                y4m.write_frame(out, pixels, chroma)
-                out.flush()
-            except BrokenPipeError:
-                # Downstream closed stdout (e.g. `resoio capture | head`).
-                # That is a clean exit, not a failure.
-                return 0
-            frame_count += 1
-            if args.verbose:
-                print(
-                    f"frame {frame.frame_id} {w}x{h} "
-                    f"unix_nanos={frame.unix_nanos} total={frame_count}",
-                    file=sys.stderr,
-                )
-    return 0
+                await producer_task
+            except asyncio.CancelledError:
+                pass
 
 
 async def _run(args: argparse.Namespace) -> int:
@@ -154,10 +200,8 @@ async def _run(args: argparse.Namespace) -> int:
     try:
         if args.duration is None:
             return await _capture_loop(args, out)
-        # wait_for cancels the coroutine on timeout, which unwinds the
-        # `async with CameraClient(...)` inside _capture_loop and closes
-        # the gRPC channel cleanly. Treat the resulting TimeoutError as
-        # a normal end-of-capture, not an error.
+        # wait_for's cancel unwinds the `async with CameraClient(...)` cleanly;
+        # the resulting TimeoutError is the normal end-of-capture signal.
         try:
             return await asyncio.wait_for(
                 _capture_loop(args, out), timeout=args.duration

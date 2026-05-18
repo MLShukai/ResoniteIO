@@ -56,8 +56,9 @@ internal sealed class FrooxEngineDisplayBridge : IDisplayBridge
             var updated = Settings.UpdateActiveSetting<ResolutionSettings>(s =>
             {
                 s.CurrentTargetResolution = target;
-                // OnResolutionSettingsChanged を即発火させて renderer に送るため一緒に commit。
-                s.CurrentCommitedResolution = target;
+                // ApplyResolution() で OnChanges → OnResolutionSettingsChanged →
+                // RenderSystem.SendCommand の engine 正規 path に commit する。
+                s.ApplyResolution();
             });
             if (!updated)
             {
