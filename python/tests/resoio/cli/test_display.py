@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -116,9 +117,6 @@ def test_apply_without_any_field_is_rejected():
     with pytest.raises(SystemExit) as excinfo:
         args = parser.parse_args(["display", "apply"])
         # _run_apply uses parser.error -> SystemExit before any I/O.
-        # Drive via asyncio.run to surface the error.
-        import asyncio
-
         asyncio.run(_amain(args))
     assert excinfo.value.code == 2
 

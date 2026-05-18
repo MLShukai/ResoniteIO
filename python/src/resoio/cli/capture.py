@@ -212,10 +212,7 @@ async def _capture_loop(args: argparse.Namespace, out: BinaryIO) -> int:
             producer_task.cancel()
             try:
                 await producer_task
-            except (asyncio.CancelledError, Exception):
-                # Cancellation is the expected outcome here, and any
-                # producer failure has either been re-raised above or is
-                # already being unwound by the consumer.
+            except asyncio.CancelledError:
                 pass
 
 

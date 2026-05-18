@@ -8,6 +8,7 @@ driven from the shell. ``apply`` requires at least one of ``--width``,
 from __future__ import annotations
 
 import argparse
+from collections.abc import Awaitable, Callable
 
 
 def register(
@@ -67,7 +68,7 @@ def register(
         dest="max_fps",
         help="Background fps cap (0.0 = leave unchanged).",
     )
-    apply_parser.set_defaults(func=_run_apply, _display_parser=apply_parser)
+    apply_parser.set_defaults(func=_make_run_apply(apply_parser))
 
     get_parser = display_subs.add_parser(
         "get",
@@ -83,24 +84,31 @@ def _format_info(width: int, height: int, max_fps: float) -> str:
     return f"width={width} height={height} max_fps={max_fps}"
 
 
-async def _run_apply(args: argparse.Namespace) -> int:
-    # Reject a fully-zero apply: every field at 0 is a no-op round-trip
-    # that just echoes the current state, which `display get` already does.
-    if not (args.width or args.height or args.max_fps):
-        parser: argparse.ArgumentParser = args._display_parser
-        parser.error("specify at least one of --width / --height / --max-fps")
+def _make_run_apply(
+    parser: argparse.ArgumentParser,
+) -> Callable[[argparse.Namespace], Awaitable[int]]:
+    """Close over ``parser`` so the handler can emit argparse-style errors
+    without leaking the parser onto ``args``."""
 
-    # Defer heavy imports to keep `resoio --help` and shell completion fast.
-    from resoio.display import DisplayClient
+    async def _run_apply(args: argparse.Namespace) -> int:
+        # Reject a fully-zero apply: every field at 0 is a no-op round-trip
+        # that just echoes the current state, which `display get` already does.
+        if not (args.width or args.height or args.max_fps):
+            parser.error("specify at least one of --width / --height / --max-fps")
 
-    async with DisplayClient(args.socket) as client:
-        info = await client.apply(
-            width=args.width,
-            height=args.height,
-            max_fps=args.max_fps,
-        )
-    print(_format_info(info.width, info.height, info.max_fps))
-    return 0
+        # Defer heavy imports to keep `resoio --help` and shell completion fast.
+        from resoio.display import DisplayClient
+
+        async with DisplayClient(args.socket) as client:
+            info = await client.apply(
+                width=args.width,
+                height=args.height,
+                max_fps=args.max_fps,
+            )
+        print(_format_info(info.width, info.height, info.max_fps))
+        return 0
+
+    return _run_apply
 
 
 async def _run_get(args: argparse.Namespace) -> int:
