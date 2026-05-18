@@ -16,11 +16,10 @@ from resoio.cli import _amain, _build_parser
 
 
 def _make_fixed_camera(width: int, height: int, frame_count: int) -> type[CameraBase]:
-    """Build a Camera fake that yields exactly ``frame_count`` frames.
+    """Yield ``frame_count`` frames at fixed ``width``/``height``.
 
-    The fake intentionally ignores ``request.width``/``request.height`` so
-    tests can prove the CLI threads the *server-reported* dimensions into
-    the Y4M header (e.g. crop scenarios).
+    Ignores ``request.width``/``height`` so tests assert that the CLI threads
+    the *server-reported* dimensions through to the Y4M header.
     """
 
     class _FixedCamera(CameraBase):
@@ -44,7 +43,7 @@ def _make_fixed_camera(width: int, height: int, frame_count: int) -> type[Camera
 def _make_infinite_camera(
     width: int, height: int, interval_s: float = 0.01
 ) -> type[CameraBase]:
-    """Build a Camera fake that yields forever, simulating a live stream."""
+    """Yield frames forever at ``interval_s`` cadence."""
 
     class _InfiniteCamera(CameraBase):
         async def stream_frames(
@@ -68,13 +67,8 @@ def _make_infinite_camera(
 
 
 def _make_one_then_sleep_camera(width: int, height: int) -> type[CameraBase]:
-    """Build a Camera fake that yields one frame then sleeps for ages.
-
-    Used to exercise the consumer's "duplicate the latest frame to keep
-    the output fps constant" branch: only a single frame ever reaches
-    the capture loop, so any output beyond one frame must be a
-    duplicate.
-    """
+    """Yield exactly one frame, then sleep — exercises the duplicate-frame
+    branch."""
 
     class _OneFrameCamera(CameraBase):
         async def stream_frames(
@@ -88,8 +82,7 @@ def _make_one_then_sleep_camera(width: int, height: int) -> type[CameraBase]:
                 frame_id=0,
                 pixels=bytes([0]) * (width * height * 4),
             )
-            # Long enough that any reasonable test --duration completes
-            # before the producer task naturally ends.
+            # Outlast any reasonable test --duration so the producer never ends first.
             await asyncio.sleep(10.0)
 
     return _OneFrameCamera

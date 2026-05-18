@@ -1,15 +1,9 @@
 """E2E: verify ``DisplayClient.apply()`` actually retargets the renderer.
 
-Calls ``DisplayClient.apply(width, height)`` against a live Resonite, then
-polls ``CameraClient.stream()`` until a frame with the requested dimensions
-arrives. This is the ground-truth that ``FrooxEngineDisplayBridge`` →
-``ResolutionSettings.ApplyResolution()`` propagates all the way through the
-Renderer (engine 内部の Settings snapshot だけでなく renderer 側まで届くか)。
-
-Two distinct aspect ratios are exercised (1024x768 and 1280x720) so we
-catch the case where ``apply`` is silently no-op-ing on width/height but
-``get`` returns the cached snapshot. The original resolution is captured up
-front and restored at the end to avoid leaking state into other e2e runs.
+Polls ``CameraClient.stream()`` after ``apply`` and asserts the streamed
+frame dimensions match — the only ground-truth that
+``FrooxEngineDisplayBridge`` → ``ResolutionSettings.ApplyResolution()``
+propagates through to the Renderer (not just into the engine snapshot).
 
 Like every file under ``tests/e2e/`` this requires the host-side
 ``just host-agent`` daemon plus a live Resonite client; the
@@ -57,8 +51,8 @@ _CAMERA_READY_RETRY_INTERVAL_S = 2.0
 async def _wait_for_camera_ready() -> None:
     """Block until the Camera bridge accepts a stream (engine fully booted).
 
-    Copied from ``camera_stream.py`` deliberately; consolidating now would
-    be a premature abstraction with only two call sites.
+    Intentional copy of ``camera_stream.py``'s wait — two call sites is
+    below the bar for shared-helper extraction.
     """
     ready_deadline = time.monotonic() + _CAMERA_READY_TIMEOUT_S
     while True:
@@ -84,13 +78,10 @@ async def _get_current_display() -> DisplayInfo:
 
 
 async def _apply_resolution(width: int, height: int) -> DisplayInfo:
-    """Apply ``width``/``height`` and assert the snapshot reflects them.
+    """Apply ``width``/``height`` and assert the engine snapshot reflects them.
 
-    A mismatch here is the first sign that ``FrooxEngineDisplayBridge`` is
-    not actually routing through ``ResolutionSettings.ApplyResolution()`` —
-    the engine should return the requested values in its post-apply
-    snapshot (Renderer propagation is verified separately by polling
-    streamed frame dimensions).
+    A mismatch here means the Apply path is broken at the engine level,
+    before any Renderer propagation could be involved.
     """
     async with DisplayClient() as c:
         info = await c.apply(width=width, height=height)
@@ -144,9 +135,8 @@ class TestDisplayResolution:
                     bgr = cv2.cvtColor(frame.pixels, cv2.COLOR_RGBA2BGR)
                     cv2.imwrite(str(out_dir / f"{target_w}x{target_h}.png"), bgr)
             finally:
-                # Restore the original resolution even if an assertion in
-                # the loop fired — other e2e files (camera_stream.py) read
-                # frames at the engine default and should not be perturbed.
+                # Restore so sibling e2e files (camera_stream.py) read frames
+                # at the engine default and are not perturbed by this run.
                 await _apply_resolution(initial.width, initial.height)
 
         asyncio.run(run())
