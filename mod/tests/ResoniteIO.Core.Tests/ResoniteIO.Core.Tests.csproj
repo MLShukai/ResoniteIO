@@ -75,5 +75,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ResoniteIO.Core\ResoniteIO.Core.csproj" />
+    <!--
+      RendererShared (netstandard2.0、依存ゼロ) は engine 側 / Renderer 側
+      双方が参照する schema 定数を提供する。本テスト csproj では
+      FrameHeader の round-trip / バリデーションを検証するため参照する。
+    -->
+    <ProjectReference Include="..\..\src\ResoniteIO.RendererShared\ResoniteIO.RendererShared.csproj" />
   </ItemGroup>
 </Project>

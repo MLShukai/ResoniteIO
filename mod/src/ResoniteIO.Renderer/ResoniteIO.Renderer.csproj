@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ResoniteIO.Renderer: Renderite.Renderer.exe (Wine + Unity Mono) で動作する
+    BepInEx 5 plugin。Camera v2 で OverlayCamera の framebuffer を CommandBuffer +
+    AsyncGPUReadback で capture し、InterprocessLib 経由で engine 側に送る。
+
+    現時点 (Wave 1 C2) では sln に project entry を作るための **空シェル**。
+    Plugin.cs / FrameCapture.cs / FrameSender.cs は Wave 2 (C3, C4) で追加する。
+    sln 編集者は C2 のみ (Plan 同期点) の制約があり、本 commit で 2 project 同時
+    登録する目的のため空シェルを置く。
+
+    TargetFramework=net472:
+      Unity Mono は .NET Framework 4.x 系のみ動作するため net472 を指定する。
+      .NET 10 SDK は net472 の reference assemblies を同梱しないので
+      Microsoft.NETFramework.ReferenceAssemblies を PackageReference で
+      取得する (container build 可能でクリーンな選択肢、Mono 依存しない)。
+
+    Directory.Build.props 継承:
+      Nullable=enable / TreatWarningsAsErrors=true は継承するが、空シェル
+      段階では .cs を 1 個も置かない (Plugin.cs 等は Wave 2 で書く)。
+      空アセンブリでも dotnet build は成功する。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>ResoniteIO.Renderer</RootNamespace>
+    <AssemblyName>ResoniteIO.Renderer</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <!--
+      net472 では C# 12 既定の言語機能 (file-scoped namespace 等) を使うため
+      LangVersion=latest を明示する (Directory.Build.props と同じ値だが、
+      framework 切替時に SDK 側 default が下がるのを防ぐ意味で再宣言)。
+    -->
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.NETFramework.ReferenceAssemblies"
+      Version="1.0.3"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+</Project>
