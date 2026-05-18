@@ -13,3 +13,5 @@
 - [BepInExRenderer は framework 配置](feedback_bepinex_renderer_as_framework.md) — `ResoniteModding-BepInExRenderer` は plugin dir を作らず `Renderer/BepInEx/core/` に framework を deploy する。check-gale は `BepInEx.Preloader.dll` で確認。
 - [netstandard2.0 の polyfill 要件](feedback_netstandard20_polyfills.md) — Span/BinaryPrimitives は `System.Memory` NuGet、HashCode.Combine は無いので手組み hash で代替。
 - [test 専用 service host pattern](feedback_test_only_service_host.md) — SessionHost に mount しない wave の Core 側 modality は、test 専用の最小 Kestrel host を分離して round-trip テストを書く。
+- [FrooxEngine Settings API](feedback_frooxengine_settings_api.md) — `Settings.GetActiveSetting<T>() / UpdateActiveSetting<T>()` が公式、内部 `RunSynchronously` で engine thread に dispatch。`Engine.Current.GetCoreSetting` は存在しない。foreground fps は engine 公式経路で制御不可。
+- [InterprocessLib callback signature](feedback_interprocesslib_callback_signature.md) — `Messenger.ReceiveValueArray<T>` の callback は `Action<T[]?>`、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず -=。
