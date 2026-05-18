@@ -14,10 +14,17 @@ lint:
   # モダリティ固有のドメイン名で命名する方針 (Plan §1 Proto schema)。
   # `CameraStreamRequest` / `CameraFrame` はモダリティ間で再利用しうる
   # データ型として命名しているため、RPC 名にバインドした envelope 名は採らない。
+  #
+  # RPC_REQUEST_RESPONSE_UNIQUE は「同じ request / response 型を複数 RPC で
+  # 使わない」を要求する。`Display.Apply` / `Display.Get` は両方とも適用後の
+  # 現状値を返す API として同一 shape の `DisplayState` を返す方が直感的なので
+  # 除外する (同じドメイン名を再利用しうるという RPC_*_STANDARD_NAME 除外と
+  # 同じ精神)。
   except:
     - SERVICE_SUFFIX
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
 breaking:
   use:
     - FILE
