@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Container-side client for the host debug bridge.
 
-container 内 shell から ``just resonite-{start,stop,status}`` 経由で呼ばれ、
-host 常駐の ``scripts/host_agent.py`` に UDS で 1 リクエスト送って 1
-レスポンスを受け取って表示する薄い CLI。
+container 内 shell から ``just resonite-{start,stop,status,screenshot}``
+経由で呼ばれ、host 常駐の ``scripts/host_agent.py`` に UDS で 1 リクエスト
+送って 1 レスポンスを受け取って表示する薄い CLI。
 """
 
 from __future__ import annotations
@@ -24,6 +24,9 @@ MAX_RESPONSE_BYTES = 65536
 
 # プロファイル名に許す文字 (host_agent と同じ規約)。
 _PROFILE_ALLOWED = set(string.ascii_letters + string.digits + "._-")
+
+# Screenshot output path に許す文字 (host_agent と同じ規約)。
+_SCREENSHOT_PATH_ALLOWED = set(string.ascii_letters + string.digits + "._-/")
 
 # Exit codes
 EXIT_OK = 0
@@ -60,6 +63,59 @@ def _resolve_profile(arg: str | None) -> str:
         )
         sys.exit(EXIT_USAGE)
     return profile
+
+
+def _validate_screenshot_output(output: str) -> str:
+    """``--output`` を client 側で軽く checkout する (重複検証は host_agent に委ねる)。
+
+    fail-fast のために絶対パス / ``..`` / 許容外文字を弾く。最終的な
+    repo-root 内側判定は host_agent.py 側で再実施される。
+    """
+    if not output:
+        print("ERROR: --output が空です。", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+    if output.startswith("/"):
+        print(
+            f"ERROR: --output は repo-relative path で指定してください (got: {output!r})",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_USAGE)
+    if any(part == ".." for part in output.split("/")):
+        print(
+            f"ERROR: --output に '..' セグメントは使えません (got: {output!r})",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_USAGE)
+    if not all(c in _SCREENSHOT_PATH_ALLOWED for c in output):
+        print(
+            f"ERROR: --output に許可外文字が含まれています: {output!r} "
+            "(許容: [A-Za-z0-9._-/])",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_USAGE)
+    return output
+
+
+def _parse_bbox_arg(value: str | None) -> list[int] | None:
+    """``--bbox x,y,w,h`` を ``[x, y, w, h]`` に変換する。None なら None。"""
+    if value is None:
+        return None
+    parts = value.split(",")
+    if len(parts) != 4:
+        print(
+            f"ERROR: --bbox は 'x,y,w,h' 形式の 4 整数で指定してください (got: {value!r})",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_USAGE)
+    try:
+        ints = [int(p.strip()) for p in parts]
+    except ValueError:
+        print(
+            f"ERROR: --bbox の要素は整数である必要があります (got: {value!r})",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_USAGE)
+    return ints
 
 
 def _send_request(sock_path: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +198,27 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     sub.add_parser("stop", help="Resonite / Renderite を SIGTERM→SIGKILL で停止する")
     sub.add_parser("status", help="Resonite / Renderite の実行状態を表示する")
 
+    screenshot = sub.add_parser(
+        "screenshot",
+        help="host の desktop framebuffer を repo-relative path に PNG で書き出す",
+    )
+    screenshot.add_argument(
+        "--output",
+        required=True,
+        help="出力先 (repo-relative path、`.png` 必須、`..` / 絶対パス禁止)",
+    )
+    screenshot.add_argument(
+        "--monitor",
+        type=int,
+        default=1,
+        help="mss の monitor index (0=合成、1=primary、default=1)",
+    )
+    screenshot.add_argument(
+        "--bbox",
+        default=None,
+        help="部分領域を 'x,y,w,h' (整数) で指定。未指定なら full monitor",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -156,6 +233,13 @@ def main(argv: list[str] | None = None) -> int:
         request = {"action": "stop"}
     elif args.action == "status":
         request = {"action": "status"}
+    elif args.action == "screenshot":
+        request = {
+            "action": "screenshot",
+            "output": _validate_screenshot_output(args.output),
+            "monitor": int(args.monitor),
+            "bbox": _parse_bbox_arg(args.bbox),
+        }
     else:
         print(f"ERROR: unknown action: {args.action!r}", file=sys.stderr)
         return EXIT_USAGE

@@ -186,6 +186,10 @@ scripts/.venv/
 # 動画は数 MB/run で commit する意味がないため ignore。
 python/tests/e2e/e2e_artifacts/
 
+# `just e2e-camera-v2` / `just resonite-screenshot` の出力先。
+# repo-relative path で書き出すため repo root 直下に `tmp/` を作る。
+tmp/
+
 # =============================================================================
 # Decompiled sources
 # =============================================================================
