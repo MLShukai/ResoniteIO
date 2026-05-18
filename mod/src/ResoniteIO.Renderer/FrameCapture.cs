@@ -7,24 +7,15 @@ using UnityEngine.Rendering;
 namespace ResoniteIO.Renderer;
 
 /// <summary>
-/// Renderite renderer の screen 出力 camera (Overlay) に CommandBuffer を attach し、
-/// 毎フレーム framebuffer を <see cref="AsyncGPUReadback"/> で取り出して
+/// Renderite renderer の screen 出力 camera (max depth = Overlay) に CommandBuffer
+/// を attach し、毎フレーム framebuffer を <see cref="AsyncGPUReadback"/> で取り出して
 /// <see cref="FrameSender"/> に push する。
 /// </summary>
 /// <remarks>
-/// <para>
-/// 知見 (knowledge §3.4): Renderer プロセスには ScreenCamera (depth=0) と
-/// OverlayCamera (depth=50) の 2 つが screen 直描画している。CommandBuffer は
-/// **max depth (= overlay)** に <see cref="CameraEvent.AfterEverything"/> で attach
-/// し、<see cref="BuiltinRenderTextureType.CurrentActive"/> を中間 RenderTexture に
-/// Blit して読み出す。
-/// </para>
-/// <para>
-/// <see cref="AsyncGPUReadback"/> は drop-on-busy 方式 (<see cref="_inFlight"/> flag)
-/// で readback queue が膨れるのを防ぐ。1 フレームで取り切れなかった capture は
-/// 黙って捨てる (latest-wins の renderer 側変種; engine 側 PushedFrameCameraBridge
-/// と組み合わせて 2 段の latest-wins)。
-/// </para>
+/// Renderer プロセスには ScreenCamera (depth=0) と OverlayCamera (depth=50) の 2 つ
+/// が screen 直描画しているので max depth を選ぶ (camera-v2-constraints §3.4)。
+/// <see cref="AsyncGPUReadback"/> は drop-on-busy (<see cref="_inFlight"/>) で
+/// readback queue が膨れるのを防ぎ、取り切れない capture は黙って捨てる。
 /// </remarks>
 internal sealed class FrameCapture : IDisposable
 {
@@ -44,10 +35,7 @@ internal sealed class FrameCapture : IDisposable
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <summary>
-    /// 毎 Update tick で呼ぶ。CommandBuffer 未 attach なら attach 試行、
-    /// 前回 readback が pending なら skip (drop-on-busy)。
-    /// </summary>
+    /// <summary>毎 Update tick で呼ぶ。pending な readback があれば drop-on-busy で skip。</summary>
     public void TryCapture()
     {
         if (_disposed)
@@ -59,7 +47,7 @@ internal sealed class FrameCapture : IDisposable
 
         if (_captureRT == null)
         {
-            // attach 対象の screen camera が見つからない (engine 起動直後など)。次 tick で再試行。
+            // attach 対象 camera が未生成 (engine 起動直後など)。次 tick で再試行。
             return;
         }
 
@@ -73,13 +61,9 @@ internal sealed class FrameCapture : IDisposable
     }
 
     /// <summary>
-    /// max depth + screen 直描画 (<c>targetTexture == null</c>) の Camera に
-    /// <see cref="CameraEvent.AfterEverything"/> で <see cref="CommandBuffer"/> を attach する。
+    /// max depth + 直描画 (<c>targetTexture == null</c>) の Camera に
+    /// <see cref="CameraEvent.AfterEverything"/> で CommandBuffer を attach する。
     /// </summary>
-    /// <remarks>
-    /// hooked 済 / attach 失敗時は no-op。target が見つからない (camera がまだ無い) 状態
-    /// では次 tick で再試行されることを期待する (毎 Update から呼ばれる前提)。
-    /// </remarks>
     private void EnsureCommandBufferAttached()
     {
         if (_hookedCamera != null && _captureRT != null)

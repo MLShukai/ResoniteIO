@@ -3,13 +3,7 @@
 `ResoniteIO.Renderer.dll` (BepInEx 5、Wine + Unity Mono 上で動く plugin) が
 `Renderite.Renderer.exe` 起動時に正しく load され、OverlayCamera への
 CommandBuffer attach と InterprocessLib queue 接続が完了するかを Gale 経由起動で
-確認する手動 smoke test。
-
-実装計画上の対応:
-
-- v2 = Camera Renderite framebuffer 直取り経路の Wave 5 / E1 で実機検証した内容
-  をそのまま手順書化したもの
-- 自動化できない (Wine プロセス + Unity が動かない container 内では検証不能)
+確認する手動 smoke test (Wine + Unity が container では走らないため自動化不可)。
 
 ## 前提
 
@@ -84,20 +78,15 @@ CommandBuffer attach と InterprocessLib queue 接続が完了するかを Gale 
 
 各行の意味:
 
-- **`Awake`**: `Plugin.cs` の `Awake()` が呼ばれた = BepInEx 5 が plugin を load 完了
-- **`FrameSender attached`**: `FrameSender.cs` で `InterprocessLib.Messenger` が
-  `isAuthority: false`, queue capacity 32 MiB で engine 側 queue に attach 成功。
-  `capacity=33554432` は 32 * 1024 * 1024 = 32 MiB
-- **`attached CommandBuffer`**: `FrameCapture.EnsureCommandBufferAttached()` が
-  `Camera.allCameras` から `targetTexture==null && enabled` かつ最大 `depth` の
-  camera を見つけ、`CameraEvent.AfterEverything` で `BuiltinRenderTextureType.CurrentActive`
-  を中間 `RenderTexture` に Blit する CommandBuffer を attach 完了。
-  `size` は実機の window resolution に依存 (上は E1 検証時の値)
+- **`Awake`**: BepInEx 5 が plugin を load 完了
+- **`FrameSender attached`**: `InterprocessLib.Messenger` を `isAuthority: false`,
+  queue capacity 32 MiB で engine 側 queue に attach 成功 (`capacity=33554432` = 32 MiB)
+- **`attached CommandBuffer`**: `Camera.allCameras` から `targetTexture==null && enabled`
+  かつ最大 `depth` の camera に `CameraEvent.AfterEverything` で CommandBuffer を attach
+  完了。`size` は window resolution 依存 (上は E1 検証時の値)
 
-`Awake` は plugin load 直後に出る。`FrameSender attached` も `Awake` の中で
-構築されるので即連続する。`attached CommandBuffer` は最初の `Update` tick で
-`Camera.allCameras` が空でない (Renderite が camera を構築済み) になった時点
-で出るため、起動完了まで 1〜2 秒のラグがある。
+`attached CommandBuffer` は最初の `Update` tick で `Camera.allCameras` が
+非空になった時点で出るため、起動完了まで 1〜2 秒のラグがある。
 
 ## 期待される engine 側ログ (補助確認)
 
@@ -107,10 +96,8 @@ CommandBuffer attach と InterprocessLib queue 接続が完了するかを Gale 
 [Info   :ResoniteIO] [ResoniteIO] RendererFrameInterprocessReceiver listening: owner=net.mlshukai.resonite-io.camera queue=resonite-io-camera-frames capacity=33554432
 ```
 
-これは engine 側 Receiver (Wave 3 C6) が `isAuthority: true` で同じ queue を
-作って renderer 側からの push を待ち受けている状態。renderer 側 `FrameSender attached` と組合せると **同じ owner / queue / capacity** が両側で一致して
-いることが確認できる (一致しないと silent failure で frame が届かないので
-ここでの再 grep が大事)。
+renderer 側 `FrameSender attached` と組合せて **owner / queue / capacity** が
+両側で一致しているかを再確認する (drift があると silent failure で frame が届かない)。
 
 ## トラブルシュート
 
@@ -129,37 +116,21 @@ CommandBuffer attach と InterprocessLib queue 接続が完了するかを Gale 
 
 ### `Awake` ログは出るが `attached CommandBuffer` が出ない
 
-`Camera.allCameras` から条件に合う camera が見つからない状態:
-
-- 起動直後 (1〜2 秒) は Renderite が camera 構築前なので発生する。`Update`
-  tick で再試行されるので 5 秒も待てば出るはず
-- **15 秒以上経っても出ない** なら Renderite の camera 構造が変わった可能性。
-  `just decompile` で `Renderite.Unity` の `CameraController` / `CameraManager`
-  を再確認 (knowledge `/home/dev/.claude/plans/camera-v2-shortest-route-knowledge.md`
-  §3.4 にスナップショット時の挙動メモあり)
-- Camera target は `targetTexture == null && enabled == true && depth = max`。
-  Renderite v2 系で OverlayCamera の depth (現状 50) が変わると拾えない
+- 起動直後 1〜2 秒は Renderite が camera 構築前なので発生する。5 秒待てば出るはず
+- **15 秒以上待っても出ない** なら Renderite の camera 構造が変わった可能性。
+  `just decompile` で `Renderite.Unity` の `CameraController` を再確認
+- Camera target は `targetTexture == null && enabled == true && depth = max`
 
 ### `FrameSender attached` が出ない
 
-`InterprocessLib.Unity.dll` が load できていない:
-
-- Gale で `Nytra-InterprocessLib` が install されているか確認
-  (`gale/Renderer/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepInEx/InterprocessLib.Unity.dll`
-  が存在するか)
-- `ResoniteIO.Renderer.csproj` の HintPath
-  `$(GalePath)Renderer/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepInEx/InterprocessLib.Unity.dll`
-  と上記の実 path が一致しているか
-- 不一致なら Gale install 後の path が変わっている。`just check-gale`
-  を更新するのも合わせて検討
+`InterprocessLib.Unity.dll` を load できていない。Gale で `Nytra-InterprocessLib` が
+install されており、`ResoniteIO.Renderer.csproj` の HintPath と
+`gale/Renderer/BepInEx/plugins/Nytra-InterprocessLib/.../InterprocessLib.Unity.dll`
+の実 path が一致しているかを確認。
 
 ### `Awake` も出ない (Renderer 側 BepInEx 自体は起動している)
 
-- `gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer/ResoniteIO.Renderer.dll`
-  が存在するか確認
-- 存在するなら BepInEx 5 が plugin の load に失敗している。Renderer 側
-  `LogOutput.log` 冒頭の Preloader log に `Could not load plugin '.../ResoniteIO.Renderer.dll'` 系のエラーが出ているはず。typical な原因:
-  - `BaseUnityPlugin` の参照解決失敗 (`BepInEx.dll` HintPath ずれ)
-  - `Renderite.Shared` / `UnityEngine.CoreModule` の version skew (Resonite
-    update 後)
-  - net472 polyfill (System.Memory) の解決失敗
+`gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer/ResoniteIO.Renderer.dll` の存在を
+確認。存在するなら Renderer 側 `LogOutput.log` 冒頭の Preloader log に load 失敗
+の原因 (`BaseUnityPlugin` 参照解決失敗 / `Renderite.Shared` version skew /
+net472 polyfill 解決失敗 等) が出ているはず。

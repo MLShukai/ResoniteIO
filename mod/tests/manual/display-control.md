@@ -5,23 +5,14 @@ Python `DisplayClient.apply(...)` / `DisplayClient.get()` の挙動を実機で
 
 ## 重要な前置き
 
-`FrooxEngineDisplayBridge` は engine 公式 API
-(`Settings.UpdateActiveSetting<DesktopRenderSettings>` /
-`Settings.UpdateActiveSetting<ResolutionSettings>`) を経由するため、
-**`max_fps` は engine 側で `MaximumBackgroundFramerate` (= window が
-background のときの fps cap) にしかマップされない**。
-
-- foreground fps を 60 / 120 に上げる経路は engine `RenderSystem` の private
-  `_messagingHost` への reflection 経由でしか実現できない
-  (knowledge `/home/dev/.claude/plans/camera-v2-shortest-route-knowledge.md`
-  §3.4 で max_fps_foreground=120 を実現した path)
-- 本 Bridge では `LimitFramerateWhenUnfocused=true` を連動で書くので、
-  `apply(max_fps=120.0)` 後に **Resonite window から focus を外す**
-  (Alt-Tab で別ウィンドウに移動するなど) と engine が renderer に
-  `DesktopConfig { maximumBackgroundFramerate=120 }` を送る
-- foreground 状態 (Resonite が active window) では `Application.targetFrameRate=30`
-  (engine default) のまま。これは Plan §risk と user 合意の状態であり、
-  必要なら別 PR で `_messagingHost` 直叩き path を追加する前提
+`FrooxEngineDisplayBridge` は engine 公式 API 経由のため
+**`max_fps` は `MaximumBackgroundFramerate` (= background fps cap) にしかマップされない**。
+foreground fps を上げる経路は engine `RenderSystem._messagingHost` への
+reflection 経由でしか不可能 (camera-v2-constraints §9)。本 Bridge は連動で
+`LimitFramerateWhenUnfocused=true` を書くので、`apply(max_fps=120.0)` 後に
+**Resonite window から focus を外す** (Alt-Tab 等) と engine が renderer に
+`DesktopConfig { maximumBackgroundFramerate=120 }` を送って反映される。
+foreground 状態では `Application.targetFrameRate=30` のまま。
 
 ## 前提
 
@@ -85,24 +76,22 @@ PY
   ```text
   [Info   :ResoniteIO] [ResoniteIO] Display.Apply: max_fps (background) → 120
   ```
-- 即時には fps は変わらない (foreground 中なので `MaximumBackgroundFramerate`
-  は休眠状態)
-- **Alt-Tab で別ウィンドウに focus を移す** と Resonite が background となり
-  engine が renderer に `DesktopConfig { maximumBackgroundFramerate=120, vSync=true }` を送る → renderer の `Application.targetFrameRate=120` に
-  切り替わる (VSync 有効なら monitor refresh rate で律速)
+- 即時には fps は変わらない (foreground 中なので `MaximumBackgroundFramerate` は休眠)
+- **Alt-Tab で focus を外す** と Resonite が background となり engine が renderer に
+  `DesktopConfig { maximumBackgroundFramerate=120 }` を送って `Application.targetFrameRate=120`
+  に切り替わる (VSync 有効なら monitor refresh rate で律速)
 
 ### `get()`
 
-- 現状の engine snapshot を返す:
-  - `width` / `height`: `ResolutionSettings.CurrentTargetResolution`
-  - `max_fps`: `DesktopRenderSettings.MaximumBackgroundFramerate`
-- `apply` を呼んだ後の `get` は変更後の値を返す (engine への書き込みは
-  `Settings.UpdateActiveSetting` が `RunSynchronously` 経由で engine thread
-  に dispatch するため、`apply` が return した時点で snapshot は更新済み)
+- `width` / `height`: `ResolutionSettings.CurrentTargetResolution`
+- `max_fps`: `DesktopRenderSettings.MaximumBackgroundFramerate`
+- `apply` 後の `get` は更新後の値を返す (engine 書き込みは `RunSynchronously`
+  で engine thread に dispatch されるため `apply` return 時点で確定)
 
 ## 0 = "変更しない" の動作確認
 
-`apply` の任意のフィールドを 0 で渡すと engine 側は当該フィールドを skip する:
+`apply` の任意フィールドを 0 で渡すと engine 側はそのフィールドを skip する
+(proto3 default value セマンティクス):
 
 ```python
 # max_fps だけ更新、resolution は据え置き
@@ -110,45 +99,29 @@ info = await client.apply(max_fps=60.0)
 # → info.width / info.height は変わらず、max_fps だけ 60.0
 ```
 
-これは proto3 default value セマンティクス。Python `DisplayClient` は 0 を raw
-に server に forward し、server-side Bridge (`FrooxEngineDisplayBridge`) が
-`config.Width != 0` の `if` block 全体を skip する。
-
 ## トラブルシュート
 
 ### `RpcException: Status.Unavailable, "Display bridge is not configured."`
 
-`SessionHost` に `IDisplayBridge` が注入されていない。Wave 4 / C8 で
-`ResoniteIOPlugin.OnEngineReady` が `FrooxEngineDisplayBridge` を構築するよう
-配線したが、engine 起動順序の race で `Engine.Current` がまだ初期化されて
-おらず例外が出ると Bridge 構築が skip される可能性。engine 側 log
-(`just log`) で `Engine ready` 以降に `Failed to start Session gRPC host:`
-等のエラーが出ていないか確認。
+`SessionHost` に `IDisplayBridge` が注入されていない。`Engine ready` 以降に
+`Failed to start Session gRPC host:` 等のエラーが engine 側 log (`just log`) に
+出ていないか確認。
 
 ### `RpcException: Status.FailedPrecondition, "ResolutionSettings is not yet active"`
 
-engine 起動直後で `Settings.GetActiveSetting<T>()` がまだ null を返す
-状態。world load 完了まで数秒待ってから `apply` / `get` を再試行する
-(`FailedPrecondition` は client retry 可能の signal)。
+engine 起動直後で `Settings.GetActiveSetting<T>()` がまだ null。world load 完了
+まで数秒待ってから再試行 (`FailedPrecondition` は client retry 可能の signal)。
 
 ### Resolution は変わるが fps cap が反映されない (Alt-Tab しても)
 
-- engine 側 log で `OnDesktopRenderSettingsChanged` 由来の Renderite 側 command
-  送出ログを探す (engine の `RenderSystem` 内 log)
-- `LimitFramerateWhenUnfocused` が `true` になっているか `client.get()` で
-  確認 (false だと engine が `DesktopConfig.maximumBackgroundFramerate=null`
-  で送る、`OnDesktopRenderSettingsChanged` の decompile を参照)
-- renderer 側 (`Renderite.Unity.RenderingManager`) で `_maxBackgroundFPS`
-  反映を確認するには decompile を参照する
+- `LimitFramerateWhenUnfocused` が `true` になっているか `client.get()` で確認
+  (false だと engine が `DesktopConfig.maximumBackgroundFramerate=null` で送る)
+- renderer 側 (`Renderite.Unity.RenderingManager`) の `_maxBackgroundFPS` 反映は
+  decompile で確認
 
-## VR モード時の挙動 (未検証 / 観察事項)
+## VR モード時の挙動 (未検証)
 
-VR mode で `apply()` を呼ぶケースは E1 では検証していない。observe-only:
-
-- `ResolutionSettings` には `WindowResolution` と `FullscreenResolution` が
-  別 field で存在し、現在のモードに応じて `CurrentTargetResolution` が
-  どちらを返すかが分岐する (`Fullscreen.Value` で切替)
-- VR mode で `apply(width=..., height=...)` を呼ぶと desktop window 解像度
-  のみ変わり、VR HMD のレンダリング解像度は別系統 (`VRRenderSettings` 等
-  別 setting) なので変わらないはず
-- 検証 TODO は Plan §後続 で扱う
+VR mode では `ResolutionSettings.CurrentTargetResolution` が
+`WindowResolution` / `FullscreenResolution` のどちらを返すかが `Fullscreen.Value`
+で分岐する。VR HMD 解像度は別系統 (`VRRenderSettings` 等) なので
+`apply(width=..., height=...)` では変わらないはず。

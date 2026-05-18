@@ -319,8 +319,8 @@ def _parse_bbox(bbox: Any) -> tuple[int, int, int, int] | None:
 def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
     """``mss`` で desktop framebuffer を撮影し PNG bytes を base64 で返す。
 
-    host-local 書き出しは行わず、in-memory PNG を base64 にして response に 乗せる
-    (network 経由転送)。client (resonite_cli) が container 側で 任意 path に書き出す。
+    host-local 書き出しはせず in-memory PNG を base64 で response に乗せる (client が
+    container 側で書き出す)。
     """
     if monitor is None:
         monitor_idx = 1
@@ -338,7 +338,7 @@ def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
     except ValueError as e:
         return _error("screenshot", "bad_request", str(e))
 
-    # mss は遅延 import: venv 未 sync でも start/stop/status は動かしたい。
+    # 遅延 import: venv 未 sync でも start/stop/status は動かしたい。
     try:
         import mss  # type: ignore[import-untyped]
         import mss.tools  # type: ignore[import-untyped]
@@ -371,8 +371,6 @@ def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
                 img = sct.grab(region)
             else:
                 img = sct.grab(monitors[monitor_idx])
-            # mss.tools.to_png は output=None で PNG bytes を直接返す
-            # (mss 10.2.0 で確認)。tempfile fallback は不要。
             png_bytes = mss.tools.to_png(img.rgb, img.size, output=None)
     except Exception as e:
         return _error(
@@ -435,10 +433,7 @@ def handle_request(raw: bytes, gale_bin: str) -> dict[str, Any]:
     if action == "status":
         return cmd_status()
     if action == "screenshot":
-        # ``output`` フィールドは旧 protocol の名残。新 protocol では PNG を
-        # network 経由で返すので server 側では受け取らない。client 側
-        # (resonite_cli) が container path に書く。migration 中の旧 client
-        # からの request を壊さないため、存在しても silently ignore する。
+        # 旧 protocol の ``output`` field は無視 (PNG bytes を返す network 経路に移行済み)。
         return cmd_screenshot(
             msg.get("monitor"),
             msg.get("bbox"),

@@ -1,12 +1,5 @@
-"""Client for the Resonite IO ``Display`` gRPC unary service.
-
-``DisplayClient`` lets a Python caller read and write engine-side
-display settings (window resolution + background framerate cap) through
-the unary ``Apply`` / ``Get`` RPCs defined in
-``proto/resonite_io/v1/display.proto``. Camera v2 streams hit the
-engine-side fps cap, so callers typically pair this with
-:class:`resoio.CameraClient` to raise the cap before opening a stream.
-"""
+"""Client for the Resonite IO ``Display`` unary RPCs (window resolution + fps
+cap)."""
 
 from __future__ import annotations
 
@@ -35,12 +28,10 @@ _logger = logging.getLogger("resoio.display")
 
 @dataclass(frozen=True, slots=True)
 class DisplayInfo:
-    """Snapshot of the actual engine-side display settings.
+    """Snapshot of engine-side display settings.
 
-    ``width`` / ``height`` are the current target window resolution in
-    pixels. ``max_fps`` is the engine-applied framerate cap (currently
-    the background-FPS cap; foreground control is not exposed by the
-    engine public Settings API as of FrooxEngine 2025.x).
+    ``max_fps`` is the *background* fps cap; foreground control is not
+    exposed by the engine public Settings API.
     """
 
     width: int
@@ -49,11 +40,6 @@ class DisplayInfo:
 
 
 def _info_from_state(state: DisplayState) -> DisplayInfo:
-    """Build a public :class:`DisplayInfo` from the generated proto type.
-
-    Kept module-private so callers depend on :class:`DisplayInfo` rather
-    than the generated ``DisplayState``.
-    """
     return DisplayInfo(
         width=state.width,
         height=state.height,
@@ -64,9 +50,8 @@ def _info_from_state(state: DisplayState) -> DisplayInfo:
 class DisplayClient:
     """Async client for the Resonite IO ``Display`` service over a UDS.
 
-    Use as an async context manager so the gRPC channel is closed
-    deterministically. Socket resolution mirrors
-    :class:`resoio.SessionClient` / :class:`resoio.CameraClient`.
+    Use as an async context manager so the gRPC channel closes
+    deterministically.
     """
 
     def __init__(self, socket_path: str | None = None) -> None:
@@ -111,11 +96,8 @@ class DisplayClient:
     ) -> DisplayInfo:
         """Apply a (partial) display config and return the resulting state.
 
-        Zero values are passed through to the server, which interprets
-        ``0`` / ``0.0`` as "leave the field unchanged" (proto3 default
-        value semantics). Returned ``DisplayInfo`` reflects the
-        engine-side state *after* the partial update.
-
+        ``0`` / ``0.0`` mean "leave unchanged" (proto3 default semantics);
+        the returned snapshot reflects state *after* the partial update.
         Raises :class:`RuntimeError` if called outside ``async with``.
         """
         stub = self._stub
@@ -128,10 +110,7 @@ class DisplayClient:
         return _info_from_state(state)
 
     async def get(self) -> DisplayInfo:
-        """Return the engine-side display state without modifying it.
-
-        Raises :class:`RuntimeError` if called outside ``async with``.
-        """
+        """Return the engine-side display state without modifying it."""
         stub = self._stub
         if stub is None:
             raise RuntimeError(

@@ -4,19 +4,11 @@ using System.Buffers.Binary;
 namespace ResoniteIO.RendererShared;
 
 /// <summary>
-/// engine ↔ Renderer 間で共有メモリ queue (InterprocessLib) を流れる camera frame
-/// payload の先頭 40 bytes に乗る little-endian binary header。
+/// engine ↔ Renderer 間で共有メモリ queue を流れる camera frame payload の
+/// 先頭 40 bytes に乗る little-endian binary header。
 /// </summary>
 /// <remarks>
-/// <para>
-/// payload は <c>FrameHeader (40 bytes) + RGBA8 pixel data (PayloadLength bytes)</c>
-/// という連結形式。各 frame の bit-exact な解釈を engine / renderer 両側で揃える
-/// ため、本 struct を <see cref="ResoniteIO.RendererShared"/> に置き
-/// netstandard2.0 で共有する。
-/// </para>
-/// <para>
-/// byte layout (すべて little-endian):
-/// </para>
+/// byte layout (LE、本表は engine / renderer 両側の bit-exact 契約):
 /// <code>
 /// Offset  Size  Field
 /// 0       4     Magic        ('RIOF' = 0x52494F46 LE)
@@ -32,37 +24,26 @@ namespace ResoniteIO.RendererShared;
 /// </remarks>
 public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
-    /// <summary>Header 先頭 4 bytes の magic number 'RIOF' (LE)。</summary>
     public const uint Magic = 0x52494F46u;
 
-    /// <summary>Header 自体の固定 byte サイズ。</summary>
     public const int SizeInBytes = 40;
 
-    /// <summary><see cref="Format"/> に格納される RGBA8 のエンコーディング値。</summary>
     public const uint FormatRgba8 = 0u;
 
-    /// <summary>payload に続く pixel data の byte 数 (<c>Stride * Height</c>)。</summary>
     public uint PayloadLength { get; }
 
-    /// <summary>frame の幅 (pixel)。</summary>
     public uint Width { get; }
 
-    /// <summary>frame の高さ (pixel)。</summary>
     public uint Height { get; }
 
-    /// <summary>pixel エンコーディング (0 = RGBA8)。</summary>
     public uint Format { get; }
 
-    /// <summary>1 行あたりの byte 数。RGBA8 + padding 無しなら <c>Width * 4</c>。</summary>
     public uint Stride { get; }
 
-    /// <summary>capture 時の Unix epoch ナノ秒 (engine / Python と clock を揃える)。</summary>
     public ulong UnixNanos { get; }
 
-    /// <summary>renderer 側で monotonic に振る frame シーケンス番号。</summary>
     public ulong FrameId { get; }
 
-    /// <summary>全フィールドを指定して header を構築する。</summary>
     public FrameHeader(
         uint payloadLength,
         uint width,
@@ -83,10 +64,8 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     }
 
     /// <summary>
-    /// <paramref name="buffer"/> の先頭から 40 bytes を解釈して header を組み立てる。
+    /// <paramref name="buffer"/> の先頭 40 bytes を解釈して header を組み立てる。
     /// </summary>
-    /// <param name="buffer">少なくとも <see cref="SizeInBytes"/> bytes の入力。</param>
-    /// <returns>解釈された <see cref="FrameHeader"/>。</returns>
     /// <exception cref="ArgumentException">
     /// buffer が短い、または magic が <see cref="Magic"/> と一致しない場合。
     /// </exception>
@@ -120,10 +99,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         );
     }
 
-    /// <summary>
-    /// 本 header を <paramref name="buffer"/> の先頭 40 bytes に LE で書き込む。
-    /// </summary>
-    /// <param name="buffer">少なくとも <see cref="SizeInBytes"/> bytes の出力先。</param>
+    /// <summary>本 header を <paramref name="buffer"/> の先頭 40 bytes に LE で書き込む。</summary>
     /// <exception cref="ArgumentException">buffer が短い場合。</exception>
     public void Write(Span<byte> buffer)
     {
@@ -145,7 +121,6 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         BinaryPrimitives.WriteUInt64LittleEndian(buffer.Slice(32, 8), FrameId);
     }
 
-    /// <summary>本 header を 40 bytes の新しい <c>byte[]</c> として返す。</summary>
     public byte[] ToBytes()
     {
         var bytes = new byte[SizeInBytes];
@@ -169,9 +144,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        // netstandard2.0 では System.HashCode が無いので unchecked で手組みする。
-        // 衝突耐性は実用十分 (本 struct を hash key にする想定は無く、
-        // 主用途は集合操作の正当性確認)。
+        // netstandard2.0 には System.HashCode が無いので手組み。
         unchecked
         {
             var hash = 17;
@@ -186,9 +159,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         }
     }
 
-    /// <summary>2 つの header が同値か。</summary>
     public static bool operator ==(FrameHeader left, FrameHeader right) => left.Equals(right);
 
-    /// <summary>2 つの header が異なるか。</summary>
     public static bool operator !=(FrameHeader left, FrameHeader right) => !left.Equals(right);
 }

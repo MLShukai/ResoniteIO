@@ -7,21 +7,12 @@ using ResoniteIO.RendererShared;
 namespace ResoniteIO.Renderer;
 
 /// <summary>
-/// 1 frame 分の <see cref="FrameHeader"/> + RGBA payload を結合して
-/// InterprocessLib の <see cref="Messenger"/> 経由で engine 側に push する送信路。
+/// <see cref="FrameHeader"/> + RGBA payload を結合して engine 側に push する送信路。
 /// </summary>
 /// <remarks>
-/// <para>
-/// renderer process は engine より後に起動するため non-authority として attach する
-/// (<c>isAuthority: false</c>)。queue capacity は <see cref="IpcSocketPaths.QueueCapacityBytes"/>
-/// (= 32 MiB) で default の 1 MiB を上書きする (1118×651 RGBA8 ≒ 2.9 MiB で
-/// default は乗らない)。
-/// </para>
-/// <para>
+/// renderer は engine より後起動なので non-authority として attach する。
 /// <see cref="Messenger.OnFailure"/> / <see cref="Messenger.OnWarning"/> は static
-/// event なので <see cref="Dispose"/> で必ず <c>-=</c> する (GC されない / memory leak
-/// 防止)。
-/// </para>
+/// event なので <see cref="Dispose"/> で必ず <c>-=</c> しないと Messenger が GC されず leak する。
 /// </remarks>
 internal sealed class FrameSender : IDisposable
 {
@@ -50,10 +41,7 @@ internal sealed class FrameSender : IDisposable
         );
     }
 
-    /// <summary>
-    /// <paramref name="header"/> (40 bytes) と <paramref name="payload"/> (RGBA bytes)
-    /// を 1 つの <c>byte[]</c> に連結し <c>SendValueArray&lt;byte&gt;</c> で push する。
-    /// </summary>
+    /// <summary><paramref name="header"/> + <paramref name="payload"/> を 1 buffer に連結して送信。</summary>
     public void Send(FrameHeader header, byte[] payload)
     {
         if (payload == null)
@@ -75,8 +63,7 @@ internal sealed class FrameSender : IDisposable
         }
         catch (Exception ex)
         {
-            // engine 側がまだ attach していない / queue 一杯 / 等の状況。
-            // capture loop は次フレームで自動再試行するので個別の error は warning 止まり。
+            // engine 未 attach / queue full 等。capture loop が次フレームで再試行する。
             _log.LogWarning($"[ResoniteIO.Renderer] SendValueArray failed: {ex.Message}");
         }
     }

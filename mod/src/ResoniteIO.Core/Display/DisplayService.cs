@@ -7,14 +7,9 @@ namespace ResoniteIO.Core.Display;
 
 /// <summary><c>resonite_io.v1.Display</c> サービスの Core 実装。</summary>
 /// <remarks>
-/// <para>
-/// <see cref="IDisplayBridge"/> は optional DI。null なら <c>Status.Unavailable</c> を返す
-/// (Core 単体テストや display 非対応 engine 構成を成立させるため; CameraService と同 pattern)。
-/// </para>
-/// <para>
-/// 例外翻訳: <see cref="DisplayNotReadyException"/> → <c>FailedPrecondition</c>、
-/// その他 → <c>Internal</c>。
-/// </para>
+/// <see cref="IDisplayBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
+/// Core 単体テストや display 非対応 engine 構成も成立させる (CameraService と同 pattern)。
+/// 例外翻訳は <see cref="DisplayNotReadyException"/> → <c>FailedPrecondition</c>、その他 → <c>Internal</c>。
 /// </remarks>
 public sealed class DisplayService : V1.Display.DisplayBase
 {
@@ -27,10 +22,6 @@ public sealed class DisplayService : V1.Display.DisplayBase
         _bridge = bridge;
     }
 
-    /// <summary>
-    /// <see cref="V1.DisplayConfig"/> を engine に適用し、適用後の現値を
-    /// <see cref="V1.DisplayState"/> として返す。
-    /// </summary>
     public override async Task<V1.DisplayState> Apply(
         V1.DisplayConfig request,
         ServerCallContext context
@@ -80,7 +71,6 @@ public sealed class DisplayService : V1.Display.DisplayBase
         return ToProto(applied);
     }
 
-    /// <summary>現在の display 設定 snapshot を返す。</summary>
     public override async Task<V1.DisplayState> Get(
         V1.DisplayGetRequest request,
         ServerCallContext context

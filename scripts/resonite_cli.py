@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Container-side client for the host debug bridge.
 
-container 内 shell から ``just resonite-{start,stop,status,screenshot}``
-経由で呼ばれ、host 常駐の ``scripts/host_agent.py`` に UDS で 1 リクエスト
-送って 1 レスポンスを受け取って表示する薄い CLI。
-
-``screenshot`` は host_agent から PNG bytes を base64 で受け取り、
-container 側の ``--output`` path に書き出す (host-local 書き出しはしない)。
+container 内 shell から ``just resonite-{start,stop,status,screenshot}`` 経由で呼び、
+host 常駐の ``scripts/host_agent.py`` に UDS で 1 リクエスト送って response を表示する。
+``screenshot`` は host から PNG bytes を base64 で受け取り container 側 ``--output`` に書く。
 """
 
 from __future__ import annotations
@@ -69,13 +66,7 @@ def _resolve_profile(arg: str | None) -> str:
 
 
 def _resolve_screenshot_output(output: str) -> Path:
-    """``--output`` を container 側 path として解決し ``Path`` を返す。
-
-    container 側ファイルなので絶対 / 相対どちらでも OK、``..`` も自由 (host
-    側 repo root の拘束は撤廃)。空文字のみ拒否する。``.png`` 以外の suffix は
-    stderr に warning を出すが exit はしない (任意の拡張子で書きたい場合に
-    対応するため)。
-    """
+    """``--output`` を container 側 path として解決する。空文字のみ拒否、``.png`` 推奨。"""
     if not output:
         print("ERROR: --output が空です。", file=sys.stderr)
         sys.exit(EXIT_USAGE)
@@ -127,9 +118,7 @@ def _send_request(sock_path: Path, request: dict[str, Any]) -> dict[str, Any]:
             sock.sendall(payload)
             sock.shutdown(socket.SHUT_WR)
             sock.settimeout(READ_TIMEOUT_SEC)
-            # newline-delimited JSON。host_agent は response の末尾に必ず `\n`
-            # を付けるので、最初の `\n` を見つけたら read を打ち切る。
-            # base64 文字列は `A-Za-z0-9+/=` のみで `\n` を含まないため安全。
+            # newline-delimited JSON。base64 は `\n` を含まないので最初の `\n` で打ち切れる。
             buf = bytearray()
             while True:
                 chunk = sock.recv(65536)
@@ -181,13 +170,10 @@ def _print_response(response: dict[str, Any]) -> int:
 def _handle_screenshot_response(response: dict[str, Any], output: Path) -> int:
     """Screenshot の ok response から PNG bytes を取り出して ``output`` に書く。
 
-    成功時の stdout には e2e harness が parse する短い summary JSON を出す (PNG bytes
-    は含めない; 大きすぎてログを汚すため): ``{"path": str, "width": int, "height": int,
-    "monitor": int, "payload_bytes": int}``
+    成功時の stdout は e2e harness が parse する summary JSON のみ (``{path,
+    width, height, monitor, payload_bytes}``; PNG bytes は含めない)。
     """
     if not response.get("ok"):
-        # host_agent から error 応答が来た。生 JSON をそのまま出す
-        # (`_print_response` と同じフォーマット)。
         return _print_response(response)
 
     data = response.get("data")
@@ -293,8 +279,6 @@ def main(argv: list[str] | None = None) -> int:
     elif args.action == "status":
         request = {"action": "status"}
     elif args.action == "screenshot":
-        # ``output`` は container 側 path として client が解決する。
-        # host_agent へは送らない (S3 protocol で削除済み)。
         screenshot_output = _resolve_screenshot_output(args.output)
         request = {
             "action": "screenshot",

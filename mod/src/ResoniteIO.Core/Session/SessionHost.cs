@@ -118,8 +118,6 @@ public sealed class SessionHost : IAsyncDisposable
         var app = builder.Build();
         app.MapGrpcService<SessionService>();
         app.MapGrpcService<CameraService>();
-        // Display Service は IDisplayBridge=null でも mount する: bridge 未注入時は
-        // Service 内で Status.Unavailable を返す既存契約 (CameraService と同じ)。
         app.MapGrpcService<DisplayService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");

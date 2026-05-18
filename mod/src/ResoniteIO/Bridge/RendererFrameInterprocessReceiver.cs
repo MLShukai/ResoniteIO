@@ -8,29 +8,17 @@ using ResoniteIO.RendererShared;
 namespace ResoniteIO.Bridge;
 
 /// <summary>
-/// Renderer plugin (Wine + Unity Mono、別プロセス) から InterprocessLib (Cloudtoid
-/// 共有メモリ queue) 経由で push された camera frame を受け取り、
+/// Renderer plugin から共有メモリ queue 経由で push された camera frame を受け取り、
 /// engine 側 <see cref="PushedFrameCameraBridge"/> に流す Receiver。
 /// </summary>
 /// <remarks>
-/// <para>
-/// engine 側は <c>isAuthority: true</c> で先に queue を作成する (Resonite engine
-/// は renderer process より先に起動する保証あり、knowledge §3.3)。
-/// </para>
-/// <para>
-/// Receiver の lifecycle: <see cref="Start"/> で <see cref="Messenger"/> を構築 +
-/// callback 登録、<see cref="Dispose"/> で static event を確実に外して queue を
-/// 破棄する (<see cref="Messenger.OnFailure"/> / <c>OnWarning</c> は static event
-/// なので Dispose で -= しないと memory leak、knowledge §7)。
-/// </para>
-/// <para>
-/// Plugin (C8 で実装) からの利用: <c>new RendererFrameInterprocessReceiver(bridge, log)</c>
-/// → <c>Start()</c> → 必要なくなったら <c>Dispose()</c>。
-/// </para>
+/// engine 側は <c>isAuthority: true</c> で queue を作成する (engine が renderer
+/// より先に起動するため、camera-v2-constraints §3.3)。<see cref="Messenger.OnFailure"/>
+/// / <c>OnWarning</c> は static event のため <see cref="Dispose"/> で <c>-=</c>
+/// しないと Messenger インスタンスが GC されず leak する。
 /// </remarks>
 public sealed class RendererFrameInterprocessReceiver : IDisposable
 {
-    /// <summary>frame の RGBA8 1 pixel あたりの byte 数 (validation で使用)。</summary>
     private const int BytesPerPixelRgba8 = 4;
 
     private readonly PushedFrameCameraBridge _bridge;
@@ -40,10 +28,8 @@ public sealed class RendererFrameInterprocessReceiver : IDisposable
     private bool _started;
     private bool _disposed;
 
-    /// <summary>受け取った frame の総数 (debug 用)。</summary>
     public long ReceivedCount { get; private set; }
 
-    /// <summary>validation で reject した frame の総数 (debug 用)。</summary>
     public long RejectedCount { get; private set; }
 
     public RendererFrameInterprocessReceiver(PushedFrameCameraBridge bridge, ILogSink log)
@@ -52,7 +38,7 @@ public sealed class RendererFrameInterprocessReceiver : IDisposable
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <summary>queue を bind し callback を登録する。idempotent (2 度目以降は no-op)。</summary>
+    /// <summary>queue を bind し callback を登録する。idempotent。</summary>
     /// <exception cref="ObjectDisposedException">既に <see cref="Dispose"/> 済み。</exception>
     public void Start()
     {
@@ -120,22 +106,16 @@ public sealed class RendererFrameInterprocessReceiver : IDisposable
         }
 
         RejectedCount++;
-        // log は warning レベル (毎フレーム reject は queue/renderer 側の問題で
-        // engine 側で対処不能のため verbose にしない)。
+        // reject は queue / renderer 側の不整合で engine 側で対処不能なので warning 止まり。
         _log.LogWarning(
             $"[ResoniteIO] RendererFrameInterprocessReceiver: dropped frame ({rejectReason})"
         );
     }
 
     /// <summary>
-    /// 受信した <paramref name="data"/> を header + payload に分解し
-    /// <see cref="CameraFrame"/> を組み立てる純粋関数。
+    /// <paramref name="data"/> を header + payload に分解して <see cref="CameraFrame"/>
+    /// を組み立てる。検証 NG なら理由を <paramref name="rejectReason"/> に詰める。
     /// </summary>
-    /// <remarks>
-    /// header 不正 / payload 長 mismatch / size 整合性 NG をすべて検出して
-    /// <paramref name="rejectReason"/> を返す。本 method は internal で
-    /// <c>ResoniteIO.Tests</c> から unit test 可能。
-    /// </remarks>
     internal static bool TryParseFrame(
         byte[]? data,
         out CameraFrame frame,

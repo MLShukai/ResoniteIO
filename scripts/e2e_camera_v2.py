@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Camera v2 end-to-end harness for Claude self-verification.
-
-Camera v2 が実装された後、Claude が ``just e2e-camera-v2`` 1 発で
-「Resonite 起動済み → CameraClient.stream で N frame 取得 → 同時に
-host screenshot 撮影 → fps + (将来) pixel diff を判定」できる harness。
-
-Wave 0 の段階では:
-- ``--skip-camera`` mode: screenshot 1 発のみ撮って成功すれば pass
-- camera mode: CameraClient.stream を回し fps を測る + last frame を
-  ``.bin`` で dump。PNG decode が container 側に重い依存 (Pillow 等) を
-  要求するため、MSE 計算は **future work** として ``null`` に固定する
-
-screenshot は resonite_cli に **container 側絶対 path** を渡して書かせる
-(host-agent は network 経由で PNG bytes を返すだけで file system に書かない)。
-bind mount への依存は無い。
+"""Camera v2 end-to-end harness: Resonite 起動済み前提で fps と screenshot を取り pass 判定する。
 
 Usage:
     python scripts/e2e_camera_v2.py [--frames N] [--duration SEC]
@@ -21,21 +7,8 @@ Usage:
                                     [--monitor 1] [--bbox X,Y,W,H]
                                     [--socket /uds/path]
 
-Report (output-dir/report.json):
-    {
-      "fps": float | null,
-      "frame_count": int,
-      "screenshot_path": str,          # container 側絶対 path
-      "frame_sample_path": str | null, # last CameraFrame の raw RGBA dump (.bin)
-      "mse": null,                     # future work; image decode 依存を避ける
-      "pass": bool,
-      "thresholds": {"fps": 55, "mse": null},
-      "skip_camera": bool,
-      "duration_sec": float,
-      "errors": [str, ...]
-    }
-
-Exit code: 0 if pass else 1.
+Report は ``output-dir/report.json`` に dump する。MSE 計算は image decode 依存
+(Pillow 等) を入れないため ``null`` 固定。Exit code: 0 if pass else 1.
 """
 
 from __future__ import annotations
@@ -49,16 +22,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-# screenshot は資料側で完結させたいので resonite_cli を subprocess で叩く。
-# scripts/ は package 化されていないので、絶対パスで呼ぶ。
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _SCRIPTS_DIR.parent
 
-# camera mode の合格 fps しきい値 (plan 由来。 Camera v2 の目標は 60fps なので
-# 余裕を持って 55 を採用)。
+# Camera v2 の目標 60fps に対し余裕を持って 55 を pass 閾値とする。
 FPS_THRESHOLD = 55.0
 
-# camera 取得を諦めるまでの保険 timeout。
 DEFAULT_DURATION_SEC = 5.0
 
 
@@ -68,7 +37,6 @@ def _take_screenshot(
     bbox: str | None,
     socket_path: str | None,
 ) -> dict[str, Any]:
-    """``resonite_cli.py screenshot`` を subprocess で呼ぶ。"""
     cmd = [
         sys.executable,
         str(_SCRIPTS_DIR / "resonite_cli.py"),
@@ -87,12 +55,8 @@ def _take_screenshot(
 
 
 async def _stream_camera(duration_sec: float, frames_cap: int) -> dict[str, Any]:
-    """``resoio.CameraClient`` で N frame 受信し fps を測る。
-
-    返り値: ``frame_count`` / ``elapsed`` / ``fps`` / ``last_rgba`` /
-    ``last_size`` / ``error`` の dict。エラーは raise せず ``error`` フィー
-    ルドに格納する。
-    """
+    """``resoio.CameraClient`` で N frame 受信し fps を測る。エラーは ``error`` field
+    に格納。"""
     try:
         from resoio import CameraClient  # type: ignore[import-not-found]
     except ImportError as e:
@@ -115,8 +79,7 @@ async def _stream_camera(duration_sec: float, frames_cap: int) -> dict[str, Any]
         async with CameraClient() as client:  # type: ignore[call-arg]
             async for frame in client.stream(width=0, height=0, fps_limit=0):
                 frame_count += 1
-                # CameraFrame の正確な属性は実装依存。最低限 numpy 互換 .pixels
-                # を持つことを想定する。
+                # 最低限 numpy 互換 ``.pixels`` を持つ前提で extract する。
                 pixels = getattr(frame, "pixels", None)
                 if pixels is not None:
                     last_rgba = bytes(pixels.tobytes())
@@ -184,26 +147,19 @@ def _default_output_dir() -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    """Harness 本体。``args`` は ``_build_parser().parse_args(...)`` の結果。
-
-    return: process exit code (0 if pass else 1)
-    """
+    """Harness 本体。process exit code を返す (0 if pass else 1)。"""
     output_dir_rel = args.output_dir or _default_output_dir()
     output_dir_abs = (_REPO_ROOT / output_dir_rel).resolve()
     output_dir_abs.mkdir(parents=True, exist_ok=True)
 
-    # resonite_cli は container 側 path として受け取るため、絶対 path を渡す。
-    # 結果として report.json に出る ``screenshot_path`` も container 側絶対 path。
     screenshot_abs = output_dir_abs / "screenshot.png"
     errors: list[str] = []
 
-    # 1) screenshot を撮る
     screenshot_result = _take_screenshot(
         str(screenshot_abs), args.monitor, args.bbox, args.socket
     )
     screenshot_ok = screenshot_result["exit_code"] == 0
     if not screenshot_ok:
-        # resonite_cli は応答を stdout に JSON で出すため、stdout も合わせて拾う。
         detail = (
             screenshot_result["stderr"].strip() or screenshot_result["stdout"].strip()
         )
@@ -211,7 +167,6 @@ def run(args: argparse.Namespace) -> int:
             f"screenshot failed: exit={screenshot_result['exit_code']} {detail}"
         )
 
-    # 2) (option) Camera stream
     camera_fps: float | None = None
     frame_count = 0
     frame_sample_path: str | None = None
@@ -224,8 +179,8 @@ def run(args: argparse.Namespace) -> int:
         if camera["error"]:
             errors.append(f"camera stream failed: {camera['error']}")
         if camera["last_rgba"] and camera["last_size"]:
-            # raw RGBA bytes を .npy ではなく .bin で素朴に書く (numpy 依存を
-            # 抑える)。最初の 2 つの uint32 = width, height を header に入れる。
+            # `[u32 LE width][u32 LE height][rgba bytes]` の最小 layout で書く
+            # (numpy / PNG 依存を入れない)。
             sample_path_abs = output_dir_abs / "frame_sample.bin"
             width, height = camera["last_size"]
             with sample_path_abs.open("wb") as f:
@@ -234,7 +189,6 @@ def run(args: argparse.Namespace) -> int:
                 f.write(camera["last_rgba"])
             frame_sample_path = str(sample_path_abs)
 
-    # 3) judge pass / fail
     if args.skip_camera:
         passed = screenshot_ok
     else:
@@ -247,7 +201,7 @@ def run(args: argparse.Namespace) -> int:
         "frame_count": frame_count,
         "screenshot_path": str(screenshot_abs),
         "frame_sample_path": frame_sample_path,
-        "mse": None,  # future work; PNG decode に Pillow 等を入れない方針
+        "mse": None,
         "pass": passed,
         "thresholds": {"fps": FPS_THRESHOLD, "mse": None},
         "skip_camera": bool(args.skip_camera),
