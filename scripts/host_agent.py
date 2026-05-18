@@ -3,9 +3,10 @@
 
 container 内 ``scripts/resonite_cli.py`` からの UDS リクエストを受け、host
 側で Gale CLI 経由で Resonite を起動 / 停止 / 状態取得し、また desktop
-framebuffer を ``mss`` で撮って repo-relative path に書き出す。Resonite と
-Gale は host の GUI session でしか動かないため、本デーモンは GUI session の
-端末から foreground で起動する。
+framebuffer を ``mss`` で撮って **PNG bytes を base64 で response に乗せる**。
+file system に書かないので bind mount への依存がなく、container 側で任意
+path に書ける。Resonite と Gale は host の GUI session でしか動かないため、
+本デーモンは GUI session の端末から foreground で起動する。
 
 Protocol: UDS (AF_UNIX) 上で 1 リクエスト / 1 レスポンスの newline-delimited
 JSON、接続 close で終端。
@@ -13,18 +14,25 @@ JSON、接続 close で終端。
 Request schema:
     {"action": "start" | "stop" | "status", "profile": str | null}
     {"action": "screenshot",
-     "output": "<repo-relative .png>",
      "monitor": int (default=1, 0=all monitors),
      "bbox": null | [x, y, w, h]}
 
 Response schema:
     {"ok": true,  "action": str, "data": dict}
     {"ok": false, "action": str, "error": str, "detail": str, "data": dict?}
+
+screenshot response data:
+    {"png_b64": str,         # base64 of PNG bytes
+     "width": int,
+     "height": int,
+     "monitor": int,
+     "payload_bytes": int}   # len(PNG bytes) (base64 前)、client 側の sanity check 用
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -52,22 +60,6 @@ TERMINATION_TIMEOUT_SEC = 3.0
 # 系プロセス (pressure-vessel-wrap / srt-bwrap / reaper) は触らない。
 RESONITE_PATTERN = "Resonite.exe"
 RENDERITE_PATTERN = "Renderite.Renderer.exe"
-
-# Screenshot output path に許容する文字。repo-relative path として安全な範囲。
-_SCREENSHOT_PATH_ALLOWED = set(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/"
-)
-
-# Repo root として screenshot 書き出しの絶対パス解決ベースに使う。
-# ``just host-agent`` は repo root から呼ばれる前提なので、import 時の cwd を
-# 採用する (resolve 済み)。テスト用に ``_set_repo_root`` で差し替え可能。
-_REPO_ROOT: Path = Path(os.getcwd()).resolve()
-
-
-def _set_repo_root(path: Path) -> None:
-    """テスト時に repo root を差し替えるための setter。"""
-    global _REPO_ROOT
-    _REPO_ROOT = path.resolve()
 
 
 class StartupError(RuntimeError):
@@ -304,37 +296,6 @@ def cmd_status() -> dict[str, Any]:
 # ===== screenshot ===========================================================
 
 
-def _validate_output_path(output: str) -> Path:
-    """``output`` を repo-relative の安全な path として解決し絶対 path を返す。
-
-    - 空文字 / 絶対 path / ``..`` を含む path / 許容外文字 → ValueError
-    - 解決後の絶対 path が ``_REPO_ROOT`` 配下に収まらない → ValueError
-    """
-    if not output:
-        raise ValueError("output is empty")
-    if output.startswith("/"):
-        raise ValueError(f"output must be repo-relative, not absolute: {output!r}")
-    # 個別セグメントの ``..`` も拒否する。``foo..bar`` のような
-    # 文字列内 ".." はファイル名として有効なので走査対象外。
-    parts = output.split("/")
-    if any(part == ".." for part in parts):
-        raise ValueError(f"output must not contain '..' segments: {output!r}")
-    if not all(c in _SCREENSHOT_PATH_ALLOWED for c in output):
-        raise ValueError(
-            f"output contains disallowed characters: {output!r} "
-            "(allowed: [A-Za-z0-9._-/])"
-        )
-    if not output.lower().endswith(".png"):
-        raise ValueError(f"output must end with .png: {output!r}")
-    abs_path = (_REPO_ROOT / output).resolve()
-    repo_root = _REPO_ROOT.resolve()
-    if not abs_path.is_relative_to(repo_root):
-        raise ValueError(
-            f"resolved output escapes repo root: {abs_path} not under {repo_root}"
-        )
-    return abs_path
-
-
 def _parse_bbox(bbox: Any) -> tuple[int, int, int, int] | None:
     """``bbox`` をパースし ``(left, top, width, height)`` を返す。
 
@@ -355,19 +316,12 @@ def _parse_bbox(bbox: Any) -> tuple[int, int, int, int] | None:
     return left, top, width, height
 
 
-def cmd_screenshot(output: Any, monitor: Any, bbox: Any) -> dict[str, Any]:
-    """``mss`` で desktop framebuffer を撮影し PNG を書き出す。"""
-    if not isinstance(output, str):
-        return _error(
-            "screenshot",
-            "bad_request",
-            "output must be a string",
-        )
-    try:
-        abs_path = _validate_output_path(output)
-    except ValueError as e:
-        return _error("screenshot", "invalid_output", str(e))
+def cmd_screenshot(monitor: Any, bbox: Any) -> dict[str, Any]:
+    """``mss`` で desktop framebuffer を撮影し PNG bytes を base64 で返す。
 
+    host-local 書き出しは行わず、in-memory PNG を base64 にして response に 乗せる
+    (network 経由転送)。client (resonite_cli) が container 側で 任意 path に書き出す。
+    """
     if monitor is None:
         monitor_idx = 1
     elif isinstance(monitor, bool) or not isinstance(monitor, int):
@@ -397,11 +351,6 @@ def cmd_screenshot(output: Any, monitor: Any, bbox: Any) -> dict[str, Any]:
         )
 
     try:
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        return _error("screenshot", "mkdir_failed", f"failed to create parent dir: {e}")
-
-    try:
         with mss.mss() as sct:
             monitors = sct.monitors
             if not (0 <= monitor_idx < len(monitors)):
@@ -422,7 +371,9 @@ def cmd_screenshot(output: Any, monitor: Any, bbox: Any) -> dict[str, Any]:
                 img = sct.grab(region)
             else:
                 img = sct.grab(monitors[monitor_idx])
-            mss.tools.to_png(img.rgb, img.size, output=str(abs_path))
+            # mss.tools.to_png は output=None で PNG bytes を直接返す
+            # (mss 10.2.0 で確認)。tempfile fallback は不要。
+            png_bytes = mss.tools.to_png(img.rgb, img.size, output=None)
     except Exception as e:
         return _error(
             "screenshot",
@@ -430,22 +381,30 @@ def cmd_screenshot(output: Any, monitor: Any, bbox: Any) -> dict[str, Any]:
             f"mss capture failed: {type(e).__name__}: {e}",
         )
 
+    if not isinstance(png_bytes, (bytes, bytearray)):
+        return _error(
+            "screenshot",
+            "capture_failed",
+            f"mss.tools.to_png did not return bytes: got {type(png_bytes).__name__}",
+        )
+
     width, height = img.size
-    rel_path = abs_path.relative_to(_REPO_ROOT.resolve())
+    png_b64 = base64.b64encode(bytes(png_bytes)).decode("ascii")
     LOG.info(
-        "Wrote screenshot to %s (%dx%d, monitor=%d)",
-        rel_path,
+        "Captured screenshot (%dx%d, monitor=%d, payload=%d bytes)",
         width,
         height,
         monitor_idx,
+        len(png_bytes),
     )
     return _ok(
         "screenshot",
         {
-            "path": str(rel_path),
+            "png_b64": png_b64,
             "width": int(width),
             "height": int(height),
             "monitor": monitor_idx,
+            "payload_bytes": len(png_bytes),
         },
     )
 
@@ -476,8 +435,11 @@ def handle_request(raw: bytes, gale_bin: str) -> dict[str, Any]:
     if action == "status":
         return cmd_status()
     if action == "screenshot":
+        # ``output`` フィールドは旧 protocol の名残。新 protocol では PNG を
+        # network 経由で返すので server 側では受け取らない。client 側
+        # (resonite_cli) が container path に書く。migration 中の旧 client
+        # からの request を壊さないため、存在しても silently ignore する。
         return cmd_screenshot(
-            msg.get("output"),
             msg.get("monitor"),
             msg.get("bbox"),
         )

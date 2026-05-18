@@ -2,25 +2,32 @@
 
 host (Resonite を動かす GUI session) 専用の ``mss`` は container 内には
 入っていないため、``sys.modules`` に fake mss を注入してから ``host_agent``
-を import する。テスト範囲:
+を import する。
 
-- 正常系: PNG が書かれ、response が ``{"path", "width", "height", "monitor"}``
-  を返す
-- パス検証: ``..`` セグメント / 絶対パス / 許容外文字 / 拡張子 / repo root
-  脱出 を拒否する
+新 protocol (S3): host_agent は file system に書かず、PNG bytes を base64
+にして response data に乗せる。output フィールドは廃止 (旧 client 互換の
+ため request に存在しても silently ignore)。
+
+テスト範囲:
+- 正常系: response の ``png_b64`` を decode した bytes が fake to_png の
+  返した bytes と一致し、``payload_bytes`` が len(bytes) と一致する
+- bbox / monitor 指定が mss.grab に正しく渡される
 - monitor index 範囲外 / 不正型 / bbox 不正型 を拒否する
 - mss が未 install のケース (ImportError) を ``mss_unavailable`` で返す
-- UDS round-trip: 実 socket 経由で正常 response が得られる
+- 旧 protocol の ``output`` フィールドが request にあっても成功する
+  (silently ignored、後方互換)
+- to_png が bytes でないものを返した場合は ``capture_failed`` で返す
+- UDS round-trip: 実 socket 経由で base64 PNG bytes が往復する
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import socket
 import sys
 import threading
 import types
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -37,9 +44,15 @@ import host_agent  # noqa: E402  # pyright: ignore[reportMissingImports]
 class _FakeImage:
     def __init__(self, width: int, height: int) -> None:
         self.size = (width, height)
-        # mss.tools.to_png は zlib エンコードしか要求しないが、テストでは
-        # to_png を mock するので中身は touch されない。
-        self.rgb = b"\x00" * (width * height * 3)
+        # rgb は payload 検証用。長さが (W*H*3) に一致することだけ確認する
+        # 用途で、内容は固定パターンで埋めてもよい。
+        self.rgb = bytes((i * 37) & 0xFF for i in range(width * height * 3))
+
+
+_FAKE_PNG_PREFIX = b"\x89PNG\r\n\x1a\n"
+
+# Sentinel for "use default" — distinct from any legal user-supplied value.
+_DEFAULT = object()
 
 
 class _FakeMss:
@@ -77,9 +90,13 @@ def _install_fake_mss(
     monkeypatch: pytest.MonkeyPatch,
     fake: _FakeMss,
     *,
-    to_png_capture: dict[str, Any] | None = None,
+    to_png_return: Any = _DEFAULT,
 ) -> None:
-    """``import mss`` / ``import mss.tools`` で fake が返るよう sys.modules を上書き。"""
+    """``import mss`` / ``import mss.tools`` で fake が返るよう sys.modules を上書き。
+
+    ``to_png_return`` を指定しなければ ``_FAKE_PNG_PREFIX + rgb[:32]`` を返す。
+    None / 非 bytes など特定の戻り値を試したいときは明示的に渡す。
+    """
     mss_mod = types.ModuleType("mss")
 
     def _mss_factory() -> _FakeMss:
@@ -89,13 +106,11 @@ def _install_fake_mss(
 
     tools_mod = types.ModuleType("mss.tools")
 
-    def _to_png(rgb: bytes, size: tuple[int, int], output: str) -> None:
-        # 本物の zlib エンコードは不要 (テストではファイルの存在のみ確認)。
-        Path(output).write_bytes(b"\x89PNG\r\n\x1a\n" + rgb[:8])
-        if to_png_capture is not None:
-            to_png_capture["rgb_len"] = len(rgb)
-            to_png_capture["size"] = size
-            to_png_capture["output"] = output
+    def _to_png(rgb: bytes, size: tuple[int, int], output: Any = None, **_: Any) -> Any:
+        if to_png_return is _DEFAULT:
+            # mss 10.2.0 と同じく ``output=None`` で bytes 返却を模す。
+            return _FAKE_PNG_PREFIX + bytes(rgb[:32])
+        return to_png_return
 
     tools_mod.to_png = _to_png  # type: ignore[attr-defined]
     mss_mod.tools = tools_mod  # type: ignore[attr-defined]
@@ -117,17 +132,6 @@ def _uninstall_mss(monkeypatch: pytest.MonkeyPatch) -> None:
 # ----- helpers --------------------------------------------------------------
 
 
-@pytest.fixture
-def repo_root(tmp_path: Path):
-    """``_REPO_ROOT`` を tmp_path に差し替えて、テスト終了時に元に戻す。"""
-    original = host_agent._REPO_ROOT
-    host_agent._set_repo_root(tmp_path)
-    try:
-        yield tmp_path.resolve()
-    finally:
-        host_agent._set_repo_root(original)
-
-
 def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     return host_agent.handle_request(
         json.dumps(payload).encode("utf-8"),
@@ -138,34 +142,37 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
 # ----- tests: success path --------------------------------------------------
 
 
-def test_screenshot_writes_png_to_repo_relative_path(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+def test_screenshot_returns_base64_png_bytes(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeMss(grab_image=_FakeImage(640, 480))
-    capture: dict[str, Any] = {}
-    _install_fake_mss(monkeypatch, fake, to_png_capture=capture)
+    _install_fake_mss(monkeypatch, fake)
 
-    response = _dispatch(
-        {"action": "screenshot", "output": "tmp/e2e/desktop.png", "monitor": 1}
-    )
+    response = _dispatch({"action": "screenshot", "monitor": 1})
 
     assert response["ok"] is True, response
     assert response["action"] == "screenshot"
-    assert response["data"] == {
-        "path": "tmp/e2e/desktop.png",
-        "width": 640,
-        "height": 480,
-        "monitor": 1,
+    data = response["data"]
+    assert set(data.keys()) == {
+        "png_b64",
+        "width",
+        "height",
+        "monitor",
+        "payload_bytes",
     }
-    written = repo_root / "tmp" / "e2e" / "desktop.png"
-    assert written.is_file()
-    assert capture["output"] == str(written)
+    assert data["width"] == 640
+    assert data["height"] == 480
+    assert data["monitor"] == 1
+
+    decoded = base64.b64decode(data["png_b64"])
+    assert decoded.startswith(_FAKE_PNG_PREFIX)
+    assert len(decoded) == data["payload_bytes"]
     # full monitor を grab したことの確認 (bbox 未指定)。
     assert fake.grab_calls == [fake.monitors[1]]
 
 
 def test_screenshot_bbox_passes_region_to_mss(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeMss(grab_image=_FakeImage(100, 50))
     _install_fake_mss(monkeypatch, fake)
@@ -173,7 +180,6 @@ def test_screenshot_bbox_passes_region_to_mss(
     response = _dispatch(
         {
             "action": "screenshot",
-            "output": "shot.png",
             "monitor": 1,
             "bbox": [10, 20, 100, 50],
         }
@@ -186,100 +192,72 @@ def test_screenshot_bbox_passes_region_to_mss(
 
 
 def test_screenshot_default_monitor_is_primary(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeMss()
     _install_fake_mss(monkeypatch, fake)
 
-    response = _dispatch({"action": "screenshot", "output": "a.png"})
+    response = _dispatch({"action": "screenshot"})
 
     assert response["ok"] is True, response
     assert response["data"]["monitor"] == 1
 
 
-def test_screenshot_creates_parent_directories(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+def test_screenshot_ignores_legacy_output_field(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _install_fake_mss(monkeypatch, _FakeMss())
+    """旧 client は ``output`` を送ってくるが新 protocol では silently ignore。"""
+    fake = _FakeMss(grab_image=_FakeImage(320, 240))
+    _install_fake_mss(monkeypatch, fake)
 
-    response = _dispatch({"action": "screenshot", "output": "a/b/c/d/desktop.png"})
+    # ``output`` が validation を引き起こす絶対 path / `..` 形式でも、
+    # 新 protocol では一切参照されないので成功して PNG が返るべき。
+    response = _dispatch(
+        {
+            "action": "screenshot",
+            "output": "/absolute/garbage/path.png",
+            "monitor": 1,
+        }
+    )
 
     assert response["ok"] is True, response
-    assert (repo_root / "a" / "b" / "c" / "d" / "desktop.png").is_file()
-
-
-# ----- tests: path validation ----------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "bad_output",
-    [
-        "../outside.png",
-        "tmp/../../escape.png",
-        "/abs/path.png",
-        "",
-        "no_extension",
-        "not_png.jpg",
-        "has space.png",
-        "weird*char.png",
-    ],
-)
-def test_screenshot_rejects_invalid_output_paths(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch, bad_output: str
-) -> None:
-    _install_fake_mss(monkeypatch, _FakeMss())
-
-    response = _dispatch({"action": "screenshot", "output": bad_output})
-
-    assert response["ok"] is False, response
-    assert response["error"] in {"invalid_output", "bad_request"}
-
-
-def test_screenshot_rejects_non_string_output(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _install_fake_mss(monkeypatch, _FakeMss())
-
-    response = _dispatch({"action": "screenshot", "output": 12345})
-
-    assert response["ok"] is False
-    assert response["error"] == "bad_request"
+    assert "png_b64" in response["data"]
+    # response の data に旧 ``path`` フィールドは無いこと。
+    assert "path" not in response["data"]
 
 
 # ----- tests: monitor / bbox validation ------------------------------------
 
 
 def test_screenshot_rejects_monitor_out_of_range(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # mss.monitors は [合成, primary] の 2 件を返す fake。 index 5 は範囲外。
     _install_fake_mss(monkeypatch, _FakeMss())
 
-    response = _dispatch({"action": "screenshot", "output": "a.png", "monitor": 5})
+    response = _dispatch({"action": "screenshot", "monitor": 5})
 
     assert response["ok"] is False
     assert response["error"] == "invalid_monitor"
 
 
 def test_screenshot_rejects_negative_monitor(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _install_fake_mss(monkeypatch, _FakeMss())
 
-    response = _dispatch({"action": "screenshot", "output": "a.png", "monitor": -1})
+    response = _dispatch({"action": "screenshot", "monitor": -1})
 
     assert response["ok"] is False
     assert response["error"] == "invalid_monitor"
 
 
 def test_screenshot_rejects_non_int_monitor(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _install_fake_mss(monkeypatch, _FakeMss())
 
-    response = _dispatch(
-        {"action": "screenshot", "output": "a.png", "monitor": "primary"}
-    )
+    response = _dispatch({"action": "screenshot", "monitor": "primary"})
 
     assert response["ok"] is False
     assert response["error"] == "bad_request"
@@ -296,35 +274,47 @@ def test_screenshot_rejects_non_int_monitor(
     ],
 )
 def test_screenshot_rejects_invalid_bbox(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch, bbox: Any
+    monkeypatch: pytest.MonkeyPatch, bbox: Any
 ) -> None:
     _install_fake_mss(monkeypatch, _FakeMss())
 
-    response = _dispatch({"action": "screenshot", "output": "a.png", "bbox": bbox})
+    response = _dispatch({"action": "screenshot", "bbox": bbox})
 
     assert response["ok"] is False
     assert response["error"] == "bad_request"
 
 
 def test_screenshot_capture_failure_returns_error(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeMss(grab_raises=RuntimeError("X server unreachable"))
     _install_fake_mss(monkeypatch, fake)
 
-    response = _dispatch({"action": "screenshot", "output": "a.png"})
+    response = _dispatch({"action": "screenshot"})
 
     assert response["ok"] is False
     assert response["error"] == "capture_failed"
     assert "X server unreachable" in response["detail"]
 
 
+def test_screenshot_to_png_returning_non_bytes_is_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """mss.tools.to_png が None (file write 経路) を返してきた場合は failure 扱い。"""
+    _install_fake_mss(monkeypatch, _FakeMss(), to_png_return=None)
+
+    response = _dispatch({"action": "screenshot"})
+
+    assert response["ok"] is False
+    assert response["error"] == "capture_failed"
+
+
 def test_screenshot_returns_error_when_mss_not_installed(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _uninstall_mss(monkeypatch)
 
-    response = _dispatch({"action": "screenshot", "output": "a.png"})
+    response = _dispatch({"action": "screenshot"})
 
     assert response["ok"] is False
     assert response["error"] == "mss_unavailable"
@@ -334,10 +324,11 @@ def test_screenshot_returns_error_when_mss_not_installed(
 
 
 def test_screenshot_via_uds_roundtrip(
-    repo_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:
-    """実 UDS server を立てて end-to-end で 1 リクエスト交換する。"""
-    fake = _FakeMss(grab_image=_FakeImage(320, 240))
+    """実 UDS server を立てて end-to-end で base64 PNG bytes を往復させる。"""
+    fake_img = _FakeImage(320, 240)
+    fake = _FakeMss(grab_image=fake_img)
     _install_fake_mss(monkeypatch, fake)
 
     sock_path = tmp_path / "agent.sock"
@@ -355,14 +346,7 @@ def test_screenshot_via_uds_roundtrip(
             client.settimeout(5.0)
             client.connect(str(sock_path))
             request = (
-                json.dumps(
-                    {
-                        "action": "screenshot",
-                        "output": "snap.png",
-                        "monitor": 1,
-                    }
-                )
-                + "\n"
+                json.dumps({"action": "screenshot", "monitor": 1}) + "\n"
             ).encode("utf-8")
             client.sendall(request)
             client.shutdown(socket.SHUT_WR)
@@ -384,16 +368,19 @@ def test_screenshot_via_uds_roundtrip(
         server_thread.join(timeout=2.0)
 
     assert response["ok"] is True, response
-    assert response["data"]["path"] == "snap.png"
-    assert response["data"]["width"] == 320
-    assert response["data"]["height"] == 240
-    assert (repo_root / "snap.png").is_file()
+    data = response["data"]
+    assert data["width"] == 320
+    assert data["height"] == 240
+    assert data["monitor"] == 1
+    decoded = base64.b64decode(data["png_b64"])
+    assert decoded.startswith(_FAKE_PNG_PREFIX)
+    assert len(decoded) == data["payload_bytes"]
 
 
 # ----- tests: unrelated actions still work ---------------------------------
 
 
-def test_unknown_action_returns_bad_request(repo_root: Path) -> None:
+def test_unknown_action_returns_bad_request() -> None:
     response = _dispatch({"action": "nope"})
     assert response["ok"] is False
     assert response["error"] == "bad_request"
