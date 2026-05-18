@@ -105,12 +105,6 @@
       <HintPath>$(GamePath)Elements.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <!-- Camera.RenderToBitmap が返す Bitmap2D を扱うため Elements.Assets も参照する。
-         Private=False で Resonite 同梱版を実機ロード時に解決する。 -->
-    <Reference Include="Elements.Assets">
-      <HintPath>$(GamePath)Elements.Assets.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Renderite.Shared">
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>

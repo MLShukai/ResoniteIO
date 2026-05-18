@@ -43,8 +43,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineSessionBridge? _sessionBridge;
 
     // Camera v2: PushedFrameCameraBridge (Channel<CameraFrame>) + RendererFrameInterprocessReceiver
-    // (Wine renderer プロセスからの InterprocessLib push 受信)。型は IF に緩めて v1
-    // 退避ルートも温存する (FrooxEngineCameraBridge.cs はファイルとして残置、C11 で削除予定)。
+    // (Wine renderer プロセスからの InterprocessLib push 受信)。型は ICameraBridge に
+    // 抽象化し、将来 v3 等への差し替え余地を残す。
     private ICameraBridge? _cameraBridge;
     private RendererFrameInterprocessReceiver? _frameReceiver;
 
@@ -100,8 +100,6 @@ public sealed class ResoniteIOPlugin : BasePlugin
             //       → RendererFrameInterprocessReceiver (engine 側、本 Plugin で構築)
             //         → PushedFrameCameraBridge.Push (Channel<CameraFrame>, latest-wins)
             //           → CameraService.StreamFrames (任意スレッドから pull)
-            // v1 (FrooxEngineCameraBridge) ファイルは repo に残し、Wave 5 で E1 が
-            // 失敗したときに一時的に再 wire できる退避ルートとする (C11 で削除予定)。
             var pushedBridge = new PushedFrameCameraBridge();
             _cameraBridge = pushedBridge;
             _frameReceiver = new RendererFrameInterprocessReceiver(pushedBridge, _logSink);
