@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         unzip \
         tar \
+        tmux \
         ca-certificates \
         xz-utils \
         bash-completion \
@@ -60,6 +61,18 @@ RUN set -eux; \
     chmod +x /tmp/dotnet-install.sh; \
     /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --install-dir /usr/local/dotnet; \
     rm -f /tmp/dotnet-install.sh
+
+# Claude Code は公式 apt リポジトリから入れる (install.sh は $HOME/.local/bin に
+# 落とすため root レイヤで実行すると dev user から見えなくなる)。
+RUN set -eux; \
+    install -d -m 0755 /etc/apt/keyrings; \
+    curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
+      -o /etc/apt/keyrings/claude-code.asc; \
+    echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
+      > /etc/apt/sources.list.d/claude-code.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends claude-code; \
+    rm -rf /var/lib/apt/lists/*
 
 # bookworm-slim の /etc/bash.bashrc は bash-completion ローダ部がコメントアウトされて
 # おり、`docker exec dev bash` は非 login 対話 shell で /etc/profile.d/bash_completion.sh

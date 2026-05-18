@@ -3,9 +3,11 @@
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
   },
+  "theme": "dark",
   "agentPushNotifEnabled": true,
   "allow": [
     "Read",
     "Bash"
-  ]
+  ],
+  "skipDangerousModePermissionPrompt": true
 }
