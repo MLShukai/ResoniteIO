@@ -70,13 +70,15 @@ def test_skip_camera_dry_run_pass(
     assert report["pass"] is True
     assert report["fps"] is None
     assert report["frame_count"] == 0
-    assert report["screenshot_path"] == "tmp/e2e-run/0001/screenshot.png"
+    # 新 protocol: container 側絶対 path で記録される
+    expected_screenshot = repo_root / "tmp" / "e2e-run" / "0001" / "screenshot.png"
+    assert report["screenshot_path"] == str(expected_screenshot)
     assert report["frame_sample_path"] is None
     assert report["mse"] is None
     assert report["skip_camera"] is True
     assert report["errors"] == []
-    # screenshot は output-dir 直下に書かせる。
-    assert captured["output"] == "tmp/e2e-run/0001/screenshot.png"
+    # resonite_cli には絶対 path で渡す
+    assert captured["output"] == str(expected_screenshot)
     assert captured["monitor"] == 1
     assert captured["bbox"] is None
 
@@ -229,4 +231,5 @@ def test_camera_mode_writes_frame_sample_when_pixels_present(
             encoding="utf-8"
         )
     )
-    assert report["frame_sample_path"].endswith("frame_sample.bin")
+    # 新 protocol: container 側絶対 path
+    assert report["frame_sample_path"] == str(sample)

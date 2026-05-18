@@ -8,8 +8,12 @@ host screenshot 撮影 → fps + (将来) pixel diff を判定」できる harne
 Wave 0 の段階では:
 - ``--skip-camera`` mode: screenshot 1 発のみ撮って成功すれば pass
 - camera mode: CameraClient.stream を回し fps を測る + last frame を
-  ``.npy`` で dump。PNG decode が container 側に重い依存 (Pillow 等) を
+  ``.bin`` で dump。PNG decode が container 側に重い依存 (Pillow 等) を
   要求するため、MSE 計算は **future work** として ``null`` に固定する
+
+screenshot は resonite_cli に **container 側絶対 path** を渡して書かせる
+(host-agent は network 経由で PNG bytes を返すだけで file system に書かない)。
+bind mount への依存は無い。
 
 Usage:
     python scripts/e2e_camera_v2.py [--frames N] [--duration SEC]
@@ -21,8 +25,8 @@ Report (output-dir/report.json):
     {
       "fps": float | null,
       "frame_count": int,
-      "screenshot_path": str,         # repo-relative
-      "frame_sample_path": str | null, # last CameraFrame の raw RGBA dump (.npy)
+      "screenshot_path": str,          # container 側絶対 path
+      "frame_sample_path": str | null, # last CameraFrame の raw RGBA dump (.bin)
       "mse": null,                     # future work; image decode 依存を避ける
       "pass": bool,
       "thresholds": {"fps": 55, "mse": null},
@@ -188,12 +192,14 @@ def run(args: argparse.Namespace) -> int:
     output_dir_abs = (_REPO_ROOT / output_dir_rel).resolve()
     output_dir_abs.mkdir(parents=True, exist_ok=True)
 
-    screenshot_rel = f"{output_dir_rel}/screenshot.png"
+    # resonite_cli は container 側 path として受け取るため、絶対 path を渡す。
+    # 結果として report.json に出る ``screenshot_path`` も container 側絶対 path。
+    screenshot_abs = output_dir_abs / "screenshot.png"
     errors: list[str] = []
 
     # 1) screenshot を撮る
     screenshot_result = _take_screenshot(
-        screenshot_rel, args.monitor, args.bbox, args.socket
+        str(screenshot_abs), args.monitor, args.bbox, args.socket
     )
     screenshot_ok = screenshot_result["exit_code"] == 0
     if not screenshot_ok:
@@ -208,7 +214,7 @@ def run(args: argparse.Namespace) -> int:
     # 2) (option) Camera stream
     camera_fps: float | None = None
     frame_count = 0
-    frame_sample_rel: str | None = None
+    frame_sample_path: str | None = None
     if args.skip_camera:
         pass
     else:
@@ -226,7 +232,7 @@ def run(args: argparse.Namespace) -> int:
                 f.write(width.to_bytes(4, "little"))
                 f.write(height.to_bytes(4, "little"))
                 f.write(camera["last_rgba"])
-            frame_sample_rel = str(sample_path_abs.relative_to(_REPO_ROOT))
+            frame_sample_path = str(sample_path_abs)
 
     # 3) judge pass / fail
     if args.skip_camera:
@@ -239,8 +245,8 @@ def run(args: argparse.Namespace) -> int:
     report: dict[str, Any] = {
         "fps": camera_fps,
         "frame_count": frame_count,
-        "screenshot_path": screenshot_rel,
-        "frame_sample_path": frame_sample_rel,
+        "screenshot_path": str(screenshot_abs),
+        "frame_sample_path": frame_sample_path,
         "mse": None,  # future work; PNG decode に Pillow 等を入れない方針
         "pass": passed,
         "thresholds": {"fps": FPS_THRESHOLD, "mse": None},

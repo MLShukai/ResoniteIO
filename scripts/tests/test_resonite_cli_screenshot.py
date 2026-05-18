@@ -1,14 +1,25 @@
 """Tests for the ``screenshot`` subcommand of ``scripts/resonite_cli.py``.
 
-container 側 CLI が:
-- subparser を正しく登録し ``--output`` を required にしている
-- output / monitor / bbox を host_agent への request dict に正しく組み立てる
-- 不正な ``--output`` / ``--bbox`` を fail-fast (exit 2) で弾く
-- host_agent からの response を stdout に表示し ok=true なら exit 0 を返す
+S4 protocol: PNG bytes は host_agent が base64 で response に乗せて返し、
+resonite_cli が container 側 ``--output`` path に書き出す。CLI 側 path
+validation は緩く、絶対 / 相対 / ``..`` を含む path も受け入れる (container
+側ファイルなので host repo root 拘束は無い)。
+
+検証範囲:
+- subparser: ``--output`` required、``--monitor`` / ``--bbox`` 既定
+- ``_resolve_screenshot_output``: 空文字拒否、絶対 / 相対 / ``..`` 受容、
+  ``.png`` 以外で stderr warning
+- ``_parse_bbox_arg``: malformed 形式拒否、空白 strip、None pass-through
+- ``main``: request 本文に ``output`` が含まれず ``monitor``/``bbox`` のみ
+- ``_handle_screenshot_response``: base64 decode → ``--output`` への
+  write、``payload_bytes`` mismatch で error、summary JSON を stdout に出す
+- 任意 container path (``/tmp/...`` 等、repo 外) に書ける
+- error response はそのまま JSON で表示し exit 1
 """
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any
@@ -16,6 +27,9 @@ from typing import Any
 import pytest
 
 import resonite_cli  # pyright: ignore[reportMissingImports]
+
+
+# ----- parser ---------------------------------------------------------------
 
 
 def test_parser_screenshot_requires_output(capsys: pytest.CaptureFixture[str]) -> None:
@@ -42,25 +56,49 @@ def test_parser_screenshot_accepts_monitor_and_bbox() -> None:
     assert ns.bbox == "10,20,100,50"
 
 
-@pytest.mark.parametrize(
-    "bad",
-    [
-        "/abs.png",
-        "../escape.png",
-        "tmp/../etc.png",
-        "weird*.png",
-        "has space.png",
-        "",
-    ],
-)
-def test_validate_screenshot_output_rejects_invalid(bad: str) -> None:
+# ----- output path resolution ----------------------------------------------
+
+
+def test_resolve_screenshot_output_rejects_empty() -> None:
     with pytest.raises(SystemExit) as exc:
-        resonite_cli._validate_screenshot_output(bad)
+        resonite_cli._resolve_screenshot_output("")
     assert exc.value.code == resonite_cli.EXIT_USAGE
 
 
-def test_validate_screenshot_output_accepts_repo_relative() -> None:
-    assert resonite_cli._validate_screenshot_output("tmp/e2e/x.png") == "tmp/e2e/x.png"
+@pytest.mark.parametrize(
+    "ok_path",
+    [
+        "/tmp/desktop.png",  # 絶対パス (S3 で許容に変更)
+        "tmp/foo.png",  # 相対パス
+        "../escape/x.png",  # `..` を含む (container 側は自由)
+        "/workspace/tmp/x.png",  # repo 外でも OK
+        "a/b/c/d.png",
+    ],
+)
+def test_resolve_screenshot_output_accepts_any_container_path(ok_path: str) -> None:
+    path = resonite_cli._resolve_screenshot_output(ok_path)
+    assert isinstance(path, Path)
+    assert str(path) == ok_path
+
+
+def test_resolve_screenshot_output_warns_on_non_png(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = resonite_cli._resolve_screenshot_output("tmp/no_extension")
+    assert str(path) == "tmp/no_extension"
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert ".png" in err
+
+
+def test_resolve_screenshot_output_no_warning_for_png(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resonite_cli._resolve_screenshot_output("tmp/a.png")
+    assert capsys.readouterr().err == ""
+
+
+# ----- bbox parsing ---------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -86,39 +124,51 @@ def test_parse_bbox_arg_strips_whitespace() -> None:
     assert resonite_cli._parse_bbox_arg("10, 20 ,100 , 50") == [10, 20, 100, 50]
 
 
-def test_main_sends_correct_request(
+# ----- main: request body ---------------------------------------------------
+
+
+_FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"FAKEPAYLOAD" * 4
+
+
+def _fake_screenshot_response(monitor: int = 1) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "action": "screenshot",
+        "data": {
+            "png_b64": base64.b64encode(_FAKE_PNG).decode("ascii"),
+            "width": 320,
+            "height": 240,
+            "monitor": monitor,
+            "payload_bytes": len(_FAKE_PNG),
+        },
+    }
+
+
+def test_main_request_excludes_output_field(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Main() が組み立てる host_agent 向け request dict を検証する。"""
+    """S3 protocol: request body に ``output`` フィールドは含めない。"""
     sock_path = tmp_path / "fake.sock"
-    sock_path.touch()  # exists() を通すためのダミー (実際の send は mock)
+    sock_path.touch()
     captured: dict[str, Any] = {}
 
     def _fake_send(socket_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         captured["socket"] = socket_path
         captured["request"] = request
-        return {
-            "ok": True,
-            "action": "screenshot",
-            "data": {
-                "path": request["output"],
-                "width": 1920,
-                "height": 1080,
-                "monitor": request["monitor"],
-            },
-        }
+        return _fake_screenshot_response(monitor=request["monitor"])
 
     monkeypatch.setattr(resonite_cli, "_send_request", _fake_send)
 
+    output_path = tmp_path / "desktop.png"
     rc = resonite_cli.main(
         [
             "--socket",
             str(sock_path),
             "screenshot",
             "--output",
-            "tmp/desktop.png",
+            str(output_path),
             "--monitor",
             "1",
             "--bbox",
@@ -130,40 +180,24 @@ def test_main_sends_correct_request(
     assert captured["socket"] == sock_path
     assert captured["request"] == {
         "action": "screenshot",
-        "output": "tmp/desktop.png",
         "monitor": 1,
         "bbox": [0, 0, 640, 480],
     }
-    out = capsys.readouterr().out
-    assert json.loads(out)["ok"] is True
-
-
-def test_main_returns_nonzero_when_response_not_ok(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    sock_path = tmp_path / "fake.sock"
-    sock_path.touch()
-
-    def _fake_send(socket_path: Path, request: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "action": "screenshot",
-            "error": "capture_failed",
-            "detail": "X server unreachable",
-        }
-
-    monkeypatch.setattr(resonite_cli, "_send_request", _fake_send)
-
-    rc = resonite_cli.main(
-        ["--socket", str(sock_path), "screenshot", "--output", "tmp/x.png"]
-    )
-    assert rc == resonite_cli.EXIT_ACTION_FAILED
+    # PNG が書き出されている
+    assert output_path.read_bytes() == _FAKE_PNG
+    # stdout の summary JSON が parse できる
+    summary = json.loads(capsys.readouterr().out)
+    assert summary == {
+        "path": str(output_path),
+        "width": 320,
+        "height": 240,
+        "monitor": 1,
+        "payload_bytes": len(_FAKE_PNG),
+    }
 
 
 def test_main_screenshot_omits_bbox_when_unset(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     sock_path = tmp_path / "fake.sock"
     sock_path.touch()
@@ -171,11 +205,199 @@ def test_main_screenshot_omits_bbox_when_unset(
 
     def _fake_send(socket_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         captured["request"] = request
-        return {"ok": True, "action": "screenshot", "data": {}}
+        return _fake_screenshot_response()
 
     monkeypatch.setattr(resonite_cli, "_send_request", _fake_send)
 
     resonite_cli.main(
-        ["--socket", str(sock_path), "screenshot", "--output", "tmp/a.png"]
+        [
+            "--socket",
+            str(sock_path),
+            "screenshot",
+            "--output",
+            str(tmp_path / "a.png"),
+        ]
     )
     assert captured["request"]["bbox"] is None
+    assert "output" not in captured["request"]
+
+
+# ----- main: response handling ---------------------------------------------
+
+
+def test_main_writes_png_to_container_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+    monkeypatch.setattr(
+        resonite_cli, "_send_request", lambda *_: _fake_screenshot_response()
+    )
+
+    # 親 dir が存在しないケース: mkdir parents が効くこと。
+    output = tmp_path / "nested" / "dirs" / "snap.png"
+    rc = resonite_cli.main(
+        ["--socket", str(sock_path), "screenshot", "--output", str(output)]
+    )
+
+    assert rc == 0
+    assert output.read_bytes() == _FAKE_PNG
+
+
+def test_main_payload_bytes_mismatch_returns_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+
+    def _bad_response(*_: Any) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "action": "screenshot",
+            "data": {
+                "png_b64": base64.b64encode(_FAKE_PNG).decode("ascii"),
+                "width": 320,
+                "height": 240,
+                "monitor": 1,
+                "payload_bytes": len(_FAKE_PNG) + 999,  # 嘘の値
+            },
+        }
+
+    monkeypatch.setattr(resonite_cli, "_send_request", _bad_response)
+
+    output = tmp_path / "x.png"
+    rc = resonite_cli.main(
+        ["--socket", str(sock_path), "screenshot", "--output", str(output)]
+    )
+
+    assert rc == resonite_cli.EXIT_ACTION_FAILED
+    err = capsys.readouterr().err
+    assert "payload_bytes mismatch" in err
+    # 書き出しは失敗側なので、ファイルは作られない。
+    assert not output.exists()
+
+
+def test_main_invalid_b64_returns_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+
+    monkeypatch.setattr(
+        resonite_cli,
+        "_send_request",
+        lambda *_: {
+            "ok": True,
+            "action": "screenshot",
+            "data": {
+                "png_b64": "not!!valid!!base64",
+                "width": 1,
+                "height": 1,
+                "monitor": 1,
+                "payload_bytes": 0,
+            },
+        },
+    )
+
+    rc = resonite_cli.main(
+        [
+            "--socket",
+            str(sock_path),
+            "screenshot",
+            "--output",
+            str(tmp_path / "a.png"),
+        ]
+    )
+
+    assert rc == resonite_cli.EXIT_ACTION_FAILED
+    err = capsys.readouterr().err
+    assert "base64 decode" in err
+
+
+def test_main_error_response_passes_through(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+
+    monkeypatch.setattr(
+        resonite_cli,
+        "_send_request",
+        lambda *_: {
+            "ok": False,
+            "action": "screenshot",
+            "error": "capture_failed",
+            "detail": "X server unreachable",
+        },
+    )
+
+    rc = resonite_cli.main(
+        [
+            "--socket",
+            str(sock_path),
+            "screenshot",
+            "--output",
+            str(tmp_path / "x.png"),
+        ]
+    )
+
+    assert rc == resonite_cli.EXIT_ACTION_FAILED
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["ok"] is False
+    assert parsed["error"] == "capture_failed"
+
+
+def test_main_writes_to_absolute_path_outside_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``/tmp/...`` のような container 側絶対 path (repo 外) でも書ける。"""
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+    monkeypatch.setattr(
+        resonite_cli, "_send_request", lambda *_: _fake_screenshot_response()
+    )
+
+    output = tmp_path / "outside" / "repo.png"  # tmp_path は pytest が用意した
+    # 一時 dir で、テスト用 "container 側絶対 path" の代用。
+    rc = resonite_cli.main(
+        ["--socket", str(sock_path), "screenshot", "--output", str(output)]
+    )
+    assert rc == 0
+    assert output.is_file()
+
+
+def test_main_missing_png_b64_returns_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sock_path = tmp_path / "fake.sock"
+    sock_path.touch()
+    monkeypatch.setattr(
+        resonite_cli,
+        "_send_request",
+        lambda *_: {
+            "ok": True,
+            "action": "screenshot",
+            "data": {"width": 1, "height": 1, "monitor": 1},
+        },
+    )
+    rc = resonite_cli.main(
+        [
+            "--socket",
+            str(sock_path),
+            "screenshot",
+            "--output",
+            str(tmp_path / "x.png"),
+        ]
+    )
+    assert rc == resonite_cli.EXIT_ACTION_FAILED
+    err = capsys.readouterr().err
+    assert "png_b64" in err
