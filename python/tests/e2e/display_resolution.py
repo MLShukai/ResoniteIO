@@ -47,6 +47,13 @@ _FRAME_MATCH_TIMEOUT_S = 15.0
 _CAMERA_READY_TIMEOUT_S = 120.0
 _CAMERA_READY_RETRY_INTERVAL_S = 2.0
 
+# Display bridge readiness lags Camera readiness: ``ResolutionSettings`` /
+# ``DesktopRenderSettings`` activate slightly later than LocalUser /
+# FocusedWorld. The conftest now stops Resonite before every test, so the
+# engine is always cold and this race surfaces deterministically.
+_DISPLAY_READY_TIMEOUT_S = 30.0
+_DISPLAY_READY_RETRY_INTERVAL_S = 1.0
+
 
 async def _wait_for_camera_ready() -> None:
     """Block until the Camera bridge accepts a stream (engine fully booted).
@@ -70,6 +77,31 @@ async def _wait_for_camera_ready() -> None:
                     f"(last reason: {e.message})"
                 ) from e
             await asyncio.sleep(_CAMERA_READY_RETRY_INTERVAL_S)
+
+
+async def _wait_for_display_ready() -> None:
+    """Block until ``Display.Get`` stops returning FAILED_PRECONDITION.
+
+    ``FrooxEngineDisplayBridge`` reports FAILED_PRECONDITION until both
+    ``ResolutionSettings`` and ``DesktopRenderSettings`` are active. This
+    can lag Camera readiness by a few seconds on a freshly booted engine.
+    """
+    ready_deadline = time.monotonic() + _DISPLAY_READY_TIMEOUT_S
+    while True:
+        try:
+            async with DisplayClient() as c:
+                await c.get()
+                return
+        except grpclib.exceptions.GRPCError as e:
+            if e.status != Status.FAILED_PRECONDITION:
+                raise
+            if time.monotonic() > ready_deadline:
+                raise TimeoutError(
+                    f"Display bridge did not become ready in "
+                    f"{_DISPLAY_READY_TIMEOUT_S:.0f}s "
+                    f"(last reason: {e.message})"
+                ) from e
+            await asyncio.sleep(_DISPLAY_READY_RETRY_INTERVAL_S)
 
 
 async def _get_current_display() -> DisplayInfo:
@@ -125,6 +157,7 @@ class TestDisplayResolution:
 
         async def run() -> None:
             await _wait_for_camera_ready()
+            await _wait_for_display_ready()
             initial = await _get_current_display()
             try:
                 for target_w, target_h in _TARGET_RESOLUTIONS:
