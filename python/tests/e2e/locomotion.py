@@ -139,19 +139,19 @@ class TestLocomotionDrive:
         out_path = out_dir / "capture.mp4"
 
         # ``mp4v`` is the codec most broadly available in pip-shipped
-        # headless opencv. If unavailable the writer silently fails open
-        # and ``out_path`` stays zero-bytes (asserted below).
+        # headless opencv. Writer dimensions must match the first frame
+        # exactly — cv2 silently drops mis-sized frames — so the writer
+        # is opened lazily once the first frame size is known (current
+        # Camera bridge ignores the requested width/height and returns
+        # the renderer's native resolution, so we cannot pre-pin a size).
         fourcc = cv2.VideoWriter.fourcc(*"mp4v")
-        writer = cv2.VideoWriter(
-            str(out_path),
-            fourcc,
-            _CAPTURE_FPS,
-            (_CAPTURE_WIDTH, _CAPTURE_HEIGHT),
-        )
+        writer: cv2.VideoWriter | None = None
+        writer_size: tuple[int, int] | None = None
 
         stop_event = asyncio.Event()
 
         async def capture_frames() -> int:
+            nonlocal writer, writer_size
             count = 0
             async with CameraClient() as cam:
                 async for frame in cam.stream(
@@ -164,6 +164,19 @@ class TestLocomotionDrive:
                     # alpha-aware so the drop is lossless for our
                     # visual verification goal).
                     bgr: NDArray = cv2.cvtColor(frame.pixels, cv2.COLOR_RGBA2BGR)
+                    if writer is None:
+                        writer_size = (frame.width, frame.height)
+                        writer = cv2.VideoWriter(
+                            str(out_path), fourcc, _CAPTURE_FPS, writer_size
+                        )
+                    elif (frame.width, frame.height) != writer_size:
+                        # Resize mid-stream is unsupported; resampling per
+                        # frame would mask actual bridge behaviour. Skip
+                        # to keep the writer aligned with its initial size.
+                        count += 1
+                        if stop_event.is_set():
+                            break
+                        continue
                     writer.write(bgr)
                     count += 1
                     if stop_event.is_set():
@@ -226,16 +239,25 @@ class TestLocomotionDrive:
         try:
             commands_sent, frames_captured = asyncio.run(run())
         finally:
-            writer.release()
+            if writer is not None:
+                writer.release()
 
         # Surface the artifact path even on green CI runs.
         print(f"E2E artifact dir: {out_dir}")
         print(f"E2E MP4: {out_path}")
-        print(f"locomotion commands={commands_sent}, camera frames={frames_captured}")
+        print(
+            f"locomotion commands={commands_sent}, camera frames={frames_captured}, "
+            f"writer_size={writer_size}"
+        )
 
         assert out_path.exists(), f"MP4 not created at {out_path}"
-        assert out_path.stat().st_size > 0, (
-            f"MP4 at {out_path} is empty (codec missing?)"
+        # mp4v writes a ~257-byte header even when every frame is dropped
+        # (size mismatch), so size > 0 alone does not prove playable
+        # content. Require >= 10 KB so the assertion catches the silent
+        # codec-failure path discovered on 2026-05-19.
+        assert out_path.stat().st_size >= 10_000, (
+            f"MP4 at {out_path} looks empty ({out_path.stat().st_size} bytes); "
+            "writer likely silently dropped frames (codec or size mismatch)."
         )
         assert frames_captured >= _MIN_CAMERA_FRAMES, (
             f"expected >= {_MIN_CAMERA_FRAMES} camera frames in "
