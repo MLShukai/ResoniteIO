@@ -1,17 +1,39 @@
 """``resoio locomotion drive`` subcommand: interactive WASD drive.
 
-Phase 1A: only the pure logic layer (``_DriveState`` / ``_KeyParser`` /
-``_apply_key`` / ``_format_status``). The async runtime, raw-tty
-context manager, Bridge-ready retry, and subcommand registration are
-added in a follow-up commit; until then this module is not wired into
-:data:`resoio.cli._COMMAND_MODULES`, so the CLI cannot reach it.
+Two layers live here:
+
+* The **pure logic layer** — :class:`_DriveState` / :class:`_KeyParser` /
+  :func:`_apply_key` / :func:`_format_status` — is unit-tested in
+  isolation (no asyncio, no termios, no gRPC). Phase 1A delivered this
+  half.
+* The **async runtime layer** — :func:`register` / :func:`_run_drive`
+  plus :func:`_raw_tty` and :func:`_wait_for_bridge_ready` — wires the
+  pure logic up to a UDS gRPC client, raw-mode stdin via ``asyncio``'s
+  ``add_reader``, and a Bridge-ready retry loop.
+
+Engine-side constraint that shapes this file: ``ExternalInput`` is
+consumed and nulled every update tick, so we send at a fixed cadence
+(default 30 Hz) for the entire session — any input held by the user is
+re-asserted on every tick rather than transmitted as a single edge.
 """
 
 from __future__ import annotations
 
+import argparse
+import asyncio
+import os
+import sys
+import termios
+import tty
+from collections.abc import AsyncIterator, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, TextIO
 
 from resoio.locomotion import LocomotionCmd
+
+if TYPE_CHECKING:
+    from resoio.locomotion import DriveSummary
 
 # Listed here so pyright does not flag the Phase 1A pure-logic helpers as
 # unused: they are exercised by the test suite and consumed in-module by
@@ -195,3 +217,288 @@ def _format_status(state: _DriveState, sprint_velocity: float) -> str:
         f"look=({state.yaw_rate:+.1f},{state.pitch_rate:+.1f}) "
         f"velocity={velocity:.2f} crouch={crouch_state}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Async runtime layer
+# ---------------------------------------------------------------------------
+
+
+_BRIDGE_READY_TIMEOUT_S = 120.0
+_BRIDGE_READY_RETRY_INTERVAL_S = 2.0
+
+
+def _positive_float(raw: str) -> float:
+    """Reject zero/negative values that would cause an infinite tick period."""
+    value = float(raw)
+    if value <= 0.0:
+        raise argparse.ArgumentTypeError(f"must be positive, got {value}")
+    return value
+
+
+def register(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
+    common: argparse.ArgumentParser,
+) -> None:
+    """Register the ``locomotion`` subparser with nested ``drive``.
+
+    ``common`` is re-attached on the leaf (not just the ``locomotion``
+    node) because argparse does not inherit shared flags from a parent
+    subparser to its children; ``resoio locomotion drive -s SOCK`` would
+    otherwise drop ``-s`` on the leaf's namespace.
+
+    The nesting (``locomotion drive`` rather than just ``locomotion``)
+    leaves room for future ``send`` / ``play`` one-shot subcommands
+    without breaking the published CLI surface.
+    """
+    parser = subparsers.add_parser(
+        "locomotion",
+        parents=[common],
+        help="Drive avatar locomotion (move / look / jump / sprint / crouch).",
+        description=(
+            "Drive the Resonite IO Locomotion service. Subcommands group "
+            "interactive (drive) and (future) scripted entry points."
+        ),
+    )
+    locomotion_subs = parser.add_subparsers(dest="locomotion_command", required=True)
+
+    drive_parser = locomotion_subs.add_parser(
+        "drive",
+        parents=[common],
+        help="Interactive WASD drive over the Resonite IO UDS.",
+        description=(
+            "Open a Locomotion stream and translate keyboard input "
+            "(WASD + arrows + Space/t/c/x/q) into LocomotionCommand "
+            "messages emitted at a fixed cadence. Engine consumes and "
+            "nulls ExternalInput every update tick so held axes are "
+            "re-asserted by --rate Hz."
+        ),
+    )
+    drive_parser.add_argument(
+        "--rate",
+        type=_positive_float,
+        default=30.0,
+        help="Tick frequency in Hz (default: 30.0).",
+    )
+    drive_parser.add_argument(
+        "--sprint",
+        type=float,
+        default=2.0,
+        help=(
+            "LocomotionCommand.velocity to send while sprint is toggled on "
+            "(default: 2.0)."
+        ),
+    )
+    drive_parser.add_argument(
+        "--look-rate",
+        type=float,
+        default=1.0,
+        dest="look_rate",
+        help="Yaw / pitch rate amplitude while a look axis is held (default: 1.0).",
+    )
+    drive_parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        dest="no_wait",
+        help=(
+            "Skip the Bridge-ready retry loop (default: retry "
+            f"FAILED_PRECONDITION for up to {_BRIDGE_READY_TIMEOUT_S:.0f}s)."
+        ),
+    )
+    drive_parser.set_defaults(func=_run_drive)
+
+
+@contextmanager
+def _raw_tty(stream: TextIO) -> Generator[None]:
+    """Put ``stream`` into cbreak mode and restore on exit.
+
+    The ``finally`` branch is the load-bearing piece: if the asyncio
+    loop crashes mid-drive the terminal must end up echoing again or
+    the user's shell is left effectively unusable.
+
+    A non-tty fd (pipe / file) is a no-op rather than an error so
+    end-to-end tests can feed canned input via ``os.pipe()`` without
+    needing a pty.
+    """
+    fd: int
+    try:
+        fd = stream.fileno()
+    except (OSError, ValueError):
+        # No fd at all — nothing to switch to raw mode.
+        yield
+        return
+    if not os.isatty(fd):
+        yield
+        return
+    original = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, original)
+
+
+async def _wait_for_bridge_ready(
+    socket_path: str | None,
+    timeout_s: float = _BRIDGE_READY_TIMEOUT_S,
+    interval_s: float = _BRIDGE_READY_RETRY_INTERVAL_S,
+) -> None:
+    """Block until ``Locomotion.Drive`` no longer raises
+    ``FAILED_PRECONDITION``.
+
+    Same shape as ``tests/e2e/locomotion.py:_wait_for_camera_ready``: open
+    a fresh client, push a single neutral command, and accept either a
+    clean summary or a ``FAILED_PRECONDITION`` GRPCError as a retry
+    signal. Anything else propagates immediately.
+    """
+    import time as _time
+
+    import grpclib.exceptions
+    from grpclib.const import Status
+
+    from resoio.locomotion import LocomotionClient
+
+    deadline = _time.monotonic() + timeout_s
+    while True:
+        try:
+            async with LocomotionClient(socket_path) as client:
+
+                async def _one_neutral() -> AsyncIterator[LocomotionCmd]:
+                    yield LocomotionCmd()
+
+                await client.drive(_one_neutral())
+            return
+        except grpclib.exceptions.GRPCError as exc:
+            if exc.status != Status.FAILED_PRECONDITION:
+                raise
+            if _time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"locomotion bridge did not become ready in "
+                    f"{timeout_s:.0f}s (last reason: {exc.message})"
+                ) from exc
+            await asyncio.sleep(interval_s)
+
+
+def _print_help(
+    stream: TextIO, *, sprint: float, look_rate: float, rate: float
+) -> None:
+    """Print the keymap to ``stream`` once at start of session.
+
+    Sent to stderr so the human-facing summary does not pollute stdout
+    where the final ``DriveSummary`` is emitted (the latter is scriptable).
+    """
+    print(
+        "resoio locomotion drive — interactive controls\n"
+        "  w / s : forward / back toggle (mutually exclusive)\n"
+        "  a / d : strafe left / right toggle (mutually exclusive)\n"
+        "  LEFT/RIGHT arrows : yaw left / right toggle\n"
+        "  UP/DOWN arrows    : look up / down toggle\n"
+        "  Space : jump pulse (one tick)\n"
+        f"  t : sprint toggle (velocity 1.0 <-> {sprint})\n"
+        "  c : crouch toggle\n"
+        "  x / 0 : stop all (reset every axis)\n"
+        "  q : quit\n"
+        f"settings: rate={rate} Hz, look_rate={look_rate}, sprint={sprint}",
+        file=stream,
+    )
+
+
+def _write_status(stream: TextIO, state: _DriveState, sprint_velocity: float) -> None:
+    """Overwrite the status line in place with the current held-axis
+    snapshot."""
+    line = _format_status(state, sprint_velocity)
+    # Leading \r so the line is overwritten rather than scrolled; no
+    # newline so the cursor stays parked on the same row.
+    stream.write("\r" + line)
+    stream.flush()
+
+
+async def _run_drive(args: argparse.Namespace) -> int:
+    """Open a Locomotion stream and translate stdin into LocomotionCommands."""
+    # Deferred to keep `resoio --help` and shell completion fast.
+    import grpclib.exceptions
+
+    from resoio.locomotion import LocomotionClient
+
+    rate: float = args.rate
+    sprint: float = args.sprint
+    look_rate: float = args.look_rate
+
+    _print_help(sys.stderr, sprint=sprint, look_rate=look_rate, rate=rate)
+
+    if not args.no_wait:
+        try:
+            await _wait_for_bridge_ready(args.socket)
+        except TimeoutError as exc:
+            print(f"locomotion bridge not ready: {exc}", file=sys.stderr)
+            return 1
+        except grpclib.exceptions.GRPCError as exc:
+            print(
+                f"locomotion bridge error: {exc.status.name} {exc.message}",
+                file=sys.stderr,
+            )
+            return 1
+
+    state = _DriveState()
+    stop_event = asyncio.Event()
+    period = 1.0 / rate
+    parser = _KeyParser()
+    loop = asyncio.get_running_loop()
+
+    # If stdin has no fd (e.g. captured by pytest), bail before opening
+    # the gRPC channel — there is no useful drive to run.
+    try:
+        stdin_fd = sys.stdin.fileno()
+    except (OSError, ValueError):
+        print("resoio locomotion drive: stdin has no fd", file=sys.stderr)
+        return 1
+
+    def on_stdin() -> None:
+        try:
+            data = os.read(stdin_fd, 64)
+        except BlockingIOError:
+            return
+        if not data:
+            # EOF (pipe closed or Ctrl-D): exit cleanly so the summary
+            # still prints.
+            stop_event.set()
+            return
+        for byte in data:
+            for key in parser.feed(byte):
+                if _apply_key(state, key, look_rate, sprint):
+                    stop_event.set()
+                    return
+
+    summary: DriveSummary
+    with _raw_tty(sys.stdin):
+        loop.add_reader(stdin_fd, on_stdin)
+        try:
+            async with LocomotionClient(args.socket) as client:
+
+                async def commands() -> AsyncIterator[LocomotionCmd]:
+                    while not stop_event.is_set():
+                        cmd = state.to_cmd(sprint)
+                        yield cmd
+                        _write_status(sys.stderr, state, sprint)
+                        await asyncio.sleep(period)
+
+                try:
+                    summary = await client.drive(commands())
+                except grpclib.exceptions.GRPCError as exc:
+                    print(
+                        f"\nlocomotion drive failed: {exc.status.name} {exc.message}",
+                        file=sys.stderr,
+                    )
+                    return 1
+        finally:
+            loop.remove_reader(stdin_fd)
+            # Close the status line so subsequent stderr output starts on
+            # a fresh row regardless of how we exited.
+            print("", file=sys.stderr)
+
+    print(
+        f"received_count={summary.received_count} "
+        f"dropped_count={summary.dropped_count} "
+        f"unix_nanos={summary.unix_nanos}"
+    )
+    return 0
