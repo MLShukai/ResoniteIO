@@ -1,11 +1,9 @@
 using System.Net.Sockets;
 using Grpc.Net.Client;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Session;
-
-// IDisplayBridge は Core.Display 名前空間にあり、ILocomotionBridge は Core.Bridge
-// 名前空間にある — 既存の Bridge using で吸収済み。
 
 namespace ResoniteIO.Core.Tests.Helpers;
 

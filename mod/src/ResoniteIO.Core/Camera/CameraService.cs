@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Google.Protobuf;
 using Grpc.Core;
-using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Logging;
 
 #pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要

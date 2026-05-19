@@ -1,7 +1,7 @@
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests.Bridge;
+namespace ResoniteIO.Core.Tests.Camera;
 
 /// <summary>
 /// <see cref="PushedFrameCameraBridge"/> の latest-wins / 待機 / キャンセル /

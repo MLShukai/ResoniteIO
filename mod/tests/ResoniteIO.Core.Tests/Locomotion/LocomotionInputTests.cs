@@ -1,4 +1,4 @@
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Locomotion;
 using Xunit;
 
 namespace ResoniteIO.Core.Tests.Locomotion;

@@ -1,5 +1,5 @@
 using Grpc.Core;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Tests.Helpers;
 using Xunit;
 using V1 = ResoniteIO.V1;

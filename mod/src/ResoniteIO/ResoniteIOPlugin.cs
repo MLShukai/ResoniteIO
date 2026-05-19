@@ -8,7 +8,7 @@ using BepInExResoniteShim;
 using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Loading;

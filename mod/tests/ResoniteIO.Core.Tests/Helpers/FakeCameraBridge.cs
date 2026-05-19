@@ -1,4 +1,4 @@
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 
 namespace ResoniteIO.Core.Tests.Helpers;
 

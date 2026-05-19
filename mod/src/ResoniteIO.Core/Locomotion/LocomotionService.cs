@@ -1,5 +1,4 @@
 using Grpc.Core;
-using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Locomotion;

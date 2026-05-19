@@ -2,7 +2,7 @@ using System;
 using Elements.Core;
 using FrooxEngine;
 using HarmonyLib;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Bridge;

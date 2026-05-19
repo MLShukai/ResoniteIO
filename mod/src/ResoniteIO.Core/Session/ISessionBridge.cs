@@ -1,4 +1,4 @@
-namespace ResoniteIO.Core.Bridge;
+namespace ResoniteIO.Core.Session;
 
 /// <summary>
 /// Core 層が FrooxEngine の Session 状態を読むための抽象。Mod 側が実装し DI で注入する。

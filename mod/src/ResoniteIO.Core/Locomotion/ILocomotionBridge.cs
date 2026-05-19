@@ -1,4 +1,4 @@
-namespace ResoniteIO.Core.Bridge;
+namespace ResoniteIO.Core.Locomotion;
 
 /// <summary>
 /// Mod 側 (FrooxEngine) が実装し DI で注入する Locomotion 制御抽象。

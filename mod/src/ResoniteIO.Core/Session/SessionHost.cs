@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;

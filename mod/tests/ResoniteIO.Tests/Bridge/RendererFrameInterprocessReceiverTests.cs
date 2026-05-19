@@ -1,6 +1,6 @@
 using System;
 using ResoniteIO.Bridge;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.RendererShared;
 using Xunit;
 

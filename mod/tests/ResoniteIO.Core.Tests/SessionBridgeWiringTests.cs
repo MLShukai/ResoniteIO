@@ -1,4 +1,4 @@
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Tests.Helpers;
 using Xunit;
 
