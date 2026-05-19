@@ -12,9 +12,10 @@ every update tick (see ``Analog3DAction.Evaluate``), so the scenario
 sends at 30 Hz to keep inputs held. ``FAILED_PRECONDITION`` from either
 bridge is retried up to 120 s — both depend on ``LocalUser`` /
 ``FocusedWorld`` readiness which lags UDS bind. The Locomotion bridge
-additionally requires a walk-capable world (home / Userspace use
-NoLocomotion modules and would never settle); the manual checklist in
-``mod/tests/manual/locomotion-e2e.md`` describes the world-switch step.
+additionally requires a walk-capable active module: the default home
+world already satisfies this, but Teleport / NoClip / NoLocomotion
+worlds need a manual switch within the retry budget — see
+``mod/tests/manual/locomotion-e2e.md``.
 
 Like every file under ``tests/e2e/`` this requires the host-side
 ``just host-agent`` daemon plus a live Resonite client; the

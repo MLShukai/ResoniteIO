@@ -12,11 +12,8 @@
 //     Bridge が符号反転して float2 = (yaw_rate, -pitch_rate) で書く。
 //   - `jump` は `DigitalAction.ExternalInput |= value` の OR-merge なので
 //     1 frame でも true なら trigger。
-//   - `velocity` は literal な乗算スカラー (1.0=通常歩行、2.0=engine の
-//     `FastMultiplier` 相当)。proto3 仕様上 wire default は 0 のため
-//     **convenience client (Python `LocomotionCmd`) 側で default=1.0 を保証**
-//     する設計 (Bridge は再解釈しない)。raw proto を直接生成して velocity を
-//     明示しないと Move が 0 倍される点に注意。
+//   - `velocity` の単位元・wire default の trade-off は下記 field doc を参照
+//     (この proto ファイル内が semantics の正典)。
 syntax = "proto3";
 
 package resonite_io.v1;

@@ -28,13 +28,12 @@ _logger = logging.getLogger("resoio.locomotion")
 
 @dataclass(frozen=True, slots=True)
 class LocomotionCmd:
-    """One desktop-style locomotion command (Python API view).
+    """Python-side ``LocomotionCommand`` with a 1.0 ``velocity`` default.
 
-    ``velocity`` defaults to ``1.0`` (the multiplicative identity) so a
-    bare ``LocomotionCmd(move_y=1.0)`` walks at the engine's natural
-    speed; the server multiplies ``Move`` by this scalar verbatim.
-    ``pitch_rate`` is "up = positive" (the bridge handles the engine's
-    sign flip). Other field semantics are canonical in
+    The ``velocity=1.0`` default is the whole point of this wrapper:
+    proto3 would otherwise send wire default ``0`` and the bridge —
+    which multiplies ``Move`` by ``velocity`` literally — would stop
+    the avatar. Field semantics are canon in
     ``proto/resonite_io/v1/locomotion.proto``.
     """
 

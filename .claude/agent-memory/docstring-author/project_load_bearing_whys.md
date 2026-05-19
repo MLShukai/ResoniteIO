@@ -1,6 +1,6 @@
 ---
 name: load-bearing-whys
-description: Non-obvious WHY comments under mod/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 surface)
+description: Non-obvious WHY comments under mod/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion surface)
 metadata:
   type: project
 ---
@@ -13,6 +13,8 @@ but the WHY patterns recurred in v2); items 10–14 originate from
 Camera v2 (renderer process bridge, `mod/src/ResoniteIO.Renderer/` +
 `mod/src/ResoniteIO.RendererShared/` + `PushedFrameCameraBridge` +
 `RendererFrameInterprocessReceiver` + `FrooxEngineDisplayBridge`).
+Items 15–17 originate from Step 4 (Locomotion: proto velocity
+semantics + Bridge sign-flip + Service round-trip assertion).
 
 01. **Google.Protobuf early-resolution hazard**
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
@@ -91,31 +93,35 @@ Camera v2 (renderer process bridge, `mod/src/ResoniteIO.Renderer/` +
     *background* cap. This is a footgun for callers who expect
     `DisplayClient.apply(max_fps=120)` to raise foreground fps —
     keep the entire remarks block; see \[\[camera-v2-constraints\]\] §9.
-15. **Locomotion velocity 0→1.0 reinterpretation site**
-    (`mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs`,
-    inside `ApplyAsync`): the `velocityMul = command.Velocity > 0f ? ... : 1.0f` line is the single canonical fallback site. Its
-    comment ("proto3 default=0 を 1.0 に再解釈する正典的な site")
-    plus the velocity field doc in `proto/resonite_io/v1/locomotion.proto`
-    are the **only two** places the semantics live — all other surfaces
-    (Python `LocomotionCmd` docstring, `ILocomotionBridge` POCO remarks,
-    `mod/tests/manual/locomotion-e2e.md` v0 section, e2e
-    `_scenario_command`) deliberately point at proto rather than
-    repeat. Don't reintroduce the long explanation in those
-    secondary spots in future passes — proto field comment is canon.
+15. **Locomotion velocity semantics canon = proto field comment**
+    (`proto/resonite_io/v1/locomotion.proto`, `LocomotionCommand.velocity`):
+    the field doc states "単位元は 1.0、Python `LocomotionCmd` で
+    default=1.0 を保証、Bridge は素のまま掛ける (再解釈なし)、raw proto
+    で未指定だと wire default 0 で Move が 0 倍される" — this is the
+    **single canonical surface**. The Bridge inline comment in
+    `FrooxEngineLocomotionBridge.ApplyAsync` (just above
+    `Move.ExternalInput = new float3(MoveX * Velocity, 0, MoveY * Velocity)`)
+    points back at this proto comment rather than repeating it.
+    All other surfaces (Python `LocomotionCmd` docstring,
+    `ILocomotionBridge` POCO remarks, `mod/tests/manual/locomotion-e2e.md`
+    v0 section, e2e `_scenario_command`) deliberately defer to proto.
+    Do NOT reintroduce a wire-side 0→1.0 fallback in the Bridge —
+    it was removed at `d195212` precisely to keep proto value and
+    applied multiplier in 1:1 correspondence.
 16. **Pitch sign-flip responsibility on Locomotion Bridge**: the
     inline comment "pitch は engine 側 `_verticalAngle -= y` で反転
     加算されるため符号反転" right above `screenInputs.Look.ExternalInput = new float2(command.YawRate, -command.PitchRate)` is the only
     surface that documents *where* the sign flip happens (Python API
     is "up positive", engine wants the opposite). Keep it on the
     Bridge — proto only states the API convention.
-17. **`Drive` test default-velocity round-trip assertion**
+17. **`Drive` test proto3-default round-trip assertion**
     (`mod/tests/ResoniteIO.Core.Tests/Locomotion/LocomotionRoundTripTests.cs`,
-    "Default Velocity (0f) must round-trip unchanged" comment):
-    explains why the test checks `received[0].Velocity == 0f`
-    instead of `1f` — the 0→1.0 reinterpretation is the engine
-    Bridge's job, not the Service's, and the proto3 default must
-    reach `ApplyAsync` intact. Without this comment the assertion
-    looks contradictory to the proto field doc.
+    "Service は proto.Velocity を素のまま POCO に詰めるだけ" comment):
+    explains why `received[0].Velocity == 0f` (not `1f`) — the
+    Service is a pure proto→POCO mapper and the convenience-side
+    default lives in Python `LocomotionCmd`. Without this comment
+    the assertion looks contradictory to the proto field doc which
+    states the unit value is 1.0.
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel
