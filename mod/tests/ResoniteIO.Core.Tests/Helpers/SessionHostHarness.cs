@@ -4,6 +4,9 @@ using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Session;
 
+// IDisplayBridge は Core.Display 名前空間にあり、ILocomotionBridge は Core.Bridge
+// 名前空間にある — 既存の Bridge using で吸収済み。
+
 namespace ResoniteIO.Core.Tests.Helpers;
 
 /// <summary>
@@ -38,20 +41,23 @@ internal sealed class SessionHostHarness : IAsyncDisposable
     public static Task<SessionHostHarness> StartAsync(
         ISessionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
-        IDisplayBridge? displayBridge = null
+        IDisplayBridge? displayBridge = null,
+        ILocomotionBridge? locomotionBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
             bridge,
             cameraBridge,
-            displayBridge
+            displayBridge,
+            locomotionBridge
         );
 
     public static async Task<SessionHostHarness> StartAsync(
         string socketPath,
         ISessionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
-        IDisplayBridge? displayBridge = null
+        IDisplayBridge? displayBridge = null,
+        ILocomotionBridge? locomotionBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -66,7 +72,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
                 cts.Token,
                 bridge,
                 cameraBridge,
-                displayBridge
+                displayBridge,
+                locomotionBridge
             );
         }
         catch

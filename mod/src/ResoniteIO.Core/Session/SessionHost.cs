@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Session;
@@ -70,7 +71,8 @@ public sealed class SessionHost : IAsyncDisposable
         CancellationToken cancellationToken,
         ISessionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
-        IDisplayBridge? displayBridge = null
+        IDisplayBridge? displayBridge = null,
+        ILocomotionBridge? locomotionBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -107,6 +109,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(displayBridge);
         }
+        if (locomotionBridge is not null)
+        {
+            builder.Services.AddSingleton(locomotionBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -119,6 +125,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<SessionService>();
         app.MapGrpcService<CameraService>();
         app.MapGrpcService<DisplayService>();
+        app.MapGrpcService<LocomotionService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
