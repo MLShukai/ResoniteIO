@@ -33,27 +33,27 @@ from resoio.cli.locomotion import (
 
 def test_w_toggles_move_y_forward_and_back_to_neutral():
     state = _DriveState()
-    assert _apply_key(state, "w", 1.0, 2.0) is False
+    assert _apply_key(state, "w", 1.0) is False
     assert state.move_y == 1.0
-    assert _apply_key(state, "w", 1.0, 2.0) is False
+    assert _apply_key(state, "w", 1.0) is False
     assert state.move_y == 0.0
 
 
 def test_s_cancels_held_w_then_flips_negative():
     state = _DriveState(move_y=1.0)
-    assert _apply_key(state, "s", 1.0, 2.0) is False
+    assert _apply_key(state, "s", 1.0) is False
     assert state.move_y == 0.0  # exclusive cancel
-    assert _apply_key(state, "s", 1.0, 2.0) is False
+    assert _apply_key(state, "s", 1.0) is False
     assert state.move_y == -1.0
 
 
 def test_a_and_d_are_exclusive_on_move_x():
     state = _DriveState()
-    _apply_key(state, "d", 1.0, 2.0)
+    _apply_key(state, "d", 1.0)
     assert state.move_x == 1.0
-    _apply_key(state, "a", 1.0, 2.0)
+    _apply_key(state, "a", 1.0)
     assert state.move_x == 0.0  # d cancelled by a
-    _apply_key(state, "a", 1.0, 2.0)
+    _apply_key(state, "a", 1.0)
     assert state.move_x == -1.0
 
 
@@ -64,27 +64,27 @@ def test_a_and_d_are_exclusive_on_move_x():
 
 def test_up_toggles_pitch_at_look_rate():
     state = _DriveState()
-    _apply_key(state, "UP", 0.5, 2.0)
+    _apply_key(state, "UP", 0.5)
     assert state.pitch_rate == 0.5
-    _apply_key(state, "UP", 0.5, 2.0)
+    _apply_key(state, "UP", 0.5)
     assert state.pitch_rate == 0.0
 
 
 def test_down_cancels_up_then_flips_negative():
     state = _DriveState(pitch_rate=0.5)
-    _apply_key(state, "DOWN", 0.5, 2.0)
+    _apply_key(state, "DOWN", 0.5)
     assert state.pitch_rate == 0.0
-    _apply_key(state, "DOWN", 0.5, 2.0)
+    _apply_key(state, "DOWN", 0.5)
     assert state.pitch_rate == -0.5
 
 
 def test_left_and_right_are_exclusive_on_yaw():
     state = _DriveState()
-    _apply_key(state, "RIGHT", 0.5, 2.0)
+    _apply_key(state, "RIGHT", 0.5)
     assert state.yaw_rate == 0.5
-    _apply_key(state, "LEFT", 0.5, 2.0)
+    _apply_key(state, "LEFT", 0.5)
     assert state.yaw_rate == 0.0  # right cancelled by left
-    _apply_key(state, "LEFT", 0.5, 2.0)
+    _apply_key(state, "LEFT", 0.5)
     assert state.yaw_rate == -0.5
 
 
@@ -95,9 +95,9 @@ def test_left_and_right_are_exclusive_on_yaw():
 
 def test_t_toggles_sprint_flag():
     state = _DriveState()
-    _apply_key(state, "t", 1.0, 2.0)
+    _apply_key(state, "t", 1.0)
     assert state.sprint_on is True
-    _apply_key(state, "t", 1.0, 2.0)
+    _apply_key(state, "t", 1.0)
     assert state.sprint_on is False
 
 
@@ -117,10 +117,10 @@ def test_to_cmd_velocity_reflects_sprint_state():
 
 def test_c_toggles_crouch_flag_and_cmd_crouch_field():
     state = _DriveState()
-    _apply_key(state, "c", 1.0, 2.0)
+    _apply_key(state, "c", 1.0)
     assert state.crouch_on is True
     assert state.to_cmd(2.0).crouch == 1.0
-    _apply_key(state, "c", 1.0, 2.0)
+    _apply_key(state, "c", 1.0)
     assert state.crouch_on is False
     assert state.to_cmd(2.0).crouch == 0.0
 
@@ -132,7 +132,7 @@ def test_c_toggles_crouch_flag_and_cmd_crouch_field():
 
 def test_space_emits_jump_on_next_cmd_then_drains():
     state = _DriveState()
-    _apply_key(state, " ", 1.0, 2.0)
+    _apply_key(state, " ", 1.0)
     assert state.jump_pending is True
     first = state.to_cmd(2.0)
     assert first.jump is True
@@ -157,13 +157,13 @@ def test_x_resets_all_axes_to_neutral():
         crouch_on=True,
         jump_pending=True,
     )
-    _apply_key(state, "x", 1.0, 2.0)
+    _apply_key(state, "x", 1.0)
     assert state == _DriveState()
 
 
 def test_zero_resets_all_axes_to_neutral():
     state = _DriveState(move_y=1.0, sprint_on=True)
-    _apply_key(state, "0", 1.0, 2.0)
+    _apply_key(state, "0", 1.0)
     assert state == _DriveState()
 
 
@@ -174,7 +174,7 @@ def test_zero_resets_all_axes_to_neutral():
 
 def test_q_returns_true_to_signal_exit():
     state = _DriveState(move_y=1.0)
-    assert _apply_key(state, "q", 1.0, 2.0) is True
+    assert _apply_key(state, "q", 1.0) is True
     # State is not touched by the exit key — caller handles teardown.
     assert state.move_y == 1.0
 
@@ -191,7 +191,7 @@ def test_unrecognised_keys_are_noop():
         jump_pending=state.jump_pending,
     )
     for key in ("?", "z", "1", "Q"):
-        assert _apply_key(state, key, 1.0, 2.0) is False
+        assert _apply_key(state, key, 1.0) is False
     assert state == before
 
 

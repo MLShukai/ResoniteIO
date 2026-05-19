@@ -4,8 +4,7 @@ Two layers live here:
 
 * The **pure logic layer** — :class:`_DriveState` / :class:`_KeyParser` /
   :func:`_apply_key` / :func:`_format_status` — is unit-tested in
-  isolation (no asyncio, no termios, no gRPC). Phase 1A delivered this
-  half.
+  isolation (no asyncio, no termios, no gRPC).
 * The **async runtime layer** — :func:`register` / :func:`_run_drive`
   plus :func:`_raw_tty` and :func:`_wait_for_bridge_ready` — wires the
   pure logic up to a UDS gRPC client, raw-mode stdin via ``asyncio``'s
@@ -34,17 +33,6 @@ from resoio.locomotion import LocomotionCmd
 
 if TYPE_CHECKING:
     from resoio.locomotion import DriveSummary
-
-# Listed here so pyright does not flag the Phase 1A pure-logic helpers as
-# unused: they are exercised by the test suite and consumed in-module by
-# the Phase 2 async runtime additions, but neither path is visible to a
-# strict-mode scan of ``src/`` alone.
-__all__ = [
-    "_DriveState",
-    "_KeyParser",
-    "_apply_key",
-    "_format_status",
-]
 
 
 @dataclass
@@ -151,19 +139,14 @@ class _KeyParser:
         return [key] if key is not None else []
 
 
-def _apply_key(
-    state: _DriveState,
-    key: str,
-    look_rate: float,
-    sprint_velocity: float,  # noqa: ARG001 - kept for symmetry with Phase 2 status renderer
-) -> bool:
+def _apply_key(state: _DriveState, key: str, look_rate: float) -> bool:
     """Apply ``key`` to ``state``; return ``True`` iff an exit was requested.
 
-    The ``sprint_velocity`` parameter is unused here — sprint magnitude
-    is applied in :meth:`_DriveState.to_cmd`. It is kept on the
-    signature so the Phase 2 status renderer (which interleaves
-    ``_apply_key`` and status redraws) can pass the same value to both
-    without inspecting ``args``.
+    Sprint magnitude is intentionally not a parameter here — it is
+    applied at emit time by :meth:`_DriveState.to_cmd`. Keeping it out of
+    this signature means the input dispatch logic depends only on the
+    rate amplitude (``look_rate``), and the sprint multiplier flows
+    through a single chokepoint when commands are serialised.
     """
     # Pair semantics: pressing the same key toggles between target and 0;
     # pressing the opposite key while engaged cancels to 0 (one press to
@@ -351,14 +334,14 @@ async def _wait_for_bridge_ready(
     clean summary or a ``FAILED_PRECONDITION`` GRPCError as a retry
     signal. Anything else propagates immediately.
     """
-    import time as _time
+    import time
 
     import grpclib.exceptions
     from grpclib.const import Status
 
     from resoio.locomotion import LocomotionClient
 
-    deadline = _time.monotonic() + timeout_s
+    deadline = time.monotonic() + timeout_s
     while True:
         try:
             async with LocomotionClient(socket_path) as client:
@@ -371,7 +354,7 @@ async def _wait_for_bridge_ready(
         except grpclib.exceptions.GRPCError as exc:
             if exc.status != Status.FAILED_PRECONDITION:
                 raise
-            if _time.monotonic() > deadline:
+            if time.monotonic() > deadline:
                 raise TimeoutError(
                     f"locomotion bridge did not become ready in "
                     f"{timeout_s:.0f}s (last reason: {exc.message})"
@@ -465,7 +448,7 @@ async def _run_drive(args: argparse.Namespace) -> int:
             return
         for byte in data:
             for key in parser.feed(byte):
-                if _apply_key(state, key, look_rate, sprint):
+                if _apply_key(state, key, look_rate):
                     stop_event.set()
                     return
 
