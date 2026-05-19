@@ -170,14 +170,15 @@ resoio locomotion drive --sprint 3.0
 [locomotion-e2e.md](locomotion-e2e.md) §トラブルシュート「fast 前進
 phase で速度差が見えない」を参照)。
 
-### `--look-rate 2.0` (旋回 / 見上げ速度倍)
+### `--look-rate 60.0` (旋回 / 見上げ速度を default の 2 倍)
 
 ```sh
-resoio locomotion drive --look-rate 2.0
+resoio locomotion drive --look-rate 60.0
 ```
 
-← / → / ↑ / ↓ の旋回 / 見上げ速度が default の 2 倍になることを目視確認
-(cursor lock 必須)。
+← / → / ↑ / ↓ の旋回 / 見上げ速度が default (30 deg/s) の 2 倍 (60 deg/s)
+になることを目視確認 (cursor lock 必須)。単位は engine の Look が積分時に
+deg/s として扱われるため (`FirstPersonTargettingController` decompile 参照)。
 
 ### Resonite を CLI 起動後に kill
 

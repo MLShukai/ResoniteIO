@@ -319,7 +319,7 @@ def test_socket_flag_accepted_on_drive(tmp_path: Path):
     # Defaults for the optional knobs flow through.
     assert args.rate == 30.0
     assert args.sprint == 2.0
-    assert args.look_rate == 1.0
+    assert args.look_rate == 30.0
 
 
 # ---------------------------------------------------------------------------

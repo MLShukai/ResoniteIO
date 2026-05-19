@@ -254,9 +254,13 @@ def register(
     drive_parser.add_argument(
         "--look-rate",
         type=float,
-        default=1.0,
+        default=30.0,
         dest="look_rate",
-        help="Yaw / pitch rate amplitude while a look axis is held (default: 1.0).",
+        help=(
+            "Yaw / pitch angular speed in deg/s while a look axis is held "
+            "(default: 30.0). The engine integrates Look as degrees per "
+            "second (see FirstPersonTargettingController in decompile)."
+        ),
     )
     drive_parser.add_argument(
         "--no-wait",
@@ -360,7 +364,7 @@ def _print_help(
         "  c : crouch toggle\n"
         "  x / 0 : stop all (reset every axis)\n"
         "  q : quit\n"
-        f"settings: rate={rate} Hz, look_rate={look_rate}, sprint={sprint}",
+        f"settings: rate={rate} Hz, look_rate={look_rate} deg/s, sprint={sprint}",
         file=stream,
     )
 
