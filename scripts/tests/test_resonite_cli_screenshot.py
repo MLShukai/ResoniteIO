@@ -6,11 +6,11 @@ validation は緩く、絶対 / 相対 / ``..`` を含む path も受け入れ�
 側ファイルなので host repo root 拘束は無い)。
 
 検証範囲:
-- subparser: ``--output`` required、``--monitor`` / ``--bbox`` 既定
+- subparser: ``--output`` required、``--bbox`` 既定 None
 - ``_resolve_screenshot_output``: 空文字拒否、絶対 / 相対 / ``..`` 受容、
   ``.png`` 以外で stderr warning
 - ``_parse_bbox_arg``: malformed 形式拒否、空白 strip、None pass-through
-- ``main``: request 本文に ``output`` が含まれず ``monitor``/``bbox`` のみ
+- ``main``: request 本文に ``output`` / ``monitor`` が含まれず ``bbox`` のみ
 - ``_handle_screenshot_response``: base64 decode → ``--output`` への
   write、``payload_bytes`` mismatch で error、summary JSON を stdout に出す
 - 任意 container path (``/tmp/...`` 等、repo 外) に書ける
@@ -39,20 +39,18 @@ def test_parser_screenshot_requires_output(capsys: pytest.CaptureFixture[str]) -
     assert "--output" in err
 
 
-def test_parser_screenshot_default_monitor_is_1() -> None:
+def test_parser_screenshot_default_bbox_is_none() -> None:
     ns = resonite_cli._parse_args(["screenshot", "--output", "tmp/a.png"])
     assert ns.action == "screenshot"
     assert ns.output == "tmp/a.png"
-    assert ns.monitor == 1
     assert ns.bbox is None
 
 
-def test_parser_screenshot_accepts_monitor_and_bbox() -> None:
+def test_parser_screenshot_accepts_bbox() -> None:
     ns = resonite_cli._parse_args(
-        ["screenshot", "--output", "a.png", "--monitor", "0", "--bbox", "10,20,100,50"]
+        ["screenshot", "--output", "a.png", "--bbox", "10,20,100,50"]
     )
     assert ns.output == "a.png"
-    assert ns.monitor == 0
     assert ns.bbox == "10,20,100,50"
 
 
@@ -130,7 +128,7 @@ def test_parse_bbox_arg_strips_whitespace() -> None:
 _FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"FAKEPAYLOAD" * 4
 
 
-def _fake_screenshot_response(monitor: int = 1) -> dict[str, Any]:
+def _fake_screenshot_response() -> dict[str, Any]:
     return {
         "ok": True,
         "action": "screenshot",
@@ -138,7 +136,6 @@ def _fake_screenshot_response(monitor: int = 1) -> dict[str, Any]:
             "png_b64": base64.b64encode(_FAKE_PNG).decode("ascii"),
             "width": 320,
             "height": 240,
-            "monitor": monitor,
             "payload_bytes": len(_FAKE_PNG),
         },
     }
@@ -157,7 +154,7 @@ def test_main_request_excludes_output_field(
     def _fake_send(socket_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         captured["socket"] = socket_path
         captured["request"] = request
-        return _fake_screenshot_response(monitor=request["monitor"])
+        return _fake_screenshot_response()
 
     monkeypatch.setattr(resonite_cli, "_send_request", _fake_send)
 
@@ -169,8 +166,6 @@ def test_main_request_excludes_output_field(
             "screenshot",
             "--output",
             str(output_path),
-            "--monitor",
-            "1",
             "--bbox",
             "0,0,640,480",
         ]
@@ -180,7 +175,6 @@ def test_main_request_excludes_output_field(
     assert captured["socket"] == sock_path
     assert captured["request"] == {
         "action": "screenshot",
-        "monitor": 1,
         "bbox": [0, 0, 640, 480],
     }
     # PNG が書き出されている
@@ -191,7 +185,6 @@ def test_main_request_excludes_output_field(
         "path": str(output_path),
         "width": 320,
         "height": 240,
-        "monitor": 1,
         "payload_bytes": len(_FAKE_PNG),
     }
 
@@ -260,7 +253,6 @@ def test_main_payload_bytes_mismatch_returns_error(
                 "png_b64": base64.b64encode(_FAKE_PNG).decode("ascii"),
                 "width": 320,
                 "height": 240,
-                "monitor": 1,
                 "payload_bytes": len(_FAKE_PNG) + 999,  # 嘘の値
             },
         }
@@ -297,7 +289,6 @@ def test_main_invalid_b64_returns_error(
                 "png_b64": "not!!valid!!base64",
                 "width": 1,
                 "height": 1,
-                "monitor": 1,
                 "payload_bytes": 0,
             },
         },
@@ -386,7 +377,7 @@ def test_main_missing_png_b64_returns_error(
         lambda *_: {
             "ok": True,
             "action": "screenshot",
-            "data": {"width": 1, "height": 1, "monitor": 1},
+            "data": {"width": 1, "height": 1},
         },
     )
     rc = resonite_cli.main(
