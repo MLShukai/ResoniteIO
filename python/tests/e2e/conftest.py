@@ -70,7 +70,16 @@ def require_host_agent() -> None:
 
 @pytest.fixture
 def resonite_session() -> Iterator[Path]:
-    """Yield the bound UDS path with ``RESONITE_IO_SOCKET`` pointing at it."""
+    """Yield the bound UDS path with ``RESONITE_IO_SOCKET`` pointing at it.
+
+    Each test starts from a clean slate: any leftover Resonite from a
+    crashed prior run or external launch is force-stopped before the
+    fixture starts its own instance.
+    """
+    # Pre-stop: ensure no stray Resonite is running from a prior crash or
+    # an out-of-band launch. ``resonite-stop`` is a no-op when nothing is
+    # running, so this is safe to always invoke.
+    _run_just("resonite-stop", check=False, timeout=30.0)
     _purge_stale_sockets(SOCKET_DIR)
     _run_just("resonite-start")
     try:

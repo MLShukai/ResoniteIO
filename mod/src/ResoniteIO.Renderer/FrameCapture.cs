@@ -47,7 +47,6 @@ internal sealed class FrameCapture : IDisposable
 
         if (_captureRT == null)
         {
-            // attach 対象 camera が未生成 (engine 起動直後など)。次 tick で再試行。
             return;
         }
 
@@ -57,18 +56,43 @@ internal sealed class FrameCapture : IDisposable
         }
 
         _inFlight = true;
+        // Request 後に resize → DetachAndReleaseCapture が走っても callback は旧 RT
+        // 参照を握ったまま完走する。新 RT 判定は OnReadback 側に委ねる。
         AsyncGPUReadback.Request(_captureRT, 0, TextureFormat.RGBA32, OnReadback);
     }
 
     /// <summary>
-    /// max depth + 直描画 (<c>targetTexture == null</c>) の Camera に
-    /// <see cref="CameraEvent.AfterEverything"/> で CommandBuffer を attach する。
+    /// Unity の <c>UnityEngine.Object == null</c> overload は destroy 済み object にも
+    /// true を返すので、camera destroy 経路もここで自然に false へ落ちて再 attach に流れる。
+    /// </summary>
+    private bool IsCaptureUpToDate()
+    {
+        return _hookedCamera != null
+            && _captureRT != null
+            && _hookedCamera.pixelWidth == _captureRT.width
+            && _hookedCamera.pixelHeight == _captureRT.height;
+    }
+
+    /// <summary>
+    /// pixel size mismatch があれば teardown して再 attach することで
+    /// <c>display.apply</c> による window resize に追従する。
+    /// <c>_hookedCamera</c> 自体の入れ替え検出は今回 scope 外
+    /// (max-depth camera は engine の lifetime に紐づくため通常起こらない)。
     /// </summary>
     private void EnsureCommandBufferAttached()
     {
-        if (_hookedCamera != null && _captureRT != null)
+        if (IsCaptureUpToDate())
         {
             return;
+        }
+
+        int? oldWidth = null;
+        int? oldHeight = null;
+        if (_captureRT != null)
+        {
+            oldWidth = _captureRT.width;
+            oldHeight = _captureRT.height;
+            DetachAndReleaseCapture();
         }
 
         Camera? target = null;
@@ -118,10 +142,70 @@ internal sealed class FrameCapture : IDisposable
         _commandBuffer = cb;
         _hookedCamera = target;
 
-        _log.LogInfo(
-            $"[ResoniteIO.Renderer] attached CommandBuffer to camera "
-                + $"name={target.name} depth={target.depth} size={target.pixelWidth}x{target.pixelHeight}"
-        );
+        // `just log` で "reattached ... due to resize" を 1 行 grep できるよう
+        // 初回 attach と resize 起因 reattach のログを分ける。
+        if (oldWidth is int ow && oldHeight is int oh)
+        {
+            _log.LogInfo(
+                $"[ResoniteIO.Renderer] reattached CommandBuffer due to resize: "
+                    + $"old={ow}x{oh} new={target.pixelWidth}x{target.pixelHeight} "
+                    + $"camera name={target.name} depth={target.depth}"
+            );
+        }
+        else
+        {
+            _log.LogInfo(
+                $"[ResoniteIO.Renderer] attached CommandBuffer to camera "
+                    + $"name={target.name} depth={target.depth} size={target.pixelWidth}x{target.pixelHeight}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// <see cref="_inFlight"/> をリセットしないことで、進行中の readback は
+    /// <see cref="OnReadback"/> 側で <c>_captureRT == null</c> により drop される
+    /// (= 旧 RT 内容を新 header で送らない安全策)。
+    /// </summary>
+    private void DetachAndReleaseCapture()
+    {
+        if (_hookedCamera != null && _commandBuffer != null)
+        {
+            var cb = _commandBuffer;
+            SafeInvoke(
+                "RemoveCommandBuffer",
+                () => _hookedCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, cb)
+            );
+        }
+
+        if (_commandBuffer != null)
+        {
+            SafeInvoke("CommandBuffer.Release", _commandBuffer.Release);
+            _commandBuffer = null;
+        }
+
+        if (_captureRT != null)
+        {
+            SafeInvoke("RenderTexture.Release", _captureRT.Release);
+            _captureRT = null;
+        }
+
+        _hookedCamera = null;
+    }
+
+    /// <summary>
+    /// teardown 中の Unity API 例外で残りの release 処理が連鎖中断しないよう
+    /// 1 呼び出しを握りつぶす wrapper。
+    /// </summary>
+    private void SafeInvoke(string label, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"[ResoniteIO.Renderer] {label} threw: {ex.Message}");
+        }
     }
 
     private void OnReadback(AsyncGPUReadbackRequest req)
@@ -139,6 +223,8 @@ internal sealed class FrameCapture : IDisposable
                 return;
             }
 
+            // Request と callback の間で DetachAndReleaseCapture が走った場合は
+            // 旧 RT 内容を新 header で送らないために drop する。
             var rt = _captureRT;
             if (rt == null)
             {
@@ -181,30 +267,6 @@ internal sealed class FrameCapture : IDisposable
         }
         _disposed = true;
 
-        if (_hookedCamera != null && _commandBuffer != null)
-        {
-            try
-            {
-                _hookedCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, _commandBuffer);
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning($"[ResoniteIO.Renderer] RemoveCommandBuffer threw: {ex.Message}");
-            }
-        }
-
-        if (_commandBuffer != null)
-        {
-            _commandBuffer.Release();
-            _commandBuffer = null;
-        }
-
-        if (_captureRT != null)
-        {
-            _captureRT.Release();
-            _captureRT = null;
-        }
-
-        _hookedCamera = null;
+        DetachAndReleaseCapture();
     }
 }

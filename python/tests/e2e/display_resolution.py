@@ -40,12 +40,28 @@ _TARGET_RESOLUTIONS: tuple[tuple[int, int], ...] = (
 # but the cap is generous for heavier worlds.
 _FRAME_MATCH_TIMEOUT_S = 15.0
 
+# ``RenderSystem.UpdateResolution`` reconciles ``ResolutionSettings`` against
+# the Renderer-reported ``InputInterface.WindowResolution`` for a few ticks
+# after Apply, so ``Display.Get`` can transiently return the pre-apply value.
+# Poll until the snapshot matches the request instead of trusting the
+# Apply-immediate return. Timeout matches the frame-match cap; poll interval
+# is tight enough to catch a settle without busy-looping.
+_APPLY_SETTLE_TIMEOUT_S = 15.0
+_APPLY_SETTLE_POLL_S = 0.2
+
 # UDS bind and LocalUser/FocusedWorld readiness race: while the engine is
 # still booting, Camera bridge returns FAILED_PRECONDITION. Mirrors
 # ``camera_stream.py``; intentionally copy-pasted (one duplication is below
 # the bar for shared helper extraction — see commit message).
 _CAMERA_READY_TIMEOUT_S = 120.0
 _CAMERA_READY_RETRY_INTERVAL_S = 2.0
+
+# Display bridge readiness lags Camera readiness: ``ResolutionSettings`` /
+# ``DesktopRenderSettings`` activate slightly later than LocalUser /
+# FocusedWorld. The conftest now stops Resonite before every test, so the
+# engine is always cold and this race surfaces deterministically.
+_DISPLAY_READY_TIMEOUT_S = 30.0
+_DISPLAY_READY_RETRY_INTERVAL_S = 1.0
 
 
 async def _wait_for_camera_ready() -> None:
@@ -72,24 +88,62 @@ async def _wait_for_camera_ready() -> None:
             await asyncio.sleep(_CAMERA_READY_RETRY_INTERVAL_S)
 
 
+async def _wait_for_display_ready() -> None:
+    """Block until ``Display.Get`` stops returning FAILED_PRECONDITION.
+
+    ``FrooxEngineDisplayBridge`` reports FAILED_PRECONDITION until both
+    ``ResolutionSettings`` and ``DesktopRenderSettings`` are active. This
+    can lag Camera readiness by a few seconds on a freshly booted engine.
+    """
+    ready_deadline = time.monotonic() + _DISPLAY_READY_TIMEOUT_S
+    while True:
+        try:
+            async with DisplayClient() as c:
+                await c.get()
+                return
+        except grpclib.exceptions.GRPCError as e:
+            if e.status != Status.FAILED_PRECONDITION:
+                raise
+            if time.monotonic() > ready_deadline:
+                raise TimeoutError(
+                    f"Display bridge did not become ready in "
+                    f"{_DISPLAY_READY_TIMEOUT_S:.0f}s "
+                    f"(last reason: {e.message})"
+                ) from e
+            await asyncio.sleep(_DISPLAY_READY_RETRY_INTERVAL_S)
+
+
 async def _get_current_display() -> DisplayInfo:
     async with DisplayClient() as c:
         return await c.get()
 
 
 async def _apply_resolution(width: int, height: int) -> DisplayInfo:
-    """Apply ``width``/``height`` and assert the engine snapshot reflects them.
+    """Apply the target resolution and wait for ``Display.Get`` to confirm it.
 
-    A mismatch here means the Apply path is broken at the engine level,
-    before any Renderer propagation could be involved.
+    Apply returns before ``RenderSystem.UpdateResolution`` finishes
+    reconciling against the Renderer (see ``_APPLY_SETTLE_*`` above), so
+    polling ``Get`` is the cheapest engine-side settle signal. Raises
+    ``AssertionError`` on deadline so a broken Apply path fails the test
+    loudly instead of silently feeding the next step a stale snapshot.
     """
     async with DisplayClient() as c:
-        info = await c.apply(width=width, height=height)
-    assert (info.width, info.height) == (width, height), (
-        f"apply({width}x{height}) returned snapshot {info.width}x{info.height}; "
-        f"FrooxEngineDisplayBridge.ApplyResolution() path may be broken."
-    )
-    return info
+        await c.apply(width=width, height=height)
+
+    deadline = time.monotonic() + _APPLY_SETTLE_TIMEOUT_S
+    while True:
+        info = await _get_current_display()
+        last_seen = (info.width, info.height)
+        if last_seen == (width, height):
+            return info
+        if time.monotonic() > deadline:
+            raise AssertionError(
+                f"apply({width}x{height}) did not settle within "
+                f"{_APPLY_SETTLE_TIMEOUT_S:.1f}s (last seen: {last_seen}). "
+                f"FrooxEngineDisplayBridge.ApplyResolution() path may be broken, "
+                f"or the Renderer cannot honor the requested resolution."
+            )
+        await asyncio.sleep(_APPLY_SETTLE_POLL_S)
 
 
 async def _poll_frame_with_dimensions(
@@ -125,6 +179,7 @@ class TestDisplayResolution:
 
         async def run() -> None:
             await _wait_for_camera_ready()
+            await _wait_for_display_ready()
             initial = await _get_current_display()
             try:
                 for target_w, target_h in _TARGET_RESOLUTIONS:
