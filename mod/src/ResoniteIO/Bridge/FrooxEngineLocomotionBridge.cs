@@ -327,18 +327,11 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             return;
         }
 
-        // Move は body-relative。UserRoot.Slot.GlobalRotation は head 向きを反映
-        // しない (~identity) ため、ScreenLocomotionDirection (WASD binding,
-        // LocomotionReference.View 既定) と同じく World.LocalUserViewRotation
-        // を経由して Slot 座標系へ変換する。HeadFacingRotation (avatar の
-        // ヘッドボーン向き) は locomotion 中の IK / animation で動的に揺れる
-        // ため strafe で前後ドリフトが出ることを実機で確認済み。LUVR は
-        // ScreenController.ViewRotation を直接反映するため user 入力と完全
-        // 同期する。pitch を含む点は MovementMode.GroundTraction の Slot-
-        // local Y 零化 (PhysicalLocomotion.cs:383-386) でキャンセルされる
-        // ため pitch sink は実害なし。詳細・定量検証は
-        // feedback_locomotion_external_input.md §8 参照。userRoot / World
-        // 未準備時は今 tick を skip し次 tick で再評価。
+        // Move は Slot-local。WASD binding と同じく LocalUserViewRotation を
+        // 経由して body-local に変換する (HFR / GlobalRotation を採らない理由・
+        // pitch sink が実害無しの根拠・定量検証は
+        // feedback_locomotion_external_input.md §8)。userRoot / World 未準備時は
+        // skip し repeater 次 tick で再評価。
         var userRoot = smooth.Slot.ActiveUserRoot;
         var world = userRoot?.World;
         if (userRoot is not null && world is not null)

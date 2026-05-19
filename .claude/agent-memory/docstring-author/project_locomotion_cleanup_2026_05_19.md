@@ -100,3 +100,25 @@ stateful 化 branch がさらに 5 commit 進み、`ApplyToEngine` の Move
 必要) ため、proto を編集した commit には生成物の手動 mirror 更新を含める
 ことができるが、container 内で実行できる環境では `just gen-proto`
 再生成が確実。
+
+## Follow-up: 2026-05-19 strafe-drift fix re-trim
+
+strafe-drift fix の 3 commit (`1ce09ab` / `d2cf8ef` / `b4573b0`) で
+`FrooxEngineLocomotionBridge.ApplyToEngine` の Move コメントが 12 行に
+再膨張していたのを 5 行に再圧縮。memory §8 に LUVR-vs-HFR の選定理由 +
+pitch sink no-op の根拠 + 定量検証 (9% 漏れ → 浮動小数雑音) を集約し、
+Bridge 側は body-local 不変条件 1 文 + §8 ポインタ + 未準備時 skip-and-
+retry 注記の構成にした。
+
+**Why:** 修正直後の commit でバグ調査の生 reasoning が Bridge に降りた
+ままになっており、memory §8 と同じ内容を 2 箇所に保持する状況だった。
+"code = WHY at the point of change、memory = full background" のレイ
+ヤリングに戻す再圧縮。
+
+**How to apply:** バグ修正コミット直後は Bridge コメントが膨らみがち。
+memory に §X を新設または更新したら、その commit のあとに Bridge コメ
+ントを「不変条件 1 文 + memory § ポインタ」まで圧縮する pass を入れる
+こと。今回は「`userRoot / World 未準備時は今 tick を skip` 注記は残す」
+という user 指示を尊重した: null check 自体は自明だが「skip しても
+repeater が次 tick で retry するので benign」という reasoning は call
+site でしか読まれないため、その 1 文だけは残した。
