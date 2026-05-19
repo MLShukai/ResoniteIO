@@ -30,14 +30,9 @@ _logger = logging.getLogger("resoio.locomotion")
 class LocomotionCmd:
     """One desktop-style locomotion command (Python API view).
 
-    ``move_x`` is strafe ([-1, 1], right positive) and ``move_y`` is
-    forward ([-1, 1], forward positive). ``yaw_rate`` / ``pitch_rate``
-    are mouse-look angular rates with "up = positive" pitch (the bridge
-    flips the sign internally to match the engine convention).
-    ``jump`` / ``sprint`` mirror Space / Shift; ``crouch`` is a [0, 1]
-    intensity matching the ``C`` key. ``sprint_multiplier`` of ``0``
-    means "use the server's default" (engine ``FastMultiplier=2.0``);
-    a positive value overrides it.
+    Field semantics — including ``velocity`` 0-means-1.0 re-interpretation
+    and the "up = positive" pitch convention — are canonical in
+    ``proto/resonite_io/v1/locomotion.proto``.
     """
 
     move_x: float = 0.0
@@ -45,19 +40,16 @@ class LocomotionCmd:
     yaw_rate: float = 0.0
     pitch_rate: float = 0.0
     jump: bool = False
-    sprint: bool = False
+    velocity: float = 0.0
     crouch: float = 0.0
-    sprint_multiplier: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
 class DriveSummary:
-    """Summary returned by the server when a ``Drive`` stream ends.
+    """Server-side summary returned when a ``Drive`` stream ends.
 
-    ``received_count`` is the number of commands the server processed;
     ``dropped_count`` is reserved for a future non-blocking bridge and
-    is always ``0`` today. ``unix_nanos`` is the server-side completion
-    timestamp.
+    is always ``0`` today.
     """
 
     received_count: int
@@ -109,13 +101,10 @@ class LocomotionClient:
     async def drive(self, commands: AsyncIterable[LocomotionCmd]) -> DriveSummary:
         """Stream locomotion commands to the server and await the summary.
 
-        Each :class:`LocomotionCmd` is wrapped in a protobuf
-        ``LocomotionCommand`` with ``unix_nanos`` stamped via
-        :func:`time.time_ns` at send time (server-side latency
-        measurement). Raises :class:`RuntimeError` when invoked outside
-        ``async with``; gRPC-level failures (e.g. ``FAILED_PRECONDITION``
-        when the engine is not yet ready) surface as
-        :class:`grpclib.exceptions.GRPCError`.
+        ``unix_nanos`` is stamped here at send time (callers do not set it
+        on :class:`LocomotionCmd`). gRPC-level failures (e.g.
+        ``FAILED_PRECONDITION`` while the engine bridge is not ready)
+        surface as :class:`grpclib.exceptions.GRPCError`.
         """
         stub = self._stub
         if stub is None:
@@ -132,9 +121,8 @@ class LocomotionClient:
                     yaw_rate=cmd.yaw_rate,
                     pitch_rate=cmd.pitch_rate,
                     jump=cmd.jump,
-                    sprint=cmd.sprint,
+                    velocity=cmd.velocity,
                     crouch=cmd.crouch,
-                    sprint_multiplier=cmd.sprint_multiplier,
                     unix_nanos=time.time_ns(),
                 )
 

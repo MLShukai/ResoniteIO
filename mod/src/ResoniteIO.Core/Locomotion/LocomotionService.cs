@@ -10,10 +10,8 @@ namespace ResoniteIO.Core.Locomotion;
 /// <remarks>
 /// <see cref="ILocomotionBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
 /// Core 単体テストや locomotion 非対応 engine 構成も成立させる (CameraService と
-/// 同 pattern)。例外翻訳は <see cref="LocomotionNotReadyException"/> →
-/// <c>FailedPrecondition</c>、その他 → <c>Internal</c>。<see cref="Drive"/> は
-/// request stream の各 command を Bridge に直列 <c>await</c> し、完了時に
-/// <c>received_count</c> / <c>dropped_count=0</c> / <c>unix_nanos</c> を返す。
+/// 同 pattern)。Bridge 例外は <see cref="LocomotionNotReadyException"/> →
+/// <c>FailedPrecondition</c>、それ以外 → <c>Internal</c> に翻訳。
 /// </remarks>
 public sealed class LocomotionService : V1.Locomotion.LocomotionBase
 {
@@ -26,10 +24,6 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         _bridge = bridge;
     }
 
-    /// <summary>
-    /// client-streaming RPC。受け取った各 <c>LocomotionCommand</c> を順に Bridge へ
-    /// 適用し、完了時に処理件数を summary で返す。
-    /// </summary>
     public override async Task<V1.LocomotionDriveSummary> Drive(
         IAsyncStreamReader<V1.LocomotionCommand> requestStream,
         ServerCallContext context
@@ -81,9 +75,8 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         }
         catch (OperationCanceledException)
         {
-            // client cancel / deadline。これまでに処理した件数を summary で返す
-            // ことはできない (gRPC はキャンセル経路で response を返せない)。
-            // CameraService と同様に黙って break する。
+            // gRPC のキャンセル経路は response を返せないので summary は捨てる
+            // (CameraService と同じ pattern)。
             _log.LogDebug($"Locomotion.Drive cancelled after {received} command(s)");
             throw;
         }
@@ -106,9 +99,8 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
             YawRate: proto.YawRate,
             PitchRate: proto.PitchRate,
             Jump: proto.Jump,
-            Sprint: proto.Sprint,
+            Velocity: proto.Velocity,
             Crouch: proto.Crouch,
-            SprintMultiplier: proto.SprintMultiplier,
             UnixNanos: proto.UnixNanos
         );
 }

@@ -170,48 +170,45 @@ class LocomotionCommand(betterproto2.Message):
 
     move_x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
     """
-    Strafe input. -1.0 = left, 1.0 = right. SmoothLocomotionInputs.Move.x へ。
+    Strafe: -1=left, +1=right.
     """
 
     move_y: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
     """
-    Forward input. -1.0 = backward, 1.0 = forward. SmoothLocomotionInputs.Move.z へ。
+    Forward: -1=backward, +1=forward.
     """
 
     yaw_rate: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
     """
-    Yaw angular rate. positive = turn right. ScreenCameraInputs.Look.x へ。
+    Yaw angular rate, positive=right.
     """
 
     pitch_rate: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
     """
-    Pitch angular rate. positive = look up. Bridge が符号反転して
-    ScreenCameraInputs.Look.y へ (engine が _verticalAngle -= y で反転するため)。
+    Pitch angular rate, positive=up (Bridge が engine 向けに符号反転)。
     """
 
     jump: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
     """
-    Space 相当。true で SmoothLocomotionInputs.Jump.ExternalInput=true (OR-merge)。
+    Space 相当 (DigitalAction.ExternalInput を OR-merge)。
     """
 
-    sprint: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
+    velocity: "float" = betterproto2.field(6, betterproto2.TYPE_FLOAT)
     """
-    Shift 相当。true のとき Bridge 内で Move.x/z を sprint_multiplier 倍する。
+    Move に掛けるスカラー倍率 (Bridge 側で適用)。
+
+    0 (proto3 default) → 1.0 (通常歩行) として再解釈、>0 はそのまま倍率。
+    engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
+    ExternalInput 経路で再現したい場合は 2.0 を明示する。**この regime が
+    velocity セマンティクスの正典であり他箇所はここを参照する。**
     """
 
     crouch: "float" = betterproto2.field(7, betterproto2.TYPE_FLOAT)
     """
-    Crouch 強度 [0..1]。HeadInputs.Crouch.ExternalInput にそのまま流す。
+    Crouch 強度 [0..1]。
     """
 
-    sprint_multiplier: "float" = betterproto2.field(8, betterproto2.TYPE_FLOAT)
-    """
-    sprint=true のときに適用する Move 倍率。0 (proto3 default) は「server 既定 2.0」と
-    解釈、>0 は override。engine の ScreenLocomotionDirection.FastMultiplier (=2.0)
-    を ExternalInput 経路で再現する用途。
-    """
-
-    unix_nanos: "int" = betterproto2.field(9, betterproto2.TYPE_INT64)
+    unix_nanos: "int" = betterproto2.field(8, betterproto2.TYPE_INT64)
     """
     クライアント送信時刻 (UTC ナノ秒)。受信側 latency 計測用、optional (0 で skip)。
     """

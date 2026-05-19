@@ -69,7 +69,7 @@ class TestLocomotionClient:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
             scenario = [
                 LocomotionCmd(move_y=1.0),
-                LocomotionCmd(move_x=1.0, sprint=True, sprint_multiplier=2.5),
+                LocomotionCmd(move_x=1.0, velocity=2.5),
                 LocomotionCmd(yaw_rate=0.5, pitch_rate=-0.25, crouch=1.0, jump=True),
             ]
             async with LocomotionClient() as client:
@@ -88,9 +88,8 @@ class TestLocomotionClient:
                 assert got.yaw_rate == sent.yaw_rate
                 assert got.pitch_rate == sent.pitch_rate
                 assert got.jump == sent.jump
-                assert got.sprint == sent.sprint
+                assert got.velocity == sent.velocity
                 assert got.crouch == sent.crouch
-                assert got.sprint_multiplier == sent.sprint_multiplier
                 # Client stamps unix_nanos at send time, so the server
                 # must always see a positive value (proof of the wire
                 # stamping, independent of the user-facing LocomotionCmd).

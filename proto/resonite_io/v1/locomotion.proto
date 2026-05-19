@@ -7,18 +7,13 @@
 // 発行** する必要がある。stream を止めれば即 idle に戻る (送信責務 = active
 // input、無送信 = neutral、というセマンティクス)。
 //
-// engine 単位の補足:
-//   - `move_x` / `move_y` は engine `SmoothLocomotionInputs.Move.ExternalInput`
-//     にそのまま (sprint_multiplier 適用後で) float3 = (move_x, 0, move_y) で書く。
-//     y 軸は fly mode の vertical だが desktop walk では使われないので無視。
+// engine マッピング上の非自明な点:
 //   - `pitch_rate` は engine 側で `_verticalAngle -= y` と反転加算されるため、
 //     Bridge が符号反転して float2 = (yaw_rate, -pitch_rate) で書く。
-//   - `jump` は `SmoothLocomotionInputs.Jump.ExternalInput |= value` (DigitalAction の
-//     OR-merge) で 1 frame でも true なら trigger。
-//   - `sprint_multiplier` は engine の `ScreenLocomotionDirection.FastMultiplier`
-//     (default 2.0) を ExternalInput 経路で再現する用途。0 は「server 既定 2.0」と
-//     解釈、>0 は override。
-//   - `crouch` は engine `HeadInputs.Crouch.ExternalInput` (AnalogAction) にそのまま流す。
+//   - `jump` は `DigitalAction.ExternalInput |= value` の OR-merge なので
+//     1 frame でも true なら trigger。
+//   - `velocity` の proto3 default=0 は Bridge 側で 1.0 (通常歩行) に再解釈する
+//     (詳細は下の field コメント)。
 syntax = "proto3";
 
 package resonite_io.v1;
@@ -28,27 +23,27 @@ option csharp_namespace = "ResoniteIO.V1";
 // クライアントからサーバへ毎フレーム送る制御コマンド。全 field optional
 // (proto3 default = 0 = neutral)。
 message LocomotionCommand {
-  // Strafe input. -1.0 = left, 1.0 = right. SmoothLocomotionInputs.Move.x へ。
+  // Strafe: -1=left, +1=right.
   float move_x = 1;
-  // Forward input. -1.0 = backward, 1.0 = forward. SmoothLocomotionInputs.Move.z へ。
+  // Forward: -1=backward, +1=forward.
   float move_y = 2;
-  // Yaw angular rate. positive = turn right. ScreenCameraInputs.Look.x へ。
+  // Yaw angular rate, positive=right.
   float yaw_rate = 3;
-  // Pitch angular rate. positive = look up. Bridge が符号反転して
-  // ScreenCameraInputs.Look.y へ (engine が _verticalAngle -= y で反転するため)。
+  // Pitch angular rate, positive=up (Bridge が engine 向けに符号反転)。
   float pitch_rate = 4;
-  // Space 相当。true で SmoothLocomotionInputs.Jump.ExternalInput=true (OR-merge)。
+  // Space 相当 (DigitalAction.ExternalInput を OR-merge)。
   bool jump = 5;
-  // Shift 相当。true のとき Bridge 内で Move.x/z を sprint_multiplier 倍する。
-  bool sprint = 6;
-  // Crouch 強度 [0..1]。HeadInputs.Crouch.ExternalInput にそのまま流す。
+  // Move に掛けるスカラー倍率 (Bridge 側で適用)。
+  //
+  // 0 (proto3 default) → 1.0 (通常歩行) として再解釈、>0 はそのまま倍率。
+  // engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
+  // ExternalInput 経路で再現したい場合は 2.0 を明示する。**この regime が
+  // velocity セマンティクスの正典であり他箇所はここを参照する。**
+  float velocity = 6;
+  // Crouch 強度 [0..1]。
   float crouch = 7;
-  // sprint=true のときに適用する Move 倍率。0 (proto3 default) は「server 既定 2.0」と
-  // 解釈、>0 は override。engine の ScreenLocomotionDirection.FastMultiplier (=2.0)
-  // を ExternalInput 経路で再現する用途。
-  float sprint_multiplier = 8;
   // クライアント送信時刻 (UTC ナノ秒)。受信側 latency 計測用、optional (0 で skip)。
-  int64 unix_nanos = 9;
+  int64 unix_nanos = 8;
 }
 
 // Drive RPC 完了時の summary。

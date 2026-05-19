@@ -1,11 +1,11 @@
 """E2E: drive Locomotion + record Camera to MP4 in a single asyncio run.
 
 The 18 s scenario walks the desktop control set in 8 phases (forward,
-sprint forward, right strafe, idle, right yaw, look up, jump, crouch,
-cool-down) so the resulting MP4 is a single visual proof that every
-``LocomotionCommand`` field reaches the engine. Camera frames are
-streamed in parallel at 30 fps so the recording is synchronised with the
-command timeline.
+fast forward via velocity=2.0, right strafe, idle, right yaw, look up,
+jump, crouch, cool-down) so the resulting MP4 is a single visual proof
+that every ``LocomotionCommand`` field reaches the engine. Camera frames
+are streamed in parallel at 30 fps so the recording is synchronised with
+the command timeline.
 
 ``LocomotionCommand.ExternalInput`` is consumed and nulled by the engine
 every update tick (see ``Analog3DAction.Evaluate``), so the scenario
@@ -98,33 +98,26 @@ def _scenario_command(elapsed: float) -> LocomotionCmd:
     phase should look like on screen.
     """
     if elapsed < 3.0:
-        # 0-3 s: walk forward (move_y=+1, no sprint).
         return LocomotionCmd(move_y=1.0)
     if elapsed < 5.0:
-        # 3-5 s: sprint forward — bridge multiplies Move by FastMultiplier.
-        return LocomotionCmd(move_y=1.0, sprint=True)
+        # Same forward input as the previous phase; velocity=2.0 must
+        # produce a visibly larger travel distance on the recording.
+        return LocomotionCmd(move_y=1.0, velocity=2.0)
     if elapsed < 7.0:
-        # 5-7 s: right strafe (move_x=+1).
         return LocomotionCmd(move_x=1.0)
     if elapsed < 9.0:
-        # 7-9 s: idle — zero ExternalInput on every tick so the engine
-        # snaps back to rest.
+        # Zero ExternalInput each tick so the engine friction snaps back to rest.
         return LocomotionCmd()
     if elapsed < 11.0:
-        # 9-11 s: yaw right at 0.5 rad/s effective rate (mouse-X analog).
         return LocomotionCmd(yaw_rate=0.5)
     if elapsed < 13.0:
-        # 11-13 s: pitch up — Python API is "up positive"; bridge flips
-        # the sign before writing engine ExternalInput.
         return LocomotionCmd(pitch_rate=0.5)
     if elapsed < 14.0:
-        # 13-14 s: jump held for ~30 ticks. DigitalAction is OR-merged,
-        # so whether this fires one jump or many is engine-dependent.
+        # Held for ~30 ticks; OR-merged DigitalAction means engine edge-detect
+        # decides whether this is one jump or many.
         return LocomotionCmd(jump=True)
     if elapsed < 16.0:
-        # 14-16 s: full crouch (HeadInputs.Crouch == 1.0).
         return LocomotionCmd(crouch=1.0)
-    # 16-18 s: cool-down idle so the recording ends on rest.
     return LocomotionCmd()
 
 

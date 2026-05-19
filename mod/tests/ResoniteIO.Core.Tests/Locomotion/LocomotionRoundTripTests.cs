@@ -24,8 +24,8 @@ public sealed class LocomotionRoundTripTests
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
-        // 移動 + sprint + sprint_multiplier override + look + jump + crouch を
-        // 1 ケースで一通り覆って proto → Core POCO へのマッピングを検証する。
+        // 移動 + velocity override + look + jump + crouch を 1 ケースで一通り
+        // 覆って proto → Core POCO へのマッピングを検証する。
         var commands = new[]
         {
             new LocomotionCommand { MoveY = 1.0f, UnixNanos = 1L },
@@ -33,8 +33,7 @@ public sealed class LocomotionRoundTripTests
             {
                 MoveX = 1.0f,
                 MoveY = 1.0f,
-                Sprint = true,
-                SprintMultiplier = 3.0f,
+                Velocity = 3.0f,
                 UnixNanos = 2L,
             },
             new LocomotionCommand
@@ -66,13 +65,16 @@ public sealed class LocomotionRoundTripTests
         var received = bridge.Received;
         Assert.Equal(commands.Length, received.Count);
 
+        // Default Velocity (0f) must round-trip unchanged: Bridge-side
+        // 0→1.0 reinterpretation is the engine bridge's responsibility,
+        // not the Service's, so the proto3 default has to reach Apply intact.
         Assert.Equal(1.0f, received[0].MoveY);
+        Assert.Equal(0f, received[0].Velocity);
         Assert.Equal(1L, received[0].UnixNanos);
 
         Assert.Equal(1.0f, received[1].MoveX);
         Assert.Equal(1.0f, received[1].MoveY);
-        Assert.True(received[1].Sprint);
-        Assert.Equal(3.0f, received[1].SprintMultiplier);
+        Assert.Equal(3.0f, received[1].Velocity);
 
         Assert.Equal(0.5f, received[2].YawRate);
         Assert.Equal(-0.25f, received[2].PitchRate);

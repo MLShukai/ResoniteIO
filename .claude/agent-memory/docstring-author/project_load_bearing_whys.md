@@ -91,6 +91,31 @@ Camera v2 (renderer process bridge, `mod/src/ResoniteIO.Renderer/` +
     *background* cap. This is a footgun for callers who expect
     `DisplayClient.apply(max_fps=120)` to raise foreground fps —
     keep the entire remarks block; see \[\[camera-v2-constraints\]\] §9.
+15. **Locomotion velocity 0→1.0 reinterpretation site**
+    (`mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs`,
+    inside `ApplyAsync`): the `velocityMul = command.Velocity > 0f ? ... : 1.0f` line is the single canonical fallback site. Its
+    comment ("proto3 default=0 を 1.0 に再解釈する正典的な site")
+    plus the velocity field doc in `proto/resonite_io/v1/locomotion.proto`
+    are the **only two** places the semantics live — all other surfaces
+    (Python `LocomotionCmd` docstring, `ILocomotionBridge` POCO remarks,
+    `mod/tests/manual/locomotion-e2e.md` v0 section, e2e
+    `_scenario_command`) deliberately point at proto rather than
+    repeat. Don't reintroduce the long explanation in those
+    secondary spots in future passes — proto field comment is canon.
+16. **Pitch sign-flip responsibility on Locomotion Bridge**: the
+    inline comment "pitch は engine 側 `_verticalAngle -= y` で反転
+    加算されるため符号反転" right above `screenInputs.Look.ExternalInput = new float2(command.YawRate, -command.PitchRate)` is the only
+    surface that documents *where* the sign flip happens (Python API
+    is "up positive", engine wants the opposite). Keep it on the
+    Bridge — proto only states the API convention.
+17. **`Drive` test default-velocity round-trip assertion**
+    (`mod/tests/ResoniteIO.Core.Tests/Locomotion/LocomotionRoundTripTests.cs`,
+    "Default Velocity (0f) must round-trip unchanged" comment):
+    explains why the test checks `received[0].Velocity == 0f`
+    instead of `1f` — the 0→1.0 reinterpretation is the engine
+    Bridge's job, not the Service's, and the proto3 default must
+    reach `ApplyAsync` intact. Without this comment the assertion
+    looks contradictory to the proto field doc.
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel
