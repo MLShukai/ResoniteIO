@@ -1,14 +1,16 @@
 ---
 name: locomotion-external-input
-description: Locomotion Bridge は engine 既存の SmoothLocomotion / FirstPersonTargettingController / HeadSimulator に ExternalInput 経路で注入する設計。pitch 符号反転 / 30Hz hold-while-streaming / AccessTools.FieldRefAccess の generic 引数順 / Camera CameraStreamRequest 既存 bug 等の落とし穴を集約
+description: Locomotion Bridge は engine 既存の SmoothLocomotion / FirstPersonTargettingController / HeadSimulator に ExternalInput 経路で stateful repeater として注入する設計。pitch 符号 / AccessTools.FieldRefAccess の generic 引数順 / velocity 単位元 / consume-once jump / Reset + disconnect 検知 / Move body-local 変換 (HeadFacingRotation) / Camera CameraStreamRequest 既存 bug 等の落とし穴を集約
 metadata:
   type: feedback
 ---
 
 Step 4 (Locomotion) で実機検証して確定した、`FrooxEngineLocomotionBridge` 周辺の
 セマンティクスと注意点。今後 Locomotion を改修するときに最初に読む 1 本。
+2026-05-19 の stateful repeater 化 + Reset RPC + disconnect 検知 + pitch 符号
+反転解除を反映済み。
 
-## 1. ExternalInput 経由の設計と 30Hz hold-while-streaming
+## 1. ExternalInput + stateful repeater で engine に注入する
 
 Locomotion は engine 既存の `SmoothLocomotionBase` (Move / Jump) +
 `FirstPersonTargettingController` (Look = Yaw + Pitch) + `HeadSimulator` (Crouch)
@@ -30,40 +32,47 @@ if (ExternalInput.HasValue) {
 }
 ```
 
-→ 入力を持続させたいときは Python から **30Hz 程度で連続発行** する。stream を
-止めれば即 idle に戻る (送信責務 = active input、無送信 = neutral)。Bridge への
-書き込み自体は任意スレッドから安全 (engine thread dispatch 不要、書き込みは
-race-free に latest-wins、消費は engine 側 tick で起きる)。
+→ 入力を持続させたいときは **毎 engine tick で再注入** する必要がある。書き込み
+自体は任意スレッドから安全 (engine thread dispatch 不要、書き込みは race-free に
+latest-wins、消費は engine 側 tick で起きる)。
 
 **Why:** engine の `InputAction` は本来 binding (キー / マウス) から毎 tick
 評価される設計で、ExternalInput は「外部から 1 frame ぶん差し込む」逃げ道。
 書き込んだ値は 1 frame で消える前提で API が成立している。
 
-**How to apply:** Python 側で `await asyncio.sleep(1/30)` のループで送り続ける
-パターンが既定。drive stream を切ったときの idle 復帰を assert したいテストは
-「送信停止 → 1〜2 frame 待って Bridge `Received` の最後が neutral」を確認する。
+**How to apply:** mod 側 Bridge が最新コマンドを保持し
+`World.RunInUpdates(0, TickStep)` の self-rescheduling で engine update tick
+ごとに `ExternalInput` に再注入する。client は **変化時に 1 回送るだけで avatar
+が動き続ける** (旧 30 Hz keep-alive 戦略は廃止)。詳細は §6 参照。
 
-## 2. pitch は engine 側が反転加算するので Bridge で符号反転
+## 2. pitch は Bridge 側で符号反転しない (実機検証ベース)
+
+decompile 上は engine 側で反転加算する記述がある:
 
 ```csharp
 // FirstPersonTargettingController.OnBeforeHeadUpdate (decompiled)
 float2 v = base.Inputs.Look.Value.Value * base.Time.Delta;
 _horizontalAngle += v.x;       // yaw: そのまま加算
-_verticalAngle  -= v.y;        // ★ pitch: y を反転加算
+_verticalAngle  -= v.y;        // pitch: y を反転加算 (decompile の読み)
 ```
 
-Python API は「上向き正」(`pitch_rate > 0 で見上げる`) で公開し、Bridge 内で
-`external_y = -pitch_rate` の符号反転を入れる。proto field の単位は
-**rad/sec ではなく `engine が time-delta で乗算する rate` ベース** (engine 側で
-`* base.Time.Delta` が掛かる点に注意、`engine の degree/sec 換算は engine 内部 定数次第`)。
+これを根拠に Bridge で `-pitch_rate` を書いていたが、2026-05-19 の実機検証で
+「UP キー (pitch_rate > 0) が下向き」になる逆挙動を観測したため反転を解除。
+**現行コードは `screenInputs.Look.ExternalInput.y = +snapshot.PitchRate` を
+そのまま書く**。decompile の `_verticalAngle -= y` 記述は変わっていないので
+「reading is consistent, runtime behaviour disagrees」の状態。engine 内のどこ
+かで追加の反転が掛かっているか、`_verticalAngle` の符号慣例が我々の読みと食い
+違っているかと思われるが、正確な経路は特定できていない。
 
-**Why:** 「Python API を直感的な向き」+「engine 内部表現は engine の都合」の二
-レイヤを分け、Bridge で 1 箇所だけ翻訳するため。proto は Python から見た方向で
-定義 (`positive = look up`)。
+**Why:** proto contract (positive = 見上げ) を不変にしつつ、Bridge は engine
+実装の符号慣例に従う方が破綻が起きにくい。decompile の読み違いをコードに
+残し続けるより、実機検証ベースの contract を 1 か所に集約する。
 
-**How to apply:** decompile の `FirstPersonTargettingController` が改修されて
-反転方向が変わったら Bridge 1 箇所の符号を直すだけで済む。e2e の「見上げ phase」
-で頭が下がる症状を観測したらここを疑う。
+**How to apply:** decompile を再生成して `_verticalAngle` 関連の演算子が変わっ
+ていないか、別途追加の反転 (`FirstPersonTargettingController.OnBeforeHeadUpdate`
+以外の経路) が見つかったら本セクションに追記する。実機で UP / DOWN キーの
+方向が proto 規約 (positive=up) と乖離する症状を観測したら本 fix の regression
+を疑う。
 
 ## 3. `AccessTools.FieldRefAccess` の generic 引数順
 
@@ -94,8 +103,8 @@ Step 4 で使った 3 経路:
 `AccessTools.FieldRefAccess<TDeclaring, TField>(name)` の宣言を **同 file 内
 既存の 3 経路と並べて diff し、引数順が揃っているか目視確認**。Resonite が
 update されたら decompile を再生成し、field 名 / declaring type の改名を
-diff チェックする (改名されると Bridge は常に `LocomotionNotReadyException` を
-投げるようになる)。
+diff チェックする (改名されると Bridge は常に precondition 失敗扱いとなり、
+stateful repeater が next tick まで apply を skip し続ける)。
 
 ## 4. velocity は ExternalInput 経路の自前再現 (単位元 1.0)
 
@@ -150,19 +159,124 @@ Step 4 locomotion e2e の調査中に発覚。client が `width=1280, height=720
 コピーする。Camera 側挙動修正の PR を書く時は (a) proto から width/height を除く
 or (b) renderer 側で resize する、の 2 択を spec-planner と相談。
 
-## 6. 既知の corner case (実害が出てから対処する候補)
+## 6. stateful repeater + Reset RPC + disconnect 検知
+
+新設計の要点 (2026-05-19 以降の現行):
+
+- **mod 側 Bridge が最新コマンドを保持し、`World.RunInUpdates(0, TickStep)` の
+  self-rescheduling で engine update tick ごとに `ExternalInput` に再注入する**。
+  client は state 変化時に 1 回送るだけで avatar が動き続ける
+- gRPC stream 側 (ThreadPool スレッド) は `_state` を `lock` 越しに書き換える
+  だけ、engine 側 (engine thread) も同 `lock` で読む (latest-wins の race 安全)
+- **jump は consume-once pulse**: Bridge `_state.JumpPending: bool` を tick で
+  apply したら即 false に戻す。CLI / Python は `jump=True` を 1 回送るだけ
+- **graceful close vs cancel/error の disconnect 検知**:
+  - `await requestStream.MoveNext()` が `false` を返す (`CompleteAsync`) → **state
+    維持** (RL/ロボティクスで「短命コマンドを送って閉じる」 idiom が成立する)
+  - `MoveNext` が `OperationCanceledException` または `IOException` を投げる (UDS
+    切断 / Http/2 RST_STREAM / Python crash) → **全 state 自動 reset** (safety)
+  - Grpc.AspNetCore + Kestrel UDS では cancel が `IOException` で表面化する経路
+    があるため、catch 3 段構え (`OperationCanceledException` → `IOException` →
+    `Exception when ct.IsCancellationRequested`) で吸収。詳細は
+    `feedback_grpc_client_cancel_exception_surface` (agent-memory) 参照
+- **明示的 `Reset` RPC**: `LocomotionResetRequest` に move / look / crouch / jump
+  の 4 bool。**全 false なら全 reset** と Service 層で展開 (proto3 wire default が
+  0 で「未指定」と「全 false」が区別不能なため一意解釈)。部分 reset は対象 field
+  のみ true
+- Service 実装は [mod/src/ResoniteIO.Core/Locomotion/LocomotionService.cs](../../mod/src/ResoniteIO.Core/Locomotion/LocomotionService.cs)、
+  engine 側再注入は [mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs](../../mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs)
+  に集約
+
+**Why:** AI エージェントから Locomotion を使う側に「30Hz keep-alive を維持する」
+責務を負わせる旧設計はリアルタイムロボティクスの抽象として薄汚い。stateful 化で
+client は「変化時に 1 回送る」典型的な actuator-driver IF になり、graceful close
+で state 維持 + ungraceful disconnect で safety reset、の 2 軸を mod 側に集約
+できる。timeout watchdog は採用せず、stream lifecycle を真値にする方が単純。
+
+**How to apply:**
+
+- 新規モダリティで「engine 側 tick で消費される ExternalInput 系の slot」がある
+  場合は、本パターン (Bridge 内 `_state` + `World.RunInUpdates(0, TickStep)` self-
+  rescheduling) を踏襲する。直接 timer thread から書くと engine Evaluate と race
+- 既存 Locomotion テスト ([mod/tests/ResoniteIO.Core.Tests/Locomotion/](../../mod/tests/ResoniteIO.Core.Tests/Locomotion/))
+  は graceful close で `Graceful` notify、client cancel で `Cancelled` notify を
+  検証する 2 件が canonical。新 Service ロジックを足したら同じ pair を追加
+
+## 7. 既知の corner case (実害が出てから対処する候補)
 
 - **active module が SmoothLocomotion 以外** (Teleport / NoClip / GrabWorld 等):
-  Bridge が `LocomotionNotReadyException` を投げ Python 側に `FailedPrecondition`
-  が伝わる。manual-test に「locomotion mode が Walk になっていること」を入れる。
-  home world (`Userspace`) も NoLocomotion 系で永久 fail。
+  Bridge は新 IF (`SetState`) では throw せず、precondition NG として次 tick の
+  再評価に委ねる (consumer は `FailedPrecondition` を見ない)。manual-test に
+  「locomotion mode が Walk になっていること」を入れる。home world (`Userspace`)
+  も NoLocomotion 系で永久 NG。
 - **VR mode で FirstPersonTargettingController が null**: Bridge は silent skip
   (Drive 自体は成功するが yaw/pitch が engine に届かない)。将来 capability RPC
   で `has_look` を露出する余地あり。
 - **`IsCursorLocked=false` で engine 側 Look.Active=false**: ユーザーが Resonite
   window でマウスを掴んでいないと yaw/pitch が動かない。precondition error には
   せず silent skip (副作用なし)、manual に明記。
-- **30Hz で `jump=true` を 30 frame 連発する**: `DigitalAction.ExternalInput` は
-  OR-merge で edge detect が無いと連続ジャンプになる可能性。e2e の jump phase は
-  ~1 秒 / 30 tick に留め、症状が出たら client 側で「`jump=true` を 1 tick だけ
-  送って次は false」のパルス化に切り替える。
+- **jump 連続発火**: Bridge 側 consume-once pulse (受信した次 1 engine tick
+  だけ apply、その後 latch を下げる) で抑止済み。client が同じ tick 内に
+  `jump=true` を複数送ると 1 pulse に圧縮される (manual test の trouble shoot
+  に既知挙動として明記)。
+
+## 8. Move は HeadFacingRotation 経由で body-local に変換する
+
+`Move.ExternalInput` は `UserRoot.Slot` 座標系の値として engine が解釈する
+(`ScreenLocomotionDirection.Evaluate` が `Slot.GlobalDirectionToLocal` で
+変換した値を Move binding 出力にしている、decompile
+`ScreenLocomotionDirection.cs:46`)。素朴に world 軸 `(MoveX, 0, MoveY)` を
+書くと、head の向きを無視した world-fixed 移動になり、yaw 旋回しても進む
+方向が変わらない症状が出る (2026-05-19 実機 bug)。
+
+原因: `UserRoot.Slot.GlobalRotation` は head 向きを反映せず ~identity の
+ため、PhysicalLocomotion 内の `LocalDirectionToGlobal` も identity 近似と
+なる。WASD binding が「正しく頭の向きに進む」のは binding 評価時に同 slot
+上で **`World.LocalUserViewRotation` を経由して** world forward/right を
+作り、`Slot.GlobalDirectionToLocal` で Slot 系に逆変換しているため。
+ExternalInput はこの変換を bypass するので、Bridge 側で同等の rotation
+を掛ける必要がある。
+
+修正: `ApplyToEngine` で `userRoot.HeadFacingRotation` を world forward/
+right に掛けた後 `Slot.GlobalDirectionToLocal` で Slot 系に変換する:
+
+```csharp
+var headRot = userRoot.HeadFacingRotation;
+var slotForward = userRoot.Slot.GlobalDirectionToLocal(headRot * float3.Forward);
+var slotRight   = userRoot.Slot.GlobalDirectionToLocal(headRot * float3.Right);
+normalInput.Move.ExternalInput =
+    (snapshot.MoveX * slotRight + snapshot.MoveY * slotForward) * snapshot.Velocity;
+```
+
+定量検証 (2026-05-19): 4-stage diagnostic で前進 → 90° yaw → 前進 の
+`Slot.GlobalPosition` を `[LocomotionPos]` log で計測した結果、
+
+- V_B (turn 前 前進ベクトル) ≈ `(0, 0, 7.88)` → +Z
+- V_D (turn 後 前進ベクトル) ≈ `(7.99, 0, 0.40)` → +X
+- 角度差 ≈ **87.1°** (頭の最終 yaw 88.6° と tolerance 内で一致)
+
+decompile では `LocomotionReference.View` 経路 (= `LocalUserViewRotation`)
+を使うが、screen mode で `HeadFacingRotation` と `LocalUserViewRotation`
+の差は 1〜2° 程度 (view は pitch を含むため Move が下向きに sink する
+リスクが上がる)。`HeadFacingRotation` は水平投影 rotation なので Move を
+水平面に保てる利点があり、こちらを採用する。
+
+**Why:** ExternalInput が Slot 座標系である事実は decompile を読まないと
+気付きにくく、world-axis で書く naive 実装が「e2e は通る (RPC が完走する)
+が動画では body-relative に動いていない」という silent 失敗を引き起こす。
+ここを固定 contract として書き残すことで「move が世界固定方向に流れる」
+症状を見た次の人が一発で参照できる。
+
+**How to apply:**
+
+- Bridge から `HeadFacingRotation` 経路を外す変更は regression。新しい
+  proto field (e.g. `body_relative: bool`) で world-fixed mode を opt-in
+  したい場合のみ別経路を足す
+- `LocalUserViewRotation` への切替を検討する場合は screen mode 限定で
+  pitch を ignore する処理を別途入れる (Move が下向きに sink するため)
+- 実機検証は `python/tests/e2e/locomotion.py` の 0-3 s phase と 9-11 s
+  phase で、視覚的に「yaw 旋回後に前進方向が画面上で変わる」ことを目視
+  ([locomotion-e2e.md](../../mod/tests/manual/locomotion-e2e.md))
+
+関連: \[\[locomotion-headfacing-body-relative\]\] (spec-driven-implementer
+memory に定量計測 prototype 経緯)。

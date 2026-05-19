@@ -17,3 +17,6 @@
 - [InterprocessLib callback signature](feedback_interprocesslib_callback_signature.md) — `Messenger.ReceiveValueArray<T>` の callback は `Action<T[]?>`、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず -=。
 - [pyright unused private in src/](feedback_pyright_unused_private_in_src.md) — tests/ が strict 除外なので `_` prefix の private 関数を test だけ参照すると unused 扱い。`__all__` に列挙して回避。
 - [asyncio add_reader テストの key pacing](feedback_asyncio_add_reader_test_pacing.md) — os.pipe stdin + add_reader 駆動 CLI の round-trip テストは keystroke を `asyncio.sleep` で pace しないと exit key が drain される。
+- [locomotion HeadFacingRotation で body-relative 成立](feedback_locomotion_headfacing_body_relative.md) — 2026-05-19 実機 \[LocomotionPos\] 計測で V_B / V_D の角度差 87.1° を観測、`HeadFacingRotation` 経路が正しいと定量確認。
+- [gRPC client cancel exception surface](feedback_grpc_client_cancel_exception_surface.md) — Grpc.AspNetCore + Kestrel UDS では client cancel が OperationCanceledException だけでなく IOException で表面化する経路あり、3 段構え catch で吸収。
+- [pre-commit stash で staged 内容が消える事象](feedback_precommit_stash_silent_unstage.md) — 並列 worktree で pre-commit 経路が "Skipped" 連発 + exit 1 を返した場合、`git status` で再 stage して再 commit する。
