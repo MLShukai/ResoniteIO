@@ -32,6 +32,26 @@ public sealed class LocomotionResetRoundTripTests
     }
 
     [Fact]
+    public async Task Reset_BridgeThrows_ReturnsInternal()
+    {
+        // Bridge.Reset が例外を投げると Service が catch して Internal に翻訳する規約 (A2)。
+        var bridge = new FakeLocomotionBridge
+        {
+            ResetThrows = new InvalidOperationException("simulated bridge failure"),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Locomotion.LocomotionClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+        {
+            await client.ResetAsync(new V1.LocomotionResetRequest());
+        });
+
+        Assert.Equal(StatusCode.Internal, ex.StatusCode);
+    }
+
+    [Fact]
     public async Task Reset_DefaultRequest_PassesAllFlags()
     {
         // 全 bool false (proto3 wire default) → Service が All に展開する規約。

@@ -143,6 +143,23 @@ public sealed class SessionHost : IAsyncDisposable
 
         log.LogInfo($"SessionHost listening on {socketPath}");
 
+        if (bridge is null)
+        {
+            log.LogWarning("Session modality is not configured.");
+        }
+        if (cameraBridge is null)
+        {
+            log.LogWarning("Camera modality is not configured.");
+        }
+        if (displayBridge is null)
+        {
+            log.LogWarning("Display modality is not configured.");
+        }
+        if (locomotionBridge is null)
+        {
+            log.LogWarning("Locomotion modality is not configured.");
+        }
+
         var runTask = Task.Run(
             async () =>
             {

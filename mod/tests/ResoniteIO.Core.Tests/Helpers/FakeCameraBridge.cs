@@ -30,7 +30,7 @@ internal sealed class FakeCameraBridge : ICameraBridge
         ct.ThrowIfCancellationRequested();
 
         var pixels = CreateCheckerboard(width, height);
-        var unixNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
+        var unixNanos = ResoniteIO.Core.UnixNanosClock.Now();
         var id = Interlocked.Increment(ref _bridgeFrameId);
 
         return new CameraFrame(

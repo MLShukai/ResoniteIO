@@ -20,9 +20,7 @@ public sealed class SessionService : V1.Session.SessionBase
         var response = new PingResponse
         {
             Message = request.Message,
-            // Tick は 100 ns 単位。ns に拡張するため ×100。Stopwatch 補正は不要 (Tick 精度で
-            // clock skew / RTT 計測には十分)。
-            ServerUnixNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L,
+            ServerUnixNanos = UnixNanosClock.Now(),
         };
         return Task.FromResult(response);
     }

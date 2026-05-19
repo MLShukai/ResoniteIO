@@ -1,3 +1,4 @@
+using ResoniteIO.Core;
 using ResoniteIO.Core.Tests.Helpers;
 using ResoniteIO.V1;
 using Xunit;

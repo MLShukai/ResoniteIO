@@ -31,6 +31,8 @@ public sealed class CameraService : V1.Camera.CameraBase
     /// </summary>
     /// <remarks>
     /// width/height が 0 以下なら 640×480、<c>fps_limit</c> が 0 以下なら pacing 無し。
+    /// fps_limit は capture 開始周期の上限 (capture+write が超過した場合は skip し、次 capture
+    /// へ進む。catch-up しない)。
     /// 例外翻訳: bridge 未注入 → <c>Unavailable</c>、<see cref="CameraNotReadyException"/>
     /// → <c>FailedPrecondition</c> (client は時間を置いて再 stream)、それ以外 →
     /// <c>Internal</c>。<c>frame_id</c> は service 側で 0 から振り直す monotonic counter
@@ -48,6 +50,8 @@ public sealed class CameraService : V1.Camera.CameraBase
                 "Camera.StreamFrames called but no ICameraBridge is registered; "
                     + "returning Unavailable."
             );
+            // "bridge not configured" は server-side configuration issue で transient ではないが、
+            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
             throw new RpcException(
                 new Status(StatusCode.Unavailable, "Camera bridge is not configured.")
             );

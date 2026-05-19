@@ -32,6 +32,8 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
                 "Locomotion.Drive called but no ILocomotionBridge is registered; "
                     + "returning Unavailable."
             );
+            // "bridge not configured" は server-side configuration issue で transient ではないが、
+            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
             throw new RpcException(
                 new Status(StatusCode.Unavailable, "Locomotion bridge is not configured.")
             );
@@ -80,7 +82,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         // MoveNext returned false = client が CompleteAsync で graceful close。
         _bridge.NotifyDisconnect(LocomotionDisconnectReason.Graceful);
 
-        var unixNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
+        var unixNanos = UnixNanosClock.Now();
         _log.LogDebug($"Locomotion.Drive end: applied {received} command(s)");
 
         return new V1.LocomotionDriveSummary
@@ -114,9 +116,21 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
             flags = LocomotionResetFlags.All;
         }
 
-        _bridge.Reset(flags);
+#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+        try
+        {
+            _bridge.Reset(flags);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError($"Locomotion.Reset: bridge faulted: {ex}");
+            throw new RpcException(
+                new Status(StatusCode.Internal, $"Locomotion bridge faulted: {ex.Message}")
+            );
+        }
+#pragma warning restore CA1031
 
-        var unixNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
+        var unixNanos = UnixNanosClock.Now();
         _log.LogDebug($"Locomotion.Reset applied flags={flags}");
 
         return Task.FromResult(
