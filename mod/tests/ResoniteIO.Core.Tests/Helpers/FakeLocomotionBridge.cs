@@ -3,50 +3,75 @@ using ResoniteIO.Core.Bridge;
 namespace ResoniteIO.Core.Tests.Helpers;
 
 /// <summary>
-/// テスト用 <see cref="ILocomotionBridge"/>。各 <see cref="LocomotionCommand"/> を
-/// <see cref="Received"/> に記録するだけの no-op 実装 (engine API には触らない)。
+/// テスト用 <see cref="ILocomotionBridge"/>。<see cref="SetState"/> /
+/// <see cref="Reset"/> / <see cref="NotifyDisconnect"/> の履歴をそれぞれ
+/// <c>lock</c> 付き append-only list に記録する no-op 実装。
 /// </summary>
 /// <remarks>
-/// <see cref="ThrowNotReady"/> = true なら全 <see cref="ApplyAsync"/> で
-/// <see cref="LocomotionNotReadyException"/> を投げる (FailedPrecondition 翻訳テスト用)。
-/// 受信記録は <c>lock</c> でガードしているので、gRPC server が複数の concurrent
-/// stream を回しても safe に読める。
+/// 派生 "LatestState" のような Bridge 挙動シミュレーションは行わない
+/// (テスト側で SetStates[^1] / Resets / Disconnects を直接 assert する規約)。
 /// </remarks>
 internal sealed class FakeLocomotionBridge : ILocomotionBridge
 {
-    private readonly List<LocomotionCommand> _received = new();
+    private readonly List<LocomotionInput> _setStates = new();
+    private readonly List<LocomotionResetFlags> _resets = new();
+    private readonly List<LocomotionDisconnectReason> _disconnects = new();
     private readonly object _gate = new();
 
-    public bool ThrowNotReady { get; set; }
-
-    /// <summary>受信した command のスナップショット (呼び出し元はこれを後で assert する)。</summary>
-    public IReadOnlyList<LocomotionCommand> Received
+    public IReadOnlyList<LocomotionInput> SetStates
     {
         get
         {
             lock (_gate)
             {
-                return _received.ToArray();
+                return _setStates.ToArray();
             }
         }
     }
 
-    public Task ApplyAsync(LocomotionCommand command, CancellationToken ct)
+    public IReadOnlyList<LocomotionResetFlags> Resets
     {
-        if (ThrowNotReady)
+        get
         {
-            throw new LocomotionNotReadyException(
-                "FakeLocomotionBridge: simulated not-ready state."
-            );
+            lock (_gate)
+            {
+                return _resets.ToArray();
+            }
         }
+    }
 
-        ct.ThrowIfCancellationRequested();
+    public IReadOnlyList<LocomotionDisconnectReason> Disconnects
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _disconnects.ToArray();
+            }
+        }
+    }
 
+    public void SetState(LocomotionInput command)
+    {
         lock (_gate)
         {
-            _received.Add(command);
+            _setStates.Add(command);
         }
+    }
 
-        return Task.CompletedTask;
+    public void Reset(LocomotionResetFlags flags)
+    {
+        lock (_gate)
+        {
+            _resets.Add(flags);
+        }
+    }
+
+    public void NotifyDisconnect(LocomotionDisconnectReason reason)
+    {
+        lock (_gate)
+        {
+            _disconnects.Add(reason);
+        }
     }
 }

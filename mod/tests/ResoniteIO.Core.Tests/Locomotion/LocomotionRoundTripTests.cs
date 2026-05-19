@@ -1,48 +1,46 @@
 using Grpc.Core;
+using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Tests.Helpers;
-using ResoniteIO.V1;
 using Xunit;
+using V1 = ResoniteIO.V1;
 
 namespace ResoniteIO.Core.Tests.Locomotion;
 
 /// <summary>
 /// <see cref="Core.Locomotion.LocomotionService"/> の Drive client-streaming
-/// round-trip と例外翻訳を SessionHost mount 越しに検証する。
+/// round-trip と disconnect 種別通知を SessionHost mount 越しに検証する。
+/// SessionHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
+/// <c>SessionHostEnv</c> collection で直列化。
 /// </summary>
-/// <remarks>
-/// SessionHostHarness が <c>RESONITE_IO_SOCKET</c> env var を書き換えるため、
-/// xunit collection <c>SessionHostEnv</c> で他テストと直列化する。
-/// </remarks>
 [Collection("SessionHostEnv")]
 public sealed class LocomotionRoundTripTests
 {
     [Fact]
-    public async Task Drive_AppliesEachCommand_AndReturnsCount()
+    public async Task Drive_RecordsLatestState_AndReturnsCount()
     {
         var bridge = new FakeLocomotionBridge();
         await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
-        // 移動 + velocity override + look + jump + crouch を 1 ケースで一通り
-        // 覆って proto → Core POCO へのマッピングを検証する。
+        // 全 field の proto → Core POCO mapping を 1 round-trip で確認する。
         var commands = new[]
         {
-            new LocomotionCommand { MoveY = 1.0f, UnixNanos = 1L },
-            new LocomotionCommand
+            new V1.LocomotionCommand { MoveY = 1.0f, UnixNanos = 1L },
+            new V1.LocomotionCommand
             {
                 MoveX = 1.0f,
                 MoveY = 1.0f,
                 Velocity = 3.0f,
                 UnixNanos = 2L,
             },
-            new LocomotionCommand
+            new V1.LocomotionCommand
             {
                 YawRate = 0.5f,
                 PitchRate = -0.25f,
                 UnixNanos = 3L,
             },
-            new LocomotionCommand
+            new V1.LocomotionCommand
             {
                 Jump = true,
                 Crouch = 0.75f,
@@ -62,80 +60,78 @@ public sealed class LocomotionRoundTripTests
         Assert.Equal(0L, summary.DroppedCount);
         Assert.True(summary.UnixNanos > 0L);
 
-        var received = bridge.Received;
-        Assert.Equal(commands.Length, received.Count);
+        var setStates = bridge.SetStates;
+        Assert.Equal(commands.Length, setStates.Count);
 
-        // Service は proto.Velocity を素のまま POCO に詰めるだけ。proto3
-        // wire default は 0 のためここでも 0 として届く (convenience client
-        // である Python LocomotionCmd 側で default=1.0 を保証する設計)。
-        Assert.Equal(1.0f, received[0].MoveY);
-        Assert.Equal(0f, received[0].Velocity);
-        Assert.Equal(1L, received[0].UnixNanos);
+        // Service は proto.Velocity を素のまま POCO に詰めるだけ (proto3 wire
+        // default = 0)。convenience default=1.0 は Python `LocomotionCmd` 側で
+        // 担保する設計のため、ここで 0 のまま見えるのは規約通り。
+        Assert.Equal(1.0f, setStates[0].MoveY);
+        Assert.Equal(0f, setStates[0].Velocity);
+        Assert.Equal(1L, setStates[0].UnixNanos);
 
-        Assert.Equal(1.0f, received[1].MoveX);
-        Assert.Equal(1.0f, received[1].MoveY);
-        Assert.Equal(3.0f, received[1].Velocity);
+        Assert.Equal(1.0f, setStates[1].MoveX);
+        Assert.Equal(1.0f, setStates[1].MoveY);
+        Assert.Equal(3.0f, setStates[1].Velocity);
 
-        Assert.Equal(0.5f, received[2].YawRate);
-        Assert.Equal(-0.25f, received[2].PitchRate);
+        Assert.Equal(0.5f, setStates[2].YawRate);
+        Assert.Equal(-0.25f, setStates[2].PitchRate);
 
-        Assert.True(received[3].Jump);
-        Assert.Equal(0.75f, received[3].Crouch);
+        Assert.True(setStates[3].Jump);
+        Assert.Equal(0.75f, setStates[3].Crouch);
+
+        var disconnects = bridge.Disconnects;
+        Assert.Single(disconnects);
+        Assert.Equal(LocomotionDisconnectReason.Graceful, disconnects[0]);
     }
 
     [Fact]
-    public async Task Drive_TranslatesNotReady_ToFailedPrecondition()
+    public async Task Drive_ClientCancellation_NotifiesCancelledDisconnect()
     {
-        var bridge = new FakeLocomotionBridge { ThrowNotReady = true };
+        var bridge = new FakeLocomotionBridge();
         await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
-        using var call = client.Drive();
-        await call.RequestStream.WriteAsync(new LocomotionCommand { MoveY = 1.0f });
+        using var cts = new CancellationTokenSource();
+        using var call = client.Drive(cancellationToken: cts.Token);
 
-        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+        await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 1.0f });
+        cts.Cancel();
+
+        try
         {
-            // Drive completes via response. Either the next WriteAsync or
-            // ResponseAsync will surface the FailedPrecondition status, so we
-            // attempt CompleteAsync first and fall back to ResponseAsync.
-            try
-            {
-                await call.RequestStream.CompleteAsync();
-            }
-            catch (RpcException)
-            {
-                throw;
-            }
             await call.ResponseAsync;
-        });
+        }
+        catch (OperationCanceledException) { }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled) { }
 
-        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
-        Assert.Empty(bridge.Received);
+        // server-side completion は非同期なので poll で待つ。
+        await TestPolling.WaitUntilAsync(
+            () => bridge.Disconnects.Count > 0,
+            TimeSpan.FromSeconds(5),
+            "Bridge did not receive disconnect notification"
+        );
+
+        Assert.Equal(LocomotionDisconnectReason.Cancelled, bridge.Disconnects[^1]);
     }
 
     [Fact]
     public async Task Drive_WithoutBridge_ReturnsUnavailable()
     {
-        // locomotionBridge=null で起動 → LocomotionService は mount されるが、
-        // bridge 未注入なので Drive を開始した時点で Unavailable に終わる。
         await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
         using var call = client.Drive();
 
+        // Server は MoveNext 前に Unavailable を返すため、RequestStream への
+        // 書き込み / CompleteAsync / ResponseAsync のいずれかが RpcException を
+        // 表面化する。Assert.ThrowsAsync が経路を吸収する。
         var ex = await Assert.ThrowsAsync<RpcException>(async () =>
         {
-            try
-            {
-                await call.RequestStream.WriteAsync(new LocomotionCommand());
-                await call.RequestStream.CompleteAsync();
-            }
-            catch (RpcException)
-            {
-                throw;
-            }
+            await call.RequestStream.WriteAsync(new V1.LocomotionCommand());
+            await call.RequestStream.CompleteAsync();
             await call.ResponseAsync;
         });
 
