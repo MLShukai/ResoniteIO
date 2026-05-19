@@ -4,7 +4,12 @@ from importlib.metadata import version as _version
 
 from resoio.camera import CameraClient, Frame
 from resoio.display import DisplayClient, DisplayInfo
-from resoio.locomotion import DriveSummary, LocomotionClient, LocomotionCmd
+from resoio.locomotion import (
+    DriveSummary,
+    LocomotionClient,
+    LocomotionCmd,
+    ResetSummary,
+)
 from resoio.session import (
     AmbiguousSocketError,
     SessionClient,
@@ -22,6 +27,7 @@ __all__ = [
     "Frame",
     "LocomotionClient",
     "LocomotionCmd",
+    "ResetSummary",
     "SessionClient",
     "SocketNotFoundError",
     "__version__",
