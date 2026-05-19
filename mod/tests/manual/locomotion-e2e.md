@@ -18,30 +18,26 @@
   (`DISPLAY` / `WAYLAND_DISPLAY` 必須)
 - container 内で `cd python && uv sync` 済み
 
-## Walk 可能 world に切り替える (必須)
+## World の前提
 
-Home / Userspace は `NoLocomotion` 系の active module が入っており、
-Bridge は常に `LocomotionNotReadyException` (= `FAILED_PRECONDITION`) を
-返す。e2e harness 側は 120 s の retry budget を持っているため、その間に
-**walk 可能 world に join し直す**必要がある。
+通常起動直後の home world でも walk locomotion (`SmoothLocomotionBase`
+派生の active module) が入っているので、**特に world 切替は不要**で
+e2e は素通る (確認: 2026-05-19 ユーザー報告)。
 
-推奨 world (どれでも可):
+active module が `Teleport` / `NoClip` / `GrabWorld` などの非 walk 系に
+設定された world の場合は Bridge が `LocomotionNotReadyException`
+(= `FAILED_PRECONDITION`) を投げる。e2e harness は 120 s の retry budget
+を持っているので、その間に locomotion mode を Walk に切り替える
+(Userspace dash → Settings → Locomotion など) か、別の walk 可能 world に
+join し直せばよい。
 
-- `SimpleAvatarTest` (公式テストワールド)
-- `Sandbox` 系 (`Sandbox - Public Test` 等)
-- 自分の Home world で `LocomotionController.ActiveModule` を
-  `Walk` (= `SmoothLocomotionBase` 派生) に設定したもの
+## マウス cursor lock について
 
-切り替え手順:
-
-1. Resonite が起動したら Contacts / WorldBrowser から walk 可能 world を
-   開く
-2. world load が完了し、avatar が地面に立っている状態になるまで待つ
-3. **window focus を Resonite に置き、画面上で右クリックしてマウス
-   cursor lock を有効にする** (ロック状態だと engine の `IsCursorLocked`
-   が `true` になり Look.Active も `true` に切り替わる; cursor unlock 状態
-   だと yaw/pitch は engine 側で skip され画面上動かないが、Drive RPC
-   自体は成功するため harness は assert を fail させない)
+window focus を Resonite に置き、画面上で右クリックしてマウス cursor lock
+を有効にすると engine の `IsCursorLocked` が `true` になり Look.Active
+も `true` に切り替わる。cursor unlock 状態だと yaw/pitch は engine 側で
+skip され画面上動かないが、Drive RPC 自体は成功するため harness は assert
+を fail させない (= 動画上で視点が固まって見える)。
 
 cursor lock 状態は手動 e2e の "見た目で動く" 条件であり、harness が判定
 できる class ではない (engine 内部状態のため)。
@@ -68,13 +64,16 @@ just e2e-test locomotion
 
 実行直後 host で:
 
-1. Resonite が起動するのを待つ (Gale 経由)
-2. home world が load し終わったら walk 可能 world に切り替える
-   (上記参照)
+1. Resonite が起動するのを待つ (Gale 経由、初回 load に数十秒〜)
+2. home world が load し終わって avatar が地面に立つのを待つ (通常起動
+   後の home world は walk locomotion が active なので切替不要)
 3. Resonite window に focus を置き、画面上で右クリック → マウス cursor lock
 4. e2e harness が 120 s の retry budget 内に Locomotion bridge を ready 検出
    できれば 18 s scenario が走り、終了後 mp4 を `python/tests/e2e/e2e_artifacts/locomotion_<timestamp>/capture.mp4`
    に書き出して PASS する
+
+非 walk world (Teleport / NoClip 等が active な world) で動作させたい場合は
+上記「World の前提」の通り 120 s 内に Walk module へ切り替える。
 
 ## 期待される engine log
 
@@ -84,8 +83,6 @@ just e2e-test locomotion
 [Info   :ResoniteIO] Engine ready — starting Session gRPC host
 [Info   :ResoniteIO] SessionHost listening on /home/<user>/.resonite-io/resonite-<pid>.sock
 [Info   :ResoniteIO] Focused world: <home world name> / LocalUser: <UserName>
-... (walk 可能 world に切替後)
-[Info   :ResoniteIO] Focused world: <walk world name> / LocalUser: <UserName>
 ```
 
 `FrooxEngineLocomotionBridge` 自体は info ログを出さない (毎 tick 30 Hz で
