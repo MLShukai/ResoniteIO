@@ -535,8 +535,7 @@ async def test_drive_round_trip_via_cli(
     assert last.pitch_rate == 0.0
     assert last.jump is False
     assert last.crouch == 0.0
-    # velocity is unchanged by `x` semantics by design? No — reset() also
-    # clears sprint_on, so neutral velocity must be 1.0.
+    # reset() also clears sprint_on, so neutral velocity is 1.0.
     assert last.velocity == 1.0
 
     captured = capsys.readouterr()

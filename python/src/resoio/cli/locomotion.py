@@ -1,19 +1,8 @@
 """``resoio locomotion drive`` subcommand: interactive WASD drive.
 
-Two layers live here:
-
-* The **pure logic layer** — :class:`_DriveState` / :class:`_KeyParser` /
-  :func:`_apply_key` / :func:`_format_status` — is unit-tested in
-  isolation (no asyncio, no termios, no gRPC).
-* The **async runtime layer** — :func:`register` / :func:`_run_drive`
-  plus :func:`_raw_tty` and :func:`_wait_for_bridge_ready` — wires the
-  pure logic up to a UDS gRPC client, raw-mode stdin via ``asyncio``'s
-  ``add_reader``, and a Bridge-ready retry loop.
-
 Engine-side constraint that shapes this file: ``ExternalInput`` is
-consumed and nulled every update tick, so we send at a fixed cadence
-(default 30 Hz) for the entire session — any input held by the user is
-re-asserted on every tick rather than transmitted as a single edge.
+consumed and nulled every update tick, so we re-send at a fixed cadence
+(default 30 Hz) — held input is repeated, not transmitted as an edge.
 """
 
 from __future__ import annotations
@@ -88,8 +77,6 @@ class _DriveState:
 class _KeyParser:
     """Byte-oriented decoder that emits one key name per completed sequence.
 
-    Accepts a single byte at a time so the caller can feed an
-    ``os.read()`` buffer in order without buffering decisions of its own.
     Recognises ASCII printables verbatim and ANSI arrow escape sequences
     ``ESC [ A/B/C/D`` as ``"UP" / "DOWN" / "RIGHT" / "LEFT"``.
 
@@ -99,7 +86,6 @@ class _KeyParser:
     otherwise be needed with non-blocking stdin reads.
     """
 
-    # 3-state state machine: 0 = ground, 1 = saw ESC, 2 = saw ESC '['.
     _GROUND = 0
     _ESC = 1
     _CSI = 2
@@ -115,11 +101,11 @@ class _KeyParser:
         self._state: int = self._GROUND
 
     def feed(self, byte: int) -> list[str]:
-        """Feed one byte; return zero or one key names (list for batchability).
+        """Feed one byte; return the completed key (if any) as a 0/1-element
+        list.
 
-        Returning a list keeps the call-site symmetric across the
-        "consumed mid-sequence" case (``[]``) and the "completed key"
-        case (``["UP"]``), so the caller can simply iterate.
+        The list-shaped return keeps the caller's ``for key in feed(b):``
+        symmetric across the consumed-mid-sequence and completed-key cases.
         """
         if self._state == self._GROUND:
             if byte == 0x1B:
@@ -130,10 +116,8 @@ class _KeyParser:
             if byte == ord("["):
                 self._state = self._CSI
                 return []
-            # Any non-'[' aborts the ESC sequence; drop it to ground silently.
             self._state = self._GROUND
             return []
-        # _CSI: expect A/B/C/D; anything else is an unsupported sequence.
         self._state = self._GROUND
         key = self._ARROW_MAP.get(byte)
         return [key] if key is not None else []
@@ -143,16 +127,11 @@ def _apply_key(state: _DriveState, key: str, look_rate: float) -> bool:
     """Apply ``key`` to ``state``; return ``True`` iff an exit was requested.
 
     Sprint magnitude is intentionally not a parameter here — it is
-    applied at emit time by :meth:`_DriveState.to_cmd`. Keeping it out of
-    this signature means the input dispatch logic depends only on the
-    rate amplitude (``look_rate``), and the sprint multiplier flows
-    through a single chokepoint when commands are serialised.
+    applied at emit time by :meth:`_DriveState.to_cmd`, so the sprint
+    multiplier flows through a single chokepoint at command serialisation.
+    Pair exclusivity (held-w + tap-s lands on neutral, not -1) is
+    documented on :class:`_DriveState`.
     """
-    # Pair semantics: pressing the same key toggles between target and 0;
-    # pressing the opposite key while engaged cancels to 0 (one press to
-    # cancel, a second press to flip). The "engaged with opposite" branch
-    # is what makes a held-w + tap-s sequence land on neutral rather than
-    # snapping straight to -1.
     match key:
         case "w":
             state.move_y = 1.0 if state.move_y == 0.0 else 0.0
@@ -424,6 +403,7 @@ async def _run_drive(args: argparse.Namespace) -> int:
 
     state = _DriveState()
     stop_event = asyncio.Event()
+    # Engine consumes + nulls ExternalInput per tick: re-send held state every tick.
     period = 1.0 / rate
     parser = _KeyParser()
     loop = asyncio.get_running_loop()
