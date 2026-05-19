@@ -110,66 +110,109 @@ public sealed class ResoniteIOPlugin : BasePlugin
         }
         catch (Exception ex)
         {
+            // partial-failure 回復: ここに到達した時点で先行 ctor / Start が成功した
+            // resource (receiver / bridge 群 / cts / 部分起動済み host) が leak しうるため、
+            // ProcessExit と同じ Dispose chain を best-effort で回す。
             Log.LogError($"Failed to start Session gRPC host: {ex}");
+            SafeShutdown();
         }
     }
 
-    // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
-    private void OnProcessExit(object? sender, EventArgs e)
+    private void OnProcessExit(object? sender, EventArgs e) => SafeShutdown();
+
+    // OnEngineReady catch / OnProcessExit の両方から呼ばれる共通 Dispose chain。
+    // 二重呼び出し対策として各 field は Dispose 後に null 化する。
+    private void SafeShutdown()
     {
-        // Dispose 順: receiver → camera → display → locomotion → session(host)。
+        // Dispose 順: receiver → camera → display → locomotion → session(bridge)
+        //   → cts → sessionHost → assemblyResolver。
         // 上流から順に止めることで、下流が残 input を dead bridge に push する race を防ぐ:
         //   - Receiver を先に止めて残 frame が dead CameraBridge に届かないようにする。
         //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し pending な
         //     CameraService.StreamFrames を CameraNotReadyException で抜けさせる。
         //   - LocomotionBridge.Dispose は engine 側 ExternalInput を 0 戻しして idle 化する。
         //   - 最後に SessionHost を止めて全 gRPC service を畳む。
-        try
-        {
-            _frameReceiver?.Dispose();
-        }
-        catch { }
+        SafeDispose(_frameReceiver, nameof(_frameReceiver));
+        _frameReceiver = null;
 
-        try
-        {
-            (_cameraBridge as IDisposable)?.Dispose();
-        }
-        catch { }
+        SafeDispose(_cameraBridge as IDisposable, nameof(_cameraBridge));
+        _cameraBridge = null;
 
-        try
-        {
-            (_displayBridge as IDisposable)?.Dispose();
-        }
-        catch { }
+        SafeDispose(_displayBridge as IDisposable, nameof(_displayBridge));
+        _displayBridge = null;
 
-        try
-        {
-            _locomotionBridge?.Dispose();
-        }
-        catch { }
+        SafeDispose(_locomotionBridge, nameof(_locomotionBridge));
+        _locomotionBridge = null;
 
-        try
-        {
-            _sessionBridge?.Dispose();
-        }
-        catch { }
+        SafeDispose(_sessionBridge, nameof(_sessionBridge));
+        _sessionBridge = null;
 
+        // CancellationTokenSource は Cancel + Dispose の 2 段なので inline で扱う。
         try
         {
             _hostCts?.Cancel();
+            _hostCts?.Dispose();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try
+            {
+                Log?.LogWarning(
+                    $"SafeDispose({nameof(_hostCts)}) threw: {ex.GetType().Name}: {ex.Message}"
+                );
+            }
+            catch
+            {
+                // log path may be dead during ProcessExit
+            }
+        }
+        _hostCts = null;
 
+        // SessionHost は IAsyncDisposable のため sync 化して扱う (ProcessExit の制約)。
         try
         {
             _sessionHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try
+            {
+                Log?.LogWarning(
+                    $"SafeDispose({nameof(_sessionHost)}) threw: {ex.GetType().Name}: {ex.Message}"
+                );
+            }
+            catch
+            {
+                // log path may be dead during ProcessExit
+            }
+        }
+        _sessionHost = null;
 
+        SafeDispose(_assemblyResolver, nameof(_assemblyResolver));
+        _assemblyResolver = null;
+    }
+
+    // ProcessExit 経路では log sink がもう信頼できないので、log は best-effort。
+    internal static void SafeDispose(IDisposable? disposable, string label)
+    {
+        if (disposable is null)
+        {
+            return;
+        }
         try
         {
-            _assemblyResolver?.Dispose();
+            disposable.Dispose();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try
+            {
+                Log?.LogWarning($"SafeDispose({label}) threw: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch
+            {
+                // log path may be dead during ProcessExit
+            }
+        }
     }
 }
