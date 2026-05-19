@@ -194,6 +194,13 @@ critical な pass 条件。
   停止 (stateful repeater が機能している証拠)
 - [ ] 矢印 ↑ で視点が **上向き**、↓ で **下向き** に動く (pitch 符号
   反転解除 fix の regression catch)
+- [ ] `d` 1 回押下 → 5 秒間、avatar が **真横 (画面右)** にだけ進み、
+  前後方向に visible なドリフトが出ない (strafe-drift fix の regression
+  catch、`feedback_locomotion_external_input.md` §8。HFR ベースだった
+  旧実装では `d` 中に ~9% 前方ドリフトが見えていた)。`a` で左方向も同様
+- [ ] 視点を下向きに ~30° pitch down してから `d` を押下 → 水平方向に
+  strafe を維持し、avatar が地面に沈んだり浮いたりしない (pitch sink
+  が GroundTraction 分岐で零化されていることの確認)
 - [ ] `Space` 1 押下で jump が 1 回だけ発生する (連打で連続 jump)
 - [ ] sprint toggle (`t`) で歩幅 / 移動距離が明確に変わる
 - [ ] `q` で graceful 終了 → CLI 側の明示 reset で avatar が neutral
