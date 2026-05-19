@@ -1,0 +1,70 @@
+// Locomotion service: Resonite desktop の基本操作 (WASD / マウスルック /
+// Space (Jump) / Shift (Sprint) / C (Crouch)) を ExternalInput 注入で再現する
+// client-streaming RPC。
+//
+// engine の `InputAction.ExternalInput` は engine update tick で消費・null reset
+// される設計なので、入力を持続させたいときは Python 側から **30Hz 程度で連続
+// 発行** する必要がある。stream を止めれば即 idle に戻る (送信責務 = active
+// input、無送信 = neutral、というセマンティクス)。
+//
+// engine 単位の補足:
+//   - `move_x` / `move_y` は engine `SmoothLocomotionInputs.Move.ExternalInput`
+//     にそのまま (sprint_multiplier 適用後で) float3 = (move_x, 0, move_y) で書く。
+//     y 軸は fly mode の vertical だが desktop walk では使われないので無視。
+//   - `pitch_rate` は engine 側で `_verticalAngle -= y` と反転加算されるため、
+//     Bridge が符号反転して float2 = (yaw_rate, -pitch_rate) で書く。
+//   - `jump` は `SmoothLocomotionInputs.Jump.ExternalInput |= value` (DigitalAction の
+//     OR-merge) で 1 frame でも true なら trigger。
+//   - `sprint_multiplier` は engine の `ScreenLocomotionDirection.FastMultiplier`
+//     (default 2.0) を ExternalInput 経路で再現する用途。0 は「server 既定 2.0」と
+//     解釈、>0 は override。
+//   - `crouch` は engine `HeadInputs.Crouch.ExternalInput` (AnalogAction) にそのまま流す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// クライアントからサーバへ毎フレーム送る制御コマンド。全 field optional
+// (proto3 default = 0 = neutral)。
+message LocomotionCommand {
+  // Strafe input. -1.0 = left, 1.0 = right. SmoothLocomotionInputs.Move.x へ。
+  float move_x = 1;
+  // Forward input. -1.0 = backward, 1.0 = forward. SmoothLocomotionInputs.Move.z へ。
+  float move_y = 2;
+  // Yaw angular rate. positive = turn right. ScreenCameraInputs.Look.x へ。
+  float yaw_rate = 3;
+  // Pitch angular rate. positive = look up. Bridge が符号反転して
+  // ScreenCameraInputs.Look.y へ (engine が _verticalAngle -= y で反転するため)。
+  float pitch_rate = 4;
+  // Space 相当。true で SmoothLocomotionInputs.Jump.ExternalInput=true (OR-merge)。
+  bool jump = 5;
+  // Shift 相当。true のとき Bridge 内で Move.x/z を sprint_multiplier 倍する。
+  bool sprint = 6;
+  // Crouch 強度 [0..1]。HeadInputs.Crouch.ExternalInput にそのまま流す。
+  float crouch = 7;
+  // sprint=true のときに適用する Move 倍率。0 (proto3 default) は「server 既定 2.0」と
+  // 解釈、>0 は override。engine の ScreenLocomotionDirection.FastMultiplier (=2.0)
+  // を ExternalInput 経路で再現する用途。
+  float sprint_multiplier = 8;
+  // クライアント送信時刻 (UTC ナノ秒)。受信側 latency 計測用、optional (0 で skip)。
+  int64 unix_nanos = 9;
+}
+
+// Drive RPC 完了時の summary。
+message LocomotionDriveSummary {
+  // 正常に処理したコマンド数。
+  int64 received_count = 1;
+  // pending を上書きした (= latest-wins で drop した) 回数。
+  // 現状の直列 ApplyAsync では常に 0。将来 non-blocking bridge へ拡張する hook。
+  int64 dropped_count = 2;
+  // サーバ完了時刻 (UTC ナノ秒)。
+  int64 unix_nanos = 3;
+}
+
+service Locomotion {
+  // 移動 + 視点制御を 1 本の client-streaming RPC に集約。
+  // 同時 Drive ポリシーは accept-overwrite (両方を受け付け Bridge の latest-wins
+  // に委ねる)。
+  rpc Drive(stream LocomotionCommand) returns (LocomotionDriveSummary);
+}
