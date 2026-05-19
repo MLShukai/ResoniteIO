@@ -71,6 +71,12 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
 
     private volatile bool _disposed;
 
+    // Phase 1 strafe-drift triage (TODO Phase 3: 削除)。Move が非 neutral の間
+    // 30 tick 毎に [LocomotionMove] log を吐く counter。neutral 中は 0 にリセット
+    // して再開時に必ず最初の tick で出力するようにしている。
+    private int _diagLogTickCounter;
+    private const int _DiagLogIntervalTicks = 30;
+
     public FrooxEngineLocomotionBridge(Engine engine, ILogSink log)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -313,7 +319,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
     }
 
-    private static void ApplyToEngine(
+    private void ApplyToEngine(
         SmoothLocomotionBase smooth,
         FirstPersonTargettingController? fpc,
         HeadSimulator? head,
@@ -343,6 +349,8 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
 
             var slotMove = snapshot.MoveX * slotRight + snapshot.MoveY * slotForward;
             normalInput.Move.ExternalInput = slotMove * snapshot.Velocity;
+
+            LogStrafeDriftDiag(userRoot, snapshot, headRot, slotForward, slotRight, slotMove);
         }
 
         if (jumpSnapshot)
@@ -372,6 +380,50 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
                 headInputs.Crouch.ExternalInput = snapshot.Crouch;
             }
         }
+    }
+
+    // Phase 1 strafe-drift triage (TODO Phase 3: 削除)。Move が非 neutral の間
+    // 30 tick (= 0.5 s @ 60 Hz) 毎に 1 行だけ吐き、HFR 経由の現行値と LUVR 経由
+    // (WASD binding 相当) の対照値を並べて grep 'LocomotionMove' で比較できる
+    // ようにする。neutral に戻ったら counter を 0 戻しして次の non-neutral
+    // 開始 tick で必ず出力。
+    private void LogStrafeDriftDiag(
+        UserRoot userRoot,
+        LocomotionInput snapshot,
+        floatQ headRot,
+        float3 slotForward,
+        float3 slotRight,
+        float3 slotMove
+    )
+    {
+        if (snapshot.MoveX == 0f && snapshot.MoveY == 0f)
+        {
+            _diagLogTickCounter = 0;
+            return;
+        }
+        if ((_diagLogTickCounter++ % _DiagLogIntervalTicks) != 0)
+        {
+            return;
+        }
+
+        var slot = userRoot.Slot;
+        var world = userRoot.World;
+        var viewRot = world is not null ? world.LocalUserViewRotation : floatQ.Identity;
+        var viewWorldForward = viewRot * float3.Forward;
+        var viewWorldRight = viewRot * float3.Right;
+        var viewSlotForward = slot.GlobalDirectionToLocal(in viewWorldForward);
+        var viewSlotRight = slot.GlobalDirectionToLocal(in viewWorldRight);
+        var viewSlotMove = snapshot.MoveX * viewSlotRight + snapshot.MoveY * viewSlotForward;
+
+        _log.LogInfo(
+            $"[LocomotionMove] "
+                + $"in=(X={snapshot.MoveX:+0.00;-0.00},Y={snapshot.MoveY:+0.00;-0.00},V={snapshot.Velocity:0.00}) "
+                + $"slotRot={slot.GlobalRotation} slotUp={slot.Up} pos={slot.GlobalPosition} "
+                + $"HFR={headRot} HFR.fwd={headRot * float3.Forward} HFR.rgt={headRot * float3.Right} "
+                + $"slot.fwd={slotForward} slot.rgt={slotRight} slotMove={slotMove} "
+                + $"| LUVR={viewRot} LUVR.fwd={viewWorldForward} LUVR.rgt={viewWorldRight} "
+                + $"vSlot.fwd={viewSlotForward} vSlot.rgt={viewSlotRight} vSlotMove={viewSlotMove}"
+        );
     }
 
     private static (
