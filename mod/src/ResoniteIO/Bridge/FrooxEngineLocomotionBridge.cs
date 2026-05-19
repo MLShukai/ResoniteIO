@@ -334,23 +334,31 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
 
         // Move は body-relative。UserRoot.Slot.GlobalRotation は head 向きを反映
-        // しない (~identity) ため、ScreenLocomotionDirection (WASD binding) と
-        // 同じく HeadFacingRotation を経由して Slot 座標系へ変換する必要がある。
-        // 詳細・定量検証は feedback_locomotion_external_input.md §8 参照。
-        // userRoot 未準備時は今 tick を skip し次 tick で再評価。
+        // しない (~identity) ため、ScreenLocomotionDirection (WASD binding,
+        // LocomotionReference.View 既定) と同じく World.LocalUserViewRotation
+        // を経由して Slot 座標系へ変換する。HeadFacingRotation (avatar の
+        // ヘッドボーン向き) は locomotion 中の IK / animation で動的に揺れる
+        // ため strafe で前後ドリフトが出ることを実機で確認済み。LUVR は
+        // ScreenController.ViewRotation を直接反映するため user 入力と完全
+        // 同期する。pitch を含む点は MovementMode.GroundTraction の Slot-
+        // local Y 零化 (PhysicalLocomotion.cs:383-386) でキャンセルされる
+        // ため pitch sink は実害なし。詳細・定量検証は
+        // feedback_locomotion_external_input.md §8 参照。userRoot / World
+        // 未準備時は今 tick を skip し次 tick で再評価。
         var userRoot = smooth.Slot.ActiveUserRoot;
-        if (userRoot is not null)
+        var world = userRoot?.World;
+        if (userRoot is not null && world is not null)
         {
-            var headRot = userRoot.HeadFacingRotation;
-            var worldForward = headRot * float3.Forward;
-            var worldRight = headRot * float3.Right;
+            var viewRot = world.LocalUserViewRotation;
+            var worldForward = viewRot * float3.Forward;
+            var worldRight = viewRot * float3.Right;
             var slotForward = userRoot.Slot.GlobalDirectionToLocal(in worldForward);
             var slotRight = userRoot.Slot.GlobalDirectionToLocal(in worldRight);
 
             var slotMove = snapshot.MoveX * slotRight + snapshot.MoveY * slotForward;
             normalInput.Move.ExternalInput = slotMove * snapshot.Velocity;
 
-            LogStrafeDriftDiag(userRoot, snapshot, headRot, slotForward, slotRight, slotMove);
+            LogStrafeDriftDiag(userRoot, snapshot, viewRot, slotForward, slotRight, slotMove);
         }
 
         if (jumpSnapshot)
@@ -390,7 +398,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     private void LogStrafeDriftDiag(
         UserRoot userRoot,
         LocomotionInput snapshot,
-        floatQ headRot,
+        floatQ viewRot,
         float3 slotForward,
         float3 slotRight,
         float3 slotMove
@@ -407,22 +415,23 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
 
         var slot = userRoot.Slot;
-        var world = userRoot.World;
-        var viewRot = world is not null ? world.LocalUserViewRotation : floatQ.Identity;
-        var viewWorldForward = viewRot * float3.Forward;
-        var viewWorldRight = viewRot * float3.Right;
-        var viewSlotForward = slot.GlobalDirectionToLocal(in viewWorldForward);
-        var viewSlotRight = slot.GlobalDirectionToLocal(in viewWorldRight);
-        var viewSlotMove = snapshot.MoveX * viewSlotRight + snapshot.MoveY * viewSlotForward;
+        // Phase 2 fix 後の対照は HFR (旧 active rotation) → strafe で drift する
+        // ことを実証した側。両者を並べて regression catch に使う。
+        var headRot = userRoot.HeadFacingRotation;
+        var headWorldForward = headRot * float3.Forward;
+        var headWorldRight = headRot * float3.Right;
+        var headSlotForward = slot.GlobalDirectionToLocal(in headWorldForward);
+        var headSlotRight = slot.GlobalDirectionToLocal(in headWorldRight);
+        var headSlotMove = snapshot.MoveX * headSlotRight + snapshot.MoveY * headSlotForward;
 
         _log.LogInfo(
             $"[LocomotionMove] "
                 + $"in=(X={snapshot.MoveX:+0.00;-0.00},Y={snapshot.MoveY:+0.00;-0.00},V={snapshot.Velocity:0.00}) "
                 + $"slotRot={slot.GlobalRotation} slotUp={slot.Up} pos={slot.GlobalPosition} "
-                + $"HFR={headRot} HFR.fwd={headRot * float3.Forward} HFR.rgt={headRot * float3.Right} "
+                + $"LUVR={viewRot} LUVR.fwd={viewRot * float3.Forward} LUVR.rgt={viewRot * float3.Right} "
                 + $"slot.fwd={slotForward} slot.rgt={slotRight} slotMove={slotMove} "
-                + $"| LUVR={viewRot} LUVR.fwd={viewWorldForward} LUVR.rgt={viewWorldRight} "
-                + $"vSlot.fwd={viewSlotForward} vSlot.rgt={viewSlotRight} vSlotMove={viewSlotMove}"
+                + $"| HFR={headRot} HFR.fwd={headWorldForward} HFR.rgt={headWorldRight} "
+                + $"hSlot.fwd={headSlotForward} hSlot.rgt={headSlotRight} hSlotMove={headSlotMove}"
         );
     }
 
