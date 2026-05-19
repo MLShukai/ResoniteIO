@@ -16,3 +16,4 @@
 - [FrooxEngine Settings API](feedback_frooxengine_settings_api.md) — `Settings.GetActiveSetting<T>() / UpdateActiveSetting<T>()` が公式、内部 `RunSynchronously` で engine thread に dispatch。`Engine.Current.GetCoreSetting` は存在しない。foreground fps は engine 公式経路で制御不可。
 - [InterprocessLib callback signature](feedback_interprocesslib_callback_signature.md) — `Messenger.ReceiveValueArray<T>` の callback は `Action<T[]?>`、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず -=。
 - [pyright unused private in src/](feedback_pyright_unused_private_in_src.md) — tests/ が strict 除外なので `_` prefix の private 関数を test だけ参照すると unused 扱い。`__all__` に列挙して回避。
+- [asyncio add_reader テストの key pacing](feedback_asyncio_add_reader_test_pacing.md) — os.pipe stdin + add_reader 駆動 CLI の round-trip テストは keystroke を `asyncio.sleep` で pace しないと exit key が drain される。
