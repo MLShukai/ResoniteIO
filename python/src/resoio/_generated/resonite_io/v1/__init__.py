@@ -17,6 +17,8 @@ __all__ = (
     "LocomotionBase",
     "LocomotionCommand",
     "LocomotionDriveSummary",
+    "LocomotionResetRequest",
+    "LocomotionResetSummary",
     "LocomotionStub",
     "PingRequest",
     "PingResponse",
@@ -164,8 +166,8 @@ default_message_pool.register_message("resonite_io.v1", "DisplayState", DisplayS
 @dataclass(eq=False, repr=False)
 class LocomotionCommand(betterproto2.Message):
     """
-    クライアントからサーバへ毎フレーム送る制御コマンド。全 field optional
-    (proto3 default = 0 = neutral)。
+    クライアントからサーバへ送る制御コマンド。全 field は変化があった時だけ
+    送れば mod 側 Bridge が engine update tick ごとに再注入する。
     """
 
     move_x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
@@ -185,27 +187,27 @@ class LocomotionCommand(betterproto2.Message):
 
     pitch_rate: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
     """
-    Pitch angular rate, positive=up (Bridge が engine 向けに符号反転)。
+    Pitch angular rate, positive=up. Bridge は符号反転せず engine にそのまま
+    渡す (decompile からは反転が必要に見えるが実機検証で逆挙動を確認、
+    feedback_locomotion_external_input.md §2 参照)。
     """
 
     jump: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
     """
-    Space 相当 (DigitalAction.ExternalInput を OR-merge)。
+    Space 相当の **pulse**。Bridge は受信した次 1 engine tick だけ apply し
+    latch を下げる (consume-once)。client 側で false に戻す責務は無い。
     """
 
     velocity: "float" = betterproto2.field(6, betterproto2.TYPE_FLOAT)
     """
-    Move に掛けるスカラー倍率 (Bridge 側で literal 適用)。
+    Move に掛けるスカラー倍率。**単位元は 1.0** (通常歩行)。Python
+    `LocomotionCmd.velocity` は default=1.0 を保証し、Bridge は proto.velocity
+    を素のまま Move に掛ける (再解釈なし)。engine の
+    `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当は 2.0 を明示する。
 
-    **単位元は 1.0** (通常歩行)。Python `LocomotionCmd.velocity` は default=1.0
-    を保証し、Bridge は proto.velocity を素のまま Move に掛ける (再解釈なし)。
-    engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
-    ExternalInput 経路で再現したい場合は 2.0 を明示する。
-
-    注意: proto3 仕様の wire default は 0。raw proto を直接生成して velocity を
-    設定しないと Move が 0 倍され停止する。convenience client (`LocomotionCmd`)
-    経由なら自動で 1.0 が入るのでこのケースは起きない。**この regime が
-    velocity セマンティクスの正典であり他箇所はここを参照する。**
+    注意: proto3 wire default は 0。raw proto を直接生成して velocity を設定
+    しないと Move が 0 倍され停止する (convenience client なら default 1.0 で
+    回避済み)。**ここが velocity セマンティクスの正典。**
     """
 
     crouch: "float" = betterproto2.field(7, betterproto2.TYPE_FLOAT)
@@ -249,6 +251,87 @@ class LocomotionDriveSummary(betterproto2.Message):
 
 default_message_pool.register_message(
     "resonite_io.v1", "LocomotionDriveSummary", LocomotionDriveSummary
+)
+
+
+@dataclass(eq=False, repr=False)
+class LocomotionResetRequest(betterproto2.Message):
+    """
+    指定された field を中立値に戻す要求。**全 bool が false で送信された場合は
+    全 reset** と Service 層で展開される (proto3 wire default = 0 で "未指定" と
+    "全 false" を区別不能なため、Reset を呼んだ以上は全部戻す解釈に倒す)。
+    部分 reset したい時は対象 field のみ true にする。
+    """
+
+    move: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
+    """
+    move_x / move_y / velocity を中立 (0, 0, 1.0) へ。
+    """
+
+    look: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
+    """
+    yaw_rate / pitch_rate を 0 へ。
+    """
+
+    crouch: "bool" = betterproto2.field(3, betterproto2.TYPE_BOOL)
+    """
+    crouch を 0 へ。
+    """
+
+    jump: "bool" = betterproto2.field(4, betterproto2.TYPE_BOOL)
+    """
+    未消費の jump pending を取り消す。
+    """
+
+    unix_nanos: "int" = betterproto2.field(5, betterproto2.TYPE_INT64)
+    """
+    クライアント送信時刻 (UTC ナノ秒)。Optional (0 で skip)。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "LocomotionResetRequest", LocomotionResetRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class LocomotionResetSummary(betterproto2.Message):
+    """
+    Reset RPC 完了時の summary。Service が request を canonicalize した結果
+    (全 false → 全 true 展開) をそのままエコーする。次の engine tick で
+    Bridge が実際に該当 field を中立に戻す責務を負うため、本 summary は
+    "canonicalize 後に有効だった reset 要求" を表すのみで、engine 側で実際に
+    状態が変わったことの保証ではない。
+    """
+
+    move: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
+    """
+    canonicalize 後に move を reset する要求があったか。
+    """
+
+    look: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
+    """
+    canonicalize 後に look を reset する要求があったか。
+    """
+
+    crouch: "bool" = betterproto2.field(3, betterproto2.TYPE_BOOL)
+    """
+    canonicalize 後に crouch を reset する要求があったか。
+    """
+
+    jump: "bool" = betterproto2.field(4, betterproto2.TYPE_BOOL)
+    """
+    canonicalize 後に jump を reset する要求があったか。
+    """
+
+    unix_nanos: "int" = betterproto2.field(5, betterproto2.TYPE_INT64)
+    """
+    サーバ完了時刻 (UTC ナノ秒)。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "LocomotionResetSummary", LocomotionResetSummary
 )
 
 
@@ -349,9 +432,8 @@ class LocomotionStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "LocomotionDriveSummary":
         """
-        移動 + 視点制御を 1 本の client-streaming RPC に集約。
-        同時 Drive ポリシーは accept-overwrite (両方を受け付け Bridge の latest-wins
-        に委ねる)。
+        移動 + 視点制御の client-streaming RPC。stream lifecycle と stateful
+        repeater の規約は file header / `LocomotionCommand` 参照。
         """
 
         return await self._stream_unary(
@@ -359,6 +441,28 @@ class LocomotionStub(betterproto2_grpclib.ServiceStub):
             messages,
             LocomotionCommand,
             LocomotionDriveSummary,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def reset(
+        self,
+        message: "LocomotionResetRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "LocomotionResetSummary":
+        """
+        指定 field を中立値に戻す (Drive stream を中断しない unary)。全 bool
+        が false なら全 reset (`LocomotionResetRequest` 参照)。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Locomotion/Reset",
+            message,
+            LocomotionResetSummary,
             timeout=timeout,
             deadline=deadline,
             metadata=metadata,
@@ -464,9 +568,18 @@ class LocomotionBase(betterproto2_grpclib.ServiceBase):
         self, messages: "AsyncIterator[LocomotionCommand]"
     ) -> "LocomotionDriveSummary":
         """
-        移動 + 視点制御を 1 本の client-streaming RPC に集約。
-        同時 Drive ポリシーは accept-overwrite (両方を受け付け Bridge の latest-wins
-        に委ねる)。
+        移動 + 視点制御の client-streaming RPC。stream lifecycle と stateful
+        repeater の規約は file header / `LocomotionCommand` 参照。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def reset(
+        self, message: "LocomotionResetRequest"
+    ) -> "LocomotionResetSummary":
+        """
+        指定 field を中立値に戻す (Drive stream を中断しない unary)。全 bool
+        が false なら全 reset (`LocomotionResetRequest` 参照)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
@@ -478,6 +591,15 @@ class LocomotionBase(betterproto2_grpclib.ServiceBase):
         response = await self.drive(request)
         await stream.send_message(response)
 
+    async def __rpc_reset(
+        self,
+        stream: "grpclib.server.Stream[LocomotionResetRequest, LocomotionResetSummary]",
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.reset(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Locomotion/Drive": grpclib.const.Handler(
@@ -485,6 +607,12 @@ class LocomotionBase(betterproto2_grpclib.ServiceBase):
                 grpclib.const.Cardinality.STREAM_UNARY,
                 LocomotionCommand,
                 LocomotionDriveSummary,
+            ),
+            "/resonite_io.v1.Locomotion/Reset": grpclib.const.Handler(
+                self.__rpc_reset,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                LocomotionResetRequest,
+                LocomotionResetSummary,
             ),
         }
 

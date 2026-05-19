@@ -14,6 +14,8 @@ from resoio._generated.resonite_io.v1 import (
     LocomotionBase,
     LocomotionCommand,
     LocomotionDriveSummary,
+    LocomotionResetRequest,
+    LocomotionResetSummary,
 )
 from resoio.cli import _amain, _build_parser
 from resoio.cli.locomotion import (
@@ -26,6 +28,17 @@ from resoio.cli.locomotion import (
     _wait_for_bridge_ready,
 )
 
+
+def _apply(state: _DriveState, key: str, look_rate: float = 1.0) -> bool:
+    """Test shim: call _apply_key with a fresh signal event we drop.
+
+    Most _apply_key tests do not care about the wake signal; only the
+    "did this state-change set the event?" assertion does. Pinning the
+    signature here keeps the rest of the suite terse.
+    """
+    return _apply_key(state, key, look_rate, asyncio.Event())
+
+
 # ---------------------------------------------------------------------------
 # Move toggles (w/s, a/d)
 # ---------------------------------------------------------------------------
@@ -33,27 +46,27 @@ from resoio.cli.locomotion import (
 
 def test_w_toggles_move_y_forward_and_back_to_neutral():
     state = _DriveState()
-    assert _apply_key(state, "w", 1.0) is False
+    assert _apply(state, "w") is False
     assert state.move_y == 1.0
-    assert _apply_key(state, "w", 1.0) is False
+    assert _apply(state, "w") is False
     assert state.move_y == 0.0
 
 
 def test_s_cancels_held_w_then_flips_negative():
     state = _DriveState(move_y=1.0)
-    assert _apply_key(state, "s", 1.0) is False
+    assert _apply(state, "s") is False
     assert state.move_y == 0.0  # exclusive cancel
-    assert _apply_key(state, "s", 1.0) is False
+    assert _apply(state, "s") is False
     assert state.move_y == -1.0
 
 
 def test_a_and_d_are_exclusive_on_move_x():
     state = _DriveState()
-    _apply_key(state, "d", 1.0)
+    _apply(state, "d")
     assert state.move_x == 1.0
-    _apply_key(state, "a", 1.0)
+    _apply(state, "a")
     assert state.move_x == 0.0  # d cancelled by a
-    _apply_key(state, "a", 1.0)
+    _apply(state, "a")
     assert state.move_x == -1.0
 
 
@@ -64,27 +77,27 @@ def test_a_and_d_are_exclusive_on_move_x():
 
 def test_up_toggles_pitch_at_look_rate():
     state = _DriveState()
-    _apply_key(state, "UP", 0.5)
+    _apply(state, "UP", 0.5)
     assert state.pitch_rate == 0.5
-    _apply_key(state, "UP", 0.5)
+    _apply(state, "UP", 0.5)
     assert state.pitch_rate == 0.0
 
 
 def test_down_cancels_up_then_flips_negative():
     state = _DriveState(pitch_rate=0.5)
-    _apply_key(state, "DOWN", 0.5)
+    _apply(state, "DOWN", 0.5)
     assert state.pitch_rate == 0.0
-    _apply_key(state, "DOWN", 0.5)
+    _apply(state, "DOWN", 0.5)
     assert state.pitch_rate == -0.5
 
 
 def test_left_and_right_are_exclusive_on_yaw():
     state = _DriveState()
-    _apply_key(state, "RIGHT", 0.5)
+    _apply(state, "RIGHT", 0.5)
     assert state.yaw_rate == 0.5
-    _apply_key(state, "LEFT", 0.5)
+    _apply(state, "LEFT", 0.5)
     assert state.yaw_rate == 0.0  # right cancelled by left
-    _apply_key(state, "LEFT", 0.5)
+    _apply(state, "LEFT", 0.5)
     assert state.yaw_rate == -0.5
 
 
@@ -95,9 +108,9 @@ def test_left_and_right_are_exclusive_on_yaw():
 
 def test_t_toggles_sprint_flag():
     state = _DriveState()
-    _apply_key(state, "t", 1.0)
+    _apply(state, "t")
     assert state.sprint_on is True
-    _apply_key(state, "t", 1.0)
+    _apply(state, "t")
     assert state.sprint_on is False
 
 
@@ -117,27 +130,96 @@ def test_to_cmd_velocity_reflects_sprint_state():
 
 def test_c_toggles_crouch_flag_and_cmd_crouch_field():
     state = _DriveState()
-    _apply_key(state, "c", 1.0)
+    _apply(state, "c")
     assert state.crouch_on is True
     assert state.to_cmd(2.0).crouch == 1.0
-    _apply_key(state, "c", 1.0)
+    _apply(state, "c")
     assert state.crouch_on is False
     assert state.to_cmd(2.0).crouch == 0.0
 
 
 # ---------------------------------------------------------------------------
-# Jump pulse (Space) — drained after one to_cmd()
+# Jump pulse (Space) — bridge-side consume-once; to_cmd is now a pure read
 # ---------------------------------------------------------------------------
 
 
-def test_space_emits_jump_on_next_cmd_then_drains():
+def test_space_sets_jump_pending_for_next_to_cmd():
+    """Space pressed -> ``jump_pending`` latches True, the next ``to_cmd`` sees
+    it set on the wire.
+
+    With the consume-once responsibility moved to the bridge (the engine
+    fires jump on exactly one tick from a single ``SetState`` carrying
+    ``jump=True``), ``to_cmd`` no longer drains the latch on its own.
+    The producer in ``_run_drive`` clears ``jump_pending`` right after
+    each emit so subsequent commands do not redundantly re-send the
+    pulse — but ``to_cmd`` itself is a pure read.
+    """
     state = _DriveState()
-    _apply_key(state, " ", 1.0)
+    _apply(state, " ")
     assert state.jump_pending is True
     first = state.to_cmd(2.0)
     assert first.jump is True
-    # Drained — a follow-up tick with no new input must emit jump=False.
+    # ``to_cmd`` does NOT mutate state any more: re-reading without an
+    # external drain still observes the latch.
+    assert state.jump_pending is True
     second = state.to_cmd(2.0)
+    assert second.jump is True
+
+
+def test_to_cmd_is_pure_read_no_mutation():
+    """A second invariant check: ``to_cmd`` (default ``consume_jump=False``)
+    must not mutate any field.
+
+    The producer relies on the snapshot being side-effect-free by
+    default so introspection call sites (debug status renderers, tests,
+    etc.) cannot accidentally swallow a jump pulse.
+    """
+    state = _DriveState(
+        move_y=1.0,
+        move_x=-1.0,
+        yaw_rate=0.5,
+        pitch_rate=-0.5,
+        sprint_on=True,
+        crouch_on=True,
+        jump_pending=True,
+    )
+    before = _DriveState(
+        move_y=state.move_y,
+        move_x=state.move_x,
+        yaw_rate=state.yaw_rate,
+        pitch_rate=state.pitch_rate,
+        sprint_on=state.sprint_on,
+        crouch_on=state.crouch_on,
+        jump_pending=state.jump_pending,
+    )
+    state.to_cmd(2.0)
+    assert state == before
+
+
+def test_to_cmd_consume_jump_drains_pending_latch_only():
+    """``consume_jump=True`` drains ``jump_pending`` (the single drain site
+    used by the wire producer) and leaves every other field untouched."""
+    state = _DriveState(
+        move_y=1.0,
+        move_x=-1.0,
+        yaw_rate=0.5,
+        pitch_rate=-0.5,
+        sprint_on=True,
+        crouch_on=True,
+        jump_pending=True,
+    )
+
+    first = state.to_cmd(2.0, consume_jump=True)
+    assert first.jump is True
+    assert state.jump_pending is False
+    # Non-jump axes survive the drain unchanged.
+    assert state.move_y == 1.0
+    assert state.move_x == -1.0
+    assert state.sprint_on is True
+    assert state.crouch_on is True
+
+    # Second emit without an intervening Space sees jump=False.
+    second = state.to_cmd(2.0, consume_jump=True)
     assert second.jump is False
     assert state.jump_pending is False
 
@@ -157,13 +239,13 @@ def test_x_resets_all_axes_to_neutral():
         crouch_on=True,
         jump_pending=True,
     )
-    _apply_key(state, "x", 1.0)
+    _apply(state, "x")
     assert state == _DriveState()
 
 
 def test_zero_resets_all_axes_to_neutral():
     state = _DriveState(move_y=1.0, sprint_on=True)
-    _apply_key(state, "0", 1.0)
+    _apply(state, "0")
     assert state == _DriveState()
 
 
@@ -174,9 +256,49 @@ def test_zero_resets_all_axes_to_neutral():
 
 def test_q_returns_true_to_signal_exit():
     state = _DriveState(move_y=1.0)
-    assert _apply_key(state, "q", 1.0) is True
+    assert _apply(state, "q") is True
     # State is not touched by the exit key — caller handles teardown.
     assert state.move_y == 1.0
+
+
+# ---------------------------------------------------------------------------
+# state_changed wake signal — the event-driven producer wakes on real changes
+# ---------------------------------------------------------------------------
+
+
+def test_state_changing_key_sets_wake_signal():
+    """Recognised keys that mutate state must trip the wake event so the event-
+    driven producer emits exactly one fresh command per change."""
+    state = _DriveState()
+    event = asyncio.Event()
+    _apply_key(state, "w", 1.0, event)
+    assert event.is_set()
+
+
+def test_jump_key_sets_wake_signal():
+    """Space is a state-altering key (sets jump_pending) and must wake."""
+    state = _DriveState()
+    event = asyncio.Event()
+    _apply_key(state, " ", 1.0, event)
+    assert event.is_set()
+
+
+def test_unrecognised_key_does_not_set_wake_signal():
+    """No-op keys must not wake the producer — otherwise every random keystroke
+    would burn a wire message."""
+    state = _DriveState()
+    event = asyncio.Event()
+    _apply_key(state, "?", 1.0, event)
+    assert not event.is_set()
+
+
+def test_quit_key_does_not_set_wake_signal():
+    """``q`` returns the exit signal via the return value; the producer wake
+    event is set separately by the stdin reader on the stop path."""
+    state = _DriveState()
+    event = asyncio.Event()
+    assert _apply_key(state, "q", 1.0, event) is True
+    assert not event.is_set()
 
 
 def test_unrecognised_keys_are_noop():
@@ -191,7 +313,7 @@ def test_unrecognised_keys_are_noop():
         jump_pending=state.jump_pending,
     )
     for key in ("?", "z", "1", "Q"):
-        assert _apply_key(state, key, 1.0) is False
+        assert _apply(state, key) is False
     assert state == before
 
 
@@ -294,18 +416,16 @@ def test_locomotion_without_subcommand_is_rejected():
     assert excinfo.value.code == 2
 
 
-def test_drive_rejects_non_positive_rate():
+def test_drive_rejects_legacy_rate_flag():
+    """``--rate`` was removed: the bridge is a stateful repeater, the
+    CLI is event-driven, and a fixed tick rate no longer makes sense.
+
+    argparse exits 2 on an unrecognised flag, matching the contract
+    other regression tests rely on.
+    """
     parser = _build_parser()
     with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["locomotion", "drive", "--rate", "0"])
-    # argparse exits 2 when a type/value validator raises ArgumentTypeError.
-    assert excinfo.value.code == 2
-
-
-def test_drive_rejects_negative_rate():
-    parser = _build_parser()
-    with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["locomotion", "drive", "--rate", "-1"])
+        parser.parse_args(["locomotion", "drive", "--rate", "30"])
     assert excinfo.value.code == 2
 
 
@@ -316,10 +436,12 @@ def test_socket_flag_accepted_on_drive(tmp_path: Path):
     args = parser.parse_args(["locomotion", "drive", "-s", sock, "--no-wait"])
     assert args.socket == sock
     assert args.no_wait is True
-    # Defaults for the optional knobs flow through.
-    assert args.rate == 30.0
+    # Defaults for the optional knobs flow through. ``--rate`` is gone.
+    assert not hasattr(args, "rate")
     assert args.sprint == 2.0
-    assert args.look_rate == 30.0
+    # 90 deg/s ≈ Resonite's MouseLookSpeed default (100 deg/s); the
+    # previous 30 deg/s tracked the keyboard preset which felt sluggish.
+    assert args.look_rate == 90.0
 
 
 # ---------------------------------------------------------------------------
@@ -408,10 +530,18 @@ def test_raw_tty_is_noop_for_stream_without_fileno(mocker: pytest_mock.MockerFix
 
 
 class _RecordingLocomotion(LocomotionBase):
-    """In-process server that captures every command for assertion."""
+    """In-process server that captures every command for assertion.
+
+    ``reset`` is also implemented because ``_run_drive`` calls it on
+    graceful exit (the bridge is stateful; ending the stream does not
+    by itself neutralise the avatar). The reset stub echoes the
+    request flags back as the summary so the CLI's post-drive reset
+    succeeds without affecting the captured drive frames.
+    """
 
     def __init__(self) -> None:
         self.received: list[LocomotionCommand] = []
+        self.reset_requests: list[LocomotionResetRequest] = []
 
     async def drive(
         self, messages: AsyncIterator[LocomotionCommand]
@@ -421,6 +551,19 @@ class _RecordingLocomotion(LocomotionBase):
         return LocomotionDriveSummary(
             received_count=len(self.received),
             dropped_count=0,
+            unix_nanos=time.time_ns(),
+        )
+
+    async def reset(self, message: LocomotionResetRequest) -> LocomotionResetSummary:
+        self.reset_requests.append(message)
+        # Echo wire flags verbatim. The "all-false → full reset" service
+        # expansion is covered by the C# Core tests; this stub stays
+        # minimal so CLI tests assert only the proto-wire shape.
+        return LocomotionResetSummary(
+            move=message.move,
+            look=message.look,
+            crouch=message.crouch,
+            jump=message.jump,
             unix_nanos=time.time_ns(),
         )
 
@@ -449,9 +592,12 @@ async def test_drive_round_trip_via_cli(
             fake_stdin = os.fdopen(read_fd, "rb", buffering=0)
             monkeypatch.setattr("sys.stdin", fake_stdin)
 
-            # Key sequence (sent paced so each key falls on a distinct
-            # tick — otherwise the reader drains them all atomically and
-            # `q` would exit before any command is yielded):
+            # Key sequence (sent paced so the stdin reader does not
+            # drain the whole buffer in one callback and race ahead of
+            # the event-driven producer — in particular, `q` must
+            # arrive after the producer has had a chance to emit the
+            # earlier state changes, otherwise the stop event trips
+            # before they reach the wire):
             #   w           : forward                       -> move_y = +1
             #   t           : sprint on                     -> velocity = 2.0
             #   space       : jump pulse (one tick only)    -> jump = True once
@@ -460,13 +606,14 @@ async def test_drive_round_trip_via_cli(
             #   q           : exit, drive RPC summary       -> received_count > 0
             async def feed_keys() -> None:
                 key_chunks = [b"w", b"t", b" ", b"\x1b[A", b"x", b"q"]
-                # Give the drive loop time to start and emit at least one
-                # tick before the first keypress arrives.
+                # Give the drive loop time to start and emit the
+                # initial neutral command before the first keypress.
                 await asyncio.sleep(0.05)
                 for chunk in key_chunks:
                     os.write(write_fd, chunk)
-                    # Two periods at --rate 200 (5 ms / tick) keeps each
-                    # keypress on its own tick reliably under CI jitter.
+                    # 50 ms between keystrokes is generous enough for
+                    # the event loop to wake `commands()`, emit, and
+                    # block again under CI jitter.
                     await asyncio.sleep(0.05)
 
             try:
@@ -474,8 +621,6 @@ async def test_drive_round_trip_via_cli(
                     [
                         "locomotion",
                         "drive",
-                        "--rate",
-                        "200",
                         "--no-wait",
                         "--sprint",
                         "2.0",
@@ -538,6 +683,17 @@ async def test_drive_round_trip_via_cli(
     # reset() also clears sprint_on, so neutral velocity is 1.0.
     assert last.velocity == 1.0
 
+    # Graceful exit (q) must trigger an explicit Locomotion.reset RPC so
+    # the bridge does not keep the last state alive forever.
+    assert len(fake.reset_requests) == 1
+    reset_req = fake.reset_requests[0]
+    # All-false request shape is the "reset everything" signal per
+    # LocomotionClient.reset() contract.
+    assert reset_req.move is False
+    assert reset_req.look is False
+    assert reset_req.crouch is False
+    assert reset_req.jump is False
+
     captured = capsys.readouterr()
     # Drive summary lands on stdout, formatted for grep / scripting.
     assert "received_count=" in captured.out
@@ -567,9 +723,7 @@ async def test_no_wait_skips_bridge_ready_probe(
             fake_stdin = os.fdopen(read_fd, "rb", buffering=0)
             monkeypatch.setattr("sys.stdin", fake_stdin)
             try:
-                args = _build_parser().parse_args(
-                    ["locomotion", "drive", "--rate", "200", "--no-wait"]
-                )
+                args = _build_parser().parse_args(["locomotion", "drive", "--no-wait"])
                 rc = await asyncio.wait_for(_run_drive(args), timeout=5.0)
                 assert rc == 0
             finally:

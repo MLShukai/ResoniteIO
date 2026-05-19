@@ -1,8 +1,14 @@
 """``resoio locomotion drive`` subcommand: interactive WASD drive.
 
-Engine-side constraint that shapes this file: ``ExternalInput`` is
-consumed and nulled every update tick, so we re-send at a fixed cadence
-(default 30 Hz) — held input is repeated, not transmitted as an edge.
+The mod-side bridge is a **stateful repeater** — it holds the most
+recent command and re-injects it into the engine every update tick — so
+this CLI is purely event-driven: a :class:`asyncio.Event` is set on
+each state-altering keystroke, the producer wakes and emits a single
+:class:`LocomotionCmd`, and then blocks again until the next keypress.
+No tick loop is required. On graceful exit (``q`` / EOF) the CLI calls
+:meth:`LocomotionClient.reset` before closing the stream so the avatar
+ends up neutral; Ctrl-C (UDS drop) is handled bridge-side by
+auto-resetting on disconnect, no CLI cleanup needed.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ class _DriveState:
     ``LEFT``/``RIGHT``, ``UP``/``DOWN``): pressing the opposing key while
     one is held cancels it (toggle to neutral) before a second press flips
     the sign. Jump is the exception — it is an edge-trigger pulse, see
-    :meth:`to_cmd`.
+    :attr:`jump_pending`.
     """
 
     move_y: float = 0.0
@@ -41,15 +47,25 @@ class _DriveState:
     pitch_rate: float = 0.0
     sprint_on: bool = False
     crouch_on: bool = False
+    # ``jump_pending`` is a single-shot signal: set by Space, drained by
+    # the next :meth:`to_cmd` call with ``consume_jump=True`` (the wire
+    # producer). Consume-once at the engine level lives on the bridge —
+    # it fires jump on exactly one tick — so this latch only exists to
+    # make sure subsequent emits do not re-send ``jump=True``.
     jump_pending: bool = False
 
-    def to_cmd(self, sprint_velocity: float) -> LocomotionCmd:
+    def to_cmd(
+        self, sprint_velocity: float, *, consume_jump: bool = False
+    ) -> LocomotionCmd:
         """Snapshot the current state into a :class:`LocomotionCmd`.
 
-        ``jump_pending`` is drained to ``False`` after every call so a
-        single Space press emits ``jump=True`` on exactly one tick — the
-        engine's ``ExternalInput`` has no edge detection and would treat
-        a held ``True`` as continuous re-jumping.
+        When ``consume_jump`` is ``False`` (default), this is a pure read:
+        no field on ``self`` is mutated, so callers that only inspect
+        state (e.g. tests, hypothetical status renderers) cannot
+        accidentally drain the jump pulse. The wire producer
+        (``_run_drive.commands``) passes ``consume_jump=True`` to drain
+        ``jump_pending`` atomically with the snapshot, keeping the drain
+        in exactly one place.
         """
         cmd = LocomotionCmd(
             move_x=self.move_x,
@@ -60,7 +76,8 @@ class _DriveState:
             velocity=sprint_velocity if self.sprint_on else 1.0,
             crouch=1.0 if self.crouch_on else 0.0,
         )
-        self.jump_pending = False
+        if consume_jump:
+            self.jump_pending = False
         return cmd
 
     def reset(self) -> None:
@@ -123,14 +140,20 @@ class _KeyParser:
         return [key] if key is not None else []
 
 
-def _apply_key(state: _DriveState, key: str, look_rate: float) -> bool:
+def _apply_key(
+    state: _DriveState,
+    key: str,
+    look_rate: float,
+    state_changed: asyncio.Event,
+) -> bool:
     """Apply ``key`` to ``state``; return ``True`` iff an exit was requested.
 
-    Sprint magnitude is intentionally not a parameter here — it is
-    applied at emit time by :meth:`_DriveState.to_cmd`, so the sprint
-    multiplier flows through a single chokepoint at command serialisation.
-    Pair exclusivity (held-w + tap-s lands on neutral, not -1) is
-    documented on :class:`_DriveState`.
+    ``state_changed`` is the wake signal driving the event-driven
+    :func:`commands` producer. Any recognised key that mutates ``state``
+    sets it so the next iteration emits exactly one fresh
+    :class:`LocomotionCmd`. Unrecognised keys and the ``q`` exit key do
+    not set it (the former never changed state; the latter triggers a
+    separate stop path).
     """
     match key:
         case "w":
@@ -150,7 +173,8 @@ def _apply_key(state: _DriveState, key: str, look_rate: float) -> bool:
         case "DOWN":
             state.pitch_rate = -look_rate if state.pitch_rate == 0.0 else 0.0
         case " ":
-            # One-tick pulse; drained by to_cmd() on the next emit.
+            # Bridge handles consume-once: emitting jump=True in one
+            # LocomotionCmd fires jump on exactly one engine tick.
             state.jump_pending = True
         case "t":
             state.sprint_on = not state.sprint_on
@@ -161,7 +185,9 @@ def _apply_key(state: _DriveState, key: str, look_rate: float) -> bool:
         case "q":
             return True
         case _:
-            pass
+            # Unrecognised: do not wake the producer.
+            return False
+    state_changed.set()
     return False
 
 
@@ -188,14 +214,6 @@ def _format_status(state: _DriveState, sprint_velocity: float) -> str:
 
 _BRIDGE_READY_TIMEOUT_S = 120.0
 _BRIDGE_READY_RETRY_INTERVAL_S = 2.0
-
-
-def _positive_float(raw: str) -> float:
-    """Reject zero/negative values that would cause an infinite tick period."""
-    value = float(raw)
-    if value <= 0.0:
-        raise argparse.ArgumentTypeError(f"must be positive, got {value}")
-    return value
 
 
 def register(
@@ -231,16 +249,10 @@ def register(
         description=(
             "Open a Locomotion stream and translate keyboard input "
             "(WASD + arrows + Space/t/c/x/q) into LocomotionCommand "
-            "messages emitted at a fixed cadence. Engine consumes and "
-            "nulls ExternalInput every update tick so held axes are "
-            "re-asserted by --rate Hz."
+            "messages. The mod-side bridge is a stateful repeater, so "
+            "this CLI emits exactly one command per state-altering key "
+            "press — no fixed tick rate is required."
         ),
-    )
-    drive_parser.add_argument(
-        "--rate",
-        type=_positive_float,
-        default=30.0,
-        help="Tick frequency in Hz (default: 30.0).",
     )
     drive_parser.add_argument(
         "--sprint",
@@ -254,12 +266,14 @@ def register(
     drive_parser.add_argument(
         "--look-rate",
         type=float,
-        default=30.0,
+        default=90.0,
         dest="look_rate",
         help=(
             "Yaw / pitch angular speed in deg/s while a look axis is held "
-            "(default: 30.0). The engine integrates Look as degrees per "
-            "second (see FirstPersonTargettingController in decompile)."
+            "(default: 90.0). Resonite's own MouseLookSpeed default is "
+            "100 deg/s and KeyboardLookSettings.HorizontalSpeed default is "
+            "20 deg/s; 90 deg/s lands close to the mouse feel which suits "
+            "interactive CLI driving better than the keyboard preset."
         ),
     )
     drive_parser.add_argument(
@@ -345,9 +359,7 @@ async def _wait_for_bridge_ready(
             await asyncio.sleep(interval_s)
 
 
-def _print_help(
-    stream: TextIO, *, sprint: float, look_rate: float, rate: float
-) -> None:
+def _print_help(stream: TextIO, *, sprint: float, look_rate: float) -> None:
     """Print the keymap to ``stream`` once at start of session.
 
     Sent to stderr so the human-facing summary does not pollute stdout
@@ -364,7 +376,7 @@ def _print_help(
         "  c : crouch toggle\n"
         "  x / 0 : stop all (reset every axis)\n"
         "  q : quit\n"
-        f"settings: rate={rate} Hz, look_rate={look_rate} deg/s, sprint={sprint}",
+        f"settings: look_rate={look_rate} deg/s, sprint={sprint}",
         file=stream,
     )
 
@@ -386,11 +398,10 @@ async def _run_drive(args: argparse.Namespace) -> int:
 
     from resoio.locomotion import LocomotionClient
 
-    rate: float = args.rate
     sprint: float = args.sprint
     look_rate: float = args.look_rate
 
-    _print_help(sys.stderr, sprint=sprint, look_rate=look_rate, rate=rate)
+    _print_help(sys.stderr, sprint=sprint, look_rate=look_rate)
 
     if not args.no_wait:
         try:
@@ -407,8 +418,9 @@ async def _run_drive(args: argparse.Namespace) -> int:
 
     state = _DriveState()
     stop_event = asyncio.Event()
-    # Engine consumes + nulls ExternalInput per tick: re-send held state every tick.
-    period = 1.0 / rate
+    # state_changed wakes the event-driven `commands()` producer. The
+    # bridge is a stateful repeater so we only emit on actual change.
+    state_changed = asyncio.Event()
     parser = _KeyParser()
     loop = asyncio.get_running_loop()
 
@@ -426,14 +438,17 @@ async def _run_drive(args: argparse.Namespace) -> int:
         except BlockingIOError:
             return
         if not data:
-            # EOF (pipe closed or Ctrl-D): exit cleanly so the summary
-            # still prints.
+            # EOF (pipe closed or Ctrl-D): wake the producer and trip
+            # the stop flag so the loop terminates after its current
+            # iteration rather than hanging on state_changed.wait().
             stop_event.set()
+            state_changed.set()
             return
         for byte in data:
             for key in parser.feed(byte):
-                if _apply_key(state, key, look_rate):
+                if _apply_key(state, key, look_rate, state_changed):
                     stop_event.set()
+                    state_changed.set()
                     return
 
     summary: DriveSummary
@@ -443,11 +458,21 @@ async def _run_drive(args: argparse.Namespace) -> int:
             async with LocomotionClient(args.socket) as client:
 
                 async def commands() -> AsyncIterator[LocomotionCmd]:
+                    # Initial neutral so the bridge sees the client and
+                    # latches a defined state immediately, instead of
+                    # waiting for the first keystroke. ``consume_jump=True``
+                    # is the single drain site for ``jump_pending``: the
+                    # bridge handles consume-once at the engine level, but
+                    # the next emit must not re-send ``jump=True``.
+                    yield state.to_cmd(sprint, consume_jump=True)
+                    _write_status(sys.stderr, state, sprint)
                     while not stop_event.is_set():
-                        cmd = state.to_cmd(sprint)
-                        yield cmd
+                        await state_changed.wait()
+                        state_changed.clear()
+                        if stop_event.is_set():
+                            break
+                        yield state.to_cmd(sprint, consume_jump=True)
                         _write_status(sys.stderr, state, sprint)
-                        await asyncio.sleep(period)
 
                 try:
                     summary = await client.drive(commands())
@@ -457,6 +482,19 @@ async def _run_drive(args: argparse.Namespace) -> int:
                         file=sys.stderr,
                     )
                     return 1
+
+                # Graceful exit (q / EOF) keeps the bridge state alive
+                # otherwise; explicit reset returns the avatar to
+                # neutral. Ctrl-C / UDS drop is handled bridge-side
+                # (auto-reset on disconnect) so no CLI hook is needed.
+                try:
+                    await client.reset()
+                except grpclib.exceptions.GRPCError as exc:
+                    # Reset failure is non-fatal — summary still prints.
+                    print(
+                        f"\nlocomotion reset failed: {exc.status.name} {exc.message}",
+                        file=sys.stderr,
+                    )
         finally:
             loop.remove_reader(stdin_fd)
             # Close the status line so subsequent stderr output starts on

@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Elements.Core;
 using FrooxEngine;
 using HarmonyLib;
@@ -10,27 +8,37 @@ using ResoniteIO.Core.Logging;
 namespace ResoniteIO.Bridge;
 
 /// <summary>
-/// <see cref="ILocomotionBridge"/> の FrooxEngine 実装。Python 側からの
-/// <see cref="LocomotionCommand"/> を engine の <c>ExternalInput</c> に流し込み、
-/// 既存の collision / smoothing / yaw clamp 経路を再利用する。
+/// <see cref="ILocomotionBridge"/> の FrooxEngine 実装 (stateful repeater)。
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>InputAction.ExternalInput</c> 書き込みは thread-safe な単純代入 (engine が
-/// 次の update tick で消費 + null reset する設計; <see cref="Analog3DAction"/>
-/// 参照) なので <c>World.RunSynchronously</c> 経由ではなく任意スレッドから
-/// 直接 set する。これにより 30Hz パケットを per-frame overhead 0 で適用できる。
+/// <see cref="SetState"/> / <see cref="Reset"/> は任意スレッドから内部 state を
+/// 更新するのみ。ExternalInput への書き込みは <see cref="TickStep"/> が
+/// <c>World.RunInUpdates(0, TickStep)</c> で self-rescheduling し engine update
+/// tick 上で行う (engine 1-frame 寿命 ExternalInput と client 送信レートの
+/// ギャップを吸収)。設計の詳細は
+/// <c>.claude/memory/feedback_locomotion_external_input.md</c>。
 /// </para>
 /// <para>
-/// engine の private field を <see cref="AccessTools.FieldRefAccess"/> で typed
-/// delegate 化して保持する。field 名は engine update で silent に壊れうるため、
-/// 初回 Drive で <see cref="LocomotionNotReadyException"/> になったら decompile を
-/// 再生成して field 名 diff を確認すること (リスク §1)。
+/// thread safety: 単一の <see cref="_lock"/> が <see cref="_latest"/> /
+/// <see cref="_jumpPending"/> / <see cref="_pendingResetFlags"/> /
+/// <see cref="_cachedWorld"/> / <see cref="_repeaterWorld"/> /
+/// <see cref="_repeaterRunning"/> をまとめて守る。contention は無く
+/// (任意スレッド SetState / Reset / WorldFocused / engine thread TickStep
+/// は事実上 serial)、deadlock-free reasoning を簡素化するため単一 lock。
+/// engine への dispatch (<c>RunInUpdates</c>) は lock 外で実行する。
+/// </para>
+/// <para>
+/// World 切替時は <see cref="OnWorldFocused"/> が新 world に re-bind し、旧
+/// repeater は次 <see cref="TickStep"/> 内で bind 不一致を検知して
+/// self-terminate する (二重 running は 1 tick で収束)。
 /// </para>
 /// </remarks>
 internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposable
 {
-    // typed delegate を 1 回だけ生成 (毎フレーム reflection を避ける)。
+    // typed delegate は static field で 1 度だけ解決 (TickStep が毎 tick 利用)。
+    // 引数順は (declaring type, field type)、逆順は silently wrong delegate を
+    // 返すため要 review (feedback_locomotion_external_input.md §3)。
     private static readonly AccessTools.FieldRef<
         SmoothLocomotionBase,
         SmoothLocomotionInputs
@@ -52,9 +60,16 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
 
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
-    private readonly object _cacheLock = new();
-    private volatile World? _cachedWorld;
-    private bool _disposed;
+
+    private readonly object _lock = new();
+    private LocomotionInput _latest;
+    private bool _jumpPending;
+    private LocomotionResetFlags _pendingResetFlags;
+    private World? _cachedWorld;
+    private World? _repeaterWorld;
+    private bool _repeaterRunning;
+
+    private volatile bool _disposed;
 
     public FrooxEngineLocomotionBridge(Engine engine, ILogSink log)
     {
@@ -63,132 +78,341 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
 
         _worldManager = engine.WorldManager;
         _log = log;
+        _latest = LocomotionInput.Neutral;
 
         // WorldFocused は新規 focus でしか発火しないため、subscribe 前の初期
         // snapshot で起動時の窓を埋める (FrooxEngineSessionBridge と同じ pattern)。
-        _cachedWorld = _worldManager.FocusedWorld;
+        var initial = _worldManager.FocusedWorld;
+        _cachedWorld = initial;
         _worldManager.WorldFocused += OnWorldFocused;
+
+        if (initial is not null && !initial.IsDisposed)
+        {
+            EnsureRepeaterStarted(initial);
+        }
     }
 
     /// <inheritdoc/>
-    public Task ApplyAsync(LocomotionCommand command, CancellationToken ct)
+    public void SetState(LocomotionInput command)
     {
         if (_disposed)
         {
-            throw new LocomotionNotReadyException("LocomotionBridge has been disposed.");
+            return;
         }
 
-        ct.ThrowIfCancellationRequested();
-
-        var (loco, fpc, head) = ResolveComponents();
-
-        // Teleport / GrabWorld 等 SmoothLocomotionBase 派生でない module は失敗扱い。
-        if (loco?.ActiveModule is not SmoothLocomotionBase smooth)
+        // WorldFocused より前に Drive が来るケース (mod 起動直後) を救うため、
+        // 同 lock 内で running 判定 + cachedWorld snapshot まで済ませる。
+        World? worldToStart;
+        lock (_lock)
         {
-            throw new LocomotionNotReadyException(
-                "Active LocomotionModule is not SmoothLocomotionBase."
-            );
-        }
-
-        var normalInput = _smoothNormalInputRef(smooth);
-        if (normalInput is null || normalInput.Move is null || normalInput.Jump is null)
-        {
-            throw new LocomotionNotReadyException(
-                "SmoothLocomotionInputs (_normalInput) is not initialized."
-            );
-        }
-
-        // velocity は literal な乗算スカラー。Python API (LocomotionCmd) 側で
-        // default=1.0 を保証する設計のため、ここでは proto.Velocity を素のまま掛ける
-        // (詳細は locomotion.proto)。
-        normalInput.Move.ExternalInput = new float3(
-            command.MoveX * command.Velocity,
-            0f,
-            command.MoveY * command.Velocity
-        );
-        if (command.Jump)
-        {
-            // DigitalAction.ExternalInput は OR-merge なので false は明示不要。
-            normalInput.Jump.ExternalInput = true;
-        }
-
-        // pitch は engine 側 `_verticalAngle -= y` で反転加算されるため符号反転。
-        // FirstPersonTargettingController が無い (VR mode 等) なら silent skip。
-        if (fpc is not null)
-        {
-            var screenInputs = _firstPersonInputsRef(fpc);
-            if (screenInputs?.Look is not null)
+            _latest = command;
+            // jump=true の rising edge だけが latch を立てる (false SetState は
+            // 既存 pending を取り消さない)。consume-once 化は TickStep 側で行う。
+            if (command.Jump)
             {
-                screenInputs.Look.ExternalInput = new float2(command.YawRate, -command.PitchRate);
+                _jumpPending = true;
             }
+
+            worldToStart = _repeaterRunning ? null : _cachedWorld;
         }
 
-        // 値 0 でも書く: engine の += 0 には副作用が無く、idle 戻し用途も兼ねる。
-        if (head is not null)
+        if (worldToStart is not null && !worldToStart.IsDisposed)
         {
-            var headInputs = _headInputsRef(head);
-            if (headInputs?.Crouch is not null)
-            {
-                headInputs.Crouch.ExternalInput = command.Crouch;
-            }
+            EnsureRepeaterStarted(worldToStart);
         }
-
-        return Task.CompletedTask;
     }
 
-    private (
-        LocomotionController? Loco,
-        FirstPersonTargettingController? Fpc,
-        HeadSimulator? Head
-    ) ResolveComponents()
+    /// <inheritdoc/>
+    public void Reset(LocomotionResetFlags flags)
     {
-        lock (_cacheLock)
+        if (_disposed || flags == LocomotionResetFlags.None)
         {
-            var world = _cachedWorld;
-            if (world is null || world.IsDisposed)
-            {
-                // WorldFocused 発火前の起動窓では現在値を直接採る。
-                world = _worldManager.FocusedWorld;
-                _cachedWorld = world;
-            }
+            return;
+        }
 
-            if (world is null || world.IsDisposed)
-            {
-                throw new LocomotionNotReadyException("FocusedWorld is not available.");
-            }
+        lock (_lock)
+        {
+            // pending として蓄積するだけ。実 reset 適用は TickStep (engine thread) で
+            // 行い、_latest と ExternalInput の書き込みを 1 スレッドに閉じる。
+            _pendingResetFlags |= flags;
+        }
+    }
 
-            var userRoot = world.LocalUser?.Root;
-            if (userRoot is null)
-            {
-                throw new LocomotionNotReadyException(
-                    "LocalUser.Root is not yet attached to the focused world."
-                );
-            }
+    /// <inheritdoc/>
+    public void NotifyDisconnect(LocomotionDisconnectReason reason)
+    {
+        if (_disposed)
+        {
+            return;
+        }
 
-            var loco = userRoot.Slot.GetComponentInChildren<LocomotionController>();
+        _log.LogDebug($"LocomotionBridge: Drive stream disconnect reason={reason}");
 
-            var screen = userRoot.ScreenController.Target;
-            // ActiveTargetting が他の controller のときは Slot 配下から fallback 探索。
-            var fpc = screen?.ActiveTargetting.Target as FirstPersonTargettingController;
-            if (fpc is null)
-            {
-                fpc = userRoot.Slot.GetComponentInChildren<FirstPersonTargettingController>();
-            }
-
-            // ScreenController 未初期化 → Head は null。ApplyAsync が silent skip する。
-            var head = screen?.Head.Target;
-
-            return (loco, fpc, head);
+        // 将来 reason ごとに別経路 (e.g. Errored で log level を上げる、Cancelled
+        // のみ全 reset ではなく Move/Look だけ reset など) を分岐させる余地を
+        // switch で確保。現状は graceful 維持 / それ以外で safety reset の 2 つ。
+        switch (reason)
+        {
+            case LocomotionDisconnectReason.Graceful:
+                // 正常終了は state 維持。
+                break;
+            case LocomotionDisconnectReason.Cancelled:
+            case LocomotionDisconnectReason.Errored:
+                Reset(LocomotionResetFlags.All);
+                break;
         }
     }
 
     private void OnWorldFocused(World world)
     {
-        lock (_cacheLock)
+        if (_disposed)
+        {
+            return;
+        }
+
+        bool restartNeeded = false;
+        lock (_lock)
         {
             _cachedWorld = world;
+            // 旧 world bind の repeater は次 TickStep 内で bind 不一致を検知して
+            // self-terminate するので、ここでは running を下ろして新 world で
+            // 再 bind する。
+            if (world is not null && !ReferenceEquals(_repeaterWorld, world))
+            {
+                _repeaterRunning = false;
+                _repeaterWorld = null;
+                restartNeeded = true;
+            }
         }
+
         _log.LogDebug($"LocomotionBridge: world refocused → {world?.Name ?? "<null>"}");
+
+        if (restartNeeded && world is not null && !world.IsDisposed)
+        {
+            EnsureRepeaterStarted(world);
+        }
+    }
+
+    /// <summary>指定 world に repeater を 1 回だけ schedule する (二重起動防止)。</summary>
+    private void EnsureRepeaterStarted(World world)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+
+        bool start = false;
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (!_repeaterRunning)
+            {
+                _repeaterWorld = world;
+                _repeaterRunning = true;
+                start = true;
+            }
+        }
+
+        if (start)
+        {
+            try
+            {
+                world.RunInUpdates(0, TickStep);
+            }
+            catch (Exception ex)
+            {
+                // running を戻して次回 SetState で再試行できるようにする。
+                _log.LogWarning($"LocomotionBridge: failed to schedule TickStep: {ex.Message}");
+                lock (_lock)
+                {
+                    _repeaterRunning = false;
+                    _repeaterWorld = null;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// engine update tick 上で 1 度実行され、末尾で次 tick へ自己 schedule する
+    /// repeater 本体。disposed / world dispose / bind 不一致で self-terminate。
+    /// </summary>
+    private void TickStep()
+    {
+        if (_disposed)
+        {
+            MarkRepeaterStopped(expected: null);
+            return;
+        }
+
+        // bind 確認 + pending reset 消化 + state snapshot を 1 lock 内で行う。
+        // OnWorldFocused が _repeaterWorld を差し替えていたら旧 world 用として
+        // self-terminate する (新 world 用は OnWorldFocused が別途 schedule 済み)。
+        World? boundWorld;
+        LocomotionInput snapshot;
+        bool jumpSnapshot;
+        lock (_lock)
+        {
+            boundWorld = _repeaterWorld;
+            if (boundWorld is null)
+            {
+                _repeaterRunning = false;
+                _repeaterWorld = null;
+                return;
+            }
+
+            var resetFlags = _pendingResetFlags;
+            _pendingResetFlags = LocomotionResetFlags.None;
+
+            _latest = _latest.ApplyReset(resetFlags);
+            if (resetFlags.HasFlag(LocomotionResetFlags.Jump))
+            {
+                _jumpPending = false;
+            }
+
+            snapshot = _latest;
+            jumpSnapshot = _jumpPending;
+            _jumpPending = false;
+        }
+
+        if (boundWorld.IsDisposed)
+        {
+            MarkRepeaterStopped(expected: boundWorld);
+            return;
+        }
+
+        // precondition NG なら今 tick の write を skip。jump pulse は次 tick で
+        // 再 apply できるよう latch を戻す (CLI から見た pulse 消失を防ぐ)。
+        var (loco, fpc, head) = ResolveComponents(boundWorld);
+        if (loco?.ActiveModule is SmoothLocomotionBase smooth)
+        {
+            ApplyToEngine(smooth, fpc, head, snapshot, jumpSnapshot);
+        }
+        else if (jumpSnapshot)
+        {
+            lock (_lock)
+            {
+                _jumpPending = true;
+            }
+        }
+
+        if (_disposed || boundWorld.IsDisposed)
+        {
+            MarkRepeaterStopped(expected: boundWorld);
+            return;
+        }
+
+        try
+        {
+            boundWorld.RunInUpdates(0, TickStep);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"LocomotionBridge: TickStep reschedule failed: {ex.Message}");
+            MarkRepeaterStopped(expected: boundWorld);
+        }
+    }
+
+    private static void ApplyToEngine(
+        SmoothLocomotionBase smooth,
+        FirstPersonTargettingController? fpc,
+        HeadSimulator? head,
+        LocomotionInput snapshot,
+        bool jumpSnapshot
+    )
+    {
+        var normalInput = _smoothNormalInputRef(smooth);
+        if (normalInput is null || normalInput.Move is null || normalInput.Jump is null)
+        {
+            return;
+        }
+
+        // Move は Slot-local。WASD binding と同じく LocalUserViewRotation を
+        // 経由して body-local に変換する (HFR / GlobalRotation を採らない理由・
+        // pitch sink が実害無しの根拠・定量検証は
+        // feedback_locomotion_external_input.md §8)。userRoot / World 未準備時は
+        // skip し repeater 次 tick で再評価。
+        var userRoot = smooth.Slot.ActiveUserRoot;
+        var world = userRoot?.World;
+        if (userRoot is not null && world is not null)
+        {
+            var viewRot = world.LocalUserViewRotation;
+            var worldForward = viewRot * float3.Forward;
+            var worldRight = viewRot * float3.Right;
+            var slotForward = userRoot.Slot.GlobalDirectionToLocal(in worldForward);
+            var slotRight = userRoot.Slot.GlobalDirectionToLocal(in worldRight);
+
+            var slotMove = snapshot.MoveX * slotRight + snapshot.MoveY * slotForward;
+            normalInput.Move.ExternalInput = slotMove * snapshot.Velocity;
+        }
+
+        if (jumpSnapshot)
+        {
+            // DigitalAction.ExternalInput は OR-merge なので false は明示不要。
+            normalInput.Jump.ExternalInput = true;
+        }
+
+        // pitch: Bridge で符号反転しない (decompile の `_verticalAngle -= y` だけ
+        // を見ると反転すべきに見えるが、実機で逆挙動が出るため。詳細は
+        // feedback_locomotion_external_input.md §2)。
+        if (fpc is not null)
+        {
+            var screenInputs = _firstPersonInputsRef(fpc);
+            if (screenInputs?.Look is not null)
+            {
+                screenInputs.Look.ExternalInput = new float2(snapshot.YawRate, snapshot.PitchRate);
+            }
+        }
+
+        // crouch は値 0 でも書く (engine の += 0 は副作用なし、idle 戻し兼用)。
+        if (head is not null)
+        {
+            var headInputs = _headInputsRef(head);
+            if (headInputs?.Crouch is not null)
+            {
+                headInputs.Crouch.ExternalInput = snapshot.Crouch;
+            }
+        }
+    }
+
+    private static (
+        LocomotionController? Loco,
+        FirstPersonTargettingController? Fpc,
+        HeadSimulator? Head
+    ) ResolveComponents(World world)
+    {
+        var userRoot = world.LocalUser?.Root;
+        if (userRoot is null)
+        {
+            return (null, null, null);
+        }
+
+        var loco = userRoot.Slot.GetComponentInChildren<LocomotionController>();
+
+        var screen = userRoot.ScreenController.Target;
+        // ActiveTargetting が他の controller のときは Slot 配下から fallback 探索。
+        var fpc = screen?.ActiveTargetting.Target as FirstPersonTargettingController;
+        if (fpc is null)
+        {
+            fpc = userRoot.Slot.GetComponentInChildren<FirstPersonTargettingController>();
+        }
+
+        // ScreenController 未初期化 → Head は null。ApplyToEngine が silent skip する。
+        var head = screen?.Head.Target;
+
+        return (loco, fpc, head);
+    }
+
+    private void MarkRepeaterStopped(World? expected)
+    {
+        lock (_lock)
+        {
+            if (expected is null || ReferenceEquals(_repeaterWorld, expected))
+            {
+                _repeaterRunning = false;
+                _repeaterWorld = null;
+            }
+        }
     }
 
     public void Dispose()
@@ -205,42 +429,17 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
         catch
         {
-            // engine 側が先に破棄されている場合の best-effort。
+            // engine 側が先に破棄されているケースの best-effort。
         }
 
-        // Best-effort idle 戻し: 残留 ExternalInput を 0 で上書きして停止を保証。
-        // engine が既に破棄済みなら例外を飲んで skip (ProcessExit 経路)。
-        try
+        // schedule 済みの TickStep は次回 head で _disposed=true を見て self-terminate。
+        lock (_lock)
         {
-            var (loco, fpc, head) = ResolveComponents();
-            if (loco?.ActiveModule is SmoothLocomotionBase smooth)
-            {
-                var normalInput = _smoothNormalInputRef(smooth);
-                if (normalInput?.Move is not null)
-                {
-                    normalInput.Move.ExternalInput = float3.Zero;
-                }
-            }
-            if (fpc is not null)
-            {
-                var screenInputs = _firstPersonInputsRef(fpc);
-                if (screenInputs?.Look is not null)
-                {
-                    screenInputs.Look.ExternalInput = float2.Zero;
-                }
-            }
-            if (head is not null)
-            {
-                var headInputs = _headInputsRef(head);
-                if (headInputs?.Crouch is not null)
-                {
-                    headInputs.Crouch.ExternalInput = 0f;
-                }
-            }
+            _repeaterRunning = false;
+            _repeaterWorld = null;
+            _cachedWorld = null;
         }
-        catch
-        {
-            // ProcessExit 経路では engine state が信頼できない。
-        }
+
+        _log.LogInfo("Locomotion Bridge disposed: state cleared, repeater stopped");
     }
 }

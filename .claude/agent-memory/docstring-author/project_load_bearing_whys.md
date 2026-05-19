@@ -13,8 +13,9 @@ but the WHY patterns recurred in v2); items 10–14 originate from
 Camera v2 (renderer process bridge, `mod/src/ResoniteIO.Renderer/` +
 `mod/src/ResoniteIO.RendererShared/` + `PushedFrameCameraBridge` +
 `RendererFrameInterprocessReceiver` + `FrooxEngineDisplayBridge`).
-Items 15–17 originate from Step 4 (Locomotion: proto velocity
-semantics + Bridge sign-flip + Service round-trip assertion).
+Items 15–18 originate from Step 4 (Locomotion: proto velocity
+semantics + Bridge sign-flip + Service round-trip assertion + Move
+body-local rotation via HeadFacingRotation).
 
 01. **Google.Protobuf early-resolution hazard**
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
@@ -108,12 +109,16 @@ semantics + Bridge sign-flip + Service round-trip assertion).
     Do NOT reintroduce a wire-side 0→1.0 fallback in the Bridge —
     it was removed at `d195212` precisely to keep proto value and
     applied multiplier in 1:1 correspondence.
-16. **Pitch sign-flip responsibility on Locomotion Bridge**: the
-    inline comment "pitch は engine 側 `_verticalAngle -= y` で反転
-    加算されるため符号反転" right above `screenInputs.Look.ExternalInput = new float2(command.YawRate, -command.PitchRate)` is the only
-    surface that documents *where* the sign flip happens (Python API
-    is "up positive", engine wants the opposite). Keep it on the
-    Bridge — proto only states the API convention.
+16. **Pitch sign on Locomotion Bridge: NO flip (2026-05-19)**. Earlier
+    decompile reading of `_verticalAngle -= y` led to a Bridge-side
+    `-PitchRate`, but live test showed the inverted behaviour and the
+    flip was removed. The inline comment above
+    `screenInputs.Look.ExternalInput = new float2(snapshot.YawRate, snapshot.PitchRate)`
+    in `FrooxEngineLocomotionBridge.ApplyToEngine` documents the
+    decompile-vs-runtime mismatch — keep it. If a future refactor
+    re-introduces `-PitchRate` "to match decompile", that is a
+    regression of this fix. Proto contract (positive = look up) is
+    unchanged.
 17. **`Drive` test proto3-default round-trip assertion**
     (`mod/tests/ResoniteIO.Core.Tests/Locomotion/LocomotionRoundTripTests.cs`,
     "Service は proto.Velocity を素のまま POCO に詰めるだけ" comment):
@@ -122,6 +127,20 @@ semantics + Bridge sign-flip + Service round-trip assertion).
     default lives in Python `LocomotionCmd`. Without this comment
     the assertion looks contradictory to the proto field doc which
     states the unit value is 1.0.
+18. **Move body-local rotation via `HeadFacingRotation`** in
+    `FrooxEngineLocomotionBridge.ApplyToEngine`: `Move.ExternalInput`
+    is interpreted in `UserRoot.Slot` coordinates, not world. A naive
+    world-axis write (`new float3(MoveX, 0, MoveY)`) silently produces
+    world-fixed locomotion that ignores head yaw — the e2e RPC still
+    completes, but the avatar walks in the wrong direction (2026-05-19
+    bug). The block computing `headRot * float3.Forward` /
+    `Slot.GlobalDirectionToLocal` and the comment above it pointing at
+    `feedback_locomotion_external_input.md` §8 are load-bearing — they
+    document why the `HeadFacingRotation` indirection exists and the
+    quantitative 87.1° verification that locked it in. Removing the
+    rotation, or switching to `LocalUserViewRotation` without
+    accounting for pitch sink, regresses the fix. Proto contract is
+    unchanged (MoveX = Strafe / Right axis, MoveY = Forward axis).
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel

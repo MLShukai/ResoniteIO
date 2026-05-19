@@ -4,27 +4,46 @@ namespace ResoniteIO.Core.Bridge;
 /// Mod 側 (FrooxEngine) が実装し DI で注入する Locomotion 制御抽象。
 /// </summary>
 /// <remarks>
-/// 本契約は ExternalInput を書き込むだけの "1 frame ぶんの指令" を表す。
-/// engine 側 `Analog3DAction.ExternalInput` は update tick で消費 + null reset
-/// されるので、入力を持続させたい場合は Service 層が同じ command を 30Hz 程度
-/// で連続発行する。<see cref="ApplyAsync"/> は任意スレッドから呼ばれる
-/// (engine thread への dispatch が必要なら実装側で隠蔽する)。
+/// <para>
+/// stateful repeater: Bridge は最新コマンドを保持し engine update tick ごとに
+/// ExternalInput へ再注入する。Service は変化があった command のみ
+/// <see cref="SetState"/> へ流せばよい。
+/// </para>
+/// <para>
+/// 本契約は **任意スレッドから呼ばれる**。engine thread への dispatch は実装側
+/// で隠蔽する。precondition 失敗 (LocalUser 未生成、active module が
+/// SmoothLocomotion でない等) は **例外を投げず** Bridge 内部で次 tick の再
+/// 評価に委ねる。Service 経由で client に通知する経路は存在しない (consumer
+/// に見せても retry 戦略にならないため)。
+/// </para>
+/// <para>
+/// 各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c> が
+/// 一次正典 (velocity 単位元 1.0、jump consume-once pulse、pitch 符号など)。
+/// </para>
 /// </remarks>
 public interface ILocomotionBridge
 {
-    /// <exception cref="LocomotionNotReadyException">
-    /// engine がまだ locomotion を制御できる状態に無い (LocalUser 未生成、active
-    /// module が SmoothLocomotion ではない、world 切替中等)。
-    /// </exception>
-    Task ApplyAsync(LocomotionCommand command, CancellationToken ct);
+    /// <summary>最新コマンドを Bridge state に latest-wins で書き込む。</summary>
+    void SetState(LocomotionInput command);
+
+    /// <summary>
+    /// 指定 field を中立値に戻す。<see cref="LocomotionResetFlags.None"/> は
+    /// no-op (Service 層で <see cref="LocomotionResetFlags.All"/> へ展開する
+    /// 規約は <c>LocomotionResetRequest</c> 参照)。
+    /// </summary>
+    void Reset(LocomotionResetFlags flags);
+
+    /// <summary>
+    /// gRPC Drive stream の終了種別を通知する。
+    /// <see cref="LocomotionDisconnectReason.Graceful"/> は state 維持、
+    /// それ以外は Bridge 側で全 state を safety reset する。
+    /// </summary>
+    void NotifyDisconnect(LocomotionDisconnectReason reason);
 }
 
 /// <summary>proto 生成型 <c>V1.LocomotionCommand</c> から独立した Core 層 POCO。</summary>
-/// <remarks>
-/// 各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c> を参照
-/// (velocity の単位元 1.0 / pitch の符号反転責務もそこに定義)。
-/// </remarks>
-public readonly record struct LocomotionCommand(
+/// <remarks>各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c>。</remarks>
+public readonly record struct LocomotionInput(
     float MoveX,
     float MoveY,
     float YawRate,
@@ -33,18 +52,78 @@ public readonly record struct LocomotionCommand(
     float Velocity,
     float Crouch,
     long UnixNanos
-);
+)
+{
+    /// <summary>
+    /// 全 field 中立値の input (velocity=1.0、それ以外は 0/false)。Bridge
+    /// 初期化や全 reset 後の派生 state として使う。<c>UnixNanos = 0</c>。
+    /// </summary>
+    public static LocomotionInput Neutral { get; } =
+        new(
+            MoveX: 0f,
+            MoveY: 0f,
+            YawRate: 0f,
+            PitchRate: 0f,
+            Jump: false,
+            Velocity: 1.0f,
+            Crouch: 0f,
+            UnixNanos: 0L
+        );
+
+    /// <summary>
+    /// 指定 <see cref="LocomotionResetFlags"/> に従って中立値を反映した派生
+    /// input を返す。<see cref="LocomotionResetFlags.None"/> は元の input を
+    /// そのまま返す。Move reset は velocity=1.0 への復帰も含む (proto velocity
+    /// 単位元 1.0 の規約)。
+    /// </summary>
+    public LocomotionInput ApplyReset(LocomotionResetFlags flags)
+    {
+        var state = this;
+        if (flags.HasFlag(LocomotionResetFlags.Move))
+        {
+            state = state with { MoveX = 0f, MoveY = 0f, Velocity = 1.0f };
+        }
+        if (flags.HasFlag(LocomotionResetFlags.Look))
+        {
+            state = state with { YawRate = 0f, PitchRate = 0f };
+        }
+        if (flags.HasFlag(LocomotionResetFlags.Crouch))
+        {
+            state = state with { Crouch = 0f };
+        }
+        if (flags.HasFlag(LocomotionResetFlags.Jump))
+        {
+            state = state with { Jump = false };
+        }
+        return state;
+    }
+}
 
 /// <summary>
-/// Bridge が一時的に locomotion を制御できない状態。Service 層が
-/// <c>Status.FailedPrecondition</c> に翻訳するので Client は時間を置いて再 Drive で
-/// retry できる。
+/// <see cref="ILocomotionBridge.Reset"/> で reset する field を指定する bitmask。
 /// </summary>
-public sealed class LocomotionNotReadyException : Exception
+[Flags]
+public enum LocomotionResetFlags
 {
-    public LocomotionNotReadyException(string message)
-        : base(message) { }
+    None = 0,
+    Move = 1 << 0,
+    Look = 1 << 1,
+    Crouch = 1 << 2,
+    Jump = 1 << 3,
+    All = Move | Look | Crouch | Jump,
+}
 
-    public LocomotionNotReadyException(string message, Exception innerException)
-        : base(message, innerException) { }
+/// <summary>
+/// <see cref="ILocomotionBridge.NotifyDisconnect"/> に渡される stream 終了種別。
+/// </summary>
+public enum LocomotionDisconnectReason
+{
+    /// <summary>client が <c>CompleteAsync</c> で stream を正常終了。state 維持。</summary>
+    Graceful,
+
+    /// <summary>UDS 切断 / client cancel / deadline 超過。全 state を reset。</summary>
+    Cancelled,
+
+    /// <summary>Bridge 内部 / Service 内部の予期せぬ例外。全 state を reset。</summary>
+    Errored,
 }
