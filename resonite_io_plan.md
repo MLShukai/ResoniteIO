@@ -337,15 +337,16 @@ ______________________________________________________________________
 - [x] **Python** (`resoio.camera`): `CameraClient` で server-stream を受信、numpy ndarray として yield。`tests/e2e/camera_stream.py` で MP4 dump (`e2e_artifacts/`、30fps) まで実施
 - [x] **AspNetCore shared framework deploy 問題の解決**: §5 決定事項参照 (`CopyAspNetCoreSharedFrameworkRuntime` Target で SDK shared framework から DLL コピー)
 
-### Step 4: Locomotion モジュール — **次に着手**
+### Step 4: Locomotion モジュール — **完了**
 
-- **proto**: `proto/resonite_io/v1/locomotion.proto` で `Locomotion` service (client-stream Pose 更新)。message は `PoseSample` 等のドメイン名で命名 (Step 3 規約を踏襲)
-- **Core**: `LocomotionService` (client-streaming Pose) と `ILocomotionBridge` 定義
-- **Mod**: `FrooxEngineLocomotionBridge` で `LocalUser.Root` の Position / Rotation を engine update tick 上で設定 (Bridge engine-thread dispatch パターンを再利用)
-- **Python**: `LocomotionClient` から制御して動くことを確認
-- **付随**: 必要なら `Engine.OnShutdown` 系 hook の調査 (現状先送り中)
+- [x] **proto** (`proto/resonite_io/v1/locomotion.proto`): `Locomotion.Drive` (client-streaming) RPC + `LocomotionCommand` (`move_x` / `move_y` / `yaw_rate` / `pitch_rate` / `jump` / `sprint` / `crouch` / `sprint_multiplier` / `unix_nanos` の 9 field) + `LocomotionDriveSummary`。message 命名規約 (Step 3 で確立した RPC standard-name except) を踏襲
+- [x] **Core** (`ResoniteIO.Core.Locomotion`): `LocomotionService` (client-streaming) と `ILocomotionBridge` を実装。`SessionHost` に optional DI で mount (Camera と同形、Bridge `null` のとき `Status.Unavailable`)、`LocomotionNotReadyException` を `FailedPrecondition` に翻訳。Fake bridge + 3 ケース (正常 + `FailedPrecondition` + `Unavailable`) のラウンドトリップ xunit 済
+- [x] **Mod** (`ResoniteIO.Bridge`): `FrooxEngineLocomotionBridge` で `HarmonyLib.AccessTools.FieldRefAccess` 経由に `SmoothLocomotionBase._normalInput` / `TargettingControllerBase<ScreenCameraInputs>._inputs` / `HeadSimulator._inputs` の private field を typed delegate で 1 度だけ解決し、`ExternalInput` に毎フレーム書き込む方式。`WorldFocused` で component cache を invalidate。engine update tick への dispatch は不要 (ExternalInput 書き込み自体は任意スレッド安全、消費は engine 側 `Analog3DAction.Evaluate` 等が tick 上で実施)
+- [x] **Python** (`resoio.locomotion`): `LocomotionClient` を async ctx mgr として実装、`drive(commands: AsyncIterable[LocomotionCmd]) -> DriveSummary`。`LocomotionCmd` は frozen / slots dataclass、`unix_nanos` は `time.time_ns()` を自動付与。in-process server で 3 ケースの単体テスト済
+- [x] **e2e** (`python/tests/e2e/locomotion.py`): Camera 受信と Locomotion 送信を `asyncio.gather` で並行起動、18 秒 8 phase シナリオ (前進 → スプリント前進 → 右ストラフ → 停止 → 右回転 → 見上げ → ジャンプ → クラウチ) を 30Hz で送信して mp4 dump。実機 E1 (2026-05-19) で **569 frames / 1.4 MB / 1280×720 mpeg4** の動画生成を確認
+- [x] **発見事項**: (a) engine が `_verticalAngle -= y` で pitch を反転加算するため Bridge 側で `external_y = -pitch_rate` の符号反転を入れる、(b) `ExternalInput` は engine update tick で消費 + null reset されるため入力保持には 30Hz の連続発行が必要、(c) Camera bridge が現在 `CameraStreamRequest` の width/height を無視して renderer ネイティブ解像度を返す既存 bug を発見 — locomotion e2e の `VideoWriter` を初フレーム dimension に追従する lazy 初期化で吸収済み (`camera_stream.py` 側は未対応、§7 継続観察に追加)
 
-### Step 5: Manipulation モジュール
+### Step 5: Manipulation モジュール — **次に着手**
 
 - **Core**: `ManipulationService` (Hand Pose / Grab / Release) と `IManipulationBridge` 定義
 - **Mod**: `FrooxEngineManipulationBridge` で Hand Slot Pose 制御 + `Grabber` の Pick/Release
@@ -364,11 +365,13 @@ ______________________________________________________________________
 
 ## 7. リスク・未解決事項
 
-### 解決済み (Step 2-3 で対処)
+### 解決済み (Step 2-4 で対処)
 
 - ✅ **Renderite IPC のドキュメント不足**: Camera readback については `decompiled/` を読みながら Step 3 で実装完了。`Camera.RenderToBitmap` 経由で安全に readback できることが確認できた。BGRA8 → RGBA8 の色順問題に時間を取られた (commit `5129bb6`)。他モダリティで Renderite IPC 知見が必要になったら同じく decompile を読みつつ進める。
 - ✅ **Kestrel が引き連れる依存と Resonite 同梱 DLL の version skew**: `Grpc.AspNetCore.Server` の transitive 群 (`Microsoft.AspNetCore.*` / `Microsoft.Extensions.*` / `System.IO.Pipelines`) は §5 の "AspNetCore shared framework の同梱" 方針で解決。Resonite 同梱の **旧 Google.Protobuf** との衝突は `PluginAssemblyResolver` で plugin folder を優先解決させる方針で解決 (`mod/src/ResoniteIO/Loading/`)。Plugin.Load 内で resolver attach 以前に Core 型を触ってはならないという制約が残る (詳細: `.claude/agent-memory/docstring-author/project_load_bearing_whys.md`)。
 - ✅ **UDS socket の host ↔ container 共有**: pressure-vessel が `/run/user/<UID>` を sandbox tmpfs で覆うため、**`$HOME/.resonite-io/` ベースに変更**して解決 (§5 決定事項参照)。stale socket は SessionHost が bind 直前に `File.Delete` で除去する `unlink` 前提運用で十分機能している。
+- ✅ **`AccessTools.FieldRefAccess` 経由の private field 解決**: Step 4 で `SmoothLocomotionBase._normalInput` / `TargettingControllerBase<ScreenCameraInputs>._inputs` / `HeadSimulator._inputs` を typed delegate で取得し ExternalInput を書き込む経路を実機検証。`AccessTools.FieldRefAccess<TDeclaring, TField>("name")` の generic 引数順 (declaring → field type) を含め、E1 動画 569 frames で機能を確認済。**緩和策**: field 名は engine update で silent に壊れる可能性があるため manual-test に「初回 `received_count > 0`」を pass 判定に入れ、Resonite update を踏んだら decompile 再生成 + field 名 diff 確認を行う。
+- ✅ **engine update tick が `ExternalInput` を 1 frame で消費するセマンティクス**: `Analog3DAction.Evaluate` ([decompiled/FrooxEngine/FrooxEngine/Analog3DAction.cs](decompiled/FrooxEngine/FrooxEngine/Analog3DAction.cs)) が `_intermediateResult += ExternalInput.Value` 直後に `ExternalInput = null` する設計を実機確認。入力を維持したい場合は Python 側から **30Hz 程度で連続発行** する必要があり、stream を止めれば即 idle に戻る (送信責務 = active input、無送信 = neutral、というセマンティクス)。Bridge への書き込み自体は任意スレッドから安全 (engine thread dispatch 不要)。
 
 ### 継続観察
 
@@ -377,7 +380,8 @@ ______________________________________________________________________
 - **マルチエージェント**: スコープ外だが、将来は 1 Resonite インスタンス = 1 エージェントのコスト問題が出てくる。
 - **Bridge インターフェイスの粒度**: モダリティが増えるにつれ IF が肥大化する懸念。各モダリティで独立 IF (`ISessionBridge`, `ICameraBridge`, …) として分割する方針 (§2 採用方針)。Step 3 完了時点で 2 IF (Session / Camera) のため肥大化はまだ起きていない。
 - **`BasePlugin` に Unload 相当が無い**: BepInEx 6 の `BasePlugin` には mod 終了時 hook が無い。Step 2 で `AppDomain.ProcessExit` 経由の best-effort 停止を採用し、Step 3 でも `Engine.OnShutdown` 経路の調査は先送り継続中 (Camera 実装スケジュール優先、`FrooxEngineCameraBridge` も engine shutdown 後の `RunSynchronously` 例外を飲んで best-effort 設計にしている)。Step 4 以降で graceful shutdown 不整合に当たったら decompile 調査を再開する (`.claude/agent-memory/spec-driven-implementer/feedback_engine_onshutdown_deferred.md`)。
-- **Bridge での engine-thread dispatch コスト**: Step 3 で `World.RunSynchronously` + `TaskCompletionSource` パターンを確立したが、毎フレームの component graph 変更が必要なモダリティ (Locomotion で `Root` を毎 tick 動かす等) では engine tick 上のコストが線形に積み上がる。Step 4 実機検証で profiling し、必要なら一括化 (`UpdateOrder` 経由の per-tick callback 等) を検討する。
+- **Bridge での engine-thread dispatch コスト**: Step 3 で `World.RunSynchronously` + `TaskCompletionSource` パターンを確立した。Step 4 (Locomotion) は ExternalInput 書き込みが任意スレッド安全だったため engine thread dispatch 不要で済んだが、Manipulation 以降で毎フレーム component graph 変更が必要なら一括化 (`UpdateOrder` 経由の per-tick callback 等) を検討する。
+- **Camera bridge が `CameraStreamRequest.width/height` を無視している既存 bug**: Step 4 locomotion e2e の調査中に発覚。client が要求した解像度に関係なく renderer ネイティブ解像度 (E1 実測 1280×720) のフレームが返ってくる。locomotion 側は `VideoWriter` を初フレーム dimension に追従する lazy 初期化で吸収済みだが、`camera_stream.py` 側は要求解像度で `VideoWriter` を先に作る設計のため 257-byte の空 mp4 で false-pass する可能性がある (実害は出ていない)。Step 5 着手前に Camera 側の挙動修正 (要求解像度に追従させるか、proto から width/height を除いて renderer-native のみとする) を別 PR で着手する。
 
 ______________________________________________________________________
 
