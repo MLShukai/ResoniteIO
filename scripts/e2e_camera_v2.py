@@ -4,7 +4,7 @@
 Usage:
     python scripts/e2e_camera_v2.py [--frames N] [--duration SEC]
                                     [--output-dir DIR] [--skip-camera]
-                                    [--monitor 1] [--bbox X,Y,W,H]
+                                    [--bbox X,Y,W,H]
                                     [--socket /uds/path]
 
 Report は ``output-dir/report.json`` に dump する。MSE 計算は image decode 依存
@@ -33,7 +33,6 @@ DEFAULT_DURATION_SEC = 5.0
 
 def _take_screenshot(
     output: str,
-    monitor: int,
     bbox: str | None,
     socket_path: str | None,
 ) -> dict[str, Any]:
@@ -43,7 +42,7 @@ def _take_screenshot(
     ]
     if socket_path is not None:
         cmd.extend(["--socket", socket_path])
-    cmd.extend(["screenshot", "--output", output, "--monitor", str(monitor)])
+    cmd.extend(["screenshot", "--output", output])
     if bbox is not None:
         cmd.extend(["--bbox", bbox])
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -124,15 +123,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="CameraClient を呼ばず screenshot のみ撮る (Camera 未実装時の dry run)",
     )
     parser.add_argument(
-        "--monitor",
-        type=int,
-        default=1,
-        help="screenshot の monitor index (default=1=primary)",
-    )
-    parser.add_argument(
         "--bbox",
         default=None,
-        help="screenshot bbox 'x,y,w,h'。未指定なら full monitor",
+        help="screenshot bbox 'x,y,w,h'。未指定なら full desktop",
     )
     parser.add_argument(
         "--socket",
@@ -155,9 +148,7 @@ def run(args: argparse.Namespace) -> int:
     screenshot_abs = output_dir_abs / "screenshot.png"
     errors: list[str] = []
 
-    screenshot_result = _take_screenshot(
-        str(screenshot_abs), args.monitor, args.bbox, args.socket
-    )
+    screenshot_result = _take_screenshot(str(screenshot_abs), args.bbox, args.socket)
     screenshot_ok = screenshot_result["exit_code"] == 0
     if not screenshot_ok:
         detail = (

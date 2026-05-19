@@ -308,8 +308,8 @@ container-clean:
 # host_agent.py 内で行う (DISPLAY / WAYLAND_DISPLAY / GaleBin が必要)。
 # **GUI session の端末から実行** (gale は --no-gui でもディスプレイを要求)。
 #
-# screenshot action のために host 側専用 `mss` を `scripts/.venv/` (uv venv 管理)
-# に入れる。venv は冪等に確保 + 同期し、最新 deps で agent を起動する。
+# screenshot action のために host 側専用 `pyscreenshot` を `scripts/.venv/` (uv venv
+# 管理) に入れる。venv は冪等に確保 + 同期し、最新 deps で agent を起動する。
 # scripts/.venv は host 専用 (container 側からは使わない、gitignore 済み)。
 host-agent:
     @test -x scripts/.venv/bin/python || uv venv scripts/.venv --python 3.12
@@ -333,9 +333,8 @@ resonite-status:
 
 # host_agent に screenshot RPC を投げて PNG を repo-relative path に書き出す。
 # 例: `just resonite-screenshot output=tmp/e2e/desktop.png`
-# `just resonite-screenshot output=tmp/e2e/desktop.png monitor=0`
-resonite-screenshot output monitor='1':
-    python3 scripts/resonite_cli.py screenshot --output {{ output }} --monitor {{ monitor }}
+resonite-screenshot output:
+    python3 scripts/resonite_cli.py screenshot --output {{ output }}
 
 # Camera v2 の e2e を回す。Resonite が起動済み + host-agent が稼働中前提。
 # Camera 未実装段階では `--skip-camera` で screenshot のみ撮る dry run が可能。

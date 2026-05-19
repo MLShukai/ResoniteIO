@@ -39,12 +39,8 @@ def _patch_screenshot(
     """``_take_screenshot`` を mock して、呼び出し引数を捕捉する。"""
     captured: dict[str, Any] = {}
 
-    def _fake(
-        output: str, monitor: int, bbox: str | None, socket_path: str | None
-    ) -> dict[str, Any]:
-        captured.update(
-            output=output, monitor=monitor, bbox=bbox, socket_path=socket_path
-        )
+    def _fake(output: str, bbox: str | None, socket_path: str | None) -> dict[str, Any]:
+        captured.update(output=output, bbox=bbox, socket_path=socket_path)
         if side_effect is not None:
             raise side_effect
         return {"exit_code": exit_code, "stdout": stdout, "stderr": stderr}
@@ -79,7 +75,6 @@ def test_skip_camera_dry_run_pass(
     assert report["errors"] == []
     # resonite_cli には絶対 path で渡す
     assert captured["output"] == str(expected_screenshot)
-    assert captured["monitor"] == 1
     assert captured["bbox"] is None
 
 
@@ -121,7 +116,7 @@ def test_default_output_dir_is_under_tmp_e2e(
     assert any(d.name.startswith("e2e-camera-v2-") for d in subdirs)
 
 
-def test_bbox_and_monitor_flow_through_to_screenshot(
+def test_bbox_flows_through_to_screenshot(
     repo_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured = _patch_screenshot(monkeypatch, exit_code=0)
@@ -130,8 +125,6 @@ def test_bbox_and_monitor_flow_through_to_screenshot(
             "--skip-camera",
             "--output-dir",
             "tmp/e2e-run/cli-args",
-            "--monitor",
-            "2",
             "--bbox",
             "10,20,640,480",
             "--socket",
@@ -140,7 +133,6 @@ def test_bbox_and_monitor_flow_through_to_screenshot(
     )
     rc = e2e_camera_v2.run(args)
     assert rc == 0
-    assert captured["monitor"] == 2
     assert captured["bbox"] == "10,20,640,480"
     assert captured["socket_path"] == "/tmp/host-agent.sock"
 

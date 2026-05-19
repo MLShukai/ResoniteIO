@@ -171,7 +171,7 @@ def _handle_screenshot_response(response: dict[str, Any], output: Path) -> int:
     """Screenshot の ok response から PNG bytes を取り出して ``output`` に書く。
 
     成功時の stdout は e2e harness が parse する summary JSON のみ (``{path,
-    width, height, monitor, payload_bytes}``; PNG bytes は含めない)。
+    width, height, payload_bytes}``; PNG bytes は含めない)。
     """
     if not response.get("ok"):
         return _print_response(response)
@@ -213,7 +213,6 @@ def _handle_screenshot_response(response: dict[str, Any], output: Path) -> int:
         "path": str(output),
         "width": data.get("width"),
         "height": data.get("height"),
-        "monitor": data.get("monitor"),
         "payload_bytes": len(png_bytes),
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -252,15 +251,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="container 側の出力 path (絶対 / 相対どちらでも可、`.png` 推奨)",
     )
     screenshot.add_argument(
-        "--monitor",
-        type=int,
-        default=1,
-        help="mss の monitor index (0=合成、1=primary、default=1)",
-    )
-    screenshot.add_argument(
         "--bbox",
         default=None,
-        help="部分領域を 'x,y,w,h' (整数) で指定。未指定なら full monitor",
+        help="部分領域を 'x,y,w,h' (整数) で指定。未指定なら full desktop",
     )
 
     return parser.parse_args(argv)
@@ -282,7 +275,6 @@ def main(argv: list[str] | None = None) -> int:
         screenshot_output = _resolve_screenshot_output(args.output)
         request = {
             "action": "screenshot",
-            "monitor": int(args.monitor),
             "bbox": _parse_bbox_arg(args.bbox),
         }
     else:

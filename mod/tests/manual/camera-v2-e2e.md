@@ -56,7 +56,7 @@ just resonite-stop                               # 後始末
 
 - **`report.json`**: 集計結果 (下記参照)
 - **`screenshot.png`**: host primary monitor の full desktop capture (約 1 MB)。
-  `monitor` / `bbox` 引数で別ディスプレイ / 切り出しも可能
+  `bbox` 引数で部分領域の切り出しも可能
 - **`frame_sample.bin`**: 最終 `CameraFrame` の raw RGBA を
   `[u32 LE width][u32 LE height][rgba bytes...]` 形式で dump
 
