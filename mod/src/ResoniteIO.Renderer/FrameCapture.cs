@@ -16,13 +16,6 @@ namespace ResoniteIO.Renderer;
 /// が screen 直描画しているので max depth を選ぶ (camera-v2-constraints §3.4)。
 /// <see cref="AsyncGPUReadback"/> は drop-on-busy (<see cref="_inFlight"/>) で
 /// readback queue が膨れるのを防ぎ、取り切れない capture は黙って捨てる。
-/// <para>
-/// 毎 tick で camera の <c>pixelWidth/pixelHeight</c> と cache 済み RT サイズの
-/// 一致を確認して、ズレていれば teardown → 再 attach する。<c>display.apply</c>
-/// で window が resize されても cached RT への <c>Blit</c> は新サイズに resample
-/// するだけで RT 自身は古いままなので、<see cref="FrameHeader"/> の WxH が古い値
-/// で固定されてしまう (= e2e で frame dimensions が apply に追従しない)。
-/// </para>
 /// </remarks>
 internal sealed class FrameCapture : IDisposable
 {
@@ -42,11 +35,7 @@ internal sealed class FrameCapture : IDisposable
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <summary>
-    /// 毎 Update tick で呼ぶ。pending な readback があれば drop-on-busy で skip。
-    /// resize-on-mismatch の検出もここからの <see cref="EnsureCommandBufferAttached"/>
-    /// 経由で 1 tick に 1 回走る。
-    /// </summary>
+    /// <summary>毎 Update tick で呼ぶ。pending な readback があれば drop-on-busy で skip。</summary>
     public void TryCapture()
     {
         if (_disposed)
@@ -58,7 +47,6 @@ internal sealed class FrameCapture : IDisposable
 
         if (_captureRT == null)
         {
-            // attach 対象 camera が未生成 (engine 起動直後など)。次 tick で再試行。
             return;
         }
 
@@ -68,14 +56,12 @@ internal sealed class FrameCapture : IDisposable
         }
 
         _inFlight = true;
-        // Request 後に resize → DetachAndReleaseCapture が走っても、callback は
-        // 旧 RT への参照を握ったまま完走する (旧 RT は GC まで生存)。新 RT が
-        // 既に attach 済みかどうかの判定は OnReadback 側に委ねる。
+        // Request 後に resize → DetachAndReleaseCapture が走っても callback は旧 RT
+        // 参照を握ったまま完走する。新 RT 判定は OnReadback 側に委ねる。
         AsyncGPUReadback.Request(_captureRT, 0, TextureFormat.RGBA32, OnReadback);
     }
 
     /// <summary>
-    /// 「同じ camera に対して同じ pixel size」で attach が生きているかを判定する。
     /// Unity の <c>UnityEngine.Object == null</c> overload は destroy 済み object にも
     /// true を返すので、camera destroy 経路もここで自然に false へ落ちて再 attach に流れる。
     /// </summary>
@@ -88,10 +74,10 @@ internal sealed class FrameCapture : IDisposable
     }
 
     /// <summary>
-    /// max depth + 直描画 (<c>targetTexture == null</c>) の Camera に
-    /// <see cref="CameraEvent.AfterEverything"/> で CommandBuffer を attach する。
-    /// 既に attach 済みでも camera の pixel size が変わっていれば teardown して再 attach
-    /// (= <c>display.apply</c> による window resize 追従)。
+    /// pixel size mismatch があれば teardown して再 attach することで
+    /// <c>display.apply</c> による window resize に追従する。
+    /// <c>_hookedCamera</c> 自体の入れ替え検出は今回 scope 外
+    /// (max-depth camera は engine の lifetime に紐づくため通常起こらない)。
     /// </summary>
     private void EnsureCommandBufferAttached()
     {
@@ -100,8 +86,6 @@ internal sealed class FrameCapture : IDisposable
             return;
         }
 
-        // 旧サイズは resize log の "old=WxH new=WxH" 用に teardown 前に拾う
-        // (teardown 後は _captureRT == null になって読めない)。
         int? oldWidth = null;
         int? oldHeight = null;
         if (_captureRT != null)
@@ -158,9 +142,8 @@ internal sealed class FrameCapture : IDisposable
         _commandBuffer = cb;
         _hookedCamera = target;
 
-        // 初回 attach と resize 起因 reattach は別行にする。`just log` で
-        // "reattached ... due to resize: old=...x... new=...x..." を 1 行で
-        // grep できるようにしておくと display.apply の追従ログを追いやすい。
+        // `just log` で "reattached ... due to resize" を 1 行 grep できるよう
+        // 初回 attach と resize 起因 reattach のログを分ける。
         if (oldWidth is int ow && oldHeight is int oh)
         {
             _log.LogInfo(
@@ -179,11 +162,9 @@ internal sealed class FrameCapture : IDisposable
     }
 
     /// <summary>
-    /// CommandBuffer / RenderTexture を camera から外して release する。resize
-    /// 検出時の teardown と <see cref="Dispose"/> から呼ぶ。
-    /// <see cref="_inFlight"/> はリセットせず、進行中の <see cref="AsyncGPUReadback"/>
-    /// 結果は <see cref="OnReadback"/> 側で <c>_captureRT == null</c> により drop
-    /// される (= 旧 RT の中身を新 header で送らない安全策)。
+    /// <see cref="_inFlight"/> をリセットしないことで、進行中の readback は
+    /// <see cref="OnReadback"/> 側で <c>_captureRT == null</c> により drop される
+    /// (= 旧 RT 内容を新 header で送らない安全策)。
     /// </summary>
     private void DetachAndReleaseCapture()
     {
@@ -212,9 +193,8 @@ internal sealed class FrameCapture : IDisposable
     }
 
     /// <summary>
-    /// teardown 中の Unity API 例外で残りの release 処理が連鎖中断しないよう、
-    /// 1 呼び出しを LogWarning で握りつぶす wrapper。<paramref name="label"/> は
-    /// ログ上の操作識別子 (e.g. <c>"RenderTexture.Release"</c>)。
+    /// teardown 中の Unity API 例外で残りの release 処理が連鎖中断しないよう
+    /// 1 呼び出しを握りつぶす wrapper。
     /// </summary>
     private void SafeInvoke(string label, Action action)
     {
@@ -243,9 +223,8 @@ internal sealed class FrameCapture : IDisposable
                 return;
             }
 
-            // Request と callback の間で DetachAndReleaseCapture が走った直後は
-            // _captureRT == null なので drop して資源を吐かない。次 tick の
-            // 再 attach 後に来る readback で送信が再開する。
+            // Request と callback の間で DetachAndReleaseCapture が走った場合は
+            // 旧 RT 内容を新 header で送らないために drop する。
             var rt = _captureRT;
             if (rt == null)
             {
