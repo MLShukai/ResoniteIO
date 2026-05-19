@@ -20,19 +20,19 @@ C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / pr
 
 ## プロジェクト状況
 
-**現状: Step 0〜3 が完了。Step 0 = Docker 化開発環境、Step 1 = mod/python/proto スケルトン、Step 2 = `Session.Ping` + Core/Mod 二層分離 + `ISessionBridge` 注入、Step 3 = Camera server-streaming RPC (`CameraService` + `FrooxEngineCameraBridge`)。次は Step 4 (Locomotion モジュール)** で、`ILocomotionBridge` + `LocomotionService` + Python `LocomotionClient` を Step 3 と同じ構造で追加する。
+**現状: Step 0〜4 が完了。Step 0 = Docker 化開発環境、Step 1 = mod/python/proto スケルトン、Step 2 = `Session.Ping` + Core/Mod 二層分離 + `ISessionBridge` 注入、Step 3 = Camera server-streaming RPC (`CameraService` + `FrooxEngineCameraBridge`)、Step 4 = Locomotion client-streaming RPC (`LocomotionService` + `FrooxEngineLocomotionBridge` で `AccessTools.FieldRefAccess` 経由 ExternalInput 注入)。次は Step 5 (Manipulation モジュール)** で、`IManipulationBridge` + `ManipulationService` + Python `ManipulationClient` を Step 3-4 と同じ構造で追加する。
 
 実装済みの主要要素:
 
 - 開発環境: `Dockerfile` / `docker-compose.yml` / `justfile` / `scripts/container-init.sh` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container → host Resonite 起動・停止 bridge)
-- C# Core (`mod/src/ResoniteIO.Core/`): `SessionHost` (Kestrel + UDS gRPC server) / `SessionService` / `CameraService` / `Bridge/ISessionBridge` / `Bridge/ICameraBridge` / `Logging/ILogSink`
-- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge を注入、`AppDomain.ProcessExit` で best-effort 停止) / `Bridge/FrooxEngineSessionBridge` / `Bridge/FrooxEngineCameraBridge` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
-- Python (`python/src/resoio/`): `SessionClient` / `CameraClient` (numpy frame yield) / `_socket.py` (UDS 探索) / `_generated/` (betterproto2 出力、commit 済み)
-- proto: `proto/resonite_io/v1/{session,camera}.proto`。`buf.yaml` で `SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except (モダリティ固有ドメイン名を優先する規約。[.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md](.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md))
+- C# Core (`mod/src/ResoniteIO.Core/`): `SessionHost` (Kestrel + UDS gRPC server) / `SessionService` / `CameraService` / `Locomotion/LocomotionService` / `Bridge/{ISessionBridge,ICameraBridge,ILocomotionBridge}` / `Logging/ILogSink`
+- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge 群を注入、`AppDomain.ProcessExit` で best-effort 停止) / `Bridge/{FrooxEngineSessionBridge,FrooxEngineCameraBridge,FrooxEngineLocomotionBridge}` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
+- Python (`python/src/resoio/`): `SessionClient` / `CameraClient` (numpy frame yield) / `LocomotionClient` + `LocomotionCmd` / `DriveSummary` (async ctx mgr で client-streaming `Drive`) / `_socket.py` (UDS 探索) / `_generated/` (betterproto2 出力、commit 済み)
+- proto: `proto/resonite_io/v1/{session,camera,locomotion}.proto`。`buf.yaml` で `SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except (モダリティ固有ドメイン名を優先する規約。[.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md](.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md))
 - 補助スクリプト: `scripts/gen_proto.sh` (Python 生成専用) / `scripts/decompile.sh` (ilspycmd、Renderite Unity DLL も対象) / `scripts/lib.sh`
 - mod Thunderstore packaging: `thunderstore.toml` + `tcli` local tool + `dotnet build -t:PackTS`
 - UDS path: 本番 gRPC IPC は **`$HOME/.resonite-io/`**、container ↔ host debug bridge は **`$HOME/.resonite-io-debug/`** で host/container 同一絶対パスの bind 共有 (`$XDG_RUNTIME_DIR/` は pressure-vessel sandbox が通さないため不採用。詳細は [.claude/memory/reference_pressure_vessel_paths.md](.claude/memory/reference_pressure_vessel_paths.md))
-- 未着手モダリティ (Audio / Locomotion / Manipulation) は `mod/src/ResoniteIO/<Modality>/` に `.gitkeep` のみ残置 (Core 側にはまだファイルなし)
+- 未着手モダリティ (Audio / Manipulation) は `mod/src/ResoniteIO/<Modality>/` に `.gitkeep` のみ残置 (Core 側にはまだファイルなし)。Locomotion は Mod 層では `mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs` に集約しており、`mod/src/ResoniteIO/Locomotion/` は `.gitkeep` のみ残った空ディレクトリ
 
 リポジトリ実構造:
 
@@ -46,7 +46,7 @@ resonite-io/
 ├── .env.example               # `.env` の雛形 (ResonitePath / GaleProfile / GaleBin 等)
 ├── resonite_io_plan.md        # 全体計画書 (Step 0〜7、決定事項、リスク)
 ├── proto/                     # 単一の真実: .proto 定義
-│   └── resonite_io/v1/{session,camera}.proto   # locomotion/manipulation/audio は後続 Step で追加
+│   └── resonite_io/v1/{session,camera,locomotion}.proto   # manipulation/audio は後続 Step で追加
 ├── mod/                       # C# 側 (.NET 10、Core/Mod 二層構成)
 │   ├── ResoniteIO.sln
 │   ├── Directory.Build.{props,targets}
@@ -54,33 +54,35 @@ resonite-io/
 │   ├── src/
 │   │   ├── ResoniteIO.Core/   # Core 層 (Resonite 非依存、Microsoft.NET.Sdk + Grpc 系のみ)
 │   │   │   ├── ResoniteIO.Core.csproj         # <Protobuf GrpcServices="Server"> を Core に集約
-│   │   │   ├── Bridge/{ISessionBridge,ICameraBridge}.cs   # mod 側が注入する callback IF
+│   │   │   ├── Bridge/{ISessionBridge,ICameraBridge,ILocomotionBridge}.cs   # mod 側が注入する callback IF
 │   │   │   ├── Session/{SessionHost,SessionService}.cs    # Kestrel + UDS gRPC host / Ping 実装
 │   │   │   ├── Camera/CameraService.cs                    # StreamFrames server-streaming RPC
+│   │   │   ├── Locomotion/LocomotionService.cs            # Drive client-streaming RPC
 │   │   │   └── Logging/ILogSink.cs                        # mod 側 BepInEx logger を Core に注入する抽象
 │   │   └── ResoniteIO/        # Mod 層 (BepInEx adapter、Core を ProjectReference)
 │   │       ├── ResoniteIO.csproj                          # Core 同梱 DLL + AspNetCore shared framework を gale/ に deploy
 │   │       ├── ResoniteIOPlugin.cs                        # BasePlugin + OnEngineReady → SessionHost.Start
-│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineCameraBridge}.cs
+│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineCameraBridge,FrooxEngineLocomotionBridge}.cs
 │   │       ├── Loading/PluginAssemblyResolver.cs          # Resonite 同梱旧 Google.Protobuf より Core 同梱版を優先
 │   │       ├── Logging/BepInExLogSink.cs                  # ILogSink を ManualLogSource で実装
-│   │       └── {Audio,Locomotion,Manipulation}/           # .gitkeep のみ (Step 4+ で実装)
+│   │       └── {Audio,Locomotion,Manipulation}/           # .gitkeep のみ (Locomotion は Bridge/ に集約済み、本 dir は空のまま)
 │   └── tests/
-│       ├── ResoniteIO.Core.Tests/      # Kestrel ラウンドトリップ + Camera streaming (Fake Bridge) を含む統合 xunit
+│       ├── ResoniteIO.Core.Tests/      # Kestrel ラウンドトリップ + Camera/Locomotion streaming (Fake Bridge) を含む統合 xunit
 │       ├── ResoniteIO.Tests/           # mod 側 smoke + BepInExLogSink 等の adapter テスト
 │       └── manual/                     # 実機 (Resonite 起動) を要する手順書 (Markdown)
 ├── python/                    # Python 側 (uv + betterproto2 + grpclib)
 │   ├── pyproject.toml         # requires-python >=3.12
 │   ├── uv.lock
 │   ├── src/resoio/
-│   │   ├── __init__.py        # importlib.metadata で __version__、SessionClient / CameraClient を re-export
+│   │   ├── __init__.py        # importlib.metadata で __version__、SessionClient / CameraClient / LocomotionClient を re-export
 │   │   ├── py.typed
 │   │   ├── _socket.py         # RESONITE_IO_SOCKET / _DIR / ~/.resonite-io 探索 (private)
 │   │   ├── session.py         # SessionClient (async context manager) + Ping
 │   │   ├── camera.py          # CameraClient (numpy ndarray yield)
+│   │   ├── locomotion.py      # LocomotionClient + LocomotionCmd / DriveSummary (client-streaming Drive)
 │   │   └── _generated/        # protoc 出力 (commit する、pyright/ruff/coverage の exclude 対象)
 │   └── tests/
-│       ├── resoio/{test_session,test_camera,test_init}.py    # 単体 + in-process gRPC ラウンドトリップ
+│       ├── resoio/{test_session,test_camera,test_locomotion,test_init}.py   # 単体 + in-process gRPC ラウンドトリップ
 │       └── e2e/               # 実 Resonite 接続テスト (pytest --ignore=python/tests/e2e で除外)
 ├── scripts/{gen_proto.sh, decompile.sh, container-init.sh, lib.sh,
 │           host_agent.py, resonite_cli.py}  # 後者 2 つは container ↔ host Resonite bridge

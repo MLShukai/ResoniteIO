@@ -1,0 +1,70 @@
+// Locomotion service: Resonite desktop の基本操作 (WASD / マウスルック /
+// Space (Jump) / Shift (Sprint) / C (Crouch)) を ExternalInput 注入で再現する
+// client-streaming RPC。
+//
+// engine の `InputAction.ExternalInput` は engine update tick で消費・null reset
+// される設計なので、入力を持続させたいときは Python 側から **30Hz 程度で連続
+// 発行** する必要がある。stream を止めれば即 idle に戻る (送信責務 = active
+// input、無送信 = neutral、というセマンティクス)。
+//
+// engine マッピング上の非自明な点:
+//   - `pitch_rate` は engine 側で `_verticalAngle -= y` と反転加算されるため、
+//     Bridge が符号反転して float2 = (yaw_rate, -pitch_rate) で書く。
+//   - `jump` は `DigitalAction.ExternalInput |= value` の OR-merge なので
+//     1 frame でも true なら trigger。
+//   - `velocity` の単位元・wire default の trade-off は下記 field doc を参照
+//     (この proto ファイル内が semantics の正典)。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// クライアントからサーバへ毎フレーム送る制御コマンド。全 field optional
+// (proto3 default = 0 = neutral)。
+message LocomotionCommand {
+  // Strafe: -1=left, +1=right.
+  float move_x = 1;
+  // Forward: -1=backward, +1=forward.
+  float move_y = 2;
+  // Yaw angular rate, positive=right.
+  float yaw_rate = 3;
+  // Pitch angular rate, positive=up (Bridge が engine 向けに符号反転)。
+  float pitch_rate = 4;
+  // Space 相当 (DigitalAction.ExternalInput を OR-merge)。
+  bool jump = 5;
+  // Move に掛けるスカラー倍率 (Bridge 側で literal 適用)。
+  //
+  // **単位元は 1.0** (通常歩行)。Python `LocomotionCmd.velocity` は default=1.0
+  // を保証し、Bridge は proto.velocity を素のまま Move に掛ける (再解釈なし)。
+  // engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
+  // ExternalInput 経路で再現したい場合は 2.0 を明示する。
+  //
+  // 注意: proto3 仕様の wire default は 0。raw proto を直接生成して velocity を
+  // 設定しないと Move が 0 倍され停止する。convenience client (`LocomotionCmd`)
+  // 経由なら自動で 1.0 が入るのでこのケースは起きない。**この regime が
+  // velocity セマンティクスの正典であり他箇所はここを参照する。**
+  float velocity = 6;
+  // Crouch 強度 [0..1]。
+  float crouch = 7;
+  // クライアント送信時刻 (UTC ナノ秒)。受信側 latency 計測用、optional (0 で skip)。
+  int64 unix_nanos = 8;
+}
+
+// Drive RPC 完了時の summary。
+message LocomotionDriveSummary {
+  // 正常に処理したコマンド数。
+  int64 received_count = 1;
+  // pending を上書きした (= latest-wins で drop した) 回数。
+  // 現状の直列 ApplyAsync では常に 0。将来 non-blocking bridge へ拡張する hook。
+  int64 dropped_count = 2;
+  // サーバ完了時刻 (UTC ナノ秒)。
+  int64 unix_nanos = 3;
+}
+
+service Locomotion {
+  // 移動 + 視点制御を 1 本の client-streaming RPC に集約。
+  // 同時 Drive ポリシーは accept-overwrite (両方を受け付け Bridge の latest-wins
+  // に委ねる)。
+  rpc Drive(stream LocomotionCommand) returns (LocomotionDriveSummary);
+}
