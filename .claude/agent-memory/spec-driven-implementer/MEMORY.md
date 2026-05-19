@@ -15,3 +15,4 @@
 - [test 専用 service host pattern](feedback_test_only_service_host.md) — SessionHost に mount しない wave の Core 側 modality は、test 専用の最小 Kestrel host を分離して round-trip テストを書く。
 - [FrooxEngine Settings API](feedback_frooxengine_settings_api.md) — `Settings.GetActiveSetting<T>() / UpdateActiveSetting<T>()` が公式、内部 `RunSynchronously` で engine thread に dispatch。`Engine.Current.GetCoreSetting` は存在しない。foreground fps は engine 公式経路で制御不可。
 - [InterprocessLib callback signature](feedback_interprocesslib_callback_signature.md) — `Messenger.ReceiveValueArray<T>` の callback は `Action<T[]?>`、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず -=。
+- [pyright unused private in src/](feedback_pyright_unused_private_in_src.md) — tests/ が strict 除外なので `_` prefix の private 関数を test だけ参照すると unused 扱い。`__all__` に列挙して回避。
