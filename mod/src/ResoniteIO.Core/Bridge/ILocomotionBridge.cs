@@ -22,7 +22,7 @@ public interface ILocomotionBridge
 /// <summary>proto 生成型 <c>V1.LocomotionCommand</c> から独立した Core 層 POCO。</summary>
 /// <remarks>
 /// 各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c> を参照
-/// (velocity の 0→1.0 再解釈・pitch の符号反転責務もそこに定義)。
+/// (velocity の単位元 1.0 / pitch の符号反転責務もそこに定義)。
 /// </remarks>
 public readonly record struct LocomotionCommand(
     float MoveX,

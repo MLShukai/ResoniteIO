@@ -30,8 +30,11 @@ _logger = logging.getLogger("resoio.locomotion")
 class LocomotionCmd:
     """One desktop-style locomotion command (Python API view).
 
-    Field semantics — including ``velocity`` 0-means-1.0 re-interpretation
-    and the "up = positive" pitch convention — are canonical in
+    ``velocity`` defaults to ``1.0`` (the multiplicative identity) so a
+    bare ``LocomotionCmd(move_y=1.0)`` walks at the engine's natural
+    speed; the server multiplies ``Move`` by this scalar verbatim.
+    ``pitch_rate`` is "up = positive" (the bridge handles the engine's
+    sign flip). Other field semantics are canonical in
     ``proto/resonite_io/v1/locomotion.proto``.
     """
 
@@ -40,7 +43,7 @@ class LocomotionCmd:
     yaw_rate: float = 0.0
     pitch_rate: float = 0.0
     jump: bool = False
-    velocity: float = 0.0
+    velocity: float = 1.0
     crouch: float = 0.0
 
 

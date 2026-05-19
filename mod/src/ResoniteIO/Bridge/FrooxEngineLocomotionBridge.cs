@@ -98,12 +98,13 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             );
         }
 
-        // proto3 default=0 を 1.0 に再解釈する正典的な site (詳細は locomotion.proto)。
-        var velocityMul = command.Velocity > 0f ? command.Velocity : 1.0f;
+        // velocity は literal な乗算スカラー。Python API (LocomotionCmd) 側で
+        // default=1.0 を保証する設計のため、ここでは proto.Velocity を素のまま掛ける
+        // (詳細は locomotion.proto)。
         normalInput.Move.ExternalInput = new float3(
-            command.MoveX * velocityMul,
+            command.MoveX * command.Velocity,
             0f,
-            command.MoveY * velocityMul
+            command.MoveY * command.Velocity
         );
         if (command.Jump)
         {

@@ -195,11 +195,16 @@ class LocomotionCommand(betterproto2.Message):
 
     velocity: "float" = betterproto2.field(6, betterproto2.TYPE_FLOAT)
     """
-    Move に掛けるスカラー倍率 (Bridge 側で適用)。
+    Move に掛けるスカラー倍率 (Bridge 側で literal 適用)。
 
-    0 (proto3 default) → 1.0 (通常歩行) として再解釈、>0 はそのまま倍率。
+    **単位元は 1.0** (通常歩行)。Python `LocomotionCmd.velocity` は default=1.0
+    を保証し、Bridge は proto.velocity を素のまま Move に掛ける (再解釈なし)。
     engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
-    ExternalInput 経路で再現したい場合は 2.0 を明示する。**この regime が
+    ExternalInput 経路で再現したい場合は 2.0 を明示する。
+
+    注意: proto3 仕様の wire default は 0。raw proto を直接生成して velocity を
+    設定しないと Move が 0 倍され停止する。convenience client (`LocomotionCmd`)
+    経由なら自動で 1.0 が入るのでこのケースは起きない。**この regime が
     velocity セマンティクスの正典であり他箇所はここを参照する。**
     """
 

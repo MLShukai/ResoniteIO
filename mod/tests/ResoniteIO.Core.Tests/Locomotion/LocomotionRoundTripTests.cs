@@ -65,9 +65,9 @@ public sealed class LocomotionRoundTripTests
         var received = bridge.Received;
         Assert.Equal(commands.Length, received.Count);
 
-        // Default Velocity (0f) must round-trip unchanged: Bridge-side
-        // 0→1.0 reinterpretation is the engine bridge's responsibility,
-        // not the Service's, so the proto3 default has to reach Apply intact.
+        // Service は proto.Velocity を素のまま POCO に詰めるだけ。proto3
+        // wire default は 0 のためここでも 0 として届く (convenience client
+        // である Python LocomotionCmd 側で default=1.0 を保証する設計)。
         Assert.Equal(1.0f, received[0].MoveY);
         Assert.Equal(0f, received[0].Velocity);
         Assert.Equal(1L, received[0].UnixNanos);
