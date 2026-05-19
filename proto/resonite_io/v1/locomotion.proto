@@ -1,27 +1,27 @@
 // Locomotion service: Resonite desktop の基本操作 (WASD / マウスルック /
-// Space (Jump) / Shift (Sprint) / C (Crouch)) を ExternalInput 注入で再現する
-// client-streaming RPC。
+// Space (Jump) / C (Crouch)) を ExternalInput 注入で再現する stateful な
+// RPC バンドル。本ファイルが velocity 単位元 / jump pulse / disconnect 規約の
+// 一次正典。
 //
-// engine の `InputAction.ExternalInput` は engine update tick で消費・null reset
-// される設計なので、入力を持続させたいときは Python 側から **30Hz 程度で連続
-// 発行** する必要がある。stream を止めれば即 idle に戻る (送信責務 = active
-// input、無送信 = neutral、というセマンティクス)。
+// stateful repeater: engine の `InputAction.ExternalInput` は engine update
+// tick で消費される 1-frame 寿命の slot だが、mod 側 Bridge が最新コマンドを
+// 保持し tick ごとに再注入する。client は **状態が変化したときに 1 回送る
+// だけで良い** (keep-alive ループは不要)。
 //
-// engine マッピング上の非自明な点:
-//   - `pitch_rate` は engine 側で `_verticalAngle -= y` と反転加算されるため、
-//     Bridge が符号反転して float2 = (yaw_rate, -pitch_rate) で書く。
-//   - `jump` は `DigitalAction.ExternalInput |= value` の OR-merge なので
-//     1 frame でも true なら trigger。
-//   - `velocity` の単位元・wire default の trade-off は下記 field doc を参照
-//     (この proto ファイル内が semantics の正典)。
+// disconnect / lifecycle:
+//   - `Drive` を `CompleteAsync` で graceful close → **state 維持**
+//     (短命コマンドを送って閉じる idiom が成立する)。
+//   - UDS 切断 / 例外 cancel → Bridge が **全 state を自動 reset**
+//     (RL/ロボティクスの safety: client crash 時に暴走しない)。
+//   - 明示 reset は `Reset` RPC (Drive を中断しない unary)。
 syntax = "proto3";
 
 package resonite_io.v1;
 
 option csharp_namespace = "ResoniteIO.V1";
 
-// クライアントからサーバへ毎フレーム送る制御コマンド。全 field optional
-// (proto3 default = 0 = neutral)。
+// クライアントからサーバへ送る制御コマンド。全 field は変化があった時だけ
+// 送れば mod 側 Bridge が engine update tick ごとに再注入する。
 message LocomotionCommand {
   // Strafe: -1=left, +1=right.
   float move_x = 1;
@@ -29,21 +29,21 @@ message LocomotionCommand {
   float move_y = 2;
   // Yaw angular rate, positive=right.
   float yaw_rate = 3;
-  // Pitch angular rate, positive=up (Bridge が engine 向けに符号反転)。
+  // Pitch angular rate, positive=up. Bridge は符号反転せず engine にそのまま
+  // 渡す (decompile からは反転が必要に見えるが実機検証で逆挙動を確認、
+  // feedback_locomotion_external_input.md §2 参照)。
   float pitch_rate = 4;
-  // Space 相当 (DigitalAction.ExternalInput を OR-merge)。
+  // Space 相当の **pulse**。Bridge は受信した次 1 engine tick だけ apply し
+  // latch を下げる (consume-once)。client 側で false に戻す責務は無い。
   bool jump = 5;
-  // Move に掛けるスカラー倍率 (Bridge 側で literal 適用)。
+  // Move に掛けるスカラー倍率。**単位元は 1.0** (通常歩行)。Python
+  // `LocomotionCmd.velocity` は default=1.0 を保証し、Bridge は proto.velocity
+  // を素のまま Move に掛ける (再解釈なし)。engine の
+  // `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当は 2.0 を明示する。
   //
-  // **単位元は 1.0** (通常歩行)。Python `LocomotionCmd.velocity` は default=1.0
-  // を保証し、Bridge は proto.velocity を素のまま Move に掛ける (再解釈なし)。
-  // engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当を
-  // ExternalInput 経路で再現したい場合は 2.0 を明示する。
-  //
-  // 注意: proto3 仕様の wire default は 0。raw proto を直接生成して velocity を
-  // 設定しないと Move が 0 倍され停止する。convenience client (`LocomotionCmd`)
-  // 経由なら自動で 1.0 が入るのでこのケースは起きない。**この regime が
-  // velocity セマンティクスの正典であり他箇所はここを参照する。**
+  // 注意: proto3 wire default は 0。raw proto を直接生成して velocity を設定
+  // しないと Move が 0 倍され停止する (convenience client なら default 1.0 で
+  // 回避済み)。**ここが velocity セマンティクスの正典。**
   float velocity = 6;
   // Crouch 強度 [0..1]。
   float crouch = 7;
@@ -62,9 +62,47 @@ message LocomotionDriveSummary {
   int64 unix_nanos = 3;
 }
 
+// 指定された field を中立値に戻す要求。**全 bool が false で送信された場合は
+// 全 reset** と Service 層で展開される (proto3 wire default = 0 で "未指定" と
+// "全 false" を区別不能なため、Reset を呼んだ以上は全部戻す解釈に倒す)。
+// 部分 reset したい時は対象 field のみ true にする。
+message LocomotionResetRequest {
+  // move_x / move_y / velocity を中立 (0, 0, 1.0) へ。
+  bool move = 1;
+  // yaw_rate / pitch_rate を 0 へ。
+  bool look = 2;
+  // crouch を 0 へ。
+  bool crouch = 3;
+  // 未消費の jump pending を取り消す。
+  bool jump = 4;
+  // クライアント送信時刻 (UTC ナノ秒)。Optional (0 で skip)。
+  int64 unix_nanos = 5;
+}
+
+// Reset RPC 完了時の summary。Service が request を canonicalize した結果
+// (全 false → 全 true 展開) をそのままエコーする。次の engine tick で
+// Bridge が実際に該当 field を中立に戻す責務を負うため、本 summary は
+// "canonicalize 後に有効だった reset 要求" を表すのみで、engine 側で実際に
+// 状態が変わったことの保証ではない。
+message LocomotionResetSummary {
+  // canonicalize 後に move を reset する要求があったか。
+  bool move = 1;
+  // canonicalize 後に look を reset する要求があったか。
+  bool look = 2;
+  // canonicalize 後に crouch を reset する要求があったか。
+  bool crouch = 3;
+  // canonicalize 後に jump を reset する要求があったか。
+  bool jump = 4;
+  // サーバ完了時刻 (UTC ナノ秒)。
+  int64 unix_nanos = 5;
+}
+
 service Locomotion {
-  // 移動 + 視点制御を 1 本の client-streaming RPC に集約。
-  // 同時 Drive ポリシーは accept-overwrite (両方を受け付け Bridge の latest-wins
-  // に委ねる)。
+  // 移動 + 視点制御の client-streaming RPC。stream lifecycle と stateful
+  // repeater の規約は file header / `LocomotionCommand` 参照。
   rpc Drive(stream LocomotionCommand) returns (LocomotionDriveSummary);
+
+  // 指定 field を中立値に戻す (Drive stream を中断しない unary)。全 bool
+  // が false なら全 reset (`LocomotionResetRequest` 参照)。
+  rpc Reset(LocomotionResetRequest) returns (LocomotionResetSummary);
 }
