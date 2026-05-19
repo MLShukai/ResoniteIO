@@ -1,0 +1,167 @@
+# Locomotion end-to-end 検証
+
+`LocomotionClient.drive(...)` を実 Resonite に流して、デスクトップ
+操作の全 phase が engine に反映されることを動画 (mp4) で確認する手動
+検証手順。e2e harness は [python/tests/e2e/locomotion.py](../../../python/tests/e2e/locomotion.py)
+で Camera + Locomotion を asyncio で並走させ、1 本の MP4 に 8 phase を
+収める。
+
+## 前提
+
+- [load-verification.md](load-verification.md) と
+  [camera-v2-e2e.md](camera-v2-e2e.md) の前提条件すべて
+- Gale プロファイルに 6 plugin install 済み (`just check-gale` 全 ✓):
+  BepisLoader / BepInExResoniteShim / BepisResoniteWrapper /
+  BepInExRenderer / RenderiteHook / InterprocessLib
+- Steam Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%`
+- host で `just host-agent` daemon が GUI session の端末で起動している
+  (`DISPLAY` / `WAYLAND_DISPLAY` 必須)
+- container 内で `cd python && uv sync` 済み
+
+## Walk 可能 world に切り替える (必須)
+
+Home / Userspace は `NoLocomotion` 系の active module が入っており、
+Bridge は常に `LocomotionNotReadyException` (= `FAILED_PRECONDITION`) を
+返す。e2e harness 側は 120 s の retry budget を持っているため、その間に
+**walk 可能 world に join し直す**必要がある。
+
+推奨 world (どれでも可):
+
+- `SimpleAvatarTest` (公式テストワールド)
+- `Sandbox` 系 (`Sandbox - Public Test` 等)
+- 自分の Home world で `LocomotionController.ActiveModule` を
+  `Walk` (= `SmoothLocomotionBase` 派生) に設定したもの
+
+切り替え手順:
+
+1. Resonite が起動したら Contacts / WorldBrowser から walk 可能 world を
+   開く
+2. world load が完了し、avatar が地面に立っている状態になるまで待つ
+3. **window focus を Resonite に置き、画面上で右クリックしてマウス
+   cursor lock を有効にする** (ロック状態だと engine の `IsCursorLocked`
+   が `true` になり Look.Active も `true` に切り替わる; cursor unlock 状態
+   だと yaw/pitch は engine 側で skip され画面上動かないが、Drive RPC
+   自体は成功するため harness は assert を fail させない)
+
+cursor lock 状態は手動 e2e の "見た目で動く" 条件であり、harness が判定
+できる class ではない (engine 内部状態のため)。
+
+## 手順
+
+container 内 shell から:
+
+```sh
+just deploy-mod                         # build + engine/renderer deploy
+```
+
+別ターミナルで:
+
+```sh
+just log                                # tail -F BepInEx LogOutput
+```
+
+container 内 shell に戻って e2e 実行:
+
+```sh
+just e2e-test locomotion
+```
+
+実行直後 host で:
+
+1. Resonite が起動するのを待つ (Gale 経由)
+2. home world が load し終わったら walk 可能 world に切り替える
+   (上記参照)
+3. Resonite window に focus を置き、画面上で右クリック → マウス cursor lock
+4. e2e harness が 120 s の retry budget 内に Locomotion bridge を ready 検出
+   できれば 18 s scenario が走り、終了後 mp4 を `python/tests/e2e/e2e_artifacts/locomotion_<timestamp>/capture.mp4`
+   に書き出して PASS する
+
+## 期待される engine log
+
+`just log` で以下が時系列に出る:
+
+```text
+[Info   :ResoniteIO] Engine ready — starting Session gRPC host
+[Info   :ResoniteIO] SessionHost listening on /home/<user>/.resonite-io/resonite-<pid>.sock
+[Info   :ResoniteIO] Focused world: <home world name> / LocalUser: <UserName>
+... (walk 可能 world に切替後)
+[Info   :ResoniteIO] Focused world: <walk world name> / LocalUser: <UserName>
+```
+
+`FrooxEngineLocomotionBridge` 自体は info ログを出さない (毎 tick 30 Hz で
+書き込むためログが flooding する)。`Drive` RPC のエラーは `Locomotion`
+service 側で 1 行のみ出る。
+
+## 期待される動画 (8 phase 視覚チェックリスト)
+
+`capture.mp4` を host 側プレイヤーで再生して以下を順に目視確認する。
+
+| 秒      | コマンド                  | 画面上で見えるはずの挙動                                          |
+| ------- | ------------------------- | ----------------------------------------------------------------- |
+| 0-3 s   | `move_y=1.0`              | 通常速度で前進する (avatar が前方向に移動)                        |
+| 3-5 s   | `move_y=1.0, sprint=True` | **明らかに速度が上がる** (前進 phase より距離が出る)              |
+| 5-7 s   | `move_x=1.0`              | 右方向にストラフ (avatar が真横に並進、向きは変わらない)          |
+| 7-9 s   | `LocomotionCmd()`         | 完全停止 (engine 既存 friction で速度が 0 に減衰)                 |
+| 9-11 s  | `yaw_rate=0.5`            | カメラが右に旋回し続ける (周囲が左から右に流れる、cursor lock 要) |
+| 11-13 s | `pitch_rate=0.5`          | カメラが見上げる方向に動く (空が見える方向; ±89° で engine clamp) |
+| 13-14 s | `jump=True`               | ジャンプ (engine の edge detect 次第で 1 回 or 連続)              |
+| 14-16 s | `crouch=1.0`              | しゃがむ (avatar の頭部高さが下がる、HeadInputs.Crouch=1)         |
+| 16-18 s | `LocomotionCmd()`         | 静止 (cool-down)                                                  |
+
+sprint phase の距離が前進 phase と区別できない場合は、`LocomotionCmd(sprint=True, sprint_multiplier=3.0)`
+等 Python 側で multiplier override を試す (`ScreenLocomotionDirection._maxMagnitude`
+の normalize で差が潰れている可能性、plan §既知リスク #6)。
+
+## トラブルシュート
+
+### `TimeoutError: Locomotion bridge did not become ready in 120s`
+
+`LocomotionController.ActiveModule` が `SmoothLocomotionBase` の派生で
+ない (Teleport / NoClip / GrabWorld / NoLocomotion 等)。walk 可能 world
+に切り替え、avatar が地面に立っている状態 (walk module active) を確認
+してから再実行。
+
+### `RpcException: Status.Unavailable, "Locomotion bridge is not configured."`
+
+`SessionHost` に `ILocomotionBridge` が注入されていない。`just log` で
+`Engine ready` 以降に `Failed to start Session gRPC host:` 等のエラーが
+出ていないか、`deploy-mod` で最新の DLL が gale プロファイルに配置されて
+いるかを確認。
+
+### yaw / pitch phase で画面が動かない (移動 phase は動いている)
+
+マウス cursor lock が外れている。Resonite window に focus を戻し、画面上で
+右クリックして cursor lock を再有効化。`Drive` RPC は成功し続けるため
+harness は PASS するが、動画では旋回・見上げが visible にならない。
+
+### Camera phase は 30 fps 出るが mp4 が真っ黒
+
+Renderite framebuffer 経路に問題あり (Locomotion 固有ではない)。
+[camera-v2-e2e.md](camera-v2-e2e.md) の "screenshot が真っ黒" 節を参照。
+
+### sprint phase で速度差が見えない
+
+`Move.magnitude > 1` で `_maxMagnitude` 経由の normalize に当たっている
+可能性 (plan §既知リスク #6)。client 側で
+`LocomotionCmd(sprint=True, sprint_multiplier=3.0)` 等の override を試す
+(server 側 build やり直し不要、proto 設計上の余白)。
+
+### VR mode で yaw / pitch が動かない
+
+`FirstPersonTargettingController` が VR mode では active にならない設計
+(desktop 専用)。Bridge は silent skip するため Drive 自体は成功するが、
+yaw / pitch は engine に届かない。desktop mode に切り替えて再実行。
+
+## v0 の仕様
+
+- 30 Hz tick 連発で input を hold する設計 (`Analog3DAction.ExternalInput`
+  は 1 frame consume + null reset)。停止したい場合は `LocomotionCmd()` を
+  送り続けるか、Drive ストリームを閉じる (どちらでも engine 側は idle に
+  戻る)
+- pitch は Python API が "up positive"、Bridge 内で engine 向けに符号反転
+  (engine `_verticalAngle -= y`)
+- sprint は Bridge 側で `Move *= sprint_multiplier` を適用 (engine 側
+  `ScreenLocomotionDirection.FastMultiplier=2.0` 相当の挙動を ExternalInput
+  経路で再現)
+- jump は OR-merge (`DigitalAction.ExternalInput |= value`)。連続ジャンプ
+  抑止は v0 では client 側の責任
