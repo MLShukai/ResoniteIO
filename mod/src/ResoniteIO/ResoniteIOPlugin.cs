@@ -45,6 +45,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private ICameraBridge? _cameraBridge;
     private RendererFrameInterprocessReceiver? _frameReceiver;
     private IDisplayBridge? _displayBridge;
+    private FrooxEngineLocomotionBridge? _locomotionBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -95,12 +96,15 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _displayBridge = new FrooxEngineDisplayBridge(_logSink);
 
+            _locomotionBridge = new FrooxEngineLocomotionBridge(Engine.Current, _logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
                 _sessionBridge,
                 _cameraBridge,
-                _displayBridge
+                _displayBridge,
+                _locomotionBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -113,9 +117,13 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        // Dispose 順: Receiver を先に止めて残 frame が dead bridge に push されるのを防ぐ。
-        // PushedFrameCameraBridge.Dispose は Channel writer を complete し、pending な
-        // CameraService.StreamFrames を CameraNotReadyException で抜けさせる。
+        // Dispose 順: receiver → camera → display → locomotion → session(host)。
+        // 上流から順に止めることで、下流が残 input を dead bridge に push する race を防ぐ:
+        //   - Receiver を先に止めて残 frame が dead CameraBridge に届かないようにする。
+        //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し pending な
+        //     CameraService.StreamFrames を CameraNotReadyException で抜けさせる。
+        //   - LocomotionBridge.Dispose は engine 側 ExternalInput を 0 戻しして idle 化する。
+        //   - 最後に SessionHost を止めて全 gRPC service を畳む。
         try
         {
             _frameReceiver?.Dispose();
@@ -125,6 +133,18 @@ public sealed class ResoniteIOPlugin : BasePlugin
         try
         {
             (_cameraBridge as IDisposable)?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            (_displayBridge as IDisposable)?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            _locomotionBridge?.Dispose();
         }
         catch { }
 
