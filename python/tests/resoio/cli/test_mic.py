@@ -1,11 +1,4 @@
-"""Tests for the ``resoio mic`` subcommand.
-
-Mirrors :mod:`tests.resoio.cli.test_record` (Speaker) but in the
-opposite direction: a fake :class:`MicrophoneBase` server is started on
-a tmp UDS, the CLI is driven via :func:`resoio.cli._amain`, and the
-frames received by the fake are decoded back to assert wire-shape
-integrity and the down-mix / normalisation paths.
-"""
+"""Tests for the ``resoio mic`` subcommand."""
 
 import asyncio
 import struct
@@ -31,12 +24,7 @@ _CHUNK_SAMPLES = 1024
 
 
 class _RecordingMicrophone(MicrophoneBase):
-    """In-process fake that captures every received frame for assertion.
-
-    Tracks both the frames themselves (so the test can decode samples
-    back from ``frame.samples``) and a deterministic summary tied to
-    the captured count.
-    """
+    """In-process fake that captures every received frame."""
 
     def __init__(self) -> None:
         self.received: list[MicrophoneAudioFrame] = []
@@ -70,19 +58,11 @@ def _write_wav(
     sampwidth: int = 4,
     channels: int = 1,
 ) -> None:
-    """Write a WAV file using stdlib :mod:`wave`.
+    """Write a WAV file via stdlib :mod:`wave`.
 
-    Defaults match the canonical wire format (48 kHz / mono / 4-byte
-    samples). ``samples`` shape:
-
-    * mono: ``(N,)`` (any dtype — converted by ``tobytes`` semantics
-      below; callers supply the right dtype for ``sampwidth``)
-    * stereo: ``(N, 2)`` interleaved on write
-
-    Note: stdlib ``wave`` does not advertise ``WAVE_FORMAT_IEEE_FLOAT``
-    in the header (it writes format tag ``1`` = PCM). The CLI reader
-    treats ``sampwidth == 4`` as float32 by convention; that lossless
-    correspondence is exactly what these tests exercise.
+    Stdlib ``wave`` always writes format tag ``1`` (PCM); the CLI reader
+    treats ``sampwidth == 4`` as float32 by convention — that lossless
+    correspondence is what these tests exercise.
     """
     with wave.open(str(path), "wb") as wav:
         wav.setnchannels(channels)
@@ -97,12 +77,11 @@ def _write_wav(
 
 
 async def test_wav_input_mono_float32(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """End-to-end: 3 full chunks of mono float32 WAV → 3 frames received."""
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "mono.wav"
 
-    # Deterministic ramp: each sample equals its index / N so the
-    # post-decoding comparison is exact.
+    # Ramp pattern → every position has a distinct value, so a
+    # reorder or duplicate would surface on the array-equal check.
     total_samples = 3 * _CHUNK_SAMPLES
     payload = np.arange(total_samples, dtype=np.float32) / float(total_samples)
     _write_wav(wav_path, payload)
@@ -132,16 +111,14 @@ async def test_wav_input_mono_float32(tmp_path: Path, monkeypatch: pytest.Monkey
 async def test_wav_input_stereo_downmix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Stereo WAV is averaged ``(L+R)/2`` into mono before being sent."""
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "stereo.wav"
 
-    # Build a stereo signal where L=0.5 and R=-0.1 everywhere. Down-mix
-    # mean = 0.2 — a single constant value makes the assertion exact.
+    # L=0.5, R=-0.1 → mean 0.2 (exactly representable in float32).
     total_samples = 2 * _CHUNK_SAMPLES
     left = np.full(total_samples, 0.5, dtype=np.float32)
     right = np.full(total_samples, -0.1, dtype=np.float32)
-    interleaved = np.stack([left, right], axis=1)  # (N, 2)
+    interleaved = np.stack([left, right], axis=1)
     _write_wav(wav_path, interleaved, channels=2)
 
     fake = _RecordingMicrophone()
@@ -156,7 +133,6 @@ async def test_wav_input_stereo_downmix(
         assert len(fake.received) == 2
         decoded = _decode_samples(fake.received)
         assert decoded.shape == (total_samples,)
-        # (0.5 + -0.1) / 2 = 0.2 exactly representable in float32.
         np.testing.assert_allclose(decoded, 0.2, rtol=0, atol=1e-7)
     finally:
         server.close()
@@ -166,13 +142,12 @@ async def test_wav_input_stereo_downmix(
 async def test_wav_input_int16_normalized(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Int16 mono WAV → samples are normalised to float32 in ``[-1, 1]``."""
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "int16.wav"
 
+    # Anchors verify the 1/32768 normalisation:
+    #   +16384 → +0.5, -16384 → -0.5, 0 → 0.0.
     total_samples = _CHUNK_SAMPLES
-    # Mix three known int16 anchors so normalisation is verifiable:
-    # +16384 → +0.5, -16384 → -0.5, 0 → 0.0.
     payload_i16 = np.full(total_samples, 16384, dtype=np.int16)
     payload_i16[100] = -16384
     payload_i16[200] = 0
@@ -190,11 +165,8 @@ async def test_wav_input_int16_normalized(
         assert len(fake.received) == 1
         decoded = _decode_samples(fake.received)
         assert decoded.shape == (total_samples,)
-        # All samples must land in [-1.0, 1.0] after normalisation.
         assert float(decoded.min()) >= -1.0
         assert float(decoded.max()) <= 1.0
-        # Anchor checks (division by 32768.0):
-        # 16384 / 32768 = 0.5, -16384 / 32768 = -0.5.
         assert decoded[0] == pytest.approx(0.5)
         assert decoded[100] == pytest.approx(-0.5)
         assert decoded[200] == 0.0
@@ -213,11 +185,9 @@ async def test_wav_input_sample_rate_mismatch_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    """Sample rate ≠ 48000 → rc=2 + stderr message mentioning the rate."""
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "44k.wav"
 
-    # 44100 Hz mono float32 — same data, only the header rate differs.
     payload = np.zeros(_CHUNK_SAMPLES, dtype=np.float32)
     _write_wav(wav_path, payload, sample_rate=44100)
 
@@ -230,11 +200,9 @@ async def test_wav_input_sample_rate_mismatch_fails(
         rc = await _amain(args)
         assert rc == 2
         captured = capsys.readouterr()
-        # Mentions the offending sample rate so the user can grep for it.
+        # Surface both the offending and canonical rates so the fix is unambiguous.
         assert "44100" in captured.err
-        # And mentions the canonical rate so the fix is unambiguous.
         assert "48000" in captured.err
-        # No frames should have reached the server.
         assert fake.received == []
     finally:
         server.close()
@@ -246,11 +214,9 @@ async def test_wav_input_channels_gt2_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    """> 2 channels (e.g. 5.1) → rc=2 with a stderr message."""
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "six.wav"
 
-    # 6 channels of zeros — we only care about the header's nchannels.
     n = 256
     payload = np.zeros((n, 6), dtype=np.float32)
     _write_wav(wav_path, payload, channels=6)
@@ -264,7 +230,6 @@ async def test_wav_input_channels_gt2_fails(
         rc = await _amain(args)
         assert rc == 2
         captured = capsys.readouterr()
-        # Mentions the offending channel count.
         assert "6" in captured.err
         assert fake.received == []
     finally:
@@ -278,12 +243,7 @@ async def test_wav_input_channels_gt2_fails(
 
 
 class _StdinShim:
-    """Minimal ``sys.stdin`` replacement exposing only ``.buffer.read``.
-
-    The CLI consumes raw bytes through ``sys.stdin.buffer.read(n)``;
-    feeding canned bytes via a class is simpler and more deterministic
-    than spawning a subprocess or splicing an ``os.pipe`` fd.
-    """
+    """Minimal ``sys.stdin`` replacement exposing only ``.buffer.read``."""
 
     def __init__(self, data: bytes) -> None:
         self.buffer = _StdinBuffer(data)
@@ -302,7 +262,6 @@ class _StdinBuffer:
 
 
 async def test_stdin_pipe_raw_float32(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Raw float32 LE bytes on stdin → chunked into 1024-sample frames."""
     socket_path = tmp_path / "rio-mic.sock"
 
     total_samples = 2 * _CHUNK_SAMPLES
@@ -314,8 +273,7 @@ async def test_stdin_pipe_raw_float32(tmp_path: Path, monkeypatch: pytest.Monkey
     await server.start(path=str(socket_path))
     try:
         monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-        # Swap sys.stdin in-place so the CLI's ``sys.stdin.buffer.read``
-        # reads from our canned buffer instead of pytest's captured fd.
+        # Swap sys.stdin so the CLI reads canned bytes instead of pytest's captured fd.
         shim: Any = _StdinShim(raw_bytes)
         monkeypatch.setattr("sys.stdin", shim)
         args = _build_parser().parse_args(["mic", "-i", "-", "--no-wait"])
@@ -338,10 +296,8 @@ async def test_stdin_pipe_raw_float32(tmp_path: Path, monkeypatch: pytest.Monkey
 async def test_duration_clips_stream(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """``--duration`` truncates the wire output at a chunk-aligned boundary.
 
-    Input is a 4-chunk WAV (4096 samples ≈ 85 ms at 48 kHz). With
-    ``--duration 0.05`` (= 50 ms = 2400 samples) we expect at most two
-    full chunks (2 × 1024 = 2048 samples ≤ 2400); the partial third
-    chunk is dropped rather than padded.
+    4-chunk WAV + ``--duration 0.05`` (2400 samples) → 2 full chunks
+    (2048 samples ≤ 2400); the partial third is dropped, not padded.
     """
     socket_path = tmp_path / "rio-mic.sock"
     wav_path = tmp_path / "long.wav"
@@ -360,7 +316,6 @@ async def test_duration_clips_stream(tmp_path: Path, monkeypatch: pytest.MonkeyP
         )
         rc = await _amain(args)
         assert rc == 0
-        # 0.05 s × 48 kHz = 2400 samples; floor(2400 / 1024) = 2 chunks.
         assert len(fake.received) == 2
         assert all(f.sample_count == _CHUNK_SAMPLES for f in fake.received)
     finally:
@@ -373,18 +328,13 @@ async def test_duration_clips_stream(tmp_path: Path, monkeypatch: pytest.MonkeyP
 # ---------------------------------------------------------------------------
 
 
-def test_mic_requires_input_argument(capsys: pytest.CaptureFixture[str]):
-    """``-i`` is mandatory — argparse short-circuits with ``SystemExit(2)``."""
+def test_mic_input_defaults_to_stdin():
     parser = _build_parser()
-    with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["mic"])
-    assert excinfo.value.code == 2
-    err = capsys.readouterr().err
-    assert "--input" in err or "-i" in err
+    args = parser.parse_args(["mic", "--no-wait"])
+    assert args.input == "-"
 
 
 def test_mic_no_wait_flag_present(tmp_path: Path):
-    """``--no-wait`` is the standard escape hatch from the bridge-ready loop."""
     parser = _build_parser()
     args = parser.parse_args(["mic", "-i", str(tmp_path / "x.wav"), "--no-wait"])
     assert args.no_wait is True
@@ -398,10 +348,10 @@ def test_mic_no_wait_flag_present(tmp_path: Path):
 
 
 def test_wav_test_helper_round_trips_mono_float32(tmp_path: Path):
-    """Regression guard: ``_write_wav`` + ``wave.open`` round-trip cleanly.
+    """If stdlib ``wave`` ever changes its 4-byte storage, fail here first.
 
-    If stdlib ``wave`` ever changes how it stores 4-byte samples this
-    test fails first, ahead of every E2E test that depends on it.
+    A regression in the test helper would silently invalidate every
+    other WAV-input test in this file.
     """
     path = tmp_path / "roundtrip.wav"
     payload = np.arange(_CHUNK_SAMPLES, dtype=np.float32) / float(_CHUNK_SAMPLES)
@@ -412,6 +362,5 @@ def test_wav_test_helper_round_trips_mono_float32(tmp_path: Path):
         assert wav.getframerate() == 48000
         raw = wav.readframes(wav.getnframes())
     decoded = np.frombuffer(raw, dtype=np.float32)
-    # struct round-trip uses native LE on every platform Resonite supports.
     assert struct.unpack("<f", raw[:4])[0] == pytest.approx(payload[0])
     np.testing.assert_array_equal(decoded, payload)

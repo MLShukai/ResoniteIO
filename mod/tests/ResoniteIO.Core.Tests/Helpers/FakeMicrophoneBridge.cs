@@ -3,35 +3,19 @@ using ResoniteIO.Core.Microphone;
 namespace ResoniteIO.Core.Tests.Helpers;
 
 /// <summary>
-/// テスト用 <see cref="IMicrophoneBridge"/>。<see cref="SubmitFrame"/> /
-/// <see cref="NotifyDisconnect"/> の履歴をそれぞれ <c>lock</c> 付き append-only
-/// list に記録する no-op 実装。
+/// テスト用 <see cref="IMicrophoneBridge"/>。受信 frame / disconnect 履歴を
+/// それぞれ <c>lock</c> 付き append-only list に記録する。
+/// <see cref="ThrowNotReady"/> / <see cref="ThrowGeneric"/> で Service の例外翻訳
+/// (FailedPrecondition / Internal) 経路を検証する。
 /// </summary>
-/// <remarks>
-/// <list type="bullet">
-/// <item><see cref="ThrowNotReady"/> = <c>true</c> なら <see cref="SubmitFrame"/>
-/// が <see cref="MicrophoneNotReadyException"/> を投げる
-/// (Service が <c>FailedPrecondition</c> に翻訳する経路の検証用)。</item>
-/// <item><see cref="ThrowGeneric"/> = <c>true</c> なら <see cref="SubmitFrame"/>
-/// が一般例外を投げる (Service が <c>Internal</c> に翻訳する経路の検証用)。</item>
-/// </list>
-/// </remarks>
 internal sealed class FakeMicrophoneBridge : IMicrophoneBridge
 {
     private readonly List<MicrophoneFrame> _frames = new();
     private readonly List<MicrophoneDisconnectReason> _disconnects = new();
     private readonly object _gate = new();
 
-    /// <summary>
-    /// <c>true</c> のとき <see cref="SubmitFrame"/> が
-    /// <see cref="MicrophoneNotReadyException"/> を投げる。
-    /// </summary>
     public bool ThrowNotReady { get; set; }
 
-    /// <summary>
-    /// <c>true</c> のとき <see cref="SubmitFrame"/> が一般例外
-    /// (<see cref="InvalidOperationException"/>) を投げる。
-    /// </summary>
     public bool ThrowGeneric { get; set; }
 
     public IReadOnlyList<MicrophoneFrame> Frames

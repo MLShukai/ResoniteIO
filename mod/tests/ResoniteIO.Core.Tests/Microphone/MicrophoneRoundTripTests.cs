@@ -9,11 +9,13 @@ using V1 = ResoniteIO.V1;
 namespace ResoniteIO.Core.Tests.Microphone;
 
 /// <summary>
-/// <see cref="Core.Microphone.MicrophoneService"/> の StreamAudio client-streaming
-/// round-trip と disconnect 種別通知を SessionHost mount 越しに検証する。
-/// SessionHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
-/// <c>SessionHostEnv</c> collection で直列化。
+/// <see cref="Core.Microphone.MicrophoneService"/> の StreamAudio round-trip と
+/// disconnect 種別通知を SessionHost mount 越しに検証する。
 /// </summary>
+/// <remarks>
+/// <c>SessionHostHarness</c> が <c>RESONITE_IO_SOCKET</c> env を触るので
+/// <c>SessionHostEnv</c> collection で直列化する (他モダリティと同 pattern)。
+/// </remarks>
 [Collection("SessionHostEnv")]
 public sealed class MicrophoneRoundTripTests
 {
@@ -25,8 +27,7 @@ public sealed class MicrophoneRoundTripTests
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 
-        // 3 frame、それぞれ独自の sample 数 / frame_id / unix_nanos を持たせて
-        // proto → Core POCO mapping と summary 集計を 1 ラウンドトリップで確認する。
+        // 3 frame で proto → Core POCO mapping と summary 集計を 1 経路で検証する。
         var frames = new[]
         {
             MakeProtoFrame(frameId: 0UL, sampleCount: 4, unixNanos: 1_000L, seed: 0.1f),
@@ -50,8 +51,7 @@ public sealed class MicrophoneRoundTripTests
         var received = bridge.Frames;
         Assert.Equal(frames.Length, received.Count);
 
-        // proto → Core POCO の field mapping を全件 1 つずつ検証。順序保持も
-        // ここで暗黙的に確認する (FakeMicrophoneBridge は受信順に append する)。
+        // 順序保持は FakeMicrophoneBridge の append-only 性で暗黙的に検証される。
         for (var i = 0; i < frames.Length; i++)
         {
             var expected = frames[i];
@@ -59,12 +59,11 @@ public sealed class MicrophoneRoundTripTests
 
             Assert.Equal((long)expected.FrameId, actual.FrameId);
             Assert.Equal(expected.UnixNanos, actual.UnixNanos);
-            // Service は bytes 長から sample 数を再計算するため、proto.SampleCount
-            // ではなく実 sample 数で一致する。
+            // Service は proto.SampleCount を信用せず bytes 長から再計算するので
+            // ここでは実 sample 数が一致することだけを assert する。
             Assert.Equal((int)expected.SampleCount, actual.SampleCount);
             Assert.Equal((int)expected.SampleCount, actual.Samples.Length);
 
-            // bytes → float[] の解釈が変質していないことを sentinel pattern で検証。
             var expectedSamples = ToFloatArray(expected.Samples);
             Assert.Equal(expectedSamples, actual.Samples);
         }
@@ -83,9 +82,8 @@ public sealed class MicrophoneRoundTripTests
 
         using var call = client.StreamAudio();
 
-        // Server は MoveNext 前に Unavailable を返すため、RequestStream への
-        // 書き込み / CompleteAsync / ResponseAsync のいずれかが RpcException を
-        // 表面化する。Assert.ThrowsAsync が経路を吸収する。
+        // Server は MoveNext 前に Unavailable を返すので Write / Complete /
+        // ResponseAsync のいずれが RpcException を表面化するかは経路依存。
         var ex = await Assert.ThrowsAsync<RpcException>(async () =>
         {
             await call.RequestStream.WriteAsync(MakeProtoFrame(0UL, 4, 0L, 0f));
@@ -115,7 +113,7 @@ public sealed class MicrophoneRoundTripTests
 
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
 
-        // server-side completion は非同期なので poll で待つ。
+        // Service の NotifyDisconnect は client の RpcException 受信より後に走る。
         await TestPolling.WaitUntilAsync(
             () => bridge.Disconnects.Count > 0,
             TimeSpan.FromSeconds(5),
@@ -143,6 +141,7 @@ public sealed class MicrophoneRoundTripTests
 
         Assert.Equal(StatusCode.Internal, ex.StatusCode);
 
+        // 非同期な server-side NotifyDisconnect を poll で待つ。
         await TestPolling.WaitUntilAsync(
             () => bridge.Disconnects.Count > 0,
             TimeSpan.FromSeconds(5),
@@ -172,7 +171,6 @@ public sealed class MicrophoneRoundTripTests
         catch (OperationCanceledException) { }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled) { }
 
-        // server-side completion は非同期なので poll で待つ。
         await TestPolling.WaitUntilAsync(
             () => bridge.Disconnects.Count > 0,
             TimeSpan.FromSeconds(5),
@@ -189,10 +187,10 @@ public sealed class MicrophoneRoundTripTests
         float seed
     )
     {
+        // Distinct values per index so a bytes ↔ float reinterpret bug is detectable.
         var samples = new float[sampleCount];
         for (var i = 0; i < sampleCount; i++)
         {
-            // deterministic sentinel pattern: bytes ↔ float の解釈ズレを検出するのに十分。
             samples[i] = seed + (float)i;
         }
         var bytes = MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();

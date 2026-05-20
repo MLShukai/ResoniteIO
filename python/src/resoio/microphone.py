@@ -1,14 +1,10 @@
 """Client for the Resonite IO ``Microphone`` gRPC streaming service.
 
-Mirror of :mod:`resoio.speaker` for the opposite direction. The bridge
-on the mod side registers a virtual ``AudioInput`` device with Resonite;
-samples pushed through :meth:`MicrophoneClient.stream` are appended to
-that device's ring buffer and broadcast as the local user's voice once
-the user picks the virtual device in Settings → Audio Input.
-
-Wire format is fixed at 48 kHz / Mono / float32 LE (no interleave); the
-proto carries no negotiation fields and the constants below are the
-single source of truth.
+The bridge on the mod side registers a virtual ``AudioInput`` device
+with Resonite; samples pushed through :meth:`MicrophoneClient.stream`
+are appended to that device's ring buffer and broadcast as the local
+user's voice once the user selects the virtual device in
+Settings → Audio Input.
 """
 
 from __future__ import annotations
@@ -43,8 +39,9 @@ __all__ = [
 _logger = logging.getLogger("resoio.microphone")
 
 # Fixed wire format: voice broadcast on the Resonite side flows through
-# ``UserAudioStream<MonoSample>``; sending stereo would require an extra
-# down-mix at the bridge for zero gain. Stay mono on the wire.
+# ``UserAudioStream<MonoSample>``; sending stereo would force a down-mix
+# at the bridge for zero gain. Stay mono on the wire. proto carries no
+# negotiation fields — these constants are the single source of truth.
 SAMPLE_RATE: Final[int] = 48000
 CHANNELS: Final[int] = 1
 DTYPE: Final[np.dtype[np.float32]] = np.dtype(np.float32)
@@ -55,14 +52,11 @@ class MicrophoneAudioChunk:
     """One outgoing audio chunk for the microphone stream.
 
     ``samples`` is a 1-D ``(N,)`` float32 array of mono samples in
-    ``[-1.0, 1.0]``. ``frame_id`` is supplied by the caller (typically
-    monotonically increasing from ``0``) so the server can detect gaps
-    or reordering; the client does not re-number it. ``unix_nanos`` is
-    the client-side send timestamp; leave it at the default ``0`` and
-    :meth:`MicrophoneClient.stream` will stamp it with
-    :func:`time.time_ns` at wire-encode time. A nonzero value is passed
-    through verbatim, which is useful when replaying a pre-recorded
-    sequence with original timestamps.
+    ``[-1.0, 1.0]``. ``frame_id`` flows through verbatim — the client
+    never rewrites it. Leave ``unix_nanos`` at ``0`` and
+    :meth:`MicrophoneClient.stream` stamps :func:`time.time_ns` at
+    wire-encode time; pass a nonzero value to replay pre-recorded
+    timestamps unchanged.
     """
 
     samples: NDArray[np.float32]
@@ -74,10 +68,8 @@ class MicrophoneAudioChunk:
 class MicrophoneStreamSummary:
     """Server-side summary returned when a ``StreamAudio`` stream ends.
 
-    Mirrors the proto ``MicrophoneStreamSummary`` 1:1. ``dropped_frames``
-    counts frames the bridge had to discard (e.g. ring buffer overflow
-    when the client outpaces engine consumption); a current bridge
-    typically reports ``0``.
+    ``dropped_frames`` counts frames the bridge discarded on ring buffer
+    overflow (client outpacing engine consumption); a healthy run is 0.
     """
 
     received_frames: int
@@ -90,10 +82,8 @@ class MicrophoneClient:
     """Async client for the Resonite IO ``Microphone`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
-    deterministically. Socket resolution mirrors
-    :class:`resoio.SessionClient`. The wire format is fixed at
-    48 kHz / Mono / float32 LE; constants are exposed at module level
-    (:data:`SAMPLE_RATE`, :data:`CHANNELS`, :data:`DTYPE`).
+    deterministically. The wire format is fixed at 48 kHz / Mono /
+    float32 LE (:data:`SAMPLE_RATE`, :data:`CHANNELS`, :data:`DTYPE`).
     """
 
     def __init__(self, socket_path: str | None = None) -> None:
@@ -134,16 +124,10 @@ class MicrophoneClient:
     ) -> MicrophoneStreamSummary:
         """Stream microphone chunks to the server and await the summary.
 
-        ``chunks`` is consumed lazily; each :class:`MicrophoneAudioChunk`
-        is converted to a wire :class:`MicrophoneAudioFrame` on the fly.
-        ``samples`` must be a 1-D float32 array (``dtype`` is enforced
-        by ``ndarray.tobytes`` plus ``sample_count = samples.shape[0]``;
-        callers are expected to coerce via :data:`DTYPE` upstream).
-        ``frame_id`` flows through verbatim. ``unix_nanos`` is stamped
-        here when the caller leaves it at ``0``, otherwise passed
-        through unchanged. gRPC failures surface as
-        :class:`grpclib.exceptions.GRPCError`. Raises
-        :class:`RuntimeError` if called outside ``async with``.
+        ``chunks`` is consumed lazily. Callers must hand in 1-D float32
+        ``samples`` (no dtype coercion happens here — ``tobytes`` blindly
+        serialises whatever buffer it gets). Raises :class:`RuntimeError`
+        if called outside ``async with``.
         """
         stub = self._stub
         if stub is None:

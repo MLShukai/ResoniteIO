@@ -1,27 +1,15 @@
 """``resoio mic`` subcommand: stream mono audio into the Resonite mic input.
 
-Symmetric counterpart of :mod:`resoio.cli.record` (which records Speaker
-output). The wire format is fixed at 48 kHz / Mono / float32 LE
-(see :mod:`resoio.microphone`); inputs that do not already match are
-either converted (stereo down-mix, int16 → float32 normalisation) or
-rejected with a clear error.
+The wire format is fixed at 48 kHz / Mono / float32 LE (see
+:mod:`resoio.microphone`); inputs that do not already match are
+converted where lossless (stereo → mono via average, int16 → float32
+normalisation) or rejected. There is no resampler — sample rate ≠ 48000
+is an error; pipe through ``ffmpeg`` and use ``-i -`` for raw PCM.
 
-Input modes:
-
-* ``-i <path.wav>``: parse a WAV file with stdlib :mod:`wave`. Accepted:
-  ``sampwidth == 4`` (treated as float32 — note the stdlib gives no way
-  to distinguish int32 from float32, so we deliberately assume float32
-  here; format probing is left to a future pass) and ``sampwidth == 2``
-  (int16, normalised to float32 by dividing by ``32768.0``). Mono is
-  passed through, stereo is averaged to mono, > 2 channels is rejected.
-  Sample rate ≠ 48000 is rejected (no resampler — use
-  ``ffmpeg ... | resoio mic -i -``).
-* ``-i -``: read raw float32 LE mono PCM from stdin. No header, no
-  validation — the caller is responsible for the format.
-
-Frames are chunked at 1024 samples each (≈ 21.3 ms at 48 kHz). The
-remainder shorter than a full chunk at EOF is discarded rather than
-zero-padded to keep frame boundaries clean on the server side.
+Frames are chunked at 1024 samples each (~21.3 ms at 48 kHz). The
+remainder shorter than a full chunk at EOF is dropped rather than
+zero-padded so the wire never carries silence the caller did not
+provide.
 """
 
 from __future__ import annotations
@@ -42,9 +30,8 @@ if TYPE_CHECKING:
     from resoio.microphone import MicrophoneStreamSummary
 
 
-# 1024 samples ≈ 21.3 ms per frame at 48 kHz. Close enough to the 20 ms
-# Opus encoder frame default (the engine re-frames anyway) that no
-# alignment headache crosses the wire boundary.
+# ~21.3 ms per frame at 48 kHz. Close to the 20 ms Opus encoder frame
+# default; the engine re-frames anyway, so the wire boundary stays clean.
 _CHUNK_SAMPLES = 1024
 
 _BRIDGE_READY_TIMEOUT_S = 120.0
@@ -55,12 +42,7 @@ def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
-    """Register the ``mic`` subparser on the top-level parser.
-
-    Flat command (``resoio mic`` rather than nesting under a hypothetical
-    ``resoio voice``) matches :mod:`resoio.cli.record` (the Speaker side)
-    so the input/output symmetry is visible at the CLI surface.
-    """
+    """Register the ``mic`` subparser on the top-level parser."""
     parser = subparsers.add_parser(
         "mic",
         parents=[common],
@@ -75,11 +57,11 @@ def register(
     parser.add_argument(
         "-i",
         "--input",
-        required=True,
+        default="-",
         dest="input",
         help=(
             'Input audio source. A path to a ``.wav`` file, or "-" to read '
-            "raw float32 LE mono PCM from stdin."
+            'raw float32 LE mono PCM from stdin (default: "-").'
         ),
     )
     parser.add_argument(
@@ -104,23 +86,16 @@ def register(
 
 
 class _InputFormatError(Exception):
-    """Raised for user-facing input format problems (rc=2).
-
-    Distinct from generic exceptions so the dispatcher knows whether to
-    emit rc=2 (format) vs rc=1 (other). The message is surfaced to
-    stderr verbatim.
-    """
+    """Distinct exception so ``_run`` can map format issues to rc=2 (vs
+    rc=1)."""
 
 
 def _load_wav(path: str) -> NDArray[np.float32]:
     """Load a WAV file and return mono float32 samples in ``[-1.0, 1.0]``.
 
-    See module docstring for the supported format envelope. Stereo is
-    down-mixed via simple ``(L+R)/2`` average; > 2 channels is an error
-    (no canonical down-mix for arbitrary layouts without losing spatial
-    intent). Sample rate ≠ 48000 is an error rather than auto-resampled
-    because adding a resampler dep (or rolling one) is out of scope for
-    this CLI.
+    Stereo is down-mixed via ``(L+R)/2``; > 2 channels is rejected (no
+    canonical down-mix for arbitrary layouts). Sample rate ≠ 48000 is
+    rejected to keep this CLI free of a resampler dependency.
     """
     with wave.open(path, "rb") as wav:
         sample_rate = wav.getframerate()
@@ -142,14 +117,11 @@ def _load_wav(path: str) -> NDArray[np.float32]:
         )
 
     if sampwidth == 4:
-        # No reliable way to distinguish int32 vs float32 via stdlib
-        # ``wave`` (it only reports byte width); we commit to float32
-        # here so the common ffmpeg-produced output works out of the box.
+        # stdlib ``wave`` cannot distinguish int32 from float32 (it only
+        # reports byte width); commit to float32 so ffmpeg output works
+        # out of the box.
         samples = np.frombuffer(raw, dtype=np.float32)
     elif sampwidth == 2:
-        # int16 → float32 in [-1, 1). Division by 32768.0 keeps the most
-        # negative int16 (-32768) on the [-1, 1] interval without
-        # clipping the positive side.
         int16 = np.frombuffer(raw, dtype=np.int16)
         samples = int16.astype(np.float32) / 32768.0
     else:
@@ -159,11 +131,8 @@ def _load_wav(path: str) -> NDArray[np.float32]:
         )
 
     if channels == 2:
-        # Interleaved L,R → ``(N, 2)`` → mono via mean over the channel axis.
         samples = samples.reshape(-1, 2).mean(axis=1, dtype=np.float32)
 
-    # Force the canonical dtype so downstream callers can rely on it
-    # without re-checking.
     return samples.astype(DTYPE, copy=False)
 
 
@@ -172,15 +141,10 @@ async def _wait_for_bridge_ready(
     timeout_s: float = _BRIDGE_READY_TIMEOUT_S,
     interval_s: float = _BRIDGE_READY_RETRY_INTERVAL_S,
 ) -> None:
-    """Block until ``Microphone.StreamAudio`` no longer raises
-    ``FAILED_PRECONDITION``.
+    """Block until ``Microphone.StreamAudio`` accepts an empty stream.
 
-    Same shape as :func:`resoio.cli.locomotion._wait_for_bridge_ready`:
-    open a fresh client, send an empty stream, and accept either a clean
-    summary or ``FAILED_PRECONDITION`` as a retry signal. Anything else
-    propagates immediately. The duplicate-of-locomotion form is
-    deliberate per the implementation plan; consolidation is left to a
-    later pass.
+    Sends an empty client-streaming call and treats ``FAILED_PRECONDITION``
+    as a retry signal; any other status propagates immediately.
     """
     import time
 
@@ -195,10 +159,8 @@ async def _wait_for_bridge_ready(
             async with MicrophoneClient(socket_path) as client:
 
                 async def _empty() -> AsyncIterator[MicrophoneAudioChunk]:
-                    # An empty stream is enough to provoke the bridge's
-                    # not-ready precondition without sending any samples.
                     return
-                    yield  # pragma: no cover - unreachable, marks generator
+                    yield  # pragma: no cover — marks this a generator
 
                 await client.stream(_empty())
             return
@@ -219,10 +181,8 @@ def _iter_wav_chunks(
 ) -> AsyncIterator[MicrophoneAudioChunk]:
     """Slice a pre-loaded mono buffer into ``_CHUNK_SAMPLES``-sized frames.
 
-    The trailing remainder shorter than ``_CHUNK_SAMPLES`` is dropped
-    rather than zero-padded; padding would inject silence the caller
-    didn't ask for. ``max_samples`` (from ``--duration``) caps the total
-    output sample count and lands on the same chunk boundary.
+    Trailing remainder shorter than a full chunk is dropped, not zero-
+    padded — never inject silence the caller did not request.
     """
 
     if max_samples is not None:
@@ -248,12 +208,9 @@ def _iter_stdin_chunks(
 ) -> AsyncIterator[MicrophoneAudioChunk]:
     """Read raw float32 LE mono PCM from ``stream`` in 1024-sample frames.
 
-    ``stream`` is the underlying binary buffer (e.g. ``sys.stdin.buffer``);
-    a short read at EOF is discarded if it does not align to a full chunk
-    so callers that need every last sample should zero-pad upstream.
-
-    Reads run inside ``asyncio.to_thread`` so the event loop stays
-    responsive (the gRPC stream is still being awaited concurrently).
+    Reads run inside ``asyncio.to_thread`` so the event loop keeps
+    pumping the concurrent gRPC stream. EOF short reads are dropped (no
+    zero-pad) — same contract as :func:`_iter_wav_chunks`.
     """
     chunk_bytes = _CHUNK_SAMPLES * DTYPE.itemsize
 
@@ -269,10 +226,7 @@ def _iter_stdin_chunks(
                 remaining_bytes = min(chunk_bytes, remaining_samples * DTYPE.itemsize)
             data: bytes = await asyncio.to_thread(stream.read, remaining_bytes)
             if len(data) < remaining_bytes:
-                # EOF (or short read on a pipe). Drop the partial tail
-                # rather than padding it with silence the user didn't
-                # ask for.
-                return
+                return  # EOF or short pipe read — drop the partial tail.
             samples = np.frombuffer(data, dtype=DTYPE)
             yield MicrophoneAudioChunk(
                 samples=samples,
@@ -287,9 +241,8 @@ def _iter_stdin_chunks(
 async def _run(args: argparse.Namespace) -> int:
     """Open a Microphone stream and push samples from WAV file or stdin.
 
-    Format / argument errors → rc=2 (+ stderr message). Broken pipe
-    (downstream closed stdin) → rc=0. Any other unexpected exception
-    propagates and the entry point translates it to rc=1.
+    Format / argument errors → rc=2; broken stdin pipe → rc=0; other
+    unexpected exceptions propagate (entry point maps them to rc=1).
     """
     # Deferred to keep ``resoio --help`` and shell completion fast.
     import grpclib.exceptions
@@ -337,7 +290,7 @@ async def _run(args: argparse.Namespace) -> int:
         async with MicrophoneClient(args.socket) as client:
             summary = await client.stream(chunks)
     except BrokenPipeError:
-        # stdin pipe closed mid-stream (e.g. ``head -c N | resoio mic -i -``).
+        # Upstream closed stdin mid-stream (e.g. ``head -c N | resoio mic -i -``).
         return 0
     except grpclib.exceptions.GRPCError as exc:
         print(

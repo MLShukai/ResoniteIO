@@ -10,21 +10,19 @@ namespace ResoniteIO.Core.Microphone;
 /// <remarks>
 /// <para>
 /// <see cref="IMicrophoneBridge"/> は optional DI: null なら <c>Unavailable</c>
-/// を返す (Core 単体テスト + microphone 非対応 engine 構成を成立させる、
-/// LocomotionService と同 pattern)。
+/// を返す (Core 単体テスト + microphone 非対応 engine 構成を成立させる)。
 /// </para>
 /// <para>
-/// 例外翻訳: bridge 未注入 → <c>Unavailable</c>、<see cref="MicrophoneNotReadyException"/>
-/// → <c>FailedPrecondition</c> (client は時間を置いて再 stream)、client cancel
-/// / UDS 切断 → <c>NotifyDisconnect(Cancelled)</c> 通知後に再 throw (Grpc.AspNetCore
-/// が <c>Cancelled</c> に変換)、その他 → <c>NotifyDisconnect(Errored)</c> 通知後に
-/// <c>Internal</c>。
+/// 例外翻訳: bridge 未注入 → <c>Unavailable</c>、
+/// <see cref="MicrophoneNotReadyException"/> → <c>FailedPrecondition</c>、
+/// client cancel / UDS 切断 → <c>NotifyDisconnect(Cancelled)</c> + 再 throw
+/// (Grpc.AspNetCore が <c>Cancelled</c> に変換)、その他 →
+/// <c>NotifyDisconnect(Errored)</c> + <c>Internal</c>。
 /// </para>
 /// <para>
-/// proto <c>bytes samples</c> → <c>float[]</c> 変換は defensive copy を行う
-/// (Bridge が長期保有しても proto buffer の再利用と衝突しない設計)。
-/// proto の <c>sample_count</c> は信用せず、実際の bytes 長から推測する
-/// (defensive: client 側 stamp ミスを Bridge に伝播させない)。
+/// proto <c>bytes samples</c> → <c>float[]</c> は defensive copy。
+/// proto の <c>sample_count</c> は信用せず実 bytes 長から再計算する
+/// (client 側 stamp のミスを Bridge に伝播させない)。
 /// </para>
 /// </remarks>
 public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
@@ -49,8 +47,8 @@ public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
                 "Microphone.StreamAudio called but no IMicrophoneBridge is registered; "
                     + "returning Unavailable."
             );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
+            // gRPC 慣習として "server-side not ready" に Unavailable を使う
+            // (transient ではないが client retry policy に friendly)。
             throw new RpcException(
                 new Status(StatusCode.Unavailable, "Microphone bridge is not configured.")
             );
@@ -123,9 +121,6 @@ public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
 
     private static MicrophoneFrame MapFromProto(V1.MicrophoneAudioFrame proto)
     {
-        // proto bytes (4 byte per float32 LE) → float[] へ defensive copy。
-        // proto の SampleCount は信用せず実 bytes 長から推測する (client 側 stamp
-        // のミスを Bridge に伝播させない設計)。
         var bytes = proto.Samples.Span;
         var floatCount = bytes.Length / sizeof(float);
         var samples = new float[floatCount];

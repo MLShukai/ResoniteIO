@@ -24,21 +24,13 @@ _SAMPLES_PER_FRAME = 256
 
 
 def _make_chunk_samples(frame_index: int) -> np.ndarray:
-    """Deterministic mono payload for frame ``frame_index``.
-
-    All ``_SAMPLES_PER_FRAME`` samples take the constant value
-    ``frame_index`` so that on the receiving side every byte can be
-    matched back to the source frame.
-    """
+    """Constant payload = ``frame_index`` so every byte traces to its source
+    frame."""
     return np.full(_SAMPLES_PER_FRAME, float(frame_index), dtype=np.float32)
 
 
 class _RecordingMicrophone(MicrophoneBase):
-    """In-process fake that records every received frame.
-
-    Returns a summary with ``received_samples`` equal to the literal
-    sum of ``sample_count`` so the test can assert wire-shape integrity.
-    """
+    """In-process fake that records every received frame."""
 
     def __init__(self) -> None:
         self.received: list[MicrophoneAudioFrame] = []
@@ -91,11 +83,8 @@ class TestMicrophoneClient:
             for sent, got in zip(scenario, fake.received, strict=True):
                 assert got.frame_id == sent.frame_id
                 assert got.sample_count == _SAMPLES_PER_FRAME
-                # Client always stamps a positive unix_nanos when the
-                # caller leaves it at 0 (default).
+                # Client stamps unix_nanos when caller leaves it at 0.
                 assert got.unix_nanos > 0
-                # The wire bytes must decode back to the original mono
-                # samples (proves dtype + 1-D shape end-to-end).
                 decoded = np.frombuffer(got.samples, dtype=np.float32)
                 assert decoded.shape == (_SAMPLES_PER_FRAME,)
                 np.testing.assert_array_equal(decoded, sent.samples)
@@ -121,8 +110,7 @@ class TestMicrophoneClient:
         await server.start(path=str(socket_path))
         try:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            # Caller controls frame_id (monotonic from 0 by convention,
-            # but the client must not rewrite whatever the caller picks).
+            # Non-contiguous IDs — client must not renumber them.
             sent_ids = [0, 1, 2, 7, 8]
             scenario = [
                 MicrophoneAudioChunk(samples=_make_chunk_samples(0), frame_id=fid)
@@ -145,8 +133,7 @@ class TestMicrophoneClient:
         await server.start(path=str(socket_path))
         try:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            # Nonzero unix_nanos must flow through verbatim (replay
-            # scenarios depend on preserved timestamps).
+            # Replay scenarios depend on the explicit timestamp surviving.
             explicit_ts = 1_700_000_000_000_000_000
             chunk = MicrophoneAudioChunk(
                 samples=_make_chunk_samples(0),
