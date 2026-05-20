@@ -105,6 +105,12 @@
       <HintPath>$(GamePath)Elements.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- MonoSample / IAudioSample<T> を提供 (Microphone Bridge が AudioInput.WriteSamples<MonoSample>
+         に渡す sample 型)。Resonite engine が同梱しているため Private=False で出力に含めない。 -->
+    <Reference Include="Elements.Assets">
+      <HintPath>$(GamePath)Elements.Assets.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Renderite.Shared">
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>

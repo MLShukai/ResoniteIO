@@ -1,0 +1,60 @@
+// Microphone service: Python → Resonite に音声を送信する片方向経路。Bridge は
+// FrooxEngine.AudioInput 派生 (virtual capture device) を AudioSystem に登録し、
+// Resonite UI で default mic に選択された場合に user voice として broadcast
+// される (engine 側で UserAudioStream<MonoSample> + OpusStream<MonoSample>
+// 経由で他ユーザーに配信、Opus encode は engine 側自動)。
+//
+// 方向別の分離: Python → Resonite は Microphone、Resonite → Python は Speaker
+// として独立 (本ファイルでは bidi にしない、format も独立に定義する)。
+//
+// sample format は **固定**: 48 kHz / Mono / float32 LE。voice broadcast 経路
+// (MonoSample) と直結し変換コストゼロ。Speaker (stereo) とは proto 上 channel
+// 数が異なるため AudioFrame を共有しない (誤接続を型で防ぐ意図)。
+//
+// frame サイズ (sample_count) は Python クライアント側の chunking 単位に従う
+// (典型 1024 samples ≒ 21 ms、Opus frame duration 20 ms と整合)。Bridge 側は
+// 内部 ring buffer に append して engine tick で消費するので可変長 OK。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// Python → server に送る音声 chunk。
+//
+// samples は `sample_count * 4 (float32 bytes)`。mono なので interleave なし。
+message MicrophoneAudioFrame {
+  // Python クライアントが 0 から monotonic に採番。連続性検査 / 順序保証用。
+  uint64 frame_id = 1;
+  // クライアント送信時刻 (UTC ナノ秒、time.time_ns())。latency 計測用。
+  int64 unix_nanos = 2;
+  // sample 数 (= samples.length / 4)。
+  uint32 sample_count = 3;
+  // float32 LE, mono (channel 数=1 固定)。
+  bytes samples = 4;
+}
+
+// StreamAudio RPC 完了時の summary。
+message MicrophoneStreamSummary {
+  // server が受信した frame 総数。
+  int64 received_frames = 1;
+  // server が受信した sample 総数 (= 各 frame の sample_count の合計)。
+  int64 received_samples = 2;
+  // Bridge 側で drop した frame 数 (ring buffer overflow など)。未実装時は 0。
+  int64 dropped_frames = 3;
+  // サーバ完了時刻 (UTC ナノ秒)。
+  int64 unix_nanos = 4;
+}
+
+service Microphone {
+  // Python が音声 frame を client-streaming で送信。Bridge は virtual
+  // AudioInput の ring buffer に append し、engine tick で WriteSamples
+  // 経由で voice 配信ストリームに流す。
+  //
+  // disconnect / lifecycle:
+  //   - `CompleteAsync` で graceful close → Bridge は ring buffer の残りを
+  //     消化し続ける (再生中の余韻を切らない)。
+  //   - UDS 切断 / 例外 cancel → Bridge が ring buffer を clear (RL/ロボティ
+  //     クスの safety: client crash 時に古い音が残らない)。
+  rpc StreamAudio(stream MicrophoneAudioFrame) returns (MicrophoneStreamSummary);
+}

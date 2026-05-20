@@ -8,6 +8,7 @@ using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 
 namespace ResoniteIO.Core.Session;
@@ -74,7 +75,8 @@ public sealed class SessionHost : IAsyncDisposable
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
         ILocomotionBridge? locomotionBridge = null,
-        ISpeakerBridge? speakerBridge = null
+        ISpeakerBridge? speakerBridge = null,
+        IMicrophoneBridge? microphoneBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -119,6 +121,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(speakerBridge);
         }
+        if (microphoneBridge is not null)
+        {
+            builder.Services.AddSingleton(microphoneBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -133,6 +139,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<DisplayService>();
         app.MapGrpcService<LocomotionService>();
         app.MapGrpcService<SpeakerService>();
+        app.MapGrpcService<MicrophoneService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -170,6 +177,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (speakerBridge is null)
         {
             log.LogWarning("Speaker modality is not configured.");
+        }
+        if (microphoneBridge is null)
+        {
+            log.LogWarning("Microphone modality is not configured.");
         }
 
         var runTask = Task.Run(

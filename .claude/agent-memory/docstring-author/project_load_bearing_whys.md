@@ -1,6 +1,6 @@
 ---
 name: load-bearing-whys
-description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker surface)
+description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 7 Microphone surface)
 metadata:
   type: project
 ---
@@ -24,6 +24,13 @@ are load-bearing and must NOT be cut.
   on `AudioOutputDriver.AudioFrameRendered`, WASAPI thread hot path,
   Dispose / SafeShutdown ordering, WAV writer stdlib-rejection
   rationale).
+- Items 25–29 originate from Step 7 (Microphone: virtual AudioInput
+  Unregister-API-missing decompile finding, must-not-throw contract
+  on `NotifyDisconnect`, RL-safety ring-buffer clear policy, `wave`
+  sampwidth=4-is-float32 commitment, fixed-mono-wire rationale).
+- Items 30–32 originate from Step 7 polish wave 2 (`paced()` helper,
+  CLI WAV warmup constant, 5 s sine fixture sized to exceed bridge
+  ring buffer).
 
 01. **Google.Protobuf early-resolution hazard**
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
@@ -212,6 +219,93 @@ are load-bearing and must NOT be cut.
     silently regressing float32 support. The seek-and-patch design
     (placeholder size fields at offsets 4 / 40, patched on close) is
     the reason `-o -` for `.wav` is disallowed (stdout is non-seekable).
+25. **Fixed mono wire format on Microphone** in
+    `python/src/resoio/microphone.py` constants comment: voice
+    broadcast on the Resonite side flows through
+    `UserAudioStream<MonoSample>`; sending stereo would force a
+    down-mix at the bridge for zero gain. The const-block comment
+    documents this and pairs with the proto schema's "channel 数=1
+    固定" note. Removing the comment invites a "consistency with
+    Speaker" PR to widen the wire to stereo, which would either fail
+    in the Bridge or silently down-mix without anyone noticing the
+    pointless conversion.
+26. **`AudioSystem.UnregisterAudioInput` does not exist (decompile
+    confirmed)** in `FrooxEngineMicrophoneBridge.Dispose` and the
+    class XML `<para>` covering Dispose: only `AudioInputs.Add` exists;
+    there is no inverse. The Bridge's best-effort
+    `_audioSystem.AudioInputs.Remove(_audioInput)` is the engineered
+    workaround, and the private `_audioInputDeviceIDs` HashSet residual
+    means a re-load may emit a DeviceID-duplicate warning (functional
+    impact: none). Both the class-level comment and the inline comment
+    above `Remove(_audioInput)` are load-bearing — stripping them
+    invites a future PR to either remove the manual Remove ("looks
+    like it should be unnecessary") or fail to add a real Unregister
+    when (if) the engine ships one.
+27. **`IMicrophoneBridge.NotifyDisconnect` must not throw**
+    (interface XML on the method + matching comment in
+    `FrooxEngineMicrophoneBridge.NotifyDisconnect`'s try/catch):
+    `MicrophoneService` calls `NotifyDisconnect` unguarded in its
+    cancel / error paths, so an escaping exception would break
+    lifecycle. The "log path も best-effort (ProcessExit 経路では
+    log sink が dead の可能性)" comment in the catch block documents
+    why even the warning emit is itself wrapped — `BepInExLogSink`
+    can lock or throw during shutdown. Removing either lets a future
+    refactor either propagate Reset() exceptions to the gRPC layer or
+    log per-disconnect on ProcessExit and trigger a self-deadlock.
+28. **Microphone Cancelled/Errored → ring buffer clear (RL safety)**
+    in `FrooxEngineMicrophoneBridge.NotifyDisconnect`'s switch on
+    `MicrophoneDisconnectReason`: client crash must not leave the
+    last second of audio playing into the world. The comment "RL/
+    ロボティクス safety: client crash 時に古い音が残らない" pairs with
+    the proto file's lifecycle paragraph and is the only place in the
+    Bridge that documents the policy choice (vs the Speaker side which
+    keeps the buffer). A future refactor to a single "always preserve"
+    path would silently regress RL safety.
+29. **`wave` sampwidth=4 → float32 commitment** in
+    `python/src/resoio/cli/mic.py` `_load_wav`: stdlib `wave` only
+    reports byte width per sample; it cannot distinguish int32 from
+    float32. The CLI commits to float32 because that is what the
+    ffmpeg-produced output uses by default and matches the wire
+    format. The inline comment is the only place this convention is
+    documented (the fixture writer in `tests/e2e/fixtures/generate_sine.py`
+    also relies on it). Without the comment a future PR will add an
+    int32 branch that silently treats float32 bytes as integers and
+    produces inaudible noise.
+30. **`paced()` helper contract**
+    (`python/src/resoio/microphone.py` `paced` docstring): three
+    WHYs are load-bearing. (a) opt-in for pre-loaded buffers; the
+    default `MicrophoneClient.stream` path is producer-paced.
+    (b) **do not** wrap real-time producers (live mic, TTS) — the
+    extra sleep compounds into audible latency; reviewers will be
+    tempted to "make pacing the default" since it sounds safer.
+    (c) sleep-after-yield means downstream auto-stamp reflects
+    *emit* time, not original capture time, so replays must set
+    `unix_nanos` explicitly to preserve timestamps. Stripping (b)
+    invites a regression where TTS over a slow producer + paced()
+    accumulates delay; stripping (c) silently corrupts replay
+    timestamps without any error path.
+31. **`_WARMUP_CHUNKS = 5` head start**
+    (`python/src/resoio/cli/mic.py`): ~107 ms (5 × 1024 / 48 kHz)
+    absorbs the engine tick latency between `StreamAudio`
+    acceptance and the Bridge draining the ring buffer. Without
+    the burst, the engine's first tick lands on an empty buffer
+    and the listener hears a tiny gap at the start. The constant
+    comment is the only place this is documented; a future
+    refactor that drops it to `1` or `0` for "simplicity" reopens
+    the gap and there is no automated test that fails (audible
+    only).
+32. **5 s sine fixture deliberately > 2 s ring buffer**
+    (`python/tests/e2e/fixtures/generate_sine.py` `_DURATION_S`
+    and filename comments): 1 s used to fit entirely in the bridge's
+    2 s ring buffer even when the client burst-sent it, hiding
+    the pacing-regression we now guard against. The filename
+    intentionally keeps the historic "1s" suffix to avoid git
+    history churn across every reference. Both the duration WHY
+    and the filename retention WHY are load-bearing — without
+    them a future PR will either (a) shrink the fixture back to
+    1 s for "obvious naming consistency", silently disabling the
+    pacing regression detector, or (b) rename the file and churn
+    every reference for cosmetic reasons.
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel

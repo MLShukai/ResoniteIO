@@ -10,6 +10,7 @@ using FrooxEngine;
 using ResoniteIO.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Loading;
@@ -47,6 +48,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private RendererFrameInterprocessReceiver? _frameReceiver;
     private IDisplayBridge? _displayBridge;
     private FrooxEngineLocomotionBridge? _locomotionBridge;
+    private FrooxEngineMicrophoneBridge? _microphoneBridge;
     private FrooxEngineSpeakerBridge? _speakerBridge;
 
     /// <remarks>
@@ -102,6 +104,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _locomotionBridge = new FrooxEngineLocomotionBridge(Engine.Current, _logSink);
 
+            _microphoneBridge = new FrooxEngineMicrophoneBridge(Engine.Current, _logSink);
+
             _speakerBridge = new FrooxEngineSpeakerBridge(Engine.Current, _logSink);
 
             _sessionHost = SessionHost.Start(
@@ -111,7 +115,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _cameraBridge,
                 _displayBridge,
                 _locomotionBridge,
-                _speakerBridge
+                _speakerBridge,
+                _microphoneBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -131,13 +136,17 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // 二重呼び出し対策として各 field は Dispose 後に null 化する。
     private void SafeShutdown()
     {
-        // Dispose 順: receiver → camera → display → locomotion → speaker → session(bridge)
-        //   → cts → sessionHost → assemblyResolver。
+        // Dispose 順: receiver → camera → display → locomotion → microphone → speaker
+        //   → session(bridge) → cts → sessionHost → assemblyResolver。
         // 上流から順に止めることで、下流が残 input を dead bridge に push する race を防ぐ:
         //   - Receiver を先に止めて残 frame が dead CameraBridge に届かないようにする。
         //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し pending な
         //     CameraService.StreamFrames を CameraNotReadyException で抜けさせる。
         //   - LocomotionBridge.Dispose は engine 側 ExternalInput を 0 戻しして idle 化する。
+        //   - MicrophoneBridge.Dispose は virtual AudioInput を AudioInputs から外し
+        //     ring buffer を clear する。engine への input 注入を止める state-mutating
+        //     操作なので Locomotion と Speaker の間で行う (Speaker の Harmony unpatch
+        //     より先に止めて、audio 経路の整合を保つ)。
         //   - SpeakerBridge.Dispose は Harmony unpatch + Channel complete を行い、WASAPI
         //     audio thread からの push を完全に断つ。SessionHost を畳む前に行うことで
         //     pending な SpeakerService.StreamAudio が完了するか正常終了する。
@@ -153,6 +162,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
         SafeDispose(_locomotionBridge, nameof(_locomotionBridge));
         _locomotionBridge = null;
+
+        SafeDispose(_microphoneBridge, nameof(_microphoneBridge));
+        _microphoneBridge = null;
 
         SafeDispose(_speakerBridge, nameof(_speakerBridge));
         _speakerBridge = null;

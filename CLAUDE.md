@@ -6,7 +6,7 @@
 
 `resonite-io` は **Resonite を AI エージェントの実行環境として使うための双方向 IPC ブリッジ**。Resonite クライアント側で動く C# Mod (`ResoniteIO`、BepisLoader) と Python パッケージ (`resoio`) を、gRPC over Unix Domain Socket で接続する monorepo。
 
-設計思想は **強化学習的な抽象化ではなく、リアルタイムロボティクス的な設計**。`Observation/Action` の抽象は持たず、`Camera` / `Speaker` / `Locomotion` / `Manipulation` といったモダリティ単位で独立した非同期ストリームを提供する。**音声系は双方向を 1 service にせず、方向別に `Speaker` (Resonite → Python、実装済) と `Microphone` (Python → Resonite、将来) を分離**。RL の `step()` 同期はスコープ外で、Python 側ライブラリで上に構築されるべきもの。
+設計思想は **強化学習的な抽象化ではなく、リアルタイムロボティクス的な設計**。`Observation/Action` の抽象は持たず、`Camera` / `Speaker` / `Microphone` / `Locomotion` / `Manipulation` といったモダリティ単位で独立した非同期ストリームを提供する。**音声系は双方向を 1 service にせず、方向別に `Speaker` (Resonite → Python、stereo) と `Microphone` (Python → Resonite、mono) を分離**。RL の `step()` 同期はスコープ外で、Python 側ライブラリで上に構築されるべきもの。
 
 C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / proto handler / 各モダリティのドメインロジック) は **Resonite に一切依存しないピュアライブラリ `ResoniteIO.Core`** に置き、BepInEx Plugin `ResoniteIO` は engine bridging のみを担う薄いアダプタとする。依存方向は **Core ← Mod** で逆参照禁止。Python (`resoio`) も Resonite 非依存。詳細は [.claude/memory/feedback_core_mod_layering.md](.claude/memory/feedback_core_mod_layering.md) 参照。
 
@@ -20,20 +20,20 @@ C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / pr
 
 ## プロジェクト状況
 
-**現状: Step 0〜5 が完了。Step 0 = Docker 化開発環境、Step 1 = mod/python/proto スケルトン、Step 2 = `Session.Ping` + Core/Mod 二層分離 + `ISessionBridge` 注入、Step 3 = Camera server-streaming RPC (`CameraService` + `FrooxEngineCameraBridge`)、Step 4 = Locomotion client-streaming RPC (`LocomotionService` + `FrooxEngineLocomotionBridge` で `AccessTools.FieldRefAccess` 経由 ExternalInput 注入)、Step 5 = Speaker server-streaming RPC (`SpeakerService` + `FrooxEngineSpeakerBridge` で `AudioOutputDriver.AudioFrameRendered` を HarmonyLib Postfix で tap、48 kHz / Stereo / float32 LE 固定、`resoio record` CLI で WAV / raw PCM stdout 出力)。次は Step 6 (Manipulation モジュール)** で、`IManipulationBridge` + `ManipulationService` + Python `ManipulationClient` を Step 3-5 と同じ構造で追加する。Microphone (旧 Audio bidi の片割れ、Python → Resonite) は新 Step 7 として独立。
+**現状: Step 0〜5 と Step 7 が完了 (Step 6 は次に着手)**。Step 0 = Docker 化開発環境、Step 1 = mod/python/proto スケルトン、Step 2 = `Session.Ping` + Core/Mod 二層分離 + `ISessionBridge` 注入、Step 3 = Camera server-streaming RPC (`CameraService` + `FrooxEngineCameraBridge`)、Step 4 = Locomotion client-streaming RPC (`LocomotionService` + `FrooxEngineLocomotionBridge` で `AccessTools.FieldRefAccess` 経由 ExternalInput 注入)、Step 5 = Speaker server-streaming RPC (`SpeakerService` + `FrooxEngineSpeakerBridge` で `AudioOutputDriver.AudioFrameRendered` を HarmonyLib Postfix で tap、48 kHz / Stereo / float32 LE 固定、`resoio record` CLI で WAV / raw PCM stdout 出力)、Step 7 = Microphone client-streaming RPC (`MicrophoneService` + `FrooxEngineMicrophoneBridge` で `FrooxEngine.AudioInput` 派生 virtual capture device を `AudioSystem.RegisterAudioInput` 登録、48 kHz / Mono / float32 LE 固定、Opus encode は engine 側 `UserAudioStream<MonoSample>` 経由で自動、`resoio mic -i {wav|-}` CLI で WAV 読込 or stdin pipe)。**次は Step 6 (Manipulation モジュール)** で、`IManipulationBridge` + `ManipulationService` + Python `ManipulationClient` を既存モダリティと同じ構造で追加する (Step 6 と Step 7 は実装順を入れ替え、ユーザー判断で音声系を先に完結させた)。
 
 実装済みの主要要素:
 
 - 開発環境: `Dockerfile` / `docker-compose.yml` / `justfile` / `scripts/container-init.sh` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container → host Resonite 起動・停止 bridge)
-- C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を同フォルダに集約 (`Session/{ISessionBridge,SessionService,SessionHost}`、`Camera/{ICameraBridge,PushedFrameCameraBridge,CameraService}`、`Speaker/{ISpeakerBridge,PushedAudioFrameSpeakerBridge,SpeakerService,SpeakerNotReadyException}`、`Locomotion/{ILocomotionBridge,LocomotionService}`、`Display/{IDisplayBridge,DisplayService}`)。共通基盤として `Logging/ILogSink` と `UnixNanosClock` (proto stamp / Service 戻り値の共通 clock)
-- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge 群を注入、`SafeShutdown` 経由で partial-failure / `AppDomain.ProcessExit` どちらも同じ Dispose chain に集約 — 順序は Locomotion → Speaker → SessionBridge) / `Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,FrooxEngineSpeakerBridge,RendererFrameInterprocessReceiver}` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
-- Python (`python/src/resoio/`): `SessionClient` / `CameraClient` (numpy frame yield) / `SpeakerClient` + `AudioChunk` (numpy float32 (N, 2) yield、`SAMPLE_RATE`/`CHANNELS`/`DTYPE` 定数 export) / `LocomotionClient` + `LocomotionCmd` / `DriveSummary` (async ctx mgr で client-streaming `Drive`) / `_socket.py` (UDS 探索) / `_generated/` (betterproto2 出力、commit 済み)
-- CLI (`python/src/resoio/cli/`): action 名 flat command の集合 — `resoio ping` / `resoio capture` (camera Y4M ffmpeg pipe) / `resoio record` (speaker WAV または raw float32 LE PCM stdout) / `resoio locomotion` (manual drive) / `resoio display`。subgroup 階層化はしない (将来 mic は `resoio voice` 等の独立 flat command 追加)
-- proto: `proto/resonite_io/v1/{session,camera,locomotion,speaker,display}.proto`。`buf.yaml` で `SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except (モダリティ固有ドメイン名を優先する規約。[.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md](.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md))
+- C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を同フォルダに集約 (`Session/{ISessionBridge,SessionService,SessionHost}`、`Camera/{ICameraBridge,PushedFrameCameraBridge,CameraService}`、`Speaker/{ISpeakerBridge,PushedAudioFrameSpeakerBridge,SpeakerService,SpeakerNotReadyException}`、`Microphone/{IMicrophoneBridge,MicrophoneService,MicrophoneNotReadyException}`、`Locomotion/{ILocomotionBridge,LocomotionService}`、`Display/{IDisplayBridge,DisplayService}`)。共通基盤として `Logging/ILogSink` と `UnixNanosClock` (proto stamp / Service 戻り値の共通 clock)
+- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge 群を注入、`SafeShutdown` 経由で partial-failure / `AppDomain.ProcessExit` どちらも同じ Dispose chain に集約 — 順序は receiver → camera → display → locomotion → microphone → speaker → session) / `Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,FrooxEngineSpeakerBridge,FrooxEngineMicrophoneBridge,RendererFrameInterprocessReceiver}` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
+- Python (`python/src/resoio/`): `SessionClient` / `CameraClient` (numpy frame yield) / `SpeakerClient` + `AudioChunk` (numpy float32 (N, 2) yield、`SAMPLE_RATE=48000`/`CHANNELS=2`/`DTYPE` 定数 export) / `MicrophoneClient` + `MicrophoneAudioChunk` + `MicrophoneStreamSummary` (numpy float32 (N,) mono、`SAMPLE_RATE=48000`/`CHANNELS=1`/`DTYPE` 定数、async ctx mgr で client-streaming `stream`) / `LocomotionClient` + `LocomotionCmd` / `DriveSummary` (async ctx mgr で client-streaming `Drive`) / `_socket.py` (UDS 探索) / `_generated/` (betterproto2 出力、commit 済み)
+- CLI (`python/src/resoio/cli/`): action 名 flat command の集合 — `resoio ping` / `resoio capture` (camera Y4M ffmpeg pipe) / `resoio record` (speaker WAV または raw float32 LE PCM stdout) / `resoio mic` (microphone WAV 読込 or stdin raw float32 LE mono PCM) / `resoio locomotion` (manual drive) / `resoio display`。subgroup 階層化はしない (Step 7 で mic CLI 追加済み、当初想定の `resoio voice` ではなく `resoio mic` 名に確定)
+- proto: `proto/resonite_io/v1/{session,camera,locomotion,speaker,microphone,display}.proto`。`buf.yaml` で `SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except (モダリティ固有ドメイン名を優先する規約。[.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md](.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md))
 - 補助スクリプト: `scripts/gen_proto.sh` (Python 生成専用) / `scripts/decompile.sh` (ilspycmd、Renderite Unity DLL も対象) / `scripts/lib.sh`
 - mod Thunderstore packaging: `thunderstore.toml` + `tcli` local tool + `dotnet build -t:PackTS`
 - UDS path: 本番 gRPC IPC は **`$HOME/.resonite-io/`**、container ↔ host debug bridge は **`$HOME/.resonite-io-debug/`** で host/container 同一絶対パスの bind 共有 (`$XDG_RUNTIME_DIR/` は pressure-vessel sandbox が通さないため不採用。詳細は [.claude/memory/reference_pressure_vessel_paths.md](.claude/memory/reference_pressure_vessel_paths.md))
-- 未着手モダリティ (Manipulation / Microphone) は両層ともファイルなし。モダリティ追加時に Core 側 `<Modality>/` と Mod 側 `Bridge/FrooxEngine<Modality>Bridge.cs` を都度作る。既存モダリティの Mod 側実装は `mod/src/ResoniteIO/Bridge/` に集約 (`FrooxEngine<Modality>Bridge` 命名)
+- 未着手モダリティ (Manipulation) は両層ともファイルなし。モダリティ追加時に Core 側 `<Modality>/` と Mod 側 `Bridge/FrooxEngine<Modality>Bridge.cs` を都度作る。既存モダリティの Mod 側実装は `mod/src/ResoniteIO/Bridge/` に集約 (`FrooxEngine<Modality>Bridge` 命名)
 
 リポジトリ実構造:
 
@@ -47,7 +47,7 @@ resonite-io/
 ├── .env.example               # `.env` の雛形 (ResonitePath / GaleProfile / GaleBin 等)
 ├── resonite_io_plan.md        # 全体計画書 (Step 0〜7、決定事項、リスク)
 ├── proto/                     # 単一の真実: .proto 定義
-│   └── resonite_io/v1/{session,camera,locomotion,speaker,display}.proto   # manipulation / microphone は後続 Step で追加
+│   └── resonite_io/v1/{session,camera,locomotion,speaker,microphone,display}.proto   # manipulation は後続 Step で追加
 ├── mod/                       # C# 側 (.NET 10、Core/Mod 二層構成)
 │   ├── ResoniteIO.sln
 │   ├── Directory.Build.{props,targets}
@@ -59,13 +59,14 @@ resonite-io/
 │   │   │   ├── Session/{ISessionBridge,SessionService,SessionHost}.cs   # IF + Ping 実装 + Kestrel/UDS host
 │   │   │   ├── Camera/{ICameraBridge,PushedFrameCameraBridge,CameraService}.cs   # IF + renderer push 経路 + StreamFrames RPC
 │   │   │   ├── Speaker/{ISpeakerBridge,PushedAudioFrameSpeakerBridge,SpeakerService,SpeakerNotReadyException}.cs   # IF + WASAPI push 経路 + StreamAudio RPC
+│   │   │   ├── Microphone/{IMicrophoneBridge,MicrophoneService,MicrophoneNotReadyException}.cs   # IF + AudioInput push 経路 + StreamAudio client-streaming RPC
 │   │   │   ├── Locomotion/{ILocomotionBridge,LocomotionService}.cs       # IF + Drive client-streaming RPC
 │   │   │   ├── Display/{IDisplayBridge,DisplayService}.cs                # IF + Apply/Stat RPC (camera v2 副産物)
 │   │   │   └── Logging/ILogSink.cs             # mod 側 BepInEx logger を Core に注入する抽象
 │   │   └── ResoniteIO/        # Mod 層 (BepInEx adapter、Core を ProjectReference)
 │   │       ├── ResoniteIO.csproj                          # Core 同梱 DLL + AspNetCore shared framework を gale/ に deploy
 │   │       ├── ResoniteIOPlugin.cs                        # BasePlugin + OnEngineReady → SessionHost.Start (partial-failure と ProcessExit を SafeShutdown に統合)
-│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,FrooxEngineSpeakerBridge,RendererFrameInterprocessReceiver}.cs
+│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,FrooxEngineSpeakerBridge,FrooxEngineMicrophoneBridge,RendererFrameInterprocessReceiver}.cs
 │   │       ├── Loading/PluginAssemblyResolver.cs          # Default ALC.Resolving fallback。Plugin.Load との協調で旧 Google.Protobuf を avoid
 │   │       └── Logging/BepInExLogSink.cs                  # ILogSink を ManualLogSource で実装
 │   └── tests/
@@ -76,18 +77,19 @@ resonite-io/
 │   ├── pyproject.toml         # requires-python >=3.12
 │   ├── uv.lock
 │   ├── src/resoio/
-│   │   ├── __init__.py        # importlib.metadata で __version__、SessionClient / CameraClient / SpeakerClient / LocomotionClient を re-export
+│   │   ├── __init__.py        # importlib.metadata で __version__、SessionClient / CameraClient / SpeakerClient / MicrophoneClient / LocomotionClient を re-export
 │   │   ├── py.typed
 │   │   ├── _socket.py         # RESONITE_IO_SOCKET / _DIR / ~/.resonite-io 探索 (private)
 │   │   ├── session.py         # SessionClient (async context manager) + Ping
 │   │   ├── camera.py          # CameraClient (numpy ndarray yield)
-│   │   ├── speaker.py         # SpeakerClient + AudioChunk (numpy float32 (N, 2) yield) + SAMPLE_RATE/CHANNELS/DTYPE 定数
+│   │   ├── speaker.py         # SpeakerClient + AudioChunk (numpy float32 (N, 2) yield) + SAMPLE_RATE/CHANNELS=2/DTYPE 定数
+│   │   ├── microphone.py      # MicrophoneClient + MicrophoneAudioChunk + MicrophoneStreamSummary (numpy float32 (N,) mono) + SAMPLE_RATE/CHANNELS=1/DTYPE 定数
 │   │   ├── locomotion.py      # LocomotionClient + LocomotionCmd / DriveSummary (client-streaming Drive)
-│   │   ├── cli/               # `resoio` console script: ping / capture / record / locomotion / display (action 名 flat command)
+│   │   ├── cli/               # `resoio` console script: ping / capture / record / mic / locomotion / display (action 名 flat command)
 │   │   └── _generated/        # protoc 出力 (commit する、pyright/ruff/coverage の exclude 対象)
 │   └── tests/
-│       ├── resoio/{test_session,test_camera,test_speaker,test_locomotion,test_init}.py   # 単体 + in-process gRPC ラウンドトリップ
-│       ├── resoio/cli/{test_ping,test_capture,test_record,test_locomotion,test_display}.py   # CLI subcommand 単体
+│       ├── resoio/{test_session,test_camera,test_speaker,test_microphone,test_locomotion,test_init}.py   # 単体 + in-process gRPC ラウンドトリップ
+│       ├── resoio/cli/{test_ping,test_capture,test_record,test_mic,test_locomotion,test_display}.py   # CLI subcommand 単体
 │       └── e2e/               # 実 Resonite 接続テスト (pytest --ignore=python/tests/e2e で除外)
 ├── scripts/{gen_proto.sh, decompile.sh, container-init.sh, lib.sh,
 │           host_agent.py, resonite_cli.py}  # 後者 2 つは container ↔ host Resonite bridge
