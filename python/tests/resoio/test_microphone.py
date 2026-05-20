@@ -18,6 +18,7 @@ from resoio.microphone import (
     MicrophoneAudioChunk,
     MicrophoneClient,
     MicrophoneStreamSummary,
+    paced,
 )
 
 _SAMPLES_PER_FRAME = 256
@@ -155,3 +156,62 @@ class TestModuleConstants:
         assert SAMPLE_RATE == 48000
         assert CHANNELS == 1
         assert DTYPE == np.dtype(np.float32)
+
+
+class TestPaced:
+    async def test_yields_at_real_time(self):
+        samples_per_chunk = 480
+        n_chunks = 3
+        sample_rate = 48000
+        expected_s = n_chunks * samples_per_chunk / sample_rate  # 30 ms
+
+        chunks_in = [
+            MicrophoneAudioChunk(
+                samples=np.zeros(samples_per_chunk, dtype=np.float32),
+                frame_id=i,
+            )
+            for i in range(n_chunks)
+        ]
+
+        start = time.monotonic()
+        collected: list[MicrophoneAudioChunk] = []
+        async for chunk in paced(_chunks(chunks_in), sample_rate=sample_rate):
+            collected.append(chunk)
+        elapsed = time.monotonic() - start
+
+        assert len(collected) == n_chunks
+        # Slack of 5 ms / 250 ms absorbs event-loop jitter on busy CI;
+        # the point is "noticeably > 0", not microsecond precision.
+        assert elapsed >= expected_s - 0.005, (
+            f"paced returned faster than real-time: {elapsed * 1000:.1f} ms "
+            f"< {expected_s * 1000:.1f} ms - 5 ms slack"
+        )
+        assert elapsed < expected_s + 0.250, (
+            f"paced is much slower than real-time: {elapsed * 1000:.1f} ms"
+        )
+
+    async def test_passes_through_chunk_payload(self):
+        samples_in = np.array([0.1, -0.2, 0.3], dtype=np.float32)
+        chunk_in = MicrophoneAudioChunk(
+            samples=samples_in, frame_id=42, unix_nanos=1_700_000_000_000_000_000
+        )
+        # Huge sample_rate collapses the sleep so the test stays fast.
+        out: list[MicrophoneAudioChunk] = []
+        async for chunk in paced(_chunks([chunk_in]), sample_rate=10_000_000):
+            out.append(chunk)
+        assert len(out) == 1
+        assert out[0].frame_id == 42
+        assert out[0].unix_nanos == 1_700_000_000_000_000_000
+        np.testing.assert_array_equal(out[0].samples, samples_in)
+
+    async def test_handles_empty_iterable(self):
+        # Tiny sample_rate so a stray sleep would obviously time out.
+        start = time.monotonic()
+        out: list[MicrophoneAudioChunk] = []
+        async for chunk in paced(_chunks([]), sample_rate=1):
+            out.append(chunk)
+        elapsed = time.monotonic() - start
+        assert out == []
+        assert elapsed < 0.05, (
+            f"paced over empty iter took {elapsed * 1000:.1f} ms — expected ~0"
+        )

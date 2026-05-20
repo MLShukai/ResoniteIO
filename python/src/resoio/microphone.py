@@ -9,6 +9,7 @@ Settings → Audio Input.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterable, AsyncIterator
@@ -34,6 +35,7 @@ __all__ = [
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "paced",
 ]
 
 _logger = logging.getLogger("resoio.microphone")
@@ -156,3 +158,29 @@ class MicrophoneClient:
             dropped_frames=summary.dropped_frames,
             unix_nanos=summary.unix_nanos,
         )
+
+
+async def paced(
+    chunks: AsyncIterable[MicrophoneAudioChunk],
+    sample_rate: int = SAMPLE_RATE,
+) -> AsyncIterator[MicrophoneAudioChunk]:
+    """Yield chunks at wall-clock pace for replaying a pre-loaded buffer.
+
+    Opt-in helper for sources that hand over their whole payload at
+    once (e.g. a WAV file): yields each chunk, then sleeps for its
+    natural duration before pulling the next one, so the downstream
+    Bridge ring buffer never overflows on long inputs.
+
+    Do **not** wrap real-time producers (live mic, TTS streams) —
+    they pace themselves; the extra sleep would compound into latency.
+
+    Because the sleep happens after yield, downstream auto-stamping in
+    :meth:`MicrophoneClient.stream` reflects *emit* time, not original
+    capture time. Set ``unix_nanos`` explicitly on each chunk to keep
+    pre-recorded timestamps intact.
+    """
+    async for chunk in chunks:
+        yield chunk
+        n_samples = int(chunk.samples.shape[0])
+        if n_samples > 0:
+            await asyncio.sleep(n_samples / sample_rate)
