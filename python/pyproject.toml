@@ -7,6 +7,7 @@ authors = []
 requires-python = ">=3.12"
 dependencies = [
   "argcomplete>=3.5",
+  "av>=14",
   "betterproto2[grpclib]",
   "numpy>=2.0",
 ]
