@@ -15,11 +15,22 @@ from resoio.session import (
     SessionClient,
     SocketNotFoundError,
 )
+from resoio.speaker import (
+    CHANNELS,
+    DTYPE,
+    SAMPLE_RATE,
+    AudioChunk,
+    SpeakerClient,
+)
 
 __version__: str = _version("resoio")
 
 __all__ = [
+    "CHANNELS",
+    "DTYPE",
+    "SAMPLE_RATE",
     "AmbiguousSocketError",
+    "AudioChunk",
     "CameraClient",
     "DisplayClient",
     "DisplayInfo",
@@ -30,5 +41,6 @@ __all__ = [
     "ResetSummary",
     "SessionClient",
     "SocketNotFoundError",
+    "SpeakerClient",
     "__version__",
 ]

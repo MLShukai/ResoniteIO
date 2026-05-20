@@ -1,0 +1,46 @@
+// Speaker service: Resonite のスピーカ出力 (= ローカルユーザが聴いている final
+// audio mix) を server-streaming で配信する。world audio + 他人 voice + UI
+// sound を engine 内部でミックスし終えた後のバッファを tap する片方向経路。
+//
+// 方向別の分離: Resonite → Python は Speaker、Python → Resonite (mic) は別
+// proto service `Microphone` として独立させる (本ファイルでは bidi にしない)。
+//
+// sample format は **固定**: 48 kHz / Stereo / float32 LE / interleaved (L, R)。
+// 将来別 format を扱う場合は別 service として追加するか、本 service に
+// breaking change を入れる (negotiation を proto に持たない)。
+//
+// frame サイズ (sample_count) は engine の WASAPI buffer に追従して可変
+// (実機で典型 1024-4096 samples / frame)。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// 現状フィールドなし。将来 device 選択 (primary / streaming output) や
+// 開始時刻指定を入れる余地として message は保持する。
+message SpeakerStreamRequest {}
+
+// AudioFrame は意図して generic に保つ (Microphone proto から同じ message を
+// import 再利用できる余地を残す)。
+//
+// samples の長さは `sample_count * 2 (channels) * 4 (float32 bytes)`。
+// インターリーブ順は (L0, R0, L1, R1, ...)。
+message AudioFrame {
+  // Bridge tap 内で monotonic に採番 (stream 開始から 0 で振り直す)。
+  uint64 frame_id = 1;
+  // Bridge が tap で受信した時刻 (UTC ナノ秒、UnixNanosClock 由来)。
+  // engine 側の dspTime ではなく wall clock を採用 (Python 側の他モダリティと
+  // 揃えるため)。
+  int64 unix_nanos = 2;
+  // インターリーブされた 1 チャネル分のサンプル数 (= samples.length / 8)。
+  uint32 sample_count = 3;
+  // float32 LE, interleaved L, R, L, R, ... (channels=2 固定)。
+  bytes samples = 4;
+}
+
+service Speaker {
+  // final mix を server-streaming で push 配信。Bridge が WASAPI audio thread
+  // からチャネルに push したものを engine 順序保証ありで流す。
+  rpc StreamAudio(SpeakerStreamRequest) returns (stream AudioFrame);
+}

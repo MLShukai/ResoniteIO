@@ -4,6 +4,7 @@ using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Session;
+using ResoniteIO.Core.Speaker;
 
 namespace ResoniteIO.Core.Tests.Helpers;
 
@@ -40,14 +41,16 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISessionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
-        ILocomotionBridge? locomotionBridge = null
+        ILocomotionBridge? locomotionBridge = null,
+        ISpeakerBridge? speakerBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
             bridge,
             cameraBridge,
             displayBridge,
-            locomotionBridge
+            locomotionBridge,
+            speakerBridge
         );
 
     public static async Task<SessionHostHarness> StartAsync(
@@ -55,7 +58,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISessionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
-        ILocomotionBridge? locomotionBridge = null
+        ILocomotionBridge? locomotionBridge = null,
+        ISpeakerBridge? speakerBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -71,7 +75,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
                 bridge,
                 cameraBridge,
                 displayBridge,
-                locomotionBridge
+                locomotionBridge,
+                speakerBridge
             );
         }
         catch
