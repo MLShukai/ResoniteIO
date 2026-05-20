@@ -19,8 +19,10 @@ from resoio._generated.resonite_io.v1 import (
 )
 from resoio.cli import _amain, _build_parser
 
-# Mirror the CLI's internal default so the assertions read naturally.
+# Mirror the CLI's internal defaults so the assertions read naturally.
 _CHUNK_SAMPLES = 1024
+_WARMUP_CHUNKS = 5
+_SAMPLE_RATE = 48000
 
 
 class _RecordingMicrophone(MicrophoneBase):
@@ -283,6 +285,49 @@ async def test_stdin_pipe_raw_float32(tmp_path: Path, monkeypatch: pytest.Monkey
         decoded = _decode_samples(fake.received)
         assert decoded.shape == (total_samples,)
         np.testing.assert_array_equal(decoded, payload)
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+# ---------------------------------------------------------------------------
+# WAV input — real-time pacing
+# ---------------------------------------------------------------------------
+
+
+async def test_wav_input_paces_after_warmup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Streaming time must reflect paced emission, not a burst send."""
+    socket_path = tmp_path / "rio-mic.sock"
+    wav_path = tmp_path / "paced.wav"
+
+    n_chunks = _WARMUP_CHUNKS + 10
+    total_samples = n_chunks * _CHUNK_SAMPLES
+    payload = np.zeros(total_samples, dtype=np.float32)
+    _write_wav(wav_path, payload)
+
+    fake = _RecordingMicrophone()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["mic", "-i", str(wav_path), "--no-wait"])
+        start = time.monotonic()
+        rc = await _amain(args)
+        elapsed = time.monotonic() - start
+        assert rc == 0
+        assert len(fake.received) == n_chunks
+
+        # Paced phase is the tail after warmup. Lower bound with slack
+        # absorbs scheduling jitter while still failing if pacing was
+        # removed entirely (in which case elapsed ≈ a few ms).
+        paced_chunks = n_chunks - _WARMUP_CHUNKS
+        expected_paced_s = paced_chunks * _CHUNK_SAMPLES / _SAMPLE_RATE
+        assert elapsed >= expected_paced_s * 0.7, (
+            f"WAV mode emitted in {elapsed * 1000:.1f} ms — expected pacing "
+            f"to take ≥ {expected_paced_s * 700:.1f} ms"
+        )
     finally:
         server.close()
         await server.wait_closed()

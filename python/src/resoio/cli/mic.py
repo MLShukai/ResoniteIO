@@ -10,6 +10,11 @@ Frames are chunked at 1024 samples each (~21.3 ms at 48 kHz). The
 remainder shorter than a full chunk at EOF is dropped rather than
 zero-padded so the wire never carries silence the caller did not
 provide.
+
+WAV mode pre-fills the Bridge ring buffer with a short warmup burst
+then paces remaining chunks at real time so multi-second files do not
+overflow the bridge's 2 s ring buffer. Stdin mode inherits pacing from
+the upstream producer's blocking reads — no extra sleeps.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from typing import IO, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
-from resoio.microphone import DTYPE, SAMPLE_RATE, MicrophoneAudioChunk
+from resoio.microphone import DTYPE, SAMPLE_RATE, MicrophoneAudioChunk, paced
 
 if TYPE_CHECKING:
     from resoio.microphone import MicrophoneStreamSummary
@@ -33,6 +38,12 @@ if TYPE_CHECKING:
 # ~21.3 ms per frame at 48 kHz. Close to the 20 ms Opus encoder frame
 # default; the engine re-frames anyway, so the wire boundary stays clean.
 _CHUNK_SAMPLES = 1024
+
+# ~107 ms head start (5 × 1024 samples @ 48 kHz) absorbs the engine
+# tick latency between StreamAudio acceptance and the Bridge draining
+# the ring buffer — without it the first tick lands on an empty buffer
+# and the listener hears a tiny gap.
+_WARMUP_CHUNKS = 5
 
 _BRIDGE_READY_TIMEOUT_S = 120.0
 _BRIDGE_READY_RETRY_INTERVAL_S = 2.0
@@ -179,7 +190,7 @@ def _iter_wav_chunks(
     samples: NDArray[np.float32],
     max_samples: int | None,
 ) -> AsyncIterator[MicrophoneAudioChunk]:
-    """Slice a pre-loaded mono buffer into ``_CHUNK_SAMPLES``-sized frames.
+    """Slice a pre-loaded mono buffer into wire-sized frames, paced.
 
     Trailing remainder shorter than a full chunk is dropped, not zero-
     padded — never inject silence the caller did not request.
@@ -189,15 +200,28 @@ def _iter_wav_chunks(
         samples = samples[:max_samples]
     total = samples.shape[0]
     full_chunks = total // _CHUNK_SAMPLES
+    warmup_end = min(_WARMUP_CHUNKS, full_chunks)
 
-    async def _gen() -> AsyncIterator[MicrophoneAudioChunk]:
-        for i in range(full_chunks):
+    async def _slice(
+        start_idx: int, stop_idx: int
+    ) -> AsyncIterator[MicrophoneAudioChunk]:
+        for i in range(start_idx, stop_idx):
             start = i * _CHUNK_SAMPLES
             end = start + _CHUNK_SAMPLES
             yield MicrophoneAudioChunk(
                 samples=samples[start:end].astype(DTYPE, copy=False),
                 frame_id=i,
             )
+
+    async def _gen() -> AsyncIterator[MicrophoneAudioChunk]:
+        # Warmup burst is unpaced; the tail goes through ``paced`` so
+        # all real-time emission logic stays in ``resoio.microphone``.
+        async for chunk in _slice(0, warmup_end):
+            yield chunk
+        async for chunk in paced(
+            _slice(warmup_end, full_chunks), sample_rate=SAMPLE_RATE
+        ):
+            yield chunk
 
     return _gen()
 
