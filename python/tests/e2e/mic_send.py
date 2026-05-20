@@ -31,7 +31,7 @@ from resoio.microphone import (
 )
 from tests.helpers import mark_e2e
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sine_440hz_1s_mono_48k.wav"
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sine_440hz_5s_mono_48k.wav"
 
 # Duplicated from ``resoio.cli.mic`` so the assertion math is anchored
 # to the wire chunk size rather than a CLI implementation detail.

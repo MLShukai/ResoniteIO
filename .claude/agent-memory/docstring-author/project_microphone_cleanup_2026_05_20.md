@@ -106,3 +106,41 @@ already wrote substantial XML / docstrings, trim pass exists" applies.
 re-author from scratch — re-read first. Append new load-bearing
 items to \[\[load-bearing-whys\]\] rather than re-introducing inline
 explanations the trim pass deemed redundant.
+
+**Polish wave 2 (2026-05-20, post-landing — paced helper + CLI WAV
+pacing + 5 s fixture):**
+
+- `microphone.py` — added `paced()` async helper (exported via
+  `__all__`). Docstring carries three load-bearing WHYs that must
+  survive future trims:
+  1. opt-in helper for pre-loaded buffers — the default path is
+     producer-driven pacing on `MicrophoneClient.stream`,
+  2. must not be wrapped over real-time producers (live mic, TTS) —
+     extra sleep compounds into latency,
+  3. sleep-after-yield means `MicrophoneClient.stream` auto-stamp
+     reflects emit time, not capture time — set `unix_nanos`
+     explicitly to preserve original timestamps.
+- `cli/mic.py` — `_WARMUP_CHUNKS = 5` (~107 ms) absorbs engine tick
+  drain ramp-up; module docstring + constant comment carry the WHY.
+  `_iter_wav_chunks` delegates pacing to `paced()` so the CLI does not
+  duplicate the pacing logic (intentional single-source-of-truth).
+- `tests/e2e/fixtures/generate_sine.py` — `_DURATION_S = 5.0`; the
+  comment explicitly states the 5 s payload deliberately exceeds the
+  bridge's 2 s ring buffer so WAV-mode pacing regressions surface as
+  `dropped_frames`. The filename keeps the historic "1s" suffix to
+  avoid git-history churn — that pair of WHYs is load-bearing.
+- `tests/e2e/mic_send.py` — replaced module-level `_EXPECTED_*`
+  constants with in-test derive from loaded fixture length, so future
+  duration changes don't drift the asserts.
+- `tests/resoio/test_microphone.py` — added `TestPaced` (real-time,
+  payload pass-through, empty iter). Test docstrings deliberately
+  omitted; tolerance comments (5 ms / 250 ms / huge sample_rate)
+  retained because they encode the CI-jitter rationale.
+- `tests/resoio/cli/test_mic.py` — added
+  `test_wav_input_paces_after_warmup`; 70 % lower-bound tolerance
+  retained as a CI-jitter shield while still catching a no-pacing
+  regression (would land at "a few ms").
+
+The reviewer-suggested "stamps reflect emit time" addition went into
+`paced()`'s docstring as a single paragraph — declined the temptation
+to expand it into an Args/Returns block.

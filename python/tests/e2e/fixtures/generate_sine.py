@@ -46,10 +46,7 @@ _FMT_CHUNK_SIZE = 16
 # treats sampwidth=4 as float32 by convention.
 _WAVE_FORMAT_PCM = 0x0001
 
-# Filename keeps the historic "1s" suffix for git-history continuity —
-# actual length follows ``_DURATION_S``. Renaming churns every reference
-# without changing behaviour.
-_FIXTURE_PATH = Path(__file__).parent / "sine_440hz_1s_mono_48k.wav"
+_FIXTURE_PATH = Path(__file__).parent / "sine_440hz_5s_mono_48k.wav"
 
 
 def _sine_samples() -> np.ndarray:

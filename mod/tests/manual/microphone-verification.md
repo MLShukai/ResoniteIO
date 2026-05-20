@@ -75,28 +75,28 @@ Resonite GUI で:
 container 内 shell から fixture 正弦波を送信:
 
 ```sh
-# Phase 6 で commit 済みの 440 Hz / 48 kHz / mono / float32 / 1 秒 WAV を送信
+# Phase 6 で commit 済みの 440 Hz / 48 kHz / mono / float32 / 5 秒 WAV を送信
 uv run --project python resoio mic \
-  -i python/tests/e2e/fixtures/sine_440hz_1s_mono_48k.wav
+  -i python/tests/e2e/fixtures/sine_440hz_5s_mono_48k.wav
 ```
 
 CLI stderr 最後の行に summary が出ることを確認:
 
 ```text
-received_frames=46 received_samples=47104 dropped_frames=0 unix_nanos=<...>
+received_frames=234 received_samples=239616 dropped_frames=0 unix_nanos=<...>
 ```
 
 判定基準:
 
 - exit code 0
-- `received_frames` が WAV 長から chunk size 1024 で割り切った値 (1 秒 = 46
-  chunks、余り 896 samples は CLI 側で drop)
+- `received_frames` が WAV 長から chunk size 1024 で割り切った値 (5 秒 = 234
+  chunks、余り 384 samples は CLI 側で drop)
 - `dropped_frames=0` (Bridge ring buffer がオーバーフローしていない)
 
 stdin pipe 経路:
 
 ```sh
-cat python/tests/e2e/fixtures/sine_440hz_1s_mono_48k.wav \
+cat python/tests/e2e/fixtures/sine_440hz_5s_mono_48k.wav \
   | uv run --project python resoio mic -i -
 ```
 
@@ -107,7 +107,7 @@ header strip して流すなら:
 
 ```sh
 ffmpeg -hide_banner -loglevel error \
-  -i python/tests/e2e/fixtures/sine_440hz_1s_mono_48k.wav \
+  -i python/tests/e2e/fixtures/sine_440hz_5s_mono_48k.wav \
   -f f32le -ac 1 -ar 48000 - \
   | uv run --project python resoio mic -i -
 ```
