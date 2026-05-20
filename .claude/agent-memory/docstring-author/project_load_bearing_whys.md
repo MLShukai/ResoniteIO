@@ -74,7 +74,7 @@ body-local rotation via HeadFacingRotation).
     single 1118×651 RGBA8 frame (~2.9 MiB). The const comment in
     `IpcSocketPaths.cs` and the `FrameSender` constructor comment
     are tied — preserve both. See \[\[camera-v2-constraints\]\] §6.
-12. **`PushedFrameCameraBridge` cap=1 + DropOldest** (`mod/src/ResoniteIO.Core/Bridge/PushedFrameCameraBridge.cs`):
+12. **`PushedFrameCameraBridge` cap=1 + DropOldest** (`mod/src/ResoniteIO.Core/Camera/PushedFrameCameraBridge.cs`):
     "silent drop is intentional, do not log per frame" + "the
     width/height args are ignored, renderer dictates resolution"
     are both load-bearing. Stripping either invites future callers

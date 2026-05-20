@@ -7,7 +7,8 @@ namespace ResoniteIO.Core.Locomotion;
 /// <remarks>
 /// <see cref="ILocomotionBridge"/> は optional DI: null なら <c>Unavailable</c>
 /// を返す (Core 単体テスト + locomotion 非対応 engine 構成を成立させる、
-/// CameraService と同 pattern)。各 RPC のセマンティクスは
+/// CameraService と同 pattern)。Bridge 側の任意例外は <c>Drive</c> / <c>Reset</c>
+/// 両 RPC で <c>Internal</c> に翻訳する。各 RPC のセマンティクスは
 /// <c>proto/resonite_io/v1/locomotion.proto</c> 参照。
 /// </remarks>
 public sealed class LocomotionService : V1.Locomotion.LocomotionBase

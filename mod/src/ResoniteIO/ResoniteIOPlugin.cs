@@ -75,7 +75,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
     /// <remarks>
     /// BepInEx 6 <c>BasePlugin</c> に Unload hook が無いため、停止は
-    /// <see cref="AppDomain.ProcessExit"/> 経由の best-effort。
+    /// <see cref="AppDomain.ProcessExit"/> 経由の best-effort。起動途中の例外も
+    /// 同じ <see cref="SafeShutdown"/> chain に流して先行 ctor / Start が確保した
+    /// 資源を leak させない。
     /// </remarks>
     private void OnEngineReady()
     {
