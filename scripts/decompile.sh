@@ -55,7 +55,10 @@ ASSEMBLIES=(
   Renderite.Host.dll
   # Renderite renderer (Renderite.Renderer.exe = Unity プロセス側の実装本体)
   # Camera / HeadOutput など「ユーザー画面の実描画」はこちらにある。
-  Renderer/Renderite.Renderer_Data/Managed/Renderite.Unity.dll
+  # NOTE: Resonite 2026.5.20.222 update で Renderite.Unity.dll は消滅した
+  # (engine と Renderer の DLL 構成が再編、Unity 側 binding は別 DLL に
+  # 統合 / 削除された)。Assembly-CSharp が依然として Renderer 側
+  # game logic の本体なので decompile 対象として残す。
   Renderer/Renderite.Renderer_Data/Managed/Assembly-CSharp.dll
   Renderer/Renderite.Renderer_Data/Managed/NativeGraphics.NET.dll
   # SkyFrost (cloud / data model)

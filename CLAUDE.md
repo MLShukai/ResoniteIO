@@ -162,28 +162,28 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 `just` レシピを使う（`uv run` / `dotnet` / `protoc` をラップ）。具体的な recipe は `justfile` を実装するときに固める想定だが、最低限以下の名前を提供する:
 
-| レシピ                 | 役割                                                                                                                                           |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just gen-proto`       | `scripts/gen_proto.sh` で `.proto` から Python 側コードを生成 (C# 側は csproj の `<Protobuf>` が build-time に生成するためノータッチ)          |
-| `just decompile`       | `scripts/decompile.sh` で Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式で `decompiled/` に展開。`.env` の `ResonitePath` 必須 |
-| `just log`             | host 側で `gale/BepInEx/LogOutput.log` (Gale 経由起動時) を `tail -F` で追従 (Resonite 再起動を跨いで再追従)。print-debug の主経路             |
-| `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (DLL 未配置なら exit 1)        |
-| `just init`            | host 側で初回 setup。docker / docker compose v2 検出 → `.env` セットアップ → `ResonitePath` 検証 → Gale プロファイル設置確認を順に実施 (冪等)  |
-| `just check-gale`      | Gale プロファイル (`./gale/`) に必須 plugin (BepisLoader / BepInExResoniteShim / BepisResoniteWrapper) が揃っているか検証 (不足あれば exit 1)  |
-| `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成 (`tcli` ラップ)                                          |
-| `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                 |
-| `just test`            | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                                                                |
-| `just type`            | Python の `pyright` を `python/src/` に対し strict 実行                                                                                        |
-| `just build`           | C# mod を `dotnet build -c Release`                                                                                                            |
-| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` を直列実行                                                                                  |
-| `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                               |
-| `just mod-clean`       | `mod/{bin,obj,build}` と `gale/BepInEx/plugins/ResoniteIO/` を削除                                                                             |
-| `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)。`--no-cache` 固定                                             |
-| `just container-up`    | サービスをバックグラウンド起動。`ResonitePath` 未設定なら fail。`~/.resonite-io{,-debug}/` を 0700 で事前作成 (Gale 確認は `just init`)        |
-| `just container-init`  | container 内で deps 解決 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)                                  |
-| `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                              |
-| `just container-down`  | サービス停止 (cache volume は保持)                                                                                                             |
-| `just container-clean` | image / cache volume / network 撤去 (destructive、host repo には影響しない)                                                                    |
+| レシピ                 | 役割                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just gen-proto`       | `scripts/gen_proto.sh` で `.proto` から Python 側コードを生成 (C# 側は csproj の `<Protobuf>` が build-time に生成するためノータッチ)           |
+| `just decompile`       | `scripts/decompile.sh` で Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式で `decompiled/` に展開。`.env` の `ResonitePath` 必須  |
+| `just log`             | host 側で `gale/BepInEx/LogOutput.log` (Gale 経由起動時) を `tail -F` で追従 (Resonite 再起動を跨いで再追従)。print-debug の主経路              |
+| `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (DLL 未配置なら exit 1)         |
+| `just init`            | host 側で初回 setup。docker / docker compose v2 検出 → `.env` セットアップ → `ResonitePath` 検証 → Gale プロファイル設置確認を順に実施 (冪等)   |
+| `just check-gale`      | Gale プロファイル (`./gale/`) に必須 plugin (BepisLoader / BepInExResoniteShim / BepisResoniteWrapper) が揃っているか検証 (不足あれば exit 1)   |
+| `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成 (`tcli` ラップ)                                           |
+| `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                  |
+| `just test`            | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                                                                 |
+| `just type`            | Python の `pyright` を `python/src/` に対し strict 実行                                                                                         |
+| `just build`           | C# mod を `dotnet build -c Release`                                                                                                             |
+| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` を直列実行                                                                                   |
+| `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                                |
+| `just mod-clean`       | `mod/{bin,obj,build}` と engine 側 `gale/BepInEx/plugins/ResoniteIO/` + Renderer 側 `gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer/` を削除 |
+| `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)。`--no-cache` 固定                                              |
+| `just container-up`    | サービスをバックグラウンド起動。`ResonitePath` 未設定なら fail。`~/.resonite-io{,-debug}/` を 0700 で事前作成 (Gale 確認は `just init`)         |
+| `just container-init`  | container 内で deps 解決 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)                                   |
+| `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                               |
+| `just container-down`  | サービス停止 (cache volume は保持)                                                                                                              |
+| `just container-clean` | image / cache volume / network 撤去 (destructive、host repo には影響しない)                                                                     |
 
 サブコマンド分離が必要な場合の補助レシピ:
 

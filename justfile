@@ -119,16 +119,22 @@ mod-pack:
     cd mod && dotnet build ResoniteIO.sln -c Release -t:PackTS -v d
 
 # ローカル開発成果物と Gale プロファイルに配置された plugin を撤去する。
+# Engine 側 (`gale/BepInEx/plugins/ResoniteIO`) と Renderer 側
+# (`gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer`、Camera v2 用) の
+# 両 deploy 先を片付ける。
 mod-clean:
     find mod -type d -name 'bin' -prune -exec rm -rf {} +
     find mod -type d -name 'obj' -prune -exec rm -rf {} +
     rm -rf mod/build
     @GALE_ROOT="${GalePath:-./gale}"; \
-    PLUGIN_DIR="$GALE_ROOT/BepInEx/plugins/ResoniteIO"; \
-    if [ -d "$PLUGIN_DIR" ]; then \
-        rm -rf "$PLUGIN_DIR" && \
-        echo "Removed $PLUGIN_DIR"; \
-    fi
+    for PLUGIN_DIR in \
+        "$GALE_ROOT/BepInEx/plugins/ResoniteIO" \
+        "$GALE_ROOT/Renderer/BepInEx/plugins/ResoniteIO.Renderer"; do \
+        if [ -d "$PLUGIN_DIR" ]; then \
+            rm -rf "$PLUGIN_DIR" && \
+            echo "Removed $PLUGIN_DIR"; \
+        fi; \
+    done
 
 # ===== 横断 ==============================================================
 

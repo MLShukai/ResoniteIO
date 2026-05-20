@@ -84,16 +84,19 @@
       <Private>False</Private>
     </Reference>
 
-    <!-- Renderite 本体。InterprocessLib.Messenger ctor が
-         Renderite.Shared.IMemoryPackerEntityPool を受け取るため Shared は必須。
-         Unity は本 commit では未使用だが Wave 5+ で Camera 探索に使う可能性あり、
-         Private=False で deploy には乗らないのでコスト低。 -->
+    <!-- Renderite.Shared: InterprocessLib.Messenger ctor が
+         Renderite.Shared.IMemoryPackerEntityPool を受け取るため必須。
+         Resonite 2026.5.20.222 update 以降は Renderer 側
+         `$(ResonitePath)/Renderer/Renderite.Renderer_Data/Managed/` から
+         Renderite.Shared.dll が削除され、engine 側 `$(ResonitePath)/Renderite.Shared.dll`
+         のみに集約された。Renderer プロセスは doorstop / assembly resolver
+         経由で engine 側 DLL を解決するため、本 build-time reference も
+         engine 側を指せばよい (Private=False で renderer プロセス同梱版に委ねる)。
+         Renderite.Unity は同 update で完全に削除された (現コードからは
+         未使用なので reference 自体を撤去)。
+         参考: `.claude/memory/feedback_camera_v2_constraints.md` -->
     <Reference Include="Renderite.Shared">
-      <HintPath>$(RendererManagedDir)Renderite.Shared.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Renderite.Unity">
-      <HintPath>$(RendererManagedDir)Renderite.Unity.dll</HintPath>
+      <HintPath>$(ResonitePath)/Renderite.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
 
