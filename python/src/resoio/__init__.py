@@ -10,6 +10,11 @@ from resoio.locomotion import (
     LocomotionCmd,
     ResetSummary,
 )
+from resoio.microphone import (
+    MicrophoneAudioChunk,
+    MicrophoneClient,
+    MicrophoneStreamSummary,
+)
 from resoio.session import (
     AmbiguousSocketError,
     SessionClient,
@@ -38,6 +43,9 @@ __all__ = [
     "Frame",
     "LocomotionClient",
     "LocomotionCmd",
+    "MicrophoneAudioChunk",
+    "MicrophoneClient",
+    "MicrophoneStreamSummary",
     "ResetSummary",
     "SessionClient",
     "SocketNotFoundError",
