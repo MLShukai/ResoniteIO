@@ -32,6 +32,8 @@ public sealed class DisplayService : V1.Display.DisplayBase
             _log.LogWarning(
                 "Display.Apply called but no IDisplayBridge is registered; returning Unavailable."
             );
+            // "bridge not configured" は server-side configuration issue で transient ではないが、
+            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
             throw new RpcException(
                 new Status(StatusCode.Unavailable, "Display bridge is not configured.")
             );

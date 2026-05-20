@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
@@ -62,7 +61,8 @@ public sealed class SessionHost : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// Bridge 引数は全て optional (モダリティ未提供構成や Core 単体テストとの両立)。
-    /// null Bridge を持つ Service は呼ばれた時点で <c>Unavailable</c> を返す。
+    /// null Bridge を持つ Service は呼ばれた時点で <c>Unavailable</c> を返し、
+    /// 未注入モダリティは起動時に WARN を 1 行ずつ列挙する。
     /// socket path を解決できない場合 (<c>HOME</c> 未設定等) は
     /// <see cref="InvalidOperationException"/>。
     /// </remarks>
@@ -143,6 +143,23 @@ public sealed class SessionHost : IAsyncDisposable
         }
 
         log.LogInfo($"SessionHost listening on {socketPath}");
+
+        if (bridge is null)
+        {
+            log.LogWarning("Session modality is not configured.");
+        }
+        if (cameraBridge is null)
+        {
+            log.LogWarning("Camera modality is not configured.");
+        }
+        if (displayBridge is null)
+        {
+            log.LogWarning("Display modality is not configured.");
+        }
+        if (locomotionBridge is null)
+        {
+            log.LogWarning("Locomotion modality is not configured.");
+        }
 
         var runTask = Task.Run(
             async () =>

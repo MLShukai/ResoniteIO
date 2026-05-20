@@ -1,4 +1,4 @@
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Locomotion;
 
 namespace ResoniteIO.Core.Tests.Helpers;
 
@@ -17,6 +17,12 @@ internal sealed class FakeLocomotionBridge : ILocomotionBridge
     private readonly List<LocomotionResetFlags> _resets = new();
     private readonly List<LocomotionDisconnectReason> _disconnects = new();
     private readonly object _gate = new();
+
+    /// <summary>
+    /// 非 null のとき <see cref="Reset"/> 呼び出し時に与えられた例外を投げる。
+    /// LocomotionService.Reset の Internal 翻訳経路 (A2) を検証する。
+    /// </summary>
+    public Exception? ResetThrows { get; set; }
 
     public IReadOnlyList<LocomotionInput> SetStates
     {
@@ -61,6 +67,10 @@ internal sealed class FakeLocomotionBridge : ILocomotionBridge
 
     public void Reset(LocomotionResetFlags flags)
     {
+        if (ResetThrows is { } ex)
+        {
+            throw ex;
+        }
         lock (_gate)
         {
             _resets.Add(flags);

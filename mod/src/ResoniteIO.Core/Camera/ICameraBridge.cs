@@ -1,4 +1,4 @@
-namespace ResoniteIO.Core.Bridge;
+namespace ResoniteIO.Core.Camera;
 
 /// <summary>
 /// Mod 側 (FrooxEngine) が実装し DI で注入する映像フレーム取得抽象。

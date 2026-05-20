@@ -1,7 +1,7 @@
 using System;
 using InterprocessLib;
 using Renderite.Shared;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.RendererShared;
 

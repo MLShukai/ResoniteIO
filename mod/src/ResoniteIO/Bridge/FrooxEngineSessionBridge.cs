@@ -1,7 +1,7 @@
 using System;
 using FrooxEngine;
-using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Session;
 
 namespace ResoniteIO.Bridge;
 

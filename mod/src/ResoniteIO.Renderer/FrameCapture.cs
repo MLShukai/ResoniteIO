@@ -27,6 +27,7 @@ internal sealed class FrameCapture : IDisposable
     private Camera? _hookedCamera;
     private bool _inFlight;
     private ulong _frameId;
+    private byte[] _payloadBuffer = Array.Empty<byte>();
     private bool _disposed;
 
     public FrameCapture(FrameSender sender, ManualLogSource log)
@@ -56,6 +57,13 @@ internal sealed class FrameCapture : IDisposable
         }
 
         _inFlight = true;
+        // FrameId は capture 試行を反映する monotonic ID。Request 直前で increment して
+        // おくことで、drop / error 経路 (req.hasError、rt == null 等) でも ID が進む。
+        // engine 側は header.FrameId の gap を見るだけで renderer 側 drop を検出できる。
+        unchecked
+        {
+            _frameId++;
+        }
         // Request 後に resize → DetachAndReleaseCapture が走っても callback は旧 RT
         // 参照を握ったまま完走する。新 RT 判定は OnReadback 側に委ねる。
         AsyncGPUReadback.Request(_captureRT, 0, TextureFormat.RGBA32, OnReadback);
@@ -231,27 +239,36 @@ internal sealed class FrameCapture : IDisposable
                 return;
             }
 
-            var bytes = req.GetData<byte>().ToArray();
+            // NativeArray<byte>.CopyTo(byte[]) を使い、解像度安定中は payload buffer を
+            // 再利用 (alloc 0)。解像度変更時のみ resize。FrameSender 側 _buffer と合わせて
+            // RGBA8 1920x1080 で 8.3 MiB/frame の GC 圧を消せる。
+            var data = req.GetData<byte>();
+            var payloadLength = data.Length;
+            if (_payloadBuffer.Length < payloadLength)
+            {
+                _payloadBuffer = new byte[payloadLength];
+            }
+            data.CopyTo(_payloadBuffer);
+
             var width = (uint)rt.width;
             var height = (uint)rt.height;
             var stride = width * 4u;
-            var frameId = unchecked(++_frameId);
             // net472 には DateTime.UnixEpoch が無いので即値を使う。
             // 1970-01-01T00:00:00Z の DateTime.Ticks (= 100ns 単位) は 621355968000000000。
             const long unixEpochTicks = 621_355_968_000_000_000L;
             var unixNanos = (ulong)((DateTimeOffset.UtcNow.UtcTicks - unixEpochTicks) * 100L);
 
             var header = new FrameHeader(
-                payloadLength: (uint)bytes.Length,
+                payloadLength: (uint)payloadLength,
                 width: width,
                 height: height,
                 format: FrameHeader.FormatRgba8,
                 stride: stride,
                 unixNanos: unixNanos,
-                frameId: frameId
+                frameId: _frameId
             );
 
-            _sender.Send(header, bytes);
+            _sender.Send(header, _payloadBuffer, payloadLength);
         }
         finally
         {

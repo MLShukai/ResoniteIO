@@ -2,7 +2,7 @@ using System;
 using Elements.Core;
 using FrooxEngine;
 using HarmonyLib;
-using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Bridge;
@@ -283,6 +283,10 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
 
         // precondition NG なら今 tick の write を skip。jump pulse は次 tick で
         // 再 apply できるよう latch を戻す (CLI から見た pulse 消失を防ぐ)。
+        // ApplyToEngine 失敗時の reapply は OR-merge で _jumpPending = true を戻す。
+        // 直前に SetState(Jump=true) が来た場合は lock 内で再 latch されるため過小
+        // 消費にはならない。最悪、次 tick で 1 frame 早く pulse が出る race は許容
+        // (consume は engine 適用成功時のみ確定)。
         var (loco, fpc, head) = ResolveComponents(boundWorld);
         if (loco?.ActiveModule is SmoothLocomotionBase smooth)
         {

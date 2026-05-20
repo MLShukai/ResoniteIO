@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace ResoniteIO.Core.Bridge;
+namespace ResoniteIO.Core.Camera;
 
 /// <summary>External-push 型の <see cref="ICameraBridge"/>。renderer が push、Service が pull。</summary>
 /// <remarks>

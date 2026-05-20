@@ -7,18 +7,26 @@ using BepInEx.Logging;
 namespace ResoniteIO.Loading;
 
 /// <summary>
-/// Plugin folder 同梱の隣接 DLL (Microsoft.AspNetCore.* / Grpc.AspNetCore.* 等) を
-/// Default <see cref="AssemblyLoadContext"/> から probe させる fallback リゾルバ。
+/// Default ALC が解決できなかった type/assembly 要求を plugin folder 同梱 DLL で
+/// fallback 解決する <see cref="AssemblyLoadContext"/>.Resolving subscriber。
 /// </summary>
 /// <remarks>
 /// BepInEx は plugin folder を Default ALC の probe path に登録しないため、これが無いと
 /// runtime が <see cref="FileNotFoundException"/> を投げる。
 /// 寿命は plugin と一致させる: dispose 後の lazy ロードは同じ理由で fail する。
 /// <para>
-/// <c>ILogSink</c> ではなく BepInEx <see cref="ManualLogSource"/> を直接受ける理由:
-/// resolver は Resonite 同梱の旧 Google.Protobuf より先に attach されなければならない。
-/// ここで <c>ILogSink</c> を経由すると <c>ResoniteIO.Core.dll</c> が早期ロードされ、
-/// 同 dll が依存する Google.Protobuf を Resonite 側 (旧版) から引いてしまう。
+/// 「Resonite 同梱 Google.Protobuf より plugin folder 版を優先する」効果は、本 class
+/// 単体ではなく <see cref="ResoniteIOPlugin.Load"/> の協調動作で成立する:
+/// (a) plugin folder の Google.Protobuf がまだロードされていない状態で本 resolver を
+/// attach し、(b) Core 型 (<c>BepInExLogSink</c> 等) への参照を
+/// <c>OnEngineReady</c> まで遅延することで、Resonite 側 protobuf が早期ロードされる
+/// 前に plugin folder 版を ALC に食わせる。
+/// </para>
+/// <para>
+/// <c>ILogSink</c> ではなく BepInEx <see cref="ManualLogSource"/> を直接受ける理由は
+/// 上記 (b) の帰結: ここで <c>ILogSink</c> を経由すると <c>ResoniteIO.Core.dll</c> が
+/// 早期ロードされ、同 dll が依存する Google.Protobuf を Resonite 側 (旧版) から
+/// 引いてしまう。
 /// </para>
 /// </remarks>
 internal sealed class PluginAssemblyResolver : IDisposable

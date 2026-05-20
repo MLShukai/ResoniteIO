@@ -1,4 +1,4 @@
-namespace ResoniteIO.Core.Bridge;
+namespace ResoniteIO.Core.Locomotion;
 
 /// <summary>
 /// Mod 側 (FrooxEngine) が実装し DI で注入する Locomotion 制御抽象。
@@ -37,6 +37,7 @@ public interface ILocomotionBridge
     /// gRPC Drive stream の終了種別を通知する。
     /// <see cref="LocomotionDisconnectReason.Graceful"/> は state 維持、
     /// それ以外は Bridge 側で全 state を safety reset する。
+    /// 本メソッドは must not throw — Service 側は本契約を信頼してガードしない。
     /// </summary>
     void NotifyDisconnect(LocomotionDisconnectReason reason);
 }

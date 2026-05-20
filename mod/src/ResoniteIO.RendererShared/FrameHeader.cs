@@ -21,6 +21,12 @@ namespace ResoniteIO.RendererShared;
 /// 32      8     FrameId      (uint64, renderer 側で monotonic に増える)
 /// 40      total
 /// </code>
+/// 不変条件: <c>PayloadLength == Stride * Height</c> (engine / renderer 双方で
+/// 保証する契約)。現状 RGBA8 のみで <c>Stride = Width * 4</c>。
+/// <see cref="PayloadLength"/> は <see cref="uint"/> なので最大 4 GiB まで表現でき、
+/// 4K (約 33 MiB) / 8K (約 132 MiB) では当面オーバーフロー余裕がある。
+/// <see cref="UnixNanos"/> は UTC 時刻の Unix epoch ナノ秒換算で、実効解像度は OS 依存
+/// (Windows / Wine では実効 ~1ms 程度)。タイムスタンプの絶対精度は期待しない設計。
 /// </remarks>
 public readonly struct FrameHeader : IEquatable<FrameHeader>
 {

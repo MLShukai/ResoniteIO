@@ -25,14 +25,14 @@ C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / pr
 実装済みの主要要素:
 
 - 開発環境: `Dockerfile` / `docker-compose.yml` / `justfile` / `scripts/container-init.sh` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container → host Resonite 起動・停止 bridge)
-- C# Core (`mod/src/ResoniteIO.Core/`): `SessionHost` (Kestrel + UDS gRPC server) / `SessionService` / `CameraService` / `Locomotion/LocomotionService` / `Bridge/{ISessionBridge,ICameraBridge,ILocomotionBridge}` / `Logging/ILogSink`
-- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge 群を注入、`AppDomain.ProcessExit` で best-effort 停止) / `Bridge/{FrooxEngineSessionBridge,FrooxEngineCameraBridge,FrooxEngineLocomotionBridge}` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
+- C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を同フォルダに集約 (`Session/{ISessionBridge,SessionService,SessionHost}`、`Camera/{ICameraBridge,PushedFrameCameraBridge,CameraService}`、`Locomotion/{ILocomotionBridge,LocomotionService}`、`Display/{IDisplayBridge,DisplayService}`)。共通基盤として `Logging/ILogSink` と `UnixNanosClock` (proto stamp / Service 戻り値の共通 clock)
+- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で `SessionHost` を起動し Bridge 群を注入、`SafeShutdown` 経由で partial-failure / `AppDomain.ProcessExit` どちらも同じ Dispose chain に集約) / `Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,RendererFrameInterprocessReceiver}` / `Loading/PluginAssemblyResolver` (Resonite 同梱 Google.Protobuf より Core 同梱版を優先) / `Logging/BepInExLogSink`
 - Python (`python/src/resoio/`): `SessionClient` / `CameraClient` (numpy frame yield) / `LocomotionClient` + `LocomotionCmd` / `DriveSummary` (async ctx mgr で client-streaming `Drive`) / `_socket.py` (UDS 探索) / `_generated/` (betterproto2 出力、commit 済み)
 - proto: `proto/resonite_io/v1/{session,camera,locomotion}.proto`。`buf.yaml` で `SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except (モダリティ固有ドメイン名を優先する規約。[.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md](.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md))
 - 補助スクリプト: `scripts/gen_proto.sh` (Python 生成専用) / `scripts/decompile.sh` (ilspycmd、Renderite Unity DLL も対象) / `scripts/lib.sh`
 - mod Thunderstore packaging: `thunderstore.toml` + `tcli` local tool + `dotnet build -t:PackTS`
 - UDS path: 本番 gRPC IPC は **`$HOME/.resonite-io/`**、container ↔ host debug bridge は **`$HOME/.resonite-io-debug/`** で host/container 同一絶対パスの bind 共有 (`$XDG_RUNTIME_DIR/` は pressure-vessel sandbox が通さないため不採用。詳細は [.claude/memory/reference_pressure_vessel_paths.md](.claude/memory/reference_pressure_vessel_paths.md))
-- 未着手モダリティ (Audio / Manipulation) は `mod/src/ResoniteIO/<Modality>/` に `.gitkeep` のみ残置 (Core 側にはまだファイルなし)。Locomotion は Mod 層では `mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs` に集約しており、`mod/src/ResoniteIO/Locomotion/` は `.gitkeep` のみ残った空ディレクトリ
+- 未着手モダリティ (Audio / Manipulation) は両層ともファイルなし。Wave 1 で `.gitkeep` のみの空ディレクトリは Core/Mod 共に撤去済み — モダリティ追加時に Core 側 `<Modality>/` と Mod 側 `Bridge/FrooxEngine<Modality>Bridge.cs` を都度作る。Locomotion を含め既存モダリティの Mod 側実装は `mod/src/ResoniteIO/Bridge/` に集約 (`FrooxEngine<Modality>Bridge` 命名)
 
 リポジトリ実構造:
 
@@ -53,19 +53,19 @@ resonite-io/
 │   ├── NuGet.config / thunderstore.toml / icon.png
 │   ├── src/
 │   │   ├── ResoniteIO.Core/   # Core 層 (Resonite 非依存、Microsoft.NET.Sdk + Grpc 系のみ)
-│   │   │   ├── ResoniteIO.Core.csproj         # <Protobuf GrpcServices="Server"> を Core に集約
-│   │   │   ├── Bridge/{ISessionBridge,ICameraBridge,ILocomotionBridge}.cs   # mod 側が注入する callback IF
-│   │   │   ├── Session/{SessionHost,SessionService}.cs    # Kestrel + UDS gRPC host / Ping 実装
-│   │   │   ├── Camera/CameraService.cs                    # StreamFrames server-streaming RPC
-│   │   │   ├── Locomotion/LocomotionService.cs            # Drive client-streaming RPC
-│   │   │   └── Logging/ILogSink.cs                        # mod 側 BepInEx logger を Core に注入する抽象
+│   │   │   ├── ResoniteIO.Core.csproj          # <Protobuf GrpcServices="Server"> を Core に集約
+│   │   │   ├── UnixNanosClock.cs               # Service / proto stamp 共通の epoch ナノ秒 clock
+│   │   │   ├── Session/{ISessionBridge,SessionService,SessionHost}.cs   # IF + Ping 実装 + Kestrel/UDS host
+│   │   │   ├── Camera/{ICameraBridge,PushedFrameCameraBridge,CameraService}.cs   # IF + renderer push 経路 + StreamFrames RPC
+│   │   │   ├── Locomotion/{ILocomotionBridge,LocomotionService}.cs       # IF + Drive client-streaming RPC
+│   │   │   ├── Display/{IDisplayBridge,DisplayService}.cs                # IF + Apply/Stat RPC (camera v2 副産物)
+│   │   │   └── Logging/ILogSink.cs             # mod 側 BepInEx logger を Core に注入する抽象
 │   │   └── ResoniteIO/        # Mod 層 (BepInEx adapter、Core を ProjectReference)
 │   │       ├── ResoniteIO.csproj                          # Core 同梱 DLL + AspNetCore shared framework を gale/ に deploy
-│   │       ├── ResoniteIOPlugin.cs                        # BasePlugin + OnEngineReady → SessionHost.Start
-│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineCameraBridge,FrooxEngineLocomotionBridge}.cs
-│   │       ├── Loading/PluginAssemblyResolver.cs          # Resonite 同梱旧 Google.Protobuf より Core 同梱版を優先
-│   │       ├── Logging/BepInExLogSink.cs                  # ILogSink を ManualLogSource で実装
-│   │       └── {Audio,Locomotion,Manipulation}/           # .gitkeep のみ (Locomotion は Bridge/ に集約済み、本 dir は空のまま)
+│   │       ├── ResoniteIOPlugin.cs                        # BasePlugin + OnEngineReady → SessionHost.Start (partial-failure と ProcessExit を SafeShutdown に統合)
+│   │       ├── Bridge/{FrooxEngineSessionBridge,FrooxEngineDisplayBridge,FrooxEngineLocomotionBridge,RendererFrameInterprocessReceiver}.cs
+│   │       ├── Loading/PluginAssemblyResolver.cs          # Default ALC.Resolving fallback。Plugin.Load との協調で旧 Google.Protobuf を avoid
+│   │       └── Logging/BepInExLogSink.cs                  # ILogSink を ManualLogSource で実装
 │   └── tests/
 │       ├── ResoniteIO.Core.Tests/      # Kestrel ラウンドトリップ + Camera/Locomotion streaming (Fake Bridge) を含む統合 xunit
 │       ├── ResoniteIO.Tests/           # mod 側 smoke + BepInExLogSink 等の adapter テスト
@@ -280,7 +280,7 @@ Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓
 ### C# 側
 
 - **Core/Mod 層の責務を混ぜない**: `ResoniteIO.Core` (pure library) は BepInEx / FrooxEngine / Renderite を一切参照せず、`ResoniteIO` (mod) は engine bridging のみ。新規モダリティは Core に `<Modality>Service` + `I<Modality>Bridge`、Mod に `FrooxEngine<Modality>Bridge` を 1 ペアで追加する
-- 名前空間: Core 側は `ResoniteIO.Core.<Modality>`、Mod 側は `ResoniteIO.Bridge` (engine 実装) と `ResoniteIO` (Plugin 本体)
+- 名前空間: Core 側は `ResoniteIO.Core.<Modality>` (cross-cutting utility である `UnixNanosClock` 等は root `ResoniteIO.Core`)、Mod 側は `ResoniteIO.Bridge` (engine 実装) と `ResoniteIO` (Plugin 本体)
 - `Nullable=enable` + `TreatWarningsAsErrors=true` を `.csproj` で必ず有効にする
 - gRPC server は **別スレッドで動作** させ、FrooxEngine 本体スレッドをブロックしない（plan Step 2）。Service 実装は Core 側にあり engine を知らないため、engine 依存処理は Bridge IF 経由で同期/非同期にディスパッチする
 - LocalUser 駆動など FrooxEngine API を呼ぶ箇所 (Mod 側 Bridge 実装) は engine の update tick 上にディスパッチする必要がある可能性大。スレッド要件はモジュールごとに調査して `.claude/memory/` に書き残すこと

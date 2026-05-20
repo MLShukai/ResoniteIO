@@ -34,7 +34,7 @@ code-quality-reviewer) が同じ概念 (stateful repeater / 30Hz keep-alive
 cleanup の網羅範囲:
 
 - proto: `proto/resonite_io/v1/locomotion.proto` (トップレベル + field doc)
-- C# Core: `mod/src/ResoniteIO.Core/Bridge/ILocomotionBridge.cs`,
+- C# Core: `mod/src/ResoniteIO.Core/Locomotion/ILocomotionBridge.cs`,
   `mod/src/ResoniteIO.Core/Locomotion/LocomotionService.cs`
 - C# Mod: `mod/src/ResoniteIO/Bridge/FrooxEngineLocomotionBridge.cs`
 - C# tests: `mod/tests/ResoniteIO.Core.Tests/Locomotion/*.cs`,
