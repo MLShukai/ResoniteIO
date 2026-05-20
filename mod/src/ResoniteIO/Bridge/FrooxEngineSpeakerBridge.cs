@@ -77,9 +77,9 @@ internal sealed class FrooxEngineSpeakerBridge : ISpeakerBridge
     private readonly AudioSystem? _audioSystem;
     private readonly ILogSink _log;
 
-    // Postfix は static でしか登録できないため、対象 driver 参照を static field
-    // 経由でアクセスする。volatile 1 word reference 書換は atomic、Postfix は
-    // ReferenceEquals でフィルタするだけなので tearing なし。
+    // Postfix は static method 制約のため _singleton 経由でこの field を読む。
+    // volatile な 1 word reference 書換は atomic、Postfix は ReferenceEquals で
+    // フィルタするだけなので tearing で誤判定しても害無し。
     private volatile AudioOutputDriver? _targetDriver;
     private bool _patched;
 
@@ -90,8 +90,6 @@ internal sealed class FrooxEngineSpeakerBridge : ISpeakerBridge
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(log);
 
-        // 1 mod 全体で 1 instance が前提。Plugin は OnEngineReady で 1 度だけ生成し、
-        // SafeShutdown で Dispose するが、安全のため二重生成を弾く。
         if (Interlocked.CompareExchange(ref _singleton, this, null) is not null)
         {
             throw new InvalidOperationException(

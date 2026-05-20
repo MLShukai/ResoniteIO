@@ -82,7 +82,6 @@ public sealed class PushedAudioFrameSpeakerBridge : ISpeakerBridge
 
         // Defensive copy: WASAPI buffer は callback 復帰後に engine 側で再利用される
         // 可能性があるため Channel に積む前に owned bytes へコピーする。
-        // sample_count * 2 (ch) * 4 (bytes) = byteSpan.Length。
         var frame = new AudioFrame(
             Samples: byteSpan.ToArray(),
             SampleCount: sampleCount,
@@ -100,7 +99,7 @@ public sealed class PushedAudioFrameSpeakerBridge : ISpeakerBridge
         [EnumeratorCancellation] CancellationToken ct
     )
     {
-        // ChannelClosedException は dispose 後の正常終了とみなして enumeration を抜ける。
+        // ReadAllAsync は Dispose 後 (Writer.Complete) を正常終了として静かに抜ける。
         await foreach (var frame in _channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
         {
             yield return frame;

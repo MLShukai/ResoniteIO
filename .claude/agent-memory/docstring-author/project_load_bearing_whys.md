@@ -1,21 +1,29 @@
 ---
 name: load-bearing-whys
-description: Non-obvious WHY comments under mod/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion surface)
+description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker surface)
 metadata:
   type: project
 ---
 
-When trimming docstrings/comments under `mod/src/ResoniteIO{,.Core,.Renderer,.RendererShared}/` and
-`mod/tests/ResoniteIO.Core.Tests/`, these WHY notes are load-bearing and
-must NOT be cut. Items 1–5 originate from Step 2 (Session / loader);
-items 6–9 originate from Step 3 (Camera v1, since removed at `ff44bf8`
-but the WHY patterns recurred in v2); items 10–14 originate from
-Camera v2 (renderer process bridge, `mod/src/ResoniteIO.Renderer/` +
-`mod/src/ResoniteIO.RendererShared/` + `PushedFrameCameraBridge` +
-`RendererFrameInterprocessReceiver` + `FrooxEngineDisplayBridge`).
-Items 15–18 originate from Step 4 (Locomotion: proto velocity
-semantics + Bridge sign-flip + Service round-trip assertion + Move
-body-local rotation via HeadFacingRotation).
+When trimming docstrings/comments under `mod/src/ResoniteIO{,.Core,.Renderer,.RendererShared}/`,
+`mod/tests/ResoniteIO.Core.Tests/`, and `python/src/resoio/`, these WHY notes
+are load-bearing and must NOT be cut.
+
+- Items 1–5 originate from Step 2 (Session / loader).
+- Items 6–9 originate from Step 3 (Camera v1, since removed at `ff44bf8`
+  but the WHY patterns recurred in v2).
+- Items 10–14 originate from Camera v2 (renderer process bridge under
+  `mod/src/ResoniteIO.Renderer/` and `mod/src/ResoniteIO.RendererShared/`,
+  plus `PushedFrameCameraBridge`, `RendererFrameInterprocessReceiver`,
+  and `FrooxEngineDisplayBridge`).
+- Items 15–18 originate from Step 4 (Locomotion: proto velocity
+  semantics, Bridge sign-flip, Service round-trip assertion, Move
+  body-local rotation via HeadFacingRotation).
+- Items 19–24 originate from Step 5 (Speaker:
+  PushedAudioFrameSpeakerBridge DropWrite policy, HarmonyLib Postfix
+  on `AudioOutputDriver.AudioFrameRendered`, WASAPI thread hot path,
+  Dispose / SafeShutdown ordering, WAV writer stdlib-rejection
+  rationale).
 
 01. **Google.Protobuf early-resolution hazard**
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
@@ -141,6 +149,69 @@ body-local rotation via HeadFacingRotation).
     rotation, or switching to `LocalUserViewRotation` without
     accounting for pitch sink, regresses the fix. Proto contract is
     unchanged (MoveX = Strafe / Right axis, MoveY = Forward axis).
+19. **`PushedAudioFrameSpeakerBridge` cap=32 + `DropWrite`**
+    (`mod/src/ResoniteIO.Core/Speaker/PushedAudioFrameSpeakerBridge.cs`):
+    cap=32 ≈ 680 ms buffer at typical 1024-sample/21 ms @ 48 kHz
+    frames; `DropWrite` (drop the *new* frame on overflow) is preferred
+    over `DropOldest` so the recent waveform continuity is preserved
+    when a consumer stalls. The XML remarks paragraph carrying this
+    rationale and the "DropWrite なので満杯でも TryWrite は true を返す"
+    inline comment are load-bearing — without them a future refactor
+    will assume `TryWrite == false` indicates overflow (it only ever
+    means Writer.Complete) and add log spam, or flip to DropOldest and
+    silently change the audible behaviour on overload.
+20. **`AudioOutputDriver.RenderAudio` direct-assign hazard /
+    HarmonyLib Postfix tap** in `FrooxEngineSpeakerBridge`: the engine
+    `RenderAudio` Action is `direct assign`-ed by `AudioSystem`, not an
+    event — subscribing via `+=` overwrites engine state and breaks
+    audio. The class XML remarks `<list>` and the file header comment
+    documenting why HarmonyLib Postfix on `AudioOutputDriver.AudioFrameRendered`
+    is the only safe tap, plus the four bullet points covering
+    `PrimaryOutput`-only target / base-class patch + derived inheritance /
+    static singleton constraint / `DefaultAudioOutputChanged` re-attach,
+    are all load-bearing. Removing any of them invites a future PR to
+    "simplify" by adopting the `RenderAudio` direct assign or by
+    patching a derived driver class.
+21. **Postfix runs on WASAPI audio thread — no log, swallow exceptions**
+    (`FrooxEngineSpeakerBridge.OnAudioFrameRenderedPostfix`):
+    the postfix is called every ~21 ms on the WASAPI callback thread.
+    The comment block explaining (a) why `dspTime` is discarded
+    (UnixNanosClock is the wall-clock surface that clients can sync to),
+    (b) why exceptions are swallowed without logging (BepInExLogSink
+    can lock and engine drops if exception escapes), and (c) why
+    `buffer.Length` odd-check never fires in practice (PrimaryOutput is
+    stereo-fixed) is load-bearing. Stripping these lets a future
+    refactor add a `LogDebug` per frame and reintroduce audio glitches.
+22. **SpeakerBridge dispose order: singleton clear before inner dispose**
+    (`FrooxEngineSpeakerBridge.Dispose`): `_singleton` must be CAS-cleared
+    *before* `_inner.Dispose()` so the Postfix (which reads `_singleton`)
+    cannot push into a disposed channel. The 2-line comment above
+    `Interlocked.CompareExchange(ref _singleton, null, this)` is
+    load-bearing — reordering these two operations creates a race where
+    a tail WASAPI callback fires `_inner.Push` after the channel writer
+    is completed (silent no-op, but the code intent looks wrong on
+    review). Keep paired with the SafeShutdown chain comment in
+    `ResoniteIOPlugin` that mentions Speaker ordering.
+23. **`SafeShutdown` chain documents Speaker placement**
+    (`ResoniteIOPlugin.SafeShutdown` ordering block, the bullet
+    "SpeakerBridge.Dispose は Harmony unpatch + Channel complete を行い、
+    WASAPI audio thread からの push を完全に断つ"): the order
+    receiver → camera → display → locomotion → speaker → session → cts →
+    sessionHost → resolver is intentional. SpeakerBridge must Dispose
+    before SessionHost so pending `SpeakerService.StreamAudio` calls see
+    the channel complete and exit cleanly (avoiding RpcException from
+    abrupt service teardown). Keep the chain comment intact — it's the
+    only place documenting the WASAPI-stop contract.
+24. **WAV writer rejects stdlib `wave` module**
+    (`python/src/resoio/cli/record.py` `_WavFloat32Writer` docstring):
+    the class docstring explicitly states "the stdlib `wave` module
+    rejects `WAVE_FORMAT_IEEE_FLOAT` and the project declines
+    `soundfile` / `scipy` as runtime deps". This is load-bearing —
+    a well-meaning future PR will see ~50 lines of `struct.pack`
+    bookkeeping and want to swap in `wave.open` for "simplicity",
+    silently regressing float32 support. The seek-and-patch design
+    (placeholder size fields at offsets 4 / 40, patched on close) is
+    the reason `-o -` for `.wav` is disallowed (stdout is non-seekable).
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel
