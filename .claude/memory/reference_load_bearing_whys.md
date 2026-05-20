@@ -2,7 +2,7 @@
 name: load-bearing-whys
 description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 7 Microphone surface)
 metadata:
-  type: project
+  type: reference
 ---
 
 When trimming docstrings/comments under `mod/src/ResoniteIO{,.Core,.Renderer,.RendererShared}/`,

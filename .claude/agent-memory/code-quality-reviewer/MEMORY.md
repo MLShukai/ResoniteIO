@@ -1,2 +1,0 @@
-- [Generated proto layout](generated_proto_layout.md) — \_generated/ has its own py.typed and is excluded from pyright strict, ruff lint, and coverage; \_generated/__init__.py is empty (bare namespace marker).
-- [betterproto2 packaging](betterproto2_packaging.md) — betterproto2 has no `[compiler]` extra; the compiler ships as a separate distribution `betterproto2_compiler`.

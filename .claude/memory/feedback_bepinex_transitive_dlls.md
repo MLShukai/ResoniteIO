@@ -1,5 +1,5 @@
 ---
-name: bepinex-mod-transitive-dlls
+name: bepinex-transitive-dlls
 description: BepInEx mod の bin/ には CopyLocalLockFileAssemblies=true + PostBuild Copy 双方が必要。AspNetCore framework reference は SDK shared framework dir から専用 Target で都度コピーする。
 metadata:
   type: feedback

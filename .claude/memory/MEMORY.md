@@ -2,32 +2,73 @@
 
 resonite-io プロジェクトの規約・知見・ユーザーの好みを記録するインデックス。詳細は各ファイルを参照。
 
-## Feedback
+タスク発火型の手順 (環境セットアップ / debug / 新規モダリティ追加) は [`.claude/skills/`](../skills/) 配下に置き、Claude harness が trigger に応じて自動で読み込む。
+
+## Skills
+
+- [`setup-resonite-env`](../skills/setup-resonite-env/SKILL.md) — 初回環境構築、Gale プロファイル、Steam Launch Options、UDS パス
+- [`debug-resonite-mod`](../skills/debug-resonite-mod/SKILL.md) — print-debug + ログ tailing、decompile、container ↔ host Resonite bridge
+- [`add-new-modality`](../skills/add-new-modality/SKILL.md) — 新規モダリティ追加 (proto + Core + Mod + Python + CLI + tests)
+
+## Feedback (project-wide convention / 落とし穴)
+
+### Core / Mod 二層・Bridge 設計
+
+- [Core/Mod 二層構成](feedback_core_mod_layering.md) — コアは Resonite 非依存ライブラリ、mod は engine bridging のみの薄いアダプタ。proto/Service は Core、Bridge 実装は mod。
+- [Bridge IF は proto 型ではなく Core POCO を返す](feedback_bridge_iface_uses_core_poco.md) — Fake bridge が interface 実装すると CS0738 で fail。Camera 同様 Core POCO + Service の MapToProto で挟む。
+- [Bridge での engine thread ディスパッチ](feedback_bridge_engine_thread_dispatch.md) — コンポーネントグラフ変更は World.RunSynchronously + TaskCompletionSource、純粋読みは任意スレッド。
+- [Session Bridge 導入時に proto を変えない](feedback_session_bridge_no_proto_change.md) — Step 2 で Bridge IF 注入のみに留め Ping proto は据え置いた判断。波及コストを測る習慣の根拠。
+- [FrooxEngine Settings API](feedback_frooxengine_settings_api.md) — `Settings.GetActiveSetting<T>() / UpdateActiveSetting<T>()` が公式、内部 `RunSynchronously` で engine thread に dispatch。foreground fps は engine 公式経路で制御不可。
+
+### モダリティ実装パターン
+
+- [Camera v2 制約集約](feedback_camera_v2_constraints.md) — Renderite framebuffer 直取り経路の確定アーキ、Wine sandbox 制約、InterprocessLib / OverlayCamera / Settings API の落とし穴を 1 本に集約。
+- [Locomotion ExternalInput 経路の落とし穴](feedback_locomotion_external_input.md) — stateful repeater / Reset RPC / disconnect 検知 / pitch 符号 / `AccessTools.FieldRefAccess` の generic 引数順 / velocity 単位元 / Move body-local 変換 (HeadFacingRotation) / Camera 既存 bug を集約。
+- [Locomotion HeadFacingRotation で body-relative 成立](feedback_locomotion_headfacing_body_relative.md) — 2026-05-19 実機計測で V_B / V_D の角度差 87.1° を観測、`HeadFacingRotation` 経路が正しいと定量確認。
+- [Speaker engine tap と方向別 modality 分割](feedback_speaker_engine_tap.md) — Audio は Speaker/Microphone に方向別分離、Speaker は `AudioOutputDriver.AudioFrameRendered` を HarmonyLib Postfix で tap、WASAPI thread の hot path 設計と SafeShutdown 順序。
+- [Microphone engine tap](feedback_microphone_engine_tap.md) — Microphone は `AudioInput` 派生 + `AudioSystem.RegisterAudioInput` で完結。`MonoSample` (Elements.Assets) 固定、`UnregisterAudioInput` 不在の制約、ring buffer + Locomotion 流 self-rescheduling repeater 設計、UI 手動切替方針。
+
+### proto / build
+
+- [proto RPC envelope naming except](feedback_proto_rpc_naming_except.md) — RPC_REQUEST/RESPONSE_STANDARD_NAME は buf.yaml で except 済み。streaming のデータ型はモダリティ固有名でよい。
+- [grpc-tools message-type duplication in test projects](feedback_grpc_tools_message_duplication.md) — Core で Server stub、Tests で Client stub を別生成すると message 型が CS0436 で重複警告。テスト csproj 限定で NoWarn 抑制する。
+- [BepInEx mod の transitive DLL 同梱](feedback_bepinex_transitive_dlls.md) — CopyLocalLockFileAssemblies=true + PostBuild Copy 双方が必要。AspNetCore framework reference は SDK shared framework dir から専用 Target で都度コピー。
+- [netstandard2.0 の polyfill 要件](feedback_netstandard20_polyfills.md) — Span/BinaryPrimitives は `System.Memory` NuGet、HashCode.Combine は無いので手組み hash で代替。
+- [BepInExRenderer は framework 配置](feedback_bepinex_renderer_as_framework.md) — `ResoniteModding-BepInExRenderer` は plugin dir を作らず `Renderer/BepInEx/core/` に framework を deploy する。check-gale は `BepInEx.Preloader.dll` で確認。
+- [Resonite 同梱 Google.Protobuf 3.11.4 制約](feedback_protobuf_3_11_4_in_resonite.md) — `UnsafeByteOperations` 等 Protobuf 3.15+ API は TypeLoadException で死ぬ。PluginAssemblyResolver では救えないケースがある。
+- [InterprocessLib callback signature](feedback_interprocesslib_callback_signature.md) — `Messenger.ReceiveValueArray<T>` の callback は `Action<T[]?>`、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず -=。
+
+### gRPC streaming テスト
+
+- [streaming fps_limit テストの tolerance](feedback_streaming_fps_limit_test_tolerance.md) — pacing 検証は理論値 +2 ぶんの上限スラックで書く。「+1 edge frame + 1 boundary slip」。
+- [test 専用 service host pattern](feedback_test_only_service_host.md) — SessionHost に mount しない wave の Core 側 modality は、test 専用の最小 Kestrel host を分離して round-trip テストを書く。
+- [gRPC client cancel exception surface](feedback_grpc_client_cancel_exception_surface.md) — Grpc.AspNetCore + Kestrel UDS では client cancel が OperationCanceledException だけでなく IOException で表面化する経路あり、3 段構え catch で吸収。
+
+### Python 規約
+
+- [pyright unused private in src/](feedback_pyright_unused_private_in_src.md) — tests/ が strict 除外なので `_` prefix の private 関数を test だけ参照すると unused 扱い。`__all__` に列挙して回避。
+
+### ツール・運用
 
 - [dotnet local tools を優先する](feedback_dotnet_local_tools.md) — .NET CLI ツールは `.config/dotnet-tools.json` で管理し、global tool + PATH 操作は避ける。
 - [git に --no-pager を付けない](feedback_git_no_pager.md) — 非インタラクティブ Bash では既定で pager を使わないため冗長。
-- [Core/Mod 二層構成](feedback_core_mod_layering.md) — コアは Resonite 非依存ライブラリ、mod は engine bridging のみの薄いアダプタ。proto/Service は Core、Bridge 実装は mod。
-- [Session Bridge 導入時に proto を変えない](feedback_session_bridge_no_proto_change.md) — Step 2 で Bridge IF 注入のみに留め Ping proto は据え置いた判断。波及コストを測る習慣の根拠。
-- [Resonite 同梱 Google.Protobuf 3.11.4 制約](feedback_protobuf_3_11_4_in_resonite.md) — `UnsafeByteOperations` 等 Protobuf 3.15+ API は TypeLoadException で死ぬ。PluginAssemblyResolver では救えないケースがある。
-- [Camera v2 制約集約](feedback_camera_v2_constraints.md) — Renderite framebuffer 直取り経路の確定アーキ、Wine sandbox 制約、InterprocessLib / OverlayCamera / Settings API の落とし穴を 1 本に集約。
-- [Locomotion ExternalInput 経路の落とし穴](feedback_locomotion_external_input.md) — stateful repeater / Reset RPC / disconnect 検知 / pitch 符号 (反転なし) / `AccessTools.FieldRefAccess` の generic 引数順 / velocity 単位元 / Move body-local 変換 (HeadFacingRotation) / Camera 既存 bug を集約。
-- [Speaker engine tap と方向別 modality 分割](feedback_speaker_engine_tap.md) — Audio は Speaker/Microphone に方向別分離、Speaker は `AudioOutputDriver.AudioFrameRendered` を HarmonyLib Postfix で tap (Renderer plugin 不要)、WASAPI thread の hot path 設計と SafeShutdown 順序。
-- [Microphone engine tap](feedback_microphone_engine_tap.md) — Microphone は `AudioInput` 派生 + `AudioSystem.RegisterAudioInput` で完結 (Speaker と非対称)。`MonoSample` (Elements.Assets) 固定、`UnregisterAudioInput` 不在の制約、ring buffer + Locomotion 流 self-rescheduling repeater 設計、UI 手動切替方針。
 - [docstring-author に cleanup も依頼する](feedback_docstring_author_includes_cleanup.md) — 呼ぶたびに「新規 polish」だけでなく「冗長コメント trim」もスコープに含めて指示する。
 
 ## Reference
 
-- [Resonite modding wiki 抜粋](reference_resonite_modding.md) — BepisLoader / BepInEx / `bep6resonite` テンプレ / `ResoniteHooks` / Thunderstore packaging の要点と URL マップ。WIP ページの代替参照先も併記。
-- [pressure-vessel の filesystem 共有経路](reference_pressure_vessel_paths.md) — `/home/$USER` は通る、`/run/user/<UID>` と `/tmp` は通らない。`PRESSURE_VESSEL_FILESYSTEMS_RW` env は strip される。`~/.resonite-io/` を採用した経緯。
+- [Resonite modding wiki 抜粋](reference_resonite_modding.md) — BepisLoader / BepInEx / `bep6resonite` テンプレ / `ResoniteHooks` / Thunderstore packaging の要点と URL マップ。
+- [pressure-vessel の filesystem 共有経路](reference_pressure_vessel_paths.md) — `/home/$USER` は通る、`/run/user/<UID>` と `/tmp` は通らない。`~/.resonite-io/` を採用した経緯。
 - [WorldManager.WorldFocused 仕様](reference_worldmanager_world_focused.md) — event 発火タイミング、`World.Name` / `User.UserName` の tearing 許容性、Bridge での snapshot 読み戦略。
-- [Camera.RenderToBitmap は ~31ms の hard cap](reference_camera_render_to_bitmap_30fps_cap.md) — 640×480 RGBA8 で natural 30fps cap。`b.render_to_bitmap` p50 値。送信側最適化は基本効かない。
+- [Camera.RenderToBitmap は ~31ms の hard cap](reference_camera_render_to_bitmap_30fps_cap.md) — 640×480 RGBA8 で natural 30fps cap。送信側最適化は基本効かない。
+- [Generated proto layout](reference_generated_proto_layout.md) — `python/src/resoio/_generated/` の構造と pyright / ruff / coverage 除外規約。
+- [betterproto2 packaging](reference_betterproto2_packaging.md) — `betterproto2` に `[compiler]` extra は存在せず、`betterproto2_compiler` は別 distribution。
+- [Load-bearing whys](reference_load_bearing_whys.md) — `mod/src/` + `python/src/resoio/` + Core テストの中で docstring trim 時に削ってはいけない WHY コメント一覧 (Session loader / Camera v2 renderer bridge / Locomotion / Speaker WASAPI tap / Microphone AudioInput など)。
 
 ## サブエージェント由来のメモ
 
 `.claude/agent-memory/<agent-type>/` に各サブエージェントが auto memory 機能で書き出した
 作業メモが格納されている。harness が自動ロードする領域だが、本リポジトリでは git 管理する方針。
-タスクが該当サブエージェントの担当範囲にかかるときは個別ファイルも参照する。
+project-wide 共有価値のあるものは上記 Feedback / Reference に昇格済み。各 agent 配下に残るのは
+当該 agent 固有の作業ノウハウのみ。
 
-- [spec-driven-implementer/MEMORY.md](../agent-memory/spec-driven-implementer/MEMORY.md) — 実装フェーズの feedback (BepInEx 配布、Bridge スレッド戦略、proto 命名規約、テスト tolerance 等)
-- [code-quality-reviewer/MEMORY.md](../agent-memory/code-quality-reviewer/MEMORY.md) — レビュー時に拾った reference / project メモ (`_generated/` 除外規約、betterproto2 packaging 等)
-- [docstring-author/MEMORY.md](../agent-memory/docstring-author/MEMORY.md) — docstring trim 時に守るべき load-bearing comments の一覧
+- [spec-driven-implementer/MEMORY.md](../agent-memory/spec-driven-implementer/MEMORY.md) — implementer 固有の作業ノウハウ (作業手順、recovery 手順、TODO、CLI install 時の skew、test pacing)
