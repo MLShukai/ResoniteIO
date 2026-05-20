@@ -1,15 +1,13 @@
 """E2E: stream the canonical sine fixture into Resonite via Microphone.
 
-Pushes a 1-second 440 Hz mono float32 fixture into the engine's
-virtual ``AudioInput`` and asserts the server-returned summary
-matches what the wire path produced. Audible verification is manual
-(see ``mod/tests/manual/microphone-verification.md``) — there is no
-Resonite-side measurement hook for "did anyone hear it".
+Pushes the 440 Hz mono float32 fixture (length defined by
+``fixtures/generate_sine.py``) into the engine's virtual
+``AudioInput`` and asserts the server-returned summary matches the
+wire path. Audible verification is manual — see
+``mod/tests/manual/microphone-verification.md``.
 
-The 48000-sample fixture chunks into 46 × 1024 frames; the trailing
-896 samples are dropped (no zero-pad). Uses :class:`MicrophoneClient`
-directly so the chunking assertion stays anchored to the wire
-protocol, not CLI argument plumbing.
+Uses :class:`MicrophoneClient` directly so the chunking assertion
+stays anchored to the wire protocol, not CLI argument plumbing.
 """
 
 from __future__ import annotations
@@ -38,10 +36,6 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sine_440hz_1s_mono_48k.wav"
 # Duplicated from ``resoio.cli.mic`` so the assertion math is anchored
 # to the wire chunk size rather than a CLI implementation detail.
 _CHUNK_SAMPLES = 1024
-
-# Derived rather than hard-coded so a fixture length change surfaces in one place.
-_EXPECTED_CHUNKS = int(SAMPLE_RATE) // _CHUNK_SAMPLES  # 46
-_EXPECTED_SAMPLES = _EXPECTED_CHUNKS * _CHUNK_SAMPLES  # 47104
 
 # Generous retry budget absorbs the Resonite cold-boot window
 # (FAILED_PRECONDITION fires until LocalUser / AudioSystem are wired up).
@@ -122,9 +116,10 @@ class TestMicrophoneSend:
         del resonite_session  # only the fixture's lifecycle side-effect matters here
 
         samples = _load_fixture_samples()
-        assert samples.shape == (int(SAMPLE_RATE),), (
-            f"unexpected fixture length: {samples.shape}"
-        )
+        # Derive expected counts from the loaded fixture so duration
+        # changes in ``generate_sine.py`` do not require updating asserts.
+        expected_chunks = samples.shape[0] // _CHUNK_SAMPLES
+        expected_samples = expected_chunks * _CHUNK_SAMPLES
 
         async def run() -> MicrophoneStreamSummary:
             await _wait_for_microphone_ready()
@@ -137,21 +132,20 @@ class TestMicrophoneSend:
         # when cross-checking against the manual audibility checklist.
         print(f"E2E microphone summary: {summary}")
         print(
-            f"sent_chunks={_EXPECTED_CHUNKS}, sent_samples={_EXPECTED_SAMPLES}, "
-            f"dropped_remainder_samples={samples.shape[0] - _EXPECTED_SAMPLES}"
+            f"sent_chunks={expected_chunks}, sent_samples={expected_samples}, "
+            f"dropped_remainder_samples={samples.shape[0] - expected_samples}"
         )
 
-        assert summary.received_frames == _EXPECTED_CHUNKS, (
+        assert summary.received_frames == expected_chunks, (
             f"server received {summary.received_frames} frames, "
-            f"expected {_EXPECTED_CHUNKS} (one per 1024-sample chunk)"
+            f"expected {expected_chunks} (one per 1024-sample chunk)"
         )
-        assert summary.received_samples == _EXPECTED_SAMPLES, (
+        assert summary.received_samples == expected_samples, (
             f"server received {summary.received_samples} samples, "
-            f"expected {_EXPECTED_SAMPLES} "
-            f"(= {_EXPECTED_CHUNKS} chunks × {_CHUNK_SAMPLES} samples)"
+            f"expected {expected_samples} "
+            f"(= {expected_chunks} chunks × {_CHUNK_SAMPLES} samples)"
         )
-        # The 2 s ring buffer absorbs 1 s of samples comfortably, so a
-        # non-zero count here means a regression silently dropped frames.
+        # Non-zero here means a bridge ring buffer overflow regression.
         assert summary.dropped_frames == 0, (
             f"server reported dropped_frames={summary.dropped_frames}; "
             "expected 0 — bridge ring buffer overflow?"

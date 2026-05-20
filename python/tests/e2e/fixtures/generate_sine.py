@@ -22,10 +22,12 @@ from pathlib import Path
 
 import numpy as np
 
-# Changing these requires regenerating the fixture AND updating the
-# expected chunk / sample counts in ``tests/e2e/mic_send.py``.
+# 5 s payload deliberately exceeds the bridge's 2 s ring buffer, so any
+# future regression that drops WAV-mode pacing surfaces as dropped_frames
+# in ``mic_send`` instead of slipping through unnoticed (1 s used to fit
+# even when burst-sent).
 _FREQUENCY_HZ = 440.0
-_DURATION_S = 1.0
+_DURATION_S = 5.0
 _AMPLITUDE = 0.5
 
 # Wire format constants duplicated from ``resoio.microphone`` to keep
@@ -44,6 +46,9 @@ _FMT_CHUNK_SIZE = 16
 # treats sampwidth=4 as float32 by convention.
 _WAVE_FORMAT_PCM = 0x0001
 
+# Filename keeps the historic "1s" suffix for git-history continuity —
+# actual length follows ``_DURATION_S``. Renaming churns every reference
+# without changing behaviour.
 _FIXTURE_PATH = Path(__file__).parent / "sine_440hz_1s_mono_48k.wav"
 
 
