@@ -370,7 +370,7 @@ internal sealed class ResoniteIOAudioInput : AudioInput
 
     public ResoniteIOAudioInput(Engine engine)
         : base(
-            name: "ResoniteIOMicrophone",
+            name: "ResoniteIO Microphone",
             deviceId: "resoio-mic-virtual",
             input: engine.InputInterface,
             type: AudioInputType.CaptureDevice,
