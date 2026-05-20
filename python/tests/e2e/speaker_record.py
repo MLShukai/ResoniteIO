@@ -30,7 +30,7 @@ import numpy as np
 from grpclib.const import Status
 
 from resoio.cli.record import _WavFloat32Writer  # noqa: PLC2701
-from resoio.speaker import CHANNELS, SAMPLE_RATE, SpeakerClient
+from resoio.speaker import CHANNELS, SAMPLE_RATE, AudioChunk, SpeakerClient
 from tests.helpers import mark_e2e
 
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
@@ -48,6 +48,14 @@ _MIN_BYTES = int(_BYTES_PER_SECOND * 5.0)  # at least 5 s of audio
 # (ICameraBridge / ISpeakerBridge docstring 参照)。
 _SPEAKER_READY_TIMEOUT_S = 120.0
 _SPEAKER_READY_RETRY_INTERVAL_S = 2.0
+
+# `just resonite-start` 経路で Resonite を起動した直後は
+# AudioOutputDriver が 'Dummy Output' などの null driver に attach して
+# 一時的にゼロ buffer を吐く期間がある (decompile 上 audio system の
+# driver enumeration が deferred で、PulseAudio device が後追いで
+# 認識される)。最初の非ゼロ chunk が来るまで wait することで、
+# 本録音の peak > 0 assertion が安定する。
+_SPEAKER_AUDIO_WARMUP_TIMEOUT_S = 60.0
 
 # WAV header layout (cli/record.py と同じ規約。重複は意図的: テスト側で
 # CLI の format spec を独立に再現することで「writer が壊れた / spec が
@@ -68,13 +76,41 @@ class TestSpeakerRecord:
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "record.wav"
 
+        def _chunk_has_audio(chunk: AudioChunk) -> bool:
+            """Return True when ``chunk`` carries any non-zero sample.
+
+            'Dummy Output' driver emits zero-valued frames at the
+            correct rate, so a chunk arriving is necessary but not
+            sufficient for "audio is flowing". See
+            _SPEAKER_AUDIO_WARMUP_TIMEOUT_S.
+            """
+            arr = np.frombuffer(chunk.samples.tobytes(), dtype=np.float32)
+            return bool(np.any(arr != 0.0))
+
         async def wait_for_speaker_ready() -> None:
             ready_deadline = time.monotonic() + _SPEAKER_READY_TIMEOUT_S
+            audio_deadline = time.monotonic() + _SPEAKER_AUDIO_WARMUP_TIMEOUT_S
             while True:
                 try:
                     async with SpeakerClient() as spk:
-                        async for _ in spk.stream():
-                            return
+                        async for chunk in spk.stream():
+                            if _chunk_has_audio(chunk):
+                                # First non-zero chunk means the engine's
+                                # real audio driver is wired up.
+                                return
+                            if time.monotonic() > audio_deadline:
+                                raise TimeoutError(
+                                    "Speaker bridge attached but produced "
+                                    "only zero-valued frames for "
+                                    f"{_SPEAKER_AUDIO_WARMUP_TIMEOUT_S:.0f}s. "
+                                    "Check `gale/BepInEx/LogOutput.log` for "
+                                    "the 'FrooxEngineSpeakerBridge' driver "
+                                    "name; 'Dummy Output' means Wine has no "
+                                    "PulseAudio / PipeWire passthrough."
+                                )
+                            # Stay subscribed: opening / closing the stream
+                            # repeatedly would only re-do the FAILED_PRECONDITION
+                            # warm-up, not advance the audio device.
                 except grpclib.exceptions.GRPCError as e:
                     if e.status != Status.FAILED_PRECONDITION:
                         raise
@@ -159,33 +195,20 @@ class TestSpeakerRecord:
             f"({36 + data_size})"
         )
 
-        # Audio content sanity check (environment-dependent): scan the
-        # entire payload for any non-zero sample. The Speaker pipeline can
-        # be verified silently — `Dummy Output` (Wine without PulseAudio
-        # / PipeWire passthrough) emits zero-valued float32 frames at the
-        # correct rate, so the pipeline (Bridge attach + WASAPI tap +
-        # gRPC + WAV writer) is fully exercised even with peak == 0.
-        # Treat all-zero as a warning rather than failure so this test
-        # passes on environments without audio device passthrough; emit
-        # the diagnostic so a real regression is still visible in the
-        # CI / artifact log.
+        # Audio content sanity check: ``wait_for_speaker_ready`` already
+        # blocked until the first non-zero chunk, so by this point the
+        # audio device is warmed up and the entire recording should
+        # contain real samples.
         with open(out_path, "rb") as f:
             f.seek(_HEADER_SIZE)
             payload = f.read()
         samples = np.frombuffer(payload, dtype=np.float32).reshape(-1, CHANNELS)
         peak = float(np.max(np.abs(samples)))
-        if peak == 0.0:
-            print(
-                "WARN: captured audio is identically zero across the entire "
-                f"{_CAPTURE_SECONDS:.0f}s. The Speaker pipeline (Bridge "
-                "attach + frame flow + WAV format) still validated, but no "
-                "real audio content reached the tap. Common causes:\n"
-                "  - Wine selected 'Dummy Output' (no PulseAudio / PipeWire "
-                "    passthrough into the Proton sandbox)\n"
-                "  - The Resonite session was muted or in a silent world\n"
-                "Check `gale/BepInEx/LogOutput.log` for "
-                "'FrooxEngineSpeakerBridge' attach lines; the driver name "
-                "logged there indicates which output was tapped."
-            )
-        else:
-            print(f"Audio content sanity OK: peak amplitude = {peak:.6f}")
+        assert peak > 0.0, (
+            f"Captured audio peak is 0 across the entire {_CAPTURE_SECONDS:.0f}s "
+            "recording even though the warm-up gate observed a non-zero "
+            "chunk. The driver may have flipped back to a null output "
+            "mid-recording. Check `gale/BepInEx/LogOutput.log` for "
+            "'FrooxEngineSpeakerBridge' re-attach lines."
+        )
+        print(f"Audio content sanity OK: peak amplitude = {peak:.6f}")
