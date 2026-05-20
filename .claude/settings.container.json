@@ -1,13 +1,20 @@
 {
   "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "Read",
+      "Write",
+      "Edit(/.claude/skills/**)"
+    ],
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
   },
+  "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "agentPushNotifEnabled": true,
   "allow": [
     "Read",
     "Bash"
-  ],
-  "skipDangerousModePermissionPrompt": true
+  ]
 }
