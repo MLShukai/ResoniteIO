@@ -109,6 +109,14 @@
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- Awwdio: Resonite が同梱する WASAPI 抽象 (AudioOutputDriver の基底
+         IAudioDeviceOutput / AudioDeviceOutput を提供)。Speaker Bridge が
+         AudioSystem.PrimaryOutput を読むために必要。Private=False で出力に含めない
+         (engine 同梱を再利用)。 -->
+    <Reference Include="Awwdio">
+      <HintPath>$(GamePath)Awwdio.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Camera v2: Gale プロファイルに install された InterprocessLib (engine 側 .NET 10 build) を
