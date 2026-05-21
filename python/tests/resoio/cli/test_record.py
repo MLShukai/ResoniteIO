@@ -1029,8 +1029,10 @@ async def test_record_muxed_audio_av_sync_t0_shared(
             v_seconds = vs.start_time * float(vs.time_base)
             a_seconds = audio.start_time * float(audio.time_base)
             skew_ms = abs(v_seconds - a_seconds) * 1000.0
-            # 300 ms allows for PyAV AAC priming + mp4 start_time
-            # rounding; on a clean run we see ≈0 ms.
+            # Spec §11.5 named 100 ms as the initial heuristic; relaxed
+            # 3x to absorb PyAV muxer buffering (a few ms) plus CI
+            # jitter. The shared-t0 design makes the observed skew
+            # essentially 0 ms on a clean run.
             assert skew_ms < 300.0, skew_ms
         finally:
             container.close()

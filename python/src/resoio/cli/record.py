@@ -1,24 +1,18 @@
 """``resoio record`` subcommand: video / audio / muxed media recording.
 
-This module unifies the former ``resoio capture`` (Camera → Y4M) and
-``resoio record`` (Speaker → WAV / raw PCM) into a single subcommand.
-The two modality flags ``--video`` / ``--audio`` are **filter semantics**:
-they are not mutually exclusive, and supplying neither means "both"
-(i.e. muxed video+audio).
+``--video`` / ``--audio`` are filter flags (not mutually exclusive)
+rather than subcommands so the dispatcher stays single-binary and
+users can compose them with one CLI surface — supplying neither
+means "both" (muxed) so the common case is the shortest invocation.
 
-Five concrete output routes are produced from the ``(mode, target)``
-matrix:
-
-* ``mode == "video"`` × ``-o -``       → Y4M (C444, std-lib + numpy)
-* ``mode == "video"`` × ``*.mp4``      → H.264 / yuv420p mp4 (PyAV)
-* ``mode == "audio"`` × ``-o -``       → raw float32 LE PCM
-* ``mode == "audio"`` × ``*.wav``      → 48 kHz / stereo float32 LE WAV
-* ``mode == "muxed"`` × ``-`` / ``*.mp4`` → matroska / mp4 video+audio
-  (PyAV; H.264 + AAC, sharing a single ``t0`` across streams for
-  preserved A/V sync).
-
-The wire formats are fixed by :mod:`resoio.speaker` (48 kHz / stereo
-float32 LE) and :mod:`resoio.camera` (RGBA8 frames).
+The recording routes split along a deliberate boundary: Y4M, raw PCM
+and WAV are emitted with stdlib + numpy because their wire formats
+are trivial and adding a PyAV dependency for those paths would only
+hurt startup time and the dependency footprint. PyAV is reserved for
+H.264 / AAC encoding and container muxing where re-implementing
+codecs is out of scope. Muxed output therefore only supports mp4
+(file) and matroska (stdout) — the two containers PyAV can stream
+reliably while preserving A/V sync via a single shared ``t0``.
 """
 
 from __future__ import annotations
@@ -681,6 +675,13 @@ def _video_pts_from_nanos(unix_nanos: int, t0_nanos: int) -> int:
     divides cleanly into the typical frame rates (30 fps → 3000 ticks).
     PTS is rounded to the nearest tick and clamped at zero so the first
     frame (whose nanos == ``t0_nanos``) lands exactly at PTS 0.
+
+    >>> _video_pts_from_nanos(0, 0)
+    0
+    >>> _video_pts_from_nanos(33_333_333, 0)
+    3000
+    >>> _video_pts_from_nanos(0, 100)
+    0
     """
     delta = max(0, unix_nanos - t0_nanos)
     # (delta_ns * 90000) / 1e9 == delta_ns * 90 / 1_000_000 (integer math).
@@ -743,12 +744,12 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
         nonlocal video_header_written
         async for frame in _paced_frames(cam, fps, verbose=args.verbose):
             if not video_header_written:
-                # Container muxers (especially mp4) freeze stream metadata
-                # on first packet, so the video dims MUST be set before
-                # the audio pump can start muxing; the event below
-                # synchronises that handshake. Anchor t0 now too so the
-                # first audio chunk uses the same reference if it has
-                # not arrived yet.
+                # mp4 freezes stream metadata on the first muxed packet:
+                # if an AAC packet lands while ``v_stream`` still reports
+                # 0×0, the video dims are locked at 0×0 and every later
+                # ``v_stream.encode(...)`` raises AVERROR_EXTERNAL. The
+                # ``video_header_ready`` event below gates the audio
+                # pump until these assignments have happened.
                 v_stream.width = frame.width
                 v_stream.height = frame.height
                 state.anchor(frame.unix_nanos)
@@ -771,9 +772,9 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
         """Pull AudioChunks, encode AAC, share ``t0`` with video."""
         nonlocal audio_pts_initialised
         sample_offset = 0
-        # Block until the video pump has set the H.264 stream's width
-        # and height; mp4 will not accept an AAC packet while the video
-        # stream still reports 0×0 dimensions.
+        # See video_pump: muxing an AAC packet before v_stream has real
+        # width/height freezes the video metadata at 0×0 and breaks all
+        # subsequent video encoding under mp4.
         await video_header_ready.wait()
         async for chunk in spk.stream():
             t0 = state.anchor(chunk.unix_nanos)
@@ -871,8 +872,15 @@ async def _dispatch(args: argparse.Namespace, mode: Mode) -> int:
 
 
 async def _run(args: argparse.Namespace) -> int:
-    """Validate → resolve mode → dispatch → wrap with duration / pipe
-    handling."""
+    """Entry point: validate, resolve mode, dispatch, bound by duration.
+
+    ``BrokenPipeError`` is swallowed here (rc=0) so any write in the
+    nested dispatch — header, frame payload, encoder flush — collapses
+    to the same clean exit when the downstream pipe closes (``... |
+    head``). ``--duration`` is enforced via ``asyncio.wait_for``; the
+    resulting ``TimeoutError`` is the normal end-of-record signal, not
+    an error.
+    """
     rc = _validate_args(args)
     if rc is not None:
         return rc
