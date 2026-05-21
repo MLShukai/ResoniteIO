@@ -93,12 +93,14 @@ class DisplayClient:
         width: int = 0,
         height: int = 0,
         max_fps: float = 0.0,
-    ) -> DisplayInfo:
-        """Apply a (partial) display config and return the resulting state.
+    ) -> None:
+        """Apply a partial display config; ``0`` / ``0.0`` mean "leave
+        unchanged".
 
-        ``0`` / ``0.0`` mean "leave unchanged" (proto3 default semantics);
-        the returned snapshot reflects state *after* the partial update.
-        Raises :class:`RuntimeError` if called outside ``async with``.
+        Returns ``None`` by contract — engine settings dispatch hops to the
+        engine thread, so the post-apply snapshot is not reliable in the
+        same RPC. Call :meth:`get` afterwards if you need the new state
+        (see ``display.proto`` for the full rationale).
         """
         stub = self._stub
         if stub is None:
@@ -106,8 +108,7 @@ class DisplayClient:
                 "DisplayClient is not connected. Use `async with DisplayClient(): ...`."
             )
         request = DisplayConfig(width=width, height=height, max_fps=max_fps)
-        state = await stub.apply(request)
-        return _info_from_state(state)
+        await stub.apply(request)
 
     async def get(self) -> DisplayInfo:
         """Return the engine-side display state without modifying it."""

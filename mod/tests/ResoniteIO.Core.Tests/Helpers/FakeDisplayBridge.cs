@@ -2,19 +2,11 @@ using ResoniteIO.Core.Display;
 
 namespace ResoniteIO.Core.Tests.Helpers;
 
-/// <summary>
-/// テスト用 <see cref="IDisplayBridge"/>。
-/// </summary>
+/// <summary>テスト用 <see cref="IDisplayBridge"/>。Apply は request を <see cref="LastApplied"/>
+/// に保存しつつ proto "0 = 変更しない" を <see cref="CurrentState"/> に反映する。</summary>
 /// <remarks>
-/// <para>
-/// "0 = 変更しない" のセマンティクス検証のため、Apply は <see cref="LastApplied"/>
-/// に request snapshot をそのまま保存し、<see cref="CurrentState"/> に 0 でない
-/// field だけを上書きしてから snapshot を返す。
-/// </para>
-/// <para>
 /// <see cref="ThrowNotReady"/> = true なら全 RPC で <see cref="DisplayNotReadyException"/>
 /// を投げる (FailedPrecondition 翻訳テスト用)。
-/// </para>
 /// </remarks>
 internal sealed class FakeDisplayBridge : IDisplayBridge
 {
@@ -30,10 +22,7 @@ internal sealed class FakeDisplayBridge : IDisplayBridge
 
     public bool ThrowNotReady { get; set; }
 
-    public Task<DisplayConfigSnapshot> ApplyAsync(
-        DisplayConfigSnapshot config,
-        CancellationToken ct
-    )
+    public Task ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct)
     {
         if (ThrowNotReady)
         {
@@ -51,7 +40,7 @@ internal sealed class FakeDisplayBridge : IDisplayBridge
             MaxFps = config.MaxFps != 0f ? config.MaxFps : CurrentState.MaxFps,
         };
 
-        return Task.FromResult(CurrentState);
+        return Task.CompletedTask;
     }
 
     public Task<DisplayConfigSnapshot> GetAsync(CancellationToken ct)

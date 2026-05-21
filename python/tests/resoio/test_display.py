@@ -4,6 +4,7 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
+    DisplayApplyResponse,
     DisplayBase,
     DisplayConfig,
     DisplayGetRequest,
@@ -13,31 +14,27 @@ from resoio.display import DisplayClient, DisplayInfo
 
 
 class _FakeDisplay(DisplayBase):
-    """In-process fake that records the last Apply config and exposes a mutable
-    current state for the test to assert against."""
+    """In-process fake mirroring server-side "0 = unchanged" semantics."""
 
     def __init__(self, initial: DisplayState) -> None:
         self.current = initial
         self.last_apply: DisplayConfig | None = None
 
-    async def apply(self, message: DisplayConfig) -> DisplayState:
+    async def apply(self, message: DisplayConfig) -> DisplayApplyResponse:
         self.last_apply = message
-        # Mirror the server-side "0 = unchanged" semantics so the
-        # returned snapshot reflects an engine that ignored zero fields.
-        new = DisplayState(
+        self.current = DisplayState(
             width=message.width or self.current.width,
             height=message.height or self.current.height,
             max_fps=message.max_fps or self.current.max_fps,
         )
-        self.current = new
-        return new
+        return DisplayApplyResponse()
 
     async def get(self, message: DisplayGetRequest) -> DisplayState:
         return self.current
 
 
 class TestDisplayClient:
-    async def test_apply_returns_info(
+    async def test_apply_returns_none_and_mutates_server_state(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         socket_path = tmp_path / "rio-display.sock"
@@ -48,7 +45,9 @@ class TestDisplayClient:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
             async with DisplayClient() as client:
                 assert client.socket_path == str(socket_path)
-                info = await client.apply(width=1920, height=1080, max_fps=120.0)
+                result = await client.apply(width=1920, height=1080, max_fps=120.0)
+                assert result is None
+                info = await client.get()
             assert info == DisplayInfo(width=1920, height=1080, max_fps=120.0)
             assert fake.last_apply is not None
             assert fake.last_apply.width == 1920
@@ -70,13 +69,12 @@ class TestDisplayClient:
         try:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
             async with DisplayClient() as client:
-                info = await client.apply(max_fps=120.0)
-            # Server saw width/height=0, max_fps=120.
+                await client.apply(max_fps=120.0)
+                info = await client.get()
             assert fake.last_apply is not None
             assert fake.last_apply.width == 0
             assert fake.last_apply.height == 0
             assert fake.last_apply.max_fps == 120.0
-            # Returned state reflects the fake's "0 = keep" behavior.
             assert info == DisplayInfo(width=1280, height=720, max_fps=120.0)
         finally:
             server.close()

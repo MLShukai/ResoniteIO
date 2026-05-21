@@ -18,9 +18,15 @@ public sealed record DisplayConfigSnapshot
 /// <summary>Mod 側 (Renderite) が実装し DI で注入する display 設定 read/write 抽象。</summary>
 public interface IDisplayBridge
 {
-    /// <summary><paramref name="config"/> の 0 でない field を engine に適用し、適用後の現値を返す。</summary>
+    /// <summary><paramref name="config"/> の 0 でない field を engine に書き込む。値は返さない。</summary>
+    /// <remarks>
+    /// engine 側 settings dispatch は engine thread に hop するため、Apply 直後の
+    /// 読み返しが適用前 snapshot を返す race がある。新しい状態が必要なら Apply
+    /// 完了後に <see cref="GetAsync"/> を別 RPC で呼ぶ — これが proto Apply が
+    /// <c>DisplayApplyResponse {}</c> を返す唯一の理由 (詳細は display.proto)。
+    /// </remarks>
     /// <exception cref="DisplayNotReadyException">engine がまだ制御不能 (renderer 未起動等)。</exception>
-    Task<DisplayConfigSnapshot> ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct);
+    Task ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct);
 
     /// <summary>現在の display 設定の snapshot を engine から読む。</summary>
     /// <exception cref="DisplayNotReadyException">engine がまだ読めない状態。</exception>

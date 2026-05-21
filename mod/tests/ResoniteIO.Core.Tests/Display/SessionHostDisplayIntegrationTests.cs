@@ -35,7 +35,7 @@ public sealed class SessionHostDisplayIntegrationTests
         using var channel = harness.CreateChannel();
         var client = new V1.Display.DisplayClient(channel);
 
-        var applied = await client.ApplyAsync(
+        var ack = await client.ApplyAsync(
             new DisplayConfig
             {
                 Width = 1920,
@@ -43,10 +43,7 @@ public sealed class SessionHostDisplayIntegrationTests
                 MaxFps = 120f,
             }
         );
-
-        Assert.Equal(1920u, applied.Width);
-        Assert.Equal(1080u, applied.Height);
-        Assert.Equal(120f, applied.MaxFps);
+        Assert.NotNull(ack);
         Assert.NotNull(bridge.LastApplied);
 
         var current = await client.GetAsync(new DisplayGetRequest());
