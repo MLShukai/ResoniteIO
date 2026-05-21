@@ -74,6 +74,19 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends claude-code; \
     rm -rf /var/lib/apt/lists/*
 
+# GitHub CLI (gh) も公式 apt リポジトリから入れる。Claude から `git push` や
+# `gh pr create` を行うため。
+RUN set -eux; \
+    install -d -m 0755 /etc/apt/keyrings; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gh; \
+    rm -rf /var/lib/apt/lists/*
+
 # bookworm-slim の /etc/bash.bashrc は bash-completion ローダ部がコメントアウトされて
 # おり、`docker exec dev bash` は非 login 対話 shell で /etc/profile.d/bash_completion.sh
 # も読まれないため、明示的にローダ呼び出しを追記する。

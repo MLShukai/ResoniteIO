@@ -8,7 +8,9 @@
       "Edit(/.claude/skills/**)",
       "Edit(/.claude/agents/**)",
       "Edit(memory/**)",
-      "Write(memory/**)"
+      "Write(memory/**)",
+      "Bash(git push:*)",
+      "Bash(gh:*)"
     ],
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
