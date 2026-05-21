@@ -1133,12 +1133,19 @@ async def test_record_muxed_stdout_broken_pipe_clean_exit(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    """Muxed stdout sink with broken pipe → rc=0 and no cascading errors.
+    """Muxed stdout closed mid-stream → rc=0 with no traceback on stderr.
 
-    Reproduces ``resoio record | ffmpeg -i -`` getting its stdout
-    closed: the encoder flush *and* the ``container.close()`` call can
-    each raise. The CLI must swallow all three without leaking a
-    traceback to stderr so shell pipelines exit cleanly.
+    Covers the user-visible end-to-end behaviour of
+    ``resoio record | ffmpeg -i -`` when the downstream consumer
+    detaches: the CLI must exit cleanly without a Python traceback
+    leaking through. The clean exit is achieved by the composition of
+    pump-level ``BrokenPipeError`` handling (the ``done``-task filter in
+    :func:`_record_muxed`) and the teardown-time suppression in
+    :func:`_suppress_teardown_errors`. Whether the teardown path is the
+    one that actually catches an exception is PyAV-version dependent —
+    on PyAV 17 the matroska muxer typically surfaces the break inside
+    the video pump rather than during ``encode(None)`` / ``close()`` —
+    so the suppression helper has its own dedicated unit tests below.
     """
     socket_path = tmp_path / "rio.sock"
     camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
@@ -1153,8 +1160,8 @@ async def test_record_muxed_stdout_broken_pipe_clean_exit(
         args = _build_parser().parse_args(["record", "-o", "-", "--duration", "0.3"])
         rc = await _amain(args)
         assert rc == 0
-        # No traceback should land on stderr; the suppression must keep
-        # both BrokenPipeError and PyAVCallbackError quiet.
+        # The pump-level + teardown-time suppression compose to keep
+        # stderr clean even when the pipe breaks mid-stream.
         err = capsys.readouterr().err
         assert "Traceback" not in err
         assert "BrokenPipeError" not in err
@@ -1162,3 +1169,51 @@ async def test_record_muxed_stdout_broken_pipe_clean_exit(
     finally:
         server.close()
         await server.wait_closed()
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for the suppression helper itself.
+#
+# The e2e test above asserts the *user-visible* shape (rc=0, no traceback);
+# these target the helper's contract directly so that an accidental change
+# to the ``except`` clause (e.g. dropping ``av.error.PyAVCallbackError``)
+# is caught even when the e2e path happens to not exercise the teardown
+# branch on the current PyAV version.
+# ---------------------------------------------------------------------------
+
+
+def test_suppress_teardown_errors_swallows_broken_pipe():
+    """``BrokenPipeError`` raised by ``fn`` must be suppressed."""
+    from resoio.cli.record import _suppress_teardown_errors
+
+    def boom() -> None:
+        raise BrokenPipeError("simulated")
+
+    _suppress_teardown_errors(boom)
+
+
+def test_suppress_teardown_errors_swallows_pyav_callback_error():
+    """PyAV's ``PyAVCallbackError`` (wraps libav write callback) must be
+    suppressed."""
+    import av.error
+
+    from resoio.cli.record import _suppress_teardown_errors
+
+    def boom() -> None:
+        # PyAV 17's PyAVCallbackError takes (errno, filename); errno=1 is
+        # the FFmpeg "operation not permitted" sentinel libav uses when
+        # the Python writer raised an exception inside a callback.
+        raise av.error.PyAVCallbackError(1, "stdout")
+
+    _suppress_teardown_errors(boom)
+
+
+def test_suppress_teardown_errors_propagates_other_exceptions():
+    """Non-IO errors must bubble out so real bugs are not hidden."""
+    from resoio.cli.record import _suppress_teardown_errors
+
+    def boom() -> None:
+        raise RuntimeError("not an I/O error")
+
+    with pytest.raises(RuntimeError, match="not an I/O error"):
+        _suppress_teardown_errors(boom)

@@ -12,3 +12,4 @@ project-wide な規約は `.claude/memory/` 側を参照し、ここには「レ
 ## Feedback
 
 - [skew-tolerance-needs-evidence](feedback_skew_tolerance_needs_evidence.md) — A/V sync などの quantitative threshold を spec から広げる場合、実測値を 1 行残す。
+- [verify-regression-test-actually-fails](feedback_verify_regression_test_actually_fails.md) — implementer の「stash で fail 確認した」報告を信じず、修正を 1 行 disable して再現する。
