@@ -14,8 +14,8 @@ matrix:
 * ``mode == "audio"`` × ``-o -``       → raw float32 LE PCM
 * ``mode == "audio"`` × ``*.wav``      → 48 kHz / stereo float32 LE WAV
 * ``mode == "muxed"`` × ``-`` / ``*.mp4`` → matroska / mp4 video+audio
-  (PyAV; deferred to a follow-up commit, currently raises
-  :class:`NotImplementedError`).
+  (PyAV; H.264 + AAC, sharing a single ``t0`` across streams for
+  preserved A/V sync).
 
 The wire formats are fixed by :mod:`resoio.speaker` (48 kHz / stereo
 float32 LE) and :mod:`resoio.camera` (RGBA8 frames).
@@ -38,6 +38,7 @@ from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     import av
+    from av.audio.stream import AudioStream
     from av.container import OutputContainer
     from av.video.stream import VideoStream
 
@@ -593,6 +594,23 @@ def _mux_video_packets(
         container.mux(packet)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _mux_audio_packets(
+    container: OutputContainer,
+    a_stream: AudioStream,
+    frame: av.AudioFrame | None,
+) -> None:
+    """Encode ``frame`` (or flush on ``None``) and mux every audio packet.
+
+    Symmetric to :func:`_mux_video_packets`: PyAV's AAC encoder accepts
+    arbitrary input ``AudioFrame`` sizes (it FIFOs internally into 1024-
+    sample AAC frames) so callers do not need an explicit
+    ``av.AudioFifo``. The ``pyright: ignore`` is confined to the two
+    lines that interact with PyAV's untyped packet stream.
+    """
+    for packet in a_stream.encode(frame):  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+        container.mux(packet)  # pyright: ignore[reportUnknownMemberType]
+
+
 async def _record_audio_pcm(args: argparse.Namespace) -> int:
     """Stream raw float32 LE PCM to ``sys.stdout.buffer``.
 
@@ -629,15 +647,197 @@ async def _record_audio_wav(args: argparse.Namespace, path: str) -> int:
     return 0
 
 
-async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
-    """Muxed video+audio recording (mp4 file or matroska stdout).
+class _MuxedState:
+    """Mutable bookkeeping shared between the muxed video and audio pumps.
 
-    Deferred to the follow-up commit that introduces PyAV-based A/V
-    sync; the dispatcher relies on :func:`_validate_args` to reject
-    extension misuse before reaching this path.
+    ``t0_nanos`` is the **shared** Unix-nanos timestamp of the earliest
+    frame seen by either pump; both pumps anchor their PTS to it so the
+    resulting mp4 / mkv preserves A/V sync. ``video_pts_seen`` /
+    ``audio_pts_seen`` are used only as a sanity guard against
+    monotonicity regressions (rare clock skew or a server re-emitting
+    a frame with an older timestamp). asyncio is single-threaded so no
+    locks are needed around these fields.
     """
-    del args, target
-    raise NotImplementedError("muxed mode added in next commit")
+
+    __slots__ = ("audio_pts_seen", "t0_nanos", "video_pts_seen")
+
+    def __init__(self) -> None:
+        self.t0_nanos: int | None = None
+        self.video_pts_seen: int = -1
+        self.audio_pts_seen: int = -1
+
+    def anchor(self, unix_nanos: int) -> int:
+        """Set ``t0_nanos`` on first call; return the shared value."""
+        if self.t0_nanos is None:
+            self.t0_nanos = unix_nanos
+        return self.t0_nanos
+
+
+def _video_pts_from_nanos(unix_nanos: int, t0_nanos: int) -> int:
+    """Convert a Camera ``unix_nanos`` to a 1/90000-Hz PTS, clamped to ≥0.
+
+    The spec (§7.1) fixes the video stream ``time_base`` to ``1/90000``
+    because 90 kHz is the common MPEG presentation-timestamp clock and
+    divides cleanly into the typical frame rates (30 fps → 3000 ticks).
+    PTS is rounded to the nearest tick and clamped at zero so the first
+    frame (whose nanos == ``t0_nanos``) lands exactly at PTS 0.
+    """
+    delta = max(0, unix_nanos - t0_nanos)
+    # (delta_ns * 90000) / 1e9 == delta_ns * 90 / 1_000_000 (integer math).
+    return (delta * 90 + 500_000) // 1_000_000
+
+
+async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
+    """Stream Camera+Speaker into a muxed mp4 file or matroska stdout.
+
+    ``target`` selects the container:
+
+    * ``target is None`` → matroska on ``sys.stdout.buffer`` (so the
+      output can be piped into ``ffmpeg`` or ``ffplay`` live).
+    * ``target is not None`` → mp4 file at that path.
+
+    Both pumps share a single :class:`_MuxedState` anchor for ``t0``
+    (the earliest Unix-nanos seen by either side) so A/V sync is
+    preserved across container formats. The classic flush MUST sequence
+    is enforced by nested ``try/finally`` blocks: video encode(None) →
+    audio encode(None) → ``container.close()``. Skipping any of those
+    on the cancellation path would leave an unreadable mp4 (missing
+    moov atom) or a truncated mkv cluster.
+    """
+    import av
+    from av.audio.stream import AudioStream
+    from av.video.stream import VideoStream
+
+    from resoio.camera import CameraClient
+    from resoio.speaker import SAMPLE_RATE, SpeakerClient
+
+    fps: float = args.fps if args.fps is not None else 30.0
+
+    if target is None:
+        container = av.open(  # pyright: ignore[reportUnknownMemberType]
+            sys.stdout.buffer, mode="w", format="matroska"
+        )
+    else:
+        container = av.open(target, mode="w")  # pyright: ignore[reportUnknownMemberType]
+
+    raw_v = container.add_stream("h264", rate=int(round(fps)))  # pyright: ignore[reportUnknownMemberType]
+    assert isinstance(raw_v, VideoStream)
+    v_stream: VideoStream = raw_v
+    v_stream.pix_fmt = "yuv420p"
+    v_stream.time_base = Fraction(1, 90_000)
+
+    raw_a = container.add_stream("aac", rate=SAMPLE_RATE)  # pyright: ignore[reportUnknownMemberType]
+    assert isinstance(raw_a, AudioStream)
+    a_stream: AudioStream = raw_a
+    a_stream.format = "fltp"
+    a_stream.layout = "stereo"
+    a_stream.time_base = Fraction(1, SAMPLE_RATE)
+
+    state = _MuxedState()
+    video_header_ready = asyncio.Event()
+    video_header_written = False
+    audio_pts_initialised = False
+
+    async def video_pump(cam: CameraClient) -> None:
+        """Pull paced frames, encode them as H.264, share ``t0`` with audio."""
+        nonlocal video_header_written
+        async for frame in _paced_frames(cam, fps, verbose=args.verbose):
+            if not video_header_written:
+                # Container muxers (especially mp4) freeze stream metadata
+                # on first packet, so the video dims MUST be set before
+                # the audio pump can start muxing; the event below
+                # synchronises that handshake. Anchor t0 now too so the
+                # first audio chunk uses the same reference if it has
+                # not arrived yet.
+                v_stream.width = frame.width
+                v_stream.height = frame.height
+                state.anchor(frame.unix_nanos)
+                video_header_written = True
+                video_header_ready.set()
+            t0 = state.anchor(frame.unix_nanos)
+            pts = _video_pts_from_nanos(frame.unix_nanos, t0)
+            if pts <= state.video_pts_seen:
+                # Container demuxers refuse non-monotonic PTS — nudge by
+                # one tick rather than dropping the frame so we keep the
+                # constant-rate cadence intact.
+                pts = state.video_pts_seen + 1
+            state.video_pts_seen = pts
+            rgb = np.ascontiguousarray(frame.pixels[..., :3])
+            vf = av.VideoFrame.from_ndarray(rgb, format="rgb24")
+            vf.pts = pts
+            _mux_video_packets(container, v_stream, vf)
+
+    async def audio_pump(spk: SpeakerClient) -> None:
+        """Pull AudioChunks, encode AAC, share ``t0`` with video."""
+        nonlocal audio_pts_initialised
+        sample_offset = 0
+        # Block until the video pump has set the H.264 stream's width
+        # and height; mp4 will not accept an AAC packet while the video
+        # stream still reports 0×0 dimensions.
+        await video_header_ready.wait()
+        async for chunk in spk.stream():
+            t0 = state.anchor(chunk.unix_nanos)
+            if not audio_pts_initialised:
+                # Convert (first_chunk_unix_nanos - t0) ns → samples at
+                # 48 kHz. Clamped at zero so the very first audio chunk
+                # always lands at PTS ≥ 0 even when it preceded the
+                # first video frame (i.e. it *is* t0).
+                delta_ns = max(0, chunk.unix_nanos - t0)
+                sample_offset = (delta_ns * SAMPLE_RATE + 500_000_000) // 1_000_000_000
+                audio_pts_initialised = True
+            pts = sample_offset
+            if pts <= state.audio_pts_seen:
+                pts = state.audio_pts_seen + 1
+            state.audio_pts_seen = pts
+            # AudioChunk samples is (N, 2) interleaved L,R — transpose to
+            # planar (2, N) for the "fltp" sample format.
+            planar = np.ascontiguousarray(chunk.samples.T)
+            af = av.AudioFrame.from_ndarray(planar, format="fltp", layout="stereo")
+            af.sample_rate = SAMPLE_RATE
+            af.pts = pts
+            _mux_audio_packets(container, a_stream, af)
+            sample_offset += chunk.samples.shape[0]
+
+    try:
+        async with (
+            CameraClient(args.socket) as cam,
+            SpeakerClient(args.socket) as spk,
+        ):
+            v_task = asyncio.create_task(video_pump(cam))
+            a_task = asyncio.create_task(audio_pump(spk))
+            try:
+                done, pending = await asyncio.wait(
+                    {v_task, a_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+            except asyncio.CancelledError:
+                # --duration timeout (or external cancel): tear down both
+                # pumps deterministically before we propagate so the
+                # finally block can still flush + close.
+                for t in (v_task, a_task):
+                    t.cancel()
+                await asyncio.gather(v_task, a_task, return_exceptions=True)
+                raise
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for t in done:
+                exc = t.exception()
+                if exc is None or isinstance(
+                    exc, (BrokenPipeError, asyncio.CancelledError)
+                ):
+                    continue
+                raise exc
+    finally:
+        try:
+            try:
+                if video_header_written:
+                    _mux_video_packets(container, v_stream, None)
+            finally:
+                if audio_pts_initialised:
+                    _mux_audio_packets(container, a_stream, None)
+        finally:
+            container.close()
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -648,13 +848,14 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
 async def _dispatch(args: argparse.Namespace, mode: Mode) -> int:
     """Pick the recording coroutine for ``(mode, args.output)`` and await it.
 
-    The five live routes are:
+    The six live routes are:
 
     * ``("video", "-")``    → Y4M on ``sys.stdout.buffer``
-    * ``("video", "*.mp4")``→ PyAV mp4 file
+    * ``("video", "*.mp4")``→ PyAV mp4 file (H.264 yuv420p)
     * ``("audio", "-")``    → raw PCM on stdout
     * ``("audio", "*.wav")``→ WAV file
-    * ``("muxed", *)``      → not implemented yet (see ``_record_muxed``)
+    * ``("muxed", "-")``    → matroska on stdout (H.264 + AAC)
+    * ``("muxed", "*.mp4")``→ mp4 file (H.264 + AAC)
     """
     if mode == "video":
         if args.output == "-":

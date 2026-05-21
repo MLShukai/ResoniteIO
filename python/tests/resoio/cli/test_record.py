@@ -1,20 +1,20 @@
-"""Tests for the ``resoio record`` subcommand (video + audio routes).
+"""Tests for the ``resoio record`` subcommand (all six routes).
 
-After the ``capture`` → ``record`` unification, this module covers both
-modality routes for the four currently-implemented outputs:
+After the ``capture`` → ``record`` unification this module covers
+every (mode, output) pair the dispatcher emits:
 
 * video × stdout → Y4M (C444)
 * video × file   → H.264 yuv420p mp4 (PyAV)
 * audio × stdout → raw float32 LE PCM
 * audio × file   → WAV (48 kHz / stereo / float32 LE)
-
-Muxed routes are deferred to a follow-up commit and are deliberately
-not exercised here.
+* muxed × stdout → matroska (H.264 + AAC) on ``sys.stdout.buffer``
+* muxed × file   → mp4 (H.264 + AAC)
 """
 
 from __future__ import annotations
 
 import asyncio
+import io
 import struct
 import sys
 import time
@@ -743,5 +743,297 @@ async def test_record_audio_rejects_verbose_flag(
 
 
 # ===========================================================================
-# Muxed routes are intentionally not exercised here — see follow-up commit.
+# Muxed route tests
 # ===========================================================================
+
+
+def _make_finite_camera_synced(
+    width: int, height: int, frame_count: int, *, base_t0: int, period_ns: int
+) -> type[CameraBase]:
+    """Camera that emits ``frame_count`` frames with deterministic
+    ``unix_nanos``.
+
+    Both ``base_t0`` and ``period_ns`` are caller-controlled so the muxed
+    A/V-sync test can correlate the camera and speaker timelines without
+    relying on wall-clock alignment (which is noisy under CI load).
+    """
+
+    class _SyncedCamera(CameraBase):
+        async def stream_frames(
+            self, message: CameraStreamRequest
+        ) -> AsyncIterator[CameraFrame]:
+            for i in range(frame_count):
+                pixels = bytes([i & 0xFF]) * (width * height * 4)
+                yield CameraFrame(
+                    width=width,
+                    height=height,
+                    format=CameraFrameFormat.RGBA8,
+                    unix_nanos=base_t0 + i * period_ns,
+                    frame_id=i,
+                    pixels=pixels,
+                )
+                await asyncio.sleep(0.005)
+
+    return _SyncedCamera
+
+
+def _make_finite_speaker_synced(
+    frame_count: int, *, base_t0: int, period_ns: int
+) -> type[SpeakerBase]:
+    """Speaker with deterministic ``unix_nanos`` for A/V sync verification."""
+
+    class _SyncedSpeaker(SpeakerBase):
+        async def stream_audio(
+            self, message: SpeakerStreamRequest
+        ) -> AsyncIterator[AudioFrame]:
+            for i in range(frame_count):
+                yield AudioFrame(
+                    frame_id=i,
+                    unix_nanos=base_t0 + i * period_ns,
+                    sample_count=_SAMPLES_PER_FRAME,
+                    samples=_frame_samples(i).tobytes(),
+                )
+                await asyncio.sleep(0.005)
+
+    return _SyncedSpeaker
+
+
+class _MuxedStdout:
+    """``sys.stdout`` stand-in whose ``.buffer`` is a writeable ``BytesIO``.
+
+    PyAV writes the matroska container directly into the buffer; the
+    test reads the captured bytes back via ``av.open(BytesIO, ...)``
+    once the CLI exits. Mirrors the pattern used by
+    :class:`_FakeStdout` for the broken-pipe test but exposes the
+    captured payload instead of raising.
+    """
+
+    def __init__(self) -> None:
+        self.buffer: BinaryIO = io.BytesIO()  # type: ignore[assignment]
+
+
+async def test_record_muxed_mp4_to_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Flag-less ``record -o out.mp4`` produces an H.264 + AAC mp4."""
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.mp4"
+    camera = _make_fixed_camera(width=32, height=16, frame_count=20)
+    speaker = _make_finite_speaker(40)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["record", "-o", str(out_path), "--duration", "0.5"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+        assert out_path.exists() and out_path.stat().st_size > 0
+
+        container = av.open(str(out_path))
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 1
+            v = container.streams.video[0]
+            assert v.width == 32
+            assert v.height == 16
+            a = container.streams.audio[0]
+            assert a.codec_context.sample_rate == 48000
+            assert a.layout.name == "stereo"
+
+            video_frames = sum(1 for _ in container.decode(v))
+            assert video_frames > 0
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_muxed_mkv_to_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Flag-less ``record -o -`` emits a matroska stream on stdout."""
+    socket_path = tmp_path / "rio.sock"
+    camera = _make_fixed_camera(width=32, height=16, frame_count=20)
+    speaker = _make_finite_speaker(40)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    stdout_stub = _MuxedStdout()
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        monkeypatch.setattr(sys, "stdout", stdout_stub)
+        args = _build_parser().parse_args(["record", "-o", "-", "--duration", "0.5"])
+        rc = await _amain(args)
+        assert rc == 0
+        # capsysbinary would intercept stdout before our buffer swap, so
+        # we read the BytesIO that the swap exposed instead.
+        buf = stdout_stub.buffer
+        assert isinstance(buf, io.BytesIO)
+        payload = buf.getvalue()
+        assert len(payload) > 0
+
+        container = av.open(io.BytesIO(payload), mode="r", format="matroska")
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 1
+            assert container.streams.audio[0].codec_context.sample_rate == 48000
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_muxed_rejects_unsupported_extension(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Flag-less ``record -o foo.avi`` exits rc=2 and writes nothing."""
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.avi"
+    camera = _make_fixed_camera(width=8, height=8, frame_count=1)
+    speaker = _make_finite_speaker(1)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["record", "-o", str(out_path)])
+        rc = await _amain(args)
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "unsupported output extension for muxed mode" in err
+        assert not out_path.exists()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_muxed_duration_stops_streaming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``--duration`` bounds runtime against both infinite producers."""
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.mp4"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    speaker = _make_infinite_speaker(interval_s=0.005)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["record", "-o", str(out_path), "--duration", "0.3"]
+        )
+        start = time.monotonic()
+        rc = await _amain(args)
+        elapsed = time.monotonic() - start
+        assert rc == 0
+        # Generous bound; the duration cancel must still leave time for
+        # flush + close before the assertion fires.
+        assert elapsed < 1.5, elapsed
+        assert out_path.exists() and out_path.stat().st_size > 0
+
+        container = av.open(str(out_path))
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 1
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_both_flags_equivalent_to_no_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``--video --audio`` is the same dispatch path as no flags."""
+    socket_path_a = tmp_path / "rio_a.sock"
+    socket_path_b = tmp_path / "rio_b.sock"
+    out_a = tmp_path / "a.mp4"
+    out_b = tmp_path / "b.mp4"
+
+    async def _run_once(sock: Path, out: Path, argv: list[str]) -> None:
+        camera = _make_fixed_camera(width=32, height=16, frame_count=20)
+        speaker = _make_finite_speaker(40)
+        server = Server([camera(), speaker()])
+        await server.start(path=str(sock))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(sock))
+            args = _build_parser().parse_args(argv)
+            rc = await _amain(args)
+            assert rc == 0
+            assert out.exists() and out.stat().st_size > 0
+            container = av.open(str(out))
+            try:
+                assert len(container.streams.video) == 1
+                assert len(container.streams.audio) == 1
+            finally:
+                container.close()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    await _run_once(
+        socket_path_a,
+        out_a,
+        ["record", "--video", "--audio", "-o", str(out_a), "--duration", "0.3"],
+    )
+    await _run_once(
+        socket_path_b,
+        out_b,
+        ["record", "-o", str(out_b), "--duration", "0.3"],
+    )
+
+
+async def test_record_muxed_audio_av_sync_t0_shared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Shared ``t0`` keeps the muxed mp4's video/audio ``start_time`` aligned.
+
+    The camera and speaker fakes both anchor their ``unix_nanos`` to
+    the same ``base_t0`` and emit at their natural cadences. The two
+    streams therefore start within a few microseconds of each other on
+    the source timeline; the muxed mp4 must preserve that to within a
+    300 ms tolerance after PyAV's AAC priming / mp4 ``start_time``
+    rounding (the spec calls 300 ms out as a CI-stable initial value).
+    """
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.mp4"
+
+    base_t0 = 1_000_000_000_000_000_000  # arbitrary fixed Unix-nanos epoch
+    camera = _make_finite_camera_synced(
+        width=32, height=16, frame_count=30, base_t0=base_t0, period_ns=33_333_333
+    )
+    speaker = _make_finite_speaker_synced(
+        frame_count=120, base_t0=base_t0, period_ns=2_666_666
+    )
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["record", "-o", str(out_path), "--duration", "0.5"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+
+        container = av.open(str(out_path))
+        try:
+            vs = container.streams.video[0]
+            audio = container.streams.audio[0]
+            assert vs.start_time is not None
+            assert audio.start_time is not None
+            v_seconds = vs.start_time * float(vs.time_base)
+            a_seconds = audio.start_time * float(audio.time_base)
+            skew_ms = abs(v_seconds - a_seconds) * 1000.0
+            # 300 ms allows for PyAV AAC priming + mp4 start_time
+            # rounding; on a clean run we see ≈0 ms.
+            assert skew_ms < 300.0, skew_ms
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
