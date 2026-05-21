@@ -92,7 +92,6 @@
       "Write(memory/**)"
     ],
     "deny": [
-      "Bash(git push:*)",
       "Bash(git -C:*)",
       "Bash(rm -rf /:*)",
       "Bash(sudo:*)"
