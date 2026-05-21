@@ -1,0 +1,1 @@
+- [resoio-pytest-doctest-modules-not-enabled](resoio-pytest-doctest-modules-not-enabled.md) — `pytest --doctest-modules` is NOT in this project's addopts; doctest may still be safe but is not auto-collected.

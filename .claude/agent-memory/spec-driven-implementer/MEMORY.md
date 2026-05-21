@@ -10,3 +10,4 @@ implementer 固有の作業ノウハウ。project-wide 価値のある feedback 
 - [Engine.OnShutdown subscription deferred to Step 3](feedback_engine_onshutdown_deferred.md) — mod 停止は AppDomain.ProcessExit best-effort。Engine.OnShutdown 経由のより早い hook 調査は Step 3 で再評価。
 - [uv tool install resoio version skew](feedback_uv_tool_install_resoio.md) — `uv tool install --editable` ignores uv.lock; isolated env picks betterproto2 0.10 against compiler 0.9 stubs and ImportErrors.
 - [asyncio add_reader テストの key pacing](feedback_asyncio_add_reader_test_pacing.md) — os.pipe stdin + add_reader 駆動 CLI の round-trip テストは keystroke を `asyncio.sleep` で pace しないと exit key が drain される。
+- [PyAV mp4 video dims before audio mux](feedback_pyav_mp4_video_dims_before_audio_mux.md) — In muxed mp4 (H.264+AAC), audio pump must wait for video pump to set width/height — mp4 freezes stream params on the first packet.
