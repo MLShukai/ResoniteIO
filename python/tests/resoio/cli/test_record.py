@@ -1039,3 +1039,126 @@ async def test_record_muxed_audio_av_sync_t0_shared(
     finally:
         server.close()
         await server.wait_closed()
+
+
+async def test_record_muxed_mp4_duration_matches_real_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Regression: muxed mp4 video duration matches the real recording window.
+
+    Guards against the ``v_stream.codec_context.time_base`` mismatch: if
+    the encoder still defaulted to ``1/fps`` while the stream advertised
+    ``1/90000``, the muxer would rescale every packet PTS by
+    ``90000/fps`` (=3000× at 30 fps), turning a ~0.4 s recording into a
+    20+ minute video. Both audio and video durations are checked
+    independently because the bug only inflated video.
+    """
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.mp4"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    speaker = _make_infinite_speaker(interval_s=0.005)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        recording_window = 0.4
+        args = _build_parser().parse_args(
+            ["record", "-o", str(out_path), "--duration", str(recording_window)]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+        assert out_path.exists() and out_path.stat().st_size > 0
+
+        container = av.open(str(out_path))
+        try:
+            v = container.streams.video[0]
+            a = container.streams.audio[0]
+            assert v.duration is not None
+            assert a.duration is not None
+            v_seconds = float(v.duration * v.time_base)
+            a_seconds = float(a.duration * a.time_base)
+            # The recording window is 0.4 s but flush + buffering can
+            # trim a touch; allow 0.1–2.0 s. The bug yields ~1200 s
+            # at 0.4 s × 3000× scaling, so any sane upper bound catches
+            # it. The lower bound rejects an empty stream.
+            assert 0.1 < v_seconds < 2.0, f"video duration {v_seconds}s"
+            assert 0.1 < a_seconds < 2.0, f"audio duration {a_seconds}s"
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+class _LateBrokenPipeMuxedStdout:
+    """``sys.stdout`` stand-in whose ``.buffer`` breaks after ``break_after``
+    bytes.
+
+    Mimics ``resoio record | head -c N`` / ``resoio record | ffmpeg -i -``
+    being interrupted mid-stream: the matroska header and a few clusters
+    are accepted, then the downstream pipe closes and every subsequent
+    write raises ``BrokenPipeError``. The realistic timing matters
+    because PyAV otherwise crashes natively when asked to mux into an
+    already-broken container that never accepted a single byte.
+    """
+
+    class _Buffer:
+        def __init__(self, break_after: int) -> None:
+            self._break_after = break_after
+            self._written = 0
+            self.captured = bytearray()
+
+        def write(self, data: bytes) -> int:
+            if self._written >= self._break_after:
+                raise BrokenPipeError("simulated broken pipe")
+            n = len(data)
+            self._written += n
+            self.captured.extend(data)
+            return n
+
+        def flush(self) -> None:
+            if self._written >= self._break_after:
+                raise BrokenPipeError("simulated broken pipe")
+
+        def seekable(self) -> bool:
+            return False
+
+    def __init__(self, break_after: int) -> None:
+        self._buf = _LateBrokenPipeMuxedStdout._Buffer(break_after)
+        self.buffer: BinaryIO = self._buf  # type: ignore[assignment]
+
+
+async def test_record_muxed_stdout_broken_pipe_clean_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Muxed stdout sink with broken pipe → rc=0 and no cascading errors.
+
+    Reproduces ``resoio record | ffmpeg -i -`` getting its stdout
+    closed: the encoder flush *and* the ``container.close()`` call can
+    each raise. The CLI must swallow all three without leaking a
+    traceback to stderr so shell pipelines exit cleanly.
+    """
+    socket_path = tmp_path / "rio.sock"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    speaker = _make_infinite_speaker(interval_s=0.005)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        # 8 KiB is enough for the matroska header + a few clusters but
+        # short enough that the duration window will overflow it.
+        monkeypatch.setattr(sys, "stdout", _LateBrokenPipeMuxedStdout(break_after=8192))
+        args = _build_parser().parse_args(["record", "-o", "-", "--duration", "0.3"])
+        rc = await _amain(args)
+        assert rc == 0
+        # No traceback should land on stderr; the suppression must keep
+        # both BrokenPipeError and PyAVCallbackError quiet.
+        err = capsys.readouterr().err
+        assert "Traceback" not in err
+        assert "BrokenPipeError" not in err
+        assert "PyAVCallbackError" not in err
+    finally:
+        server.close()
+        await server.wait_closed()

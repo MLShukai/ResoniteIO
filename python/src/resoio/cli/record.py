@@ -22,7 +22,7 @@ import asyncio
 import struct
 import sys
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
@@ -605,6 +605,28 @@ def _mux_audio_packets(
         container.mux(packet)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _suppress_teardown_errors(fn: Callable[[], None]) -> None:
+    """Run ``fn`` and silently swallow broken-pipe / PyAV I/O errors.
+
+    Used by :func:`_record_muxed` to flush + close cleanly when stdout
+    has already been closed by the downstream consumer (the classic
+    ``resoio record | head`` / ``resoio record | ffmpeg`` shape). PyAV
+    surfaces these as :class:`av.error.PyAVCallbackError` (the writer
+    callback raised ``BrokenPipeError`` inside libav) rather than the
+    bare :class:`BrokenPipeError`, so we have to catch both. File-backed
+    outputs never raise here, so this suppression is a no-op for them.
+
+    Lazy-imports ``av.error`` to keep the CLI's cold-start path off PyAV
+    when the user is only invoking non-muxed routes.
+    """
+    import av.error
+
+    try:
+        fn()
+    except (BrokenPipeError, av.error.PyAVCallbackError):
+        pass
+
+
 async def _record_audio_pcm(args: argparse.Namespace) -> int:
     """Stream raw float32 LE PCM to ``sys.stdout.buffer``.
 
@@ -726,6 +748,12 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
     v_stream: VideoStream = raw_v
     v_stream.pix_fmt = "yuv420p"
     v_stream.time_base = Fraction(1, 90_000)
+    # codec_context.time_base must match stream.time_base, otherwise PyAV's
+    # encoder interprets vf.pts in its default 1/rate (=1/fps) units while
+    # the muxer rescales each packet from stream.time_base (1/90000),
+    # inflating durations by 90000/fps (=3000× at 30 fps). Setting it
+    # explicitly here keeps the conversion a no-op.
+    v_stream.codec_context.time_base = Fraction(1, 90_000)
 
     raw_a = container.add_stream("aac", rate=SAMPLE_RATE)  # pyright: ignore[reportUnknownMemberType]
     assert isinstance(raw_a, AudioStream)
@@ -829,15 +857,21 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
                     continue
                 raise exc
     finally:
-        try:
-            try:
-                if video_header_written:
-                    _mux_video_packets(container, v_stream, None)
-            finally:
-                if audio_pts_initialised:
-                    _mux_audio_packets(container, a_stream, None)
-        finally:
-            container.close()
+        # Teardown writes must all run regardless of which step fails, and
+        # any I/O error in this phase is benign: it only happens when the
+        # downstream sink has already closed (stdout pipe broken — file
+        # outputs never raise here). Swallowing keeps the user's rc=0 path
+        # clean instead of producing a 3-stage cascade of BrokenPipeError /
+        # PyAVCallbackError tracebacks.
+        if video_header_written:
+            _suppress_teardown_errors(
+                lambda: _mux_video_packets(container, v_stream, None)
+            )
+        if audio_pts_initialised:
+            _suppress_teardown_errors(
+                lambda: _mux_audio_packets(container, a_stream, None)
+            )
+        _suppress_teardown_errors(container.close)
     return 0
 
 
