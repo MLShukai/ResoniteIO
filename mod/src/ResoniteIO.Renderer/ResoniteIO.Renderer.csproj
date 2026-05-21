@@ -94,7 +94,7 @@
          engine 側を指せばよい (Private=False で renderer プロセス同梱版に委ねる)。
          Renderite.Unity は同 update で完全に削除された (現コードからは
          未使用なので reference 自体を撤去)。
-         参考: `.claude/memory/feedback_camera_v2_constraints.md` -->
+         参考: `memory/feedback_camera_v2_constraints.md` -->
     <Reference Include="Renderite.Shared">
       <HintPath>$(ResonitePath)/Renderite.Shared.dll</HintPath>
       <Private>False</Private>

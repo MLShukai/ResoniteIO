@@ -12,7 +12,7 @@ device を `AudioSystem.RegisterAudioInput` で登録し、Python 側
   / 正弦波を流して voice として聞こえるか確認する」相当
 - 自動化できない: Resonite ローカル UI 操作 (Audio Input device 切替) と、
   他ユーザーで voice として聞こえることの耳確認が必要なため
-- [.claude/memory/feedback_microphone_engine_tap.md](../../../.claude/memory/feedback_microphone_engine_tap.md)
+- [memory/feedback_microphone_engine_tap.md](../../../memory/feedback_microphone_engine_tap.md)
   に音声経路の確定事項を集約
 
 ## 前提
@@ -165,7 +165,7 @@ WriteSamples の generic constraint 違反。csproj の `<Reference Include="Ele
 `AudioSystem.UnregisterAudioInput` API が engine 側に存在しないため、
 `AudioSystem._audioInputDeviceIDs` (private HashSet) に device ID が残留する
 仕様。**機能影響なし**。Resonite を完全再起動すれば clear される。
-詳細: [feedback_microphone_engine_tap.md](../../../.claude/memory/feedback_microphone_engine_tap.md)
+詳細: [feedback_microphone_engine_tap.md](../../../memory/feedback_microphone_engine_tap.md)
 
 ### `Microphone Bridge: tick repeater stopped unexpectedly`
 
