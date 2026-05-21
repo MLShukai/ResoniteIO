@@ -1,7 +1,7 @@
 # Memory Index — code-quality-reviewer
 
 レビュー観点で繰り返し確認している論点・プロジェクト固有のチェック方針。
-project-wide な規約は `.claude/memory/` 側を参照し、ここには「レビュー時に
+project-wide な規約は `memory/` 側を参照し、ここには「レビュー時に
 具体的に何を確認すべきか」「過去に発見した欠陥パターン」だけを残す。
 
 ## Reference

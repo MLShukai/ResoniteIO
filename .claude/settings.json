@@ -87,7 +87,9 @@
       "Bash(pre-commit run *)",
       "Bash(shfmt *)",
       "Bash(command *)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Edit(memory/**)",
+      "Write(memory/**)"
     ],
     "deny": [
       "Bash(git push:*)",

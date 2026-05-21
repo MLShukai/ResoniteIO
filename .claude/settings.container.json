@@ -7,8 +7,8 @@
       "Write",
       "Edit(/.claude/skills/**)",
       "Edit(/.claude/agents/**)",
-      "Edit(/.claude/agents-memory/**)",
-      "Edit(/.claude/memory/**)"
+      "Edit(memory/**)",
+      "Write(memory/**)"
     ],
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true

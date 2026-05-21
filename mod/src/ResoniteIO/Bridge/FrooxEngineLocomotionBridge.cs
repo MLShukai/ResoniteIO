@@ -17,7 +17,7 @@ namespace ResoniteIO.Bridge;
 /// <c>World.RunInUpdates(0, TickStep)</c> で self-rescheduling し engine update
 /// tick 上で行う (engine 1-frame 寿命 ExternalInput と client 送信レートの
 /// ギャップを吸収)。設計の詳細は
-/// <c>.claude/memory/feedback_locomotion_external_input.md</c>。
+/// <c>memory/feedback_locomotion_external_input.md</c>。
 /// </para>
 /// <para>
 /// thread safety: 単一の <see cref="_lock"/> が <see cref="_latest"/> /
