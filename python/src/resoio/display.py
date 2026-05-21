@@ -94,14 +94,13 @@ class DisplayClient:
         height: int = 0,
         max_fps: float = 0.0,
     ) -> None:
-        """Apply a (partial) display config. Returns ``None``.
+        """Apply a partial display config; ``0`` / ``0.0`` mean "leave
+        unchanged".
 
-        ``0`` / ``0.0`` mean "leave unchanged" (proto3 default semantics).
-        The engine commits the change asynchronously (settings dispatch hops
-        to the engine thread), so reading the post-apply snapshot from the
-        same RPC was unreliable — instead call :meth:`get` afterwards if you
-        need to observe the new state. Raises :class:`RuntimeError` if called
-        outside ``async with``.
+        Returns ``None`` by contract — engine settings dispatch hops to the
+        engine thread, so the post-apply snapshot is not reliable in the
+        same RPC. Call :meth:`get` afterwards if you need the new state
+        (see ``display.proto`` for the full rationale).
         """
         stub = self._stub
         if stub is None:

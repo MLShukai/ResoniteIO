@@ -35,7 +35,6 @@ public sealed class SessionHostDisplayIntegrationTests
         using var channel = harness.CreateChannel();
         var client = new V1.Display.DisplayClient(channel);
 
-        // Apply の応答は Empty。state は bridge への書き込みと follow-up Get で検証する。
         var ack = await client.ApplyAsync(
             new DisplayConfig
             {

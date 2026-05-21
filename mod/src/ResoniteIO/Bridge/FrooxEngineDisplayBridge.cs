@@ -17,11 +17,8 @@ namespace ResoniteIO.Bridge;
 /// マップしない。<c>OnDesktopRenderSettingsChanged</c> が
 /// <c>maximumForegroundFramerate</c> を送出しないため foreground 直接制御は
 /// reflection 経由でしか不可能 (camera-v2-constraints §9)。
-/// 0 field は proto3 default = "変更しない" として skip する。
-/// <see cref="Settings.UpdateActiveSetting{T}"/> は engine thread に内部 dispatch
-/// するため、Apply 直後に読み返しても新しい値が反映されていないケースがある。
-/// Apply は値を返さず、新しい状態が欲しい呼び出し側は <see cref="GetAsync"/> を
-/// 別途呼ぶ契約 (interface XML doc を参照)。
+/// 0 field は proto3 default = "変更しない" として skip する。Apply の Empty
+/// 応答契約は <see cref="IDisplayBridge.ApplyAsync"/> を参照。
 /// </remarks>
 internal sealed class FrooxEngineDisplayBridge : IDisplayBridge
 {

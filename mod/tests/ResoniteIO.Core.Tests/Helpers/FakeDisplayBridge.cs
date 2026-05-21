@@ -2,20 +2,11 @@ using ResoniteIO.Core.Display;
 
 namespace ResoniteIO.Core.Tests.Helpers;
 
-/// <summary>
-/// テスト用 <see cref="IDisplayBridge"/>。
-/// </summary>
+/// <summary>テスト用 <see cref="IDisplayBridge"/>。Apply は request を <see cref="LastApplied"/>
+/// に保存しつつ proto "0 = 変更しない" を <see cref="CurrentState"/> に反映する。</summary>
 /// <remarks>
-/// <para>
-/// "0 = 変更しない" のセマンティクス検証のため、Apply は <see cref="LastApplied"/>
-/// に request snapshot をそのまま保存し、<see cref="CurrentState"/> に 0 でない
-/// field だけを上書きする。Apply 自体は値を返さない (real Bridge と合わせる) ので、
-/// state の変化は後続の <see cref="GetAsync"/> 経由で検証する。
-/// </para>
-/// <para>
 /// <see cref="ThrowNotReady"/> = true なら全 RPC で <see cref="DisplayNotReadyException"/>
 /// を投げる (FailedPrecondition 翻訳テスト用)。
-/// </para>
 /// </remarks>
 internal sealed class FakeDisplayBridge : IDisplayBridge
 {

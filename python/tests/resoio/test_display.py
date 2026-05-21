@@ -14,8 +14,7 @@ from resoio.display import DisplayClient, DisplayInfo
 
 
 class _FakeDisplay(DisplayBase):
-    """In-process fake that records the last Apply config and exposes a mutable
-    current state for the test to assert against."""
+    """In-process fake mirroring server-side "0 = unchanged" semantics."""
 
     def __init__(self, initial: DisplayState) -> None:
         self.current = initial
@@ -23,9 +22,6 @@ class _FakeDisplay(DisplayBase):
 
     async def apply(self, message: DisplayConfig) -> DisplayApplyResponse:
         self.last_apply = message
-        # Mirror the server-side "0 = unchanged" semantics: zero fields keep
-        # the current value, non-zero fields overwrite. State mutation is
-        # observable via the next `get()` call (Apply no longer returns it).
         self.current = DisplayState(
             width=message.width or self.current.width,
             height=message.height or self.current.height,
@@ -50,7 +46,6 @@ class TestDisplayClient:
             async with DisplayClient() as client:
                 assert client.socket_path == str(socket_path)
                 result = await client.apply(width=1920, height=1080, max_fps=120.0)
-                # Apply now returns None; follow-up `get()` observes the new state.
                 assert result is None
                 info = await client.get()
             assert info == DisplayInfo(width=1920, height=1080, max_fps=120.0)
@@ -76,12 +71,10 @@ class TestDisplayClient:
             async with DisplayClient() as client:
                 await client.apply(max_fps=120.0)
                 info = await client.get()
-            # Server saw width/height=0, max_fps=120.
             assert fake.last_apply is not None
             assert fake.last_apply.width == 0
             assert fake.last_apply.height == 0
             assert fake.last_apply.max_fps == 120.0
-            # Follow-up Get observes the fake's "0 = keep" behavior on the server.
             assert info == DisplayInfo(width=1280, height=720, max_fps=120.0)
         finally:
             server.close()

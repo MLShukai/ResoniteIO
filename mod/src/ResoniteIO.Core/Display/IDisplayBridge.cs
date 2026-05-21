@@ -20,10 +20,10 @@ public interface IDisplayBridge
 {
     /// <summary><paramref name="config"/> の 0 でない field を engine に書き込む。値は返さない。</summary>
     /// <remarks>
-    /// engine 側の設定書き換えは <c>Settings.UpdateActiveSetting</c> が engine thread に
-    /// 内部 dispatch するため、Apply 直後に現値を読み返しても適用前の snapshot が見える
-    /// ケースがある。読み返しが必要な呼び出し側は Apply 完了後に <see cref="GetAsync"/>
-    /// を別 RPC として呼ぶこと。
+    /// engine 側 settings dispatch は engine thread に hop するため、Apply 直後の
+    /// 読み返しが適用前 snapshot を返す race がある。新しい状態が必要なら Apply
+    /// 完了後に <see cref="GetAsync"/> を別 RPC で呼ぶ — これが proto Apply が
+    /// <c>DisplayApplyResponse {}</c> を返す唯一の理由 (詳細は display.proto)。
     /// </remarks>
     /// <exception cref="DisplayNotReadyException">engine がまだ制御不能 (renderer 未起動等)。</exception>
     Task ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct);

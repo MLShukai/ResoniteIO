@@ -49,12 +49,11 @@ async def test_apply_with_width_and_height(
         )
         rc = await _amain(args)
         assert rc == 0
-        # Apply path returns Empty -> stdout must be silent (rc=0 only signal).
         assert capsys.readouterr().out == ""
         assert fake.last_apply is not None
         assert fake.last_apply.width == 1920
         assert fake.last_apply.height == 1080
-        # Unset fields propagate as 0.0 (proto3 default = "leave unchanged").
+        # Unset --max-fps propagates as 0.0 (proto3 "leave unchanged").
         assert fake.last_apply.max_fps == 0.0
     finally:
         server.close()
@@ -75,7 +74,6 @@ async def test_apply_with_only_max_fps(
         args = _build_parser().parse_args(["display", "--max-fps", "120"])
         rc = await _amain(args)
         assert rc == 0
-        # Apply path returns Empty -> stdout must be silent (rc=0 only signal).
         assert capsys.readouterr().out == ""
         assert fake.last_apply is not None
         assert fake.last_apply.width == 0
@@ -97,13 +95,11 @@ async def test_get_prints_current_snapshot(
     await server.start(path=str(socket_path))
     try:
         monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-        # No display-affecting flags -> Get path.
         args = _build_parser().parse_args(["display"])
         rc = await _amain(args)
         assert rc == 0
         out = capsys.readouterr().out.strip()
         assert out == "width=2560 height=1440 max_fps=144.0"
-        # Get must not record an Apply on the server side.
         assert fake.last_apply is None
     finally:
         server.close()
@@ -121,7 +117,7 @@ async def test_socket_only_invokes_get_not_apply(
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
-        # Clear the env var so we know -s is the only thing routing the socket.
+        # -s must be the sole socket route: env var would mask test intent.
         monkeypatch.delenv("RESONITE_IO_SOCKET", raising=False)
         args = _build_parser().parse_args(["display", "-s", str(socket_path)])
         rc = await _amain(args)
@@ -153,7 +149,6 @@ async def test_explicit_max_fps_zero_is_apply_not_get(
         args = _build_parser().parse_args(["display", "--max-fps", "0"])
         rc = await _amain(args)
         assert rc == 0
-        # Apply path -> silent stdout.
         assert capsys.readouterr().out == ""
         assert fake.last_apply is not None
         assert fake.last_apply.max_fps == 0.0

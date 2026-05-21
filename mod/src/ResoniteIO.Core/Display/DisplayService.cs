@@ -67,9 +67,7 @@ public sealed class DisplayService : V1.Display.DisplayBase
             );
         }
 
-        // Apply は値を返さない: engine 側 settings dispatch は async で、Apply 直後の
-        // 読み返しが適用前の値を返すケースがある。新しい snapshot が欲しい呼び出し側は
-        // Apply 完了後に Get を別途呼ぶ契約 (proto コメント参照)。
+        // Apply の Empty 応答契約は proto / IDisplayBridge.ApplyAsync XML 参照。
         return new V1.DisplayApplyResponse();
     }
 

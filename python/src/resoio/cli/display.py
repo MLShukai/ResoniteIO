@@ -23,11 +23,7 @@ def register(
 ) -> None:
     """Register the flat ``display`` subparser.
 
-    No nested subcommands: flag presence decides the action. With no
-    display-affecting flags this command reads the current snapshot
-    and prints ``width=W height=H max_fps=F``; with any of ``--width``
-    / ``--height`` / ``--max-fps`` set, it applies a partial config
-    and exits silently on success.
+    Dispatch rules (no nested subcommands) live in the module docstring.
     """
     parser = subparsers.add_parser(
         "display",
@@ -81,10 +77,8 @@ async def _run(args: argparse.Namespace) -> int:
 
     async with DisplayClient(args.socket) as client:
         if apply_requested:
-            # Forward the proto3 defaults (0 / 0.0) for any unspecified
-            # field; the server interprets those as "leave unchanged".
-            # An explicit value (e.g. `--max-fps 0`) is forwarded as-is —
-            # the "0 = unchanged" collapse happens server-side, not here.
+            # Unset flags collapse to 0 / 0.0 (proto3 default = server-side
+            # "leave unchanged"). Explicit `--max-fps 0` is forwarded as-is.
             await client.apply(
                 width=args.width if args.width is not None else 0,
                 height=args.height if args.height is not None else 0,

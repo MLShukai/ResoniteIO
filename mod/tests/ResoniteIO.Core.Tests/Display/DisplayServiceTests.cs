@@ -33,17 +33,15 @@ public sealed class DisplayServiceTests
             Height = 1080,
             MaxFps = 120f,
         };
-        // Apply の応答は Empty (DisplayApplyResponse {})。state は後続 Get で観測する。
         var ack = await client.ApplyAsync(request);
         Assert.NotNull(ack);
 
-        // Bridge には request snapshot がそのまま渡る (0 / 空の解釈は Bridge 側)。
         Assert.NotNull(bridge.LastApplied);
         Assert.Equal(1920u, bridge.LastApplied!.Width);
         Assert.Equal(1080u, bridge.LastApplied!.Height);
         Assert.Equal(120f, bridge.LastApplied!.MaxFps);
 
-        // Apply が engine state を更新したことを follow-up Get で検証する。
+        // Apply は Empty なので state は follow-up Get で観測する (display.proto 参照)。
         var state = await client.GetAsync(new DisplayGetRequest());
         Assert.Equal(1920u, state.Width);
         Assert.Equal(1080u, state.Height);
@@ -91,18 +89,15 @@ public sealed class DisplayServiceTests
         using var channel = host.CreateChannel();
         var client = new V1.Display.DisplayClient(channel);
 
-        // max_fps のみ更新、他は 0 (= 変更しない)。
         var request = new DisplayConfig { MaxFps = 120f };
         await client.ApplyAsync(request);
 
-        // Bridge は 0 をそのまま受け取り、0 でない field だけ上書きする。
         Assert.NotNull(bridge.LastApplied);
         Assert.Equal(0u, bridge.LastApplied!.Width);
         Assert.Equal(0u, bridge.LastApplied!.Height);
         Assert.Equal(120f, bridge.LastApplied!.MaxFps);
 
-        // Apply 後の現値は follow-up Get で取得する。Bridge は 0 field を skip し
-        // 既存値を保つので Width/Height は元の値、MaxFps は新値。
+        // Bridge は 0 field を skip。Width/Height は元の値、MaxFps だけ新値。
         var state = await client.GetAsync(new DisplayGetRequest());
         Assert.Equal(1280u, state.Width);
         Assert.Equal(720u, state.Height);
