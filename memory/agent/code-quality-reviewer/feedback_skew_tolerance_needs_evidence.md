@@ -14,7 +14,7 @@ spec で initial value として与えられた quantitative threshold (e.g. A/V
 **How to apply:** レビュー対象に "tolerance / threshold / skew / margin" のような語が含まれる assert が出てきたら、spec 値と差があるかを確認。差があるなら以下のいずれかを要求する:
 
 - test の docstring に「実測 ≈X ms、margin Yx で Z ms」を 1 行追加
-- `.claude/memory/feedback_<feature>_tolerance.md` を新設して MEMORY.md にリンク
+- `memory/feedback_<feature>_tolerance.md` を新設して MEMORY.md にリンク
 - commit message に reasoning を残す (最低限)
 
 「margin が広がっていること自体」は問題ではなく、「広げた根拠が残らないこと」が問題。

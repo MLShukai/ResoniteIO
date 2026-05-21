@@ -1,7 +1,7 @@
 # Memory Index — spec-driven-implementer
 
 implementer 固有の作業ノウハウ。project-wide 価値のある feedback は
-[.claude/memory/](../../memory/) に昇格済みなのでそちらを参照。
+[memory/](../../) に昇格済みなのでそちらを参照。
 
 ## Feedback
 
