@@ -383,18 +383,6 @@ class _WavFloat32Writer:
 
 
 # ---------------------------------------------------------------------------
-# I/O helpers
-# ---------------------------------------------------------------------------
-
-
-def _open_output(path: str) -> tuple[BinaryIO, bool]:
-    """Return ``(stream, should_close)``; the caller must not close stdout."""
-    if path == "-":
-        return sys.stdout.buffer, False
-    return open(path, "wb"), True
-
-
-# ---------------------------------------------------------------------------
 # Frame pacing — shared between video-Y4M, video-MP4, and (later) muxed.
 # ---------------------------------------------------------------------------
 
@@ -440,15 +428,22 @@ async def _paced_frames(
                 first_frame_arrived.set()
         except BaseException as exc:
             producer_failure = exc
-            first_frame_arrived.set()
             raise
+        finally:
+            # Unblock the consumer in every termination path (normal EOS,
+            # zero-frame EOS, cancellation, error) so the generator never
+            # deadlocks on `first_frame_arrived.wait()`.
+            first_frame_arrived.set()
 
     producer_task = asyncio.create_task(producer())
     try:
         await first_frame_arrived.wait()
         if producer_failure is not None:
             raise producer_failure
-        assert latest_frame is not None  # event-set invariant
+        if latest_frame is None:
+            # Producer finished cleanly without yielding a single frame —
+            # nothing to pace; terminate the iterator quietly.
+            return
 
         header_w = latest_frame.width
         header_h = latest_frame.height
@@ -510,7 +505,13 @@ async def _paced_frames(
 
 
 async def _record_video_y4m(args: argparse.Namespace, out: BinaryIO) -> int:
-    """Stream Camera frames as a Y4M (C444) byte stream to ``out``."""
+    """Stream Camera frames as a Y4M (C444) byte stream to ``out``.
+
+    ``BrokenPipeError`` is *not* caught here — :func:`_run` wraps the
+    whole dispatch in one outer ``try/except BrokenPipeError`` so the
+    "downstream closed stdout" case (e.g. ``... | head``) collapses to a
+    single rc=0 path regardless of which write raised.
+    """
     from resoio.camera import CameraClient
 
     fps: float = args.fps if args.fps is not None else 30.0
@@ -522,17 +523,20 @@ async def _record_video_y4m(args: argparse.Namespace, out: BinaryIO) -> int:
             if not header_written:
                 _y4m_write_header(out, frame.width, frame.height, fps_num, fps_den)
                 header_written = True
-            try:
-                _y4m_write_frame(out, frame.pixels)
-                out.flush()
-            except BrokenPipeError:
-                # Downstream closed stdout (e.g. `... | head`) — clean exit.
-                return 0
+            _y4m_write_frame(out, frame.pixels)
+            out.flush()
     return 0
 
 
 async def _record_video_mp4(args: argparse.Namespace, path: str) -> int:
-    """Stream Camera frames as an H.264 (yuv420p) mp4 via PyAV."""
+    """Stream Camera frames as an H.264 (yuv420p) mp4 via PyAV.
+
+    Flush ordering matters: encoder ``encode(None)`` must run *before*
+    ``container.close()`` so the reorder-buffer's last packets land in
+    the file before ``close()`` writes the moov atom. Both calls live in
+    a single ``try/finally`` so cancellation (``--duration`` timeout) and
+    exceptions still produce a well-formed mp4 (spec §7.6 MUST).
+    """
     import av
     from av.video.stream import VideoStream
 
@@ -541,16 +545,16 @@ async def _record_video_mp4(args: argparse.Namespace, path: str) -> int:
     fps: float = args.fps if args.fps is not None else 30.0
 
     container = av.open(path, mode="w")
-    try:
-        # The "h264" overload of add_stream returns a VideoStream; pyright
-        # widens to VideoStream | AudioStream | SubtitleStream, so narrow
-        # explicitly to keep encode()/pix_fmt assignment strict-typed.
-        raw_stream = container.add_stream("h264", rate=int(round(fps)))  # pyright: ignore[reportUnknownMemberType]
-        assert isinstance(raw_stream, VideoStream)
-        v_stream: VideoStream = raw_stream
-        v_stream.pix_fmt = "yuv420p"
+    # The "h264" overload of add_stream returns a VideoStream; pyright
+    # widens to VideoStream | AudioStream | SubtitleStream, so narrow
+    # explicitly to keep encode()/pix_fmt assignment strict-typed.
+    raw_stream = container.add_stream("h264", rate=int(round(fps)))  # pyright: ignore[reportUnknownMemberType]
+    assert isinstance(raw_stream, VideoStream)
+    v_stream: VideoStream = raw_stream
+    v_stream.pix_fmt = "yuv420p"
 
-        header_written = False
+    header_written = False
+    try:
         async with CameraClient(args.socket) as client:
             async for frame in _paced_frames(client, fps, verbose=args.verbose):
                 if not header_written:
@@ -562,12 +566,15 @@ async def _record_video_mp4(args: argparse.Namespace, path: str) -> int:
                 rgb = np.ascontiguousarray(frame.pixels[..., :3])
                 vf = av.VideoFrame.from_ndarray(rgb, format="rgb24")
                 _mux_video_packets(container, v_stream, vf)
-
-        # Flush the encoder's reorder buffer before close() finalises moov.
-        if header_written:
-            _mux_video_packets(container, v_stream, None)
     finally:
-        container.close()
+        try:
+            # Flush the encoder's reorder buffer before close() finalises
+            # the moov atom; skipped if no frame ever arrived (header
+            # never written → stream dims unset → encode would raise).
+            if header_written:
+                _mux_video_packets(container, v_stream, None)
+        finally:
+            container.close()
     return 0
 
 
@@ -651,12 +658,7 @@ async def _dispatch(args: argparse.Namespace, mode: Mode) -> int:
     """
     if mode == "video":
         if args.output == "-":
-            out, should_close = _open_output(args.output)
-            try:
-                return await _record_video_y4m(args, out)
-            finally:
-                if should_close:
-                    out.close()
+            return await _record_video_y4m(args, sys.stdout.buffer)
         return await _record_video_mp4(args, args.output)
     if mode == "audio":
         if args.output == "-":

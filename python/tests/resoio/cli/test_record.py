@@ -307,6 +307,54 @@ async def test_record_video_mp4_to_file(
         await server.wait_closed()
 
 
+async def test_record_video_mp4_duration_stops_streaming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``--video -o out.mp4 --duration`` produces a well-formed mp4.
+
+    Regression guard for the flush ordering: if ``stream.encode(None)``
+    or ``container.close()`` were skipped on the duration-cancel path,
+    the moov atom would be missing and ``av.open`` would raise on
+    read-back. The test also asserts at least one decoded frame to
+    catch the case where flush ran but the writer otherwise produced an
+    empty body.
+    """
+    socket_path = tmp_path / "rio.sock"
+    out_path = tmp_path / "out.mp4"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    server = Server([camera()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["record", "--video", "-o", str(out_path), "--duration", "0.3"]
+        )
+        start = time.monotonic()
+        rc = await _amain(args)
+        elapsed = time.monotonic() - start
+        assert rc == 0
+        assert elapsed < 1.5
+        assert out_path.exists() and out_path.stat().st_size > 0
+
+        container = av.open(str(out_path))
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 0
+            v = container.streams.video[0]
+            assert v.width == 32
+            assert v.height == 16
+            decoded_frames = 0
+            for frame in container.decode(v):
+                del frame
+                decoded_frames += 1
+            assert decoded_frames > 0
+        finally:
+            container.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
 async def test_record_video_rejects_unsupported_extension(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
