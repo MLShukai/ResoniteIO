@@ -10,6 +10,7 @@ __all__ = (
     "CameraFrameFormat",
     "CameraStreamRequest",
     "CameraStub",
+    "DisplayApplyResponse",
     "DisplayBase",
     "DisplayConfig",
     "DisplayGetRequest",
@@ -152,6 +153,22 @@ class CameraStreamRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "resonite_io.v1", "CameraStreamRequest", CameraStreamRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class DisplayApplyResponse(betterproto2.Message):
+    """
+    Apply の placeholder response。`google.protobuf.Empty` を avoid して
+    custom empty を採用するのは `DisplayGetRequest` と同じ pattern
+    (リポジトリ内で `google/protobuf/*` への依存を増やさないため)。
+    """
+
+    pass
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "DisplayApplyResponse", DisplayApplyResponse
 )
 
 
@@ -516,11 +533,11 @@ class DisplayStub(betterproto2_grpclib.ServiceStub):
         timeout: "float | None" = None,
         deadline: "Deadline | None" = None,
         metadata: "MetadataLike | None" = None,
-    ) -> "DisplayState":
+    ) -> "DisplayApplyResponse":
         return await self._unary_unary(
             "/resonite_io.v1.Display/Apply",
             message,
-            DisplayState,
+            DisplayApplyResponse,
             timeout=timeout,
             deadline=deadline,
             metadata=metadata,
@@ -709,14 +726,14 @@ class CameraBase(betterproto2_grpclib.ServiceBase):
 
 
 class DisplayBase(betterproto2_grpclib.ServiceBase):
-    async def apply(self, message: "DisplayConfig") -> "DisplayState":
+    async def apply(self, message: "DisplayConfig") -> "DisplayApplyResponse":
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def get(self, message: "DisplayGetRequest") -> "DisplayState":
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def __rpc_apply(
-        self, stream: "grpclib.server.Stream[DisplayConfig, DisplayState]"
+        self, stream: "grpclib.server.Stream[DisplayConfig, DisplayApplyResponse]"
     ) -> None:
         request = await stream.recv_message()
         assert request is not None
@@ -737,7 +754,7 @@ class DisplayBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_apply,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 DisplayConfig,
-                DisplayState,
+                DisplayApplyResponse,
             ),
             "/resonite_io.v1.Display/Get": grpclib.const.Handler(
                 self.__rpc_get,

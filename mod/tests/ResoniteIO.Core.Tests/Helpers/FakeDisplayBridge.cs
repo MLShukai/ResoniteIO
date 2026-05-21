@@ -9,7 +9,8 @@ namespace ResoniteIO.Core.Tests.Helpers;
 /// <para>
 /// "0 = 変更しない" のセマンティクス検証のため、Apply は <see cref="LastApplied"/>
 /// に request snapshot をそのまま保存し、<see cref="CurrentState"/> に 0 でない
-/// field だけを上書きしてから snapshot を返す。
+/// field だけを上書きする。Apply 自体は値を返さない (real Bridge と合わせる) ので、
+/// state の変化は後続の <see cref="GetAsync"/> 経由で検証する。
 /// </para>
 /// <para>
 /// <see cref="ThrowNotReady"/> = true なら全 RPC で <see cref="DisplayNotReadyException"/>
@@ -30,10 +31,7 @@ internal sealed class FakeDisplayBridge : IDisplayBridge
 
     public bool ThrowNotReady { get; set; }
 
-    public Task<DisplayConfigSnapshot> ApplyAsync(
-        DisplayConfigSnapshot config,
-        CancellationToken ct
-    )
+    public Task ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct)
     {
         if (ThrowNotReady)
         {
@@ -51,7 +49,7 @@ internal sealed class FakeDisplayBridge : IDisplayBridge
             MaxFps = config.MaxFps != 0f ? config.MaxFps : CurrentState.MaxFps,
         };
 
-        return Task.FromResult(CurrentState);
+        return Task.CompletedTask;
     }
 
     public Task<DisplayConfigSnapshot> GetAsync(CancellationToken ct)

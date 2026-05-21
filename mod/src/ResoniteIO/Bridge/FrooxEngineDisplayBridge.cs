@@ -18,8 +18,10 @@ namespace ResoniteIO.Bridge;
 /// <c>maximumForegroundFramerate</c> を送出しないため foreground 直接制御は
 /// reflection 経由でしか不可能 (camera-v2-constraints §9)。
 /// 0 field は proto3 default = "変更しない" として skip する。
-/// <see cref="Settings.UpdateActiveSetting{T}"/> が engine thread への dispatch
-/// を内部で隠蔽するため、本 Bridge は同期 path で <c>Task.FromResult</c> を返す。
+/// <see cref="Settings.UpdateActiveSetting{T}"/> は engine thread に内部 dispatch
+/// するため、Apply 直後に読み返しても新しい値が反映されていないケースがある。
+/// Apply は値を返さず、新しい状態が欲しい呼び出し側は <see cref="GetAsync"/> を
+/// 別途呼ぶ契約 (interface XML doc を参照)。
 /// </remarks>
 internal sealed class FrooxEngineDisplayBridge : IDisplayBridge
 {
@@ -31,10 +33,7 @@ internal sealed class FrooxEngineDisplayBridge : IDisplayBridge
     }
 
     /// <inheritdoc/>
-    public Task<DisplayConfigSnapshot> ApplyAsync(
-        DisplayConfigSnapshot config,
-        CancellationToken ct
-    )
+    public Task ApplyAsync(DisplayConfigSnapshot config, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
@@ -96,7 +95,7 @@ internal sealed class FrooxEngineDisplayBridge : IDisplayBridge
             _log.LogInfo($"[ResoniteIO] Display.Apply: max_fps (background) → {fps}");
         }
 
-        return Task.FromResult(ReadCurrent());
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>

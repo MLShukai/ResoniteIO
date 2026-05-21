@@ -6,9 +6,14 @@
 // engine 側からその値を制御する gRPC API を提供し、Python 側で
 // `max_fps_foreground=120` のように上限を上げて Camera を 60fps で取り回す。
 //
-// "0 = 変更しない" のセマンティクスを採用する: Apply のフィールドが 0 / 空のとき
-// engine 側は当該フィールドを skip し、適用後の DisplayState 返値は engine 内の
-// 実際の値 (skip された field を含む) を返す。
+// "0 = 変更しない" のセマンティクスを採用する: Apply の field が 0 / 空のとき
+// engine 側は当該 field を skip し、それ以外の field のみ書き込む。
+//
+// Apply は値を返さない (`DisplayApplyResponse {}`)。`Settings.UpdateActiveSetting`
+// が engine thread に内部 dispatch するため、Apply 直後に現値を読み返しても
+// 適用前の snapshot を返すケースがあり、wire 上に DisplayState を載せると
+// クライアントを誤読させる。新しい状態が欲しい呼び出し側は Apply 後に
+// 改めて `Get` を呼ぶ契約。
 syntax = "proto3";
 
 package resonite_io.v1;
@@ -27,6 +32,11 @@ message DisplayConfig {
 // Get の placeholder request (将来 fields 追加に備える)。
 message DisplayGetRequest {}
 
+// Apply の placeholder response。`google.protobuf.Empty` を avoid して
+// custom empty を採用するのは `DisplayGetRequest` と同じ pattern
+// (リポジトリ内で `google/protobuf/*` への依存を増やさないため)。
+message DisplayApplyResponse {}
+
 // engine 側で実際に適用された後の現値。
 message DisplayState {
   uint32 width = 1;
@@ -35,6 +45,6 @@ message DisplayState {
 }
 
 service Display {
-  rpc Apply(DisplayConfig) returns (DisplayState);
+  rpc Apply(DisplayConfig) returns (DisplayApplyResponse);
   rpc Get(DisplayGetRequest) returns (DisplayState);
 }

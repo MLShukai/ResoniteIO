@@ -22,7 +22,7 @@ public sealed class DisplayService : V1.Display.DisplayBase
         _bridge = bridge;
     }
 
-    public override async Task<V1.DisplayState> Apply(
+    public override async Task<V1.DisplayApplyResponse> Apply(
         V1.DisplayConfig request,
         ServerCallContext context
     )
@@ -46,12 +46,9 @@ public sealed class DisplayService : V1.Display.DisplayBase
             MaxFps = request.MaxFps,
         };
 
-        DisplayConfigSnapshot applied;
         try
         {
-            applied = await _bridge
-                .ApplyAsync(snapshot, context.CancellationToken)
-                .ConfigureAwait(false);
+            await _bridge.ApplyAsync(snapshot, context.CancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -70,7 +67,10 @@ public sealed class DisplayService : V1.Display.DisplayBase
             );
         }
 
-        return ToProto(applied);
+        // Apply は値を返さない: engine 側 settings dispatch は async で、Apply 直後の
+        // 読み返しが適用前の値を返すケースがある。新しい snapshot が欲しい呼び出し側は
+        // Apply 完了後に Get を別途呼ぶ契約 (proto コメント参照)。
+        return new V1.DisplayApplyResponse();
     }
 
     public override async Task<V1.DisplayState> Get(

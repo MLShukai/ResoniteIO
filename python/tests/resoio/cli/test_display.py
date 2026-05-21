@@ -5,6 +5,7 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
+    DisplayApplyResponse,
     DisplayBase,
     DisplayConfig,
     DisplayGetRequest,
@@ -20,15 +21,14 @@ class _FakeDisplay(DisplayBase):
         self.current = initial
         self.last_apply: DisplayConfig | None = None
 
-    async def apply(self, message: DisplayConfig) -> DisplayState:
+    async def apply(self, message: DisplayConfig) -> DisplayApplyResponse:
         self.last_apply = message
-        new = DisplayState(
+        self.current = DisplayState(
             width=message.width or self.current.width,
             height=message.height or self.current.height,
             max_fps=message.max_fps or self.current.max_fps,
         )
-        self.current = new
-        return new
+        return DisplayApplyResponse()
 
     async def get(self, message: DisplayGetRequest) -> DisplayState:
         return self.current
@@ -50,9 +50,9 @@ async def test_apply_with_width_and_height(
         )
         rc = await _amain(args)
         assert rc == 0
-        out = capsys.readouterr().out.strip()
-        # Server fills in unchanged max_fps from current state (30.0).
-        assert out == "width=1920 height=1080 max_fps=30.0"
+        # Apply は Empty 応答に変わったので stdout は空 (silent OK)。
+        # 新しい snapshot を見たい場合は `display get` を別途呼ぶ契約。
+        assert capsys.readouterr().out == ""
         assert fake.last_apply is not None
         assert fake.last_apply.width == 1920
         assert fake.last_apply.height == 1080
@@ -77,9 +77,8 @@ async def test_apply_with_only_max_fps(
         args = _build_parser().parse_args(["display", "apply", "--max-fps", "120"])
         rc = await _amain(args)
         assert rc == 0
-        out = capsys.readouterr().out.strip()
-        # width/height untouched (server keeps current), max_fps updated.
-        assert out == "width=1280 height=720 max_fps=120.0"
+        # Apply は Empty 応答に変わったので stdout は空 (silent OK)。
+        assert capsys.readouterr().out == ""
         assert fake.last_apply is not None
         assert fake.last_apply.width == 0
         assert fake.last_apply.height == 0

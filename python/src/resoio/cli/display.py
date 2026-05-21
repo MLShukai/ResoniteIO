@@ -87,12 +87,14 @@ def _make_run_apply(
         from resoio.display import DisplayClient
 
         async with DisplayClient(args.socket) as client:
-            info = await client.apply(
+            # Apply は値を返さない (`-> None`)。stdout は空のままにし、新しい snapshot を
+            # 見たい呼び出し側は別途 `resoio display get` を実行する契約。Commit B で
+            # CLI 自体を flat 化する際にこの dispatch も整理する。
+            await client.apply(
                 width=args.width,
                 height=args.height,
                 max_fps=args.max_fps,
             )
-        print(_format_info(info.width, info.height, info.max_fps))
         return 0
 
     return _run_apply
