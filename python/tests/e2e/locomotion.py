@@ -17,8 +17,7 @@ from either bridge is retried up to 120 s — both depend on ``LocalUser``
 / ``FocusedWorld`` readiness which lags UDS bind. The Locomotion bridge
 additionally requires a walk-capable active module: the default home
 world already satisfies this, but Teleport / NoClip / NoLocomotion
-worlds need a manual switch within the retry budget — see
-``mod/tests/manual/locomotion-e2e.md``.
+worlds need a manual switch within the retry budget.
 
 The Reset phase (16-20 s) drives ``move_y=1.0`` for 3 s, then a parallel
 ``LocomotionClient.reset()`` from a **second** client fires at 19.0 s
@@ -28,7 +27,7 @@ Because the Bridge re-injects the last command every tick, the post-
 reset idle phase MUST send neutral commands — sending nothing would let
 the previously-held ``move_y=1.0`` survive at the engine, masking the
 visible effect of Reset. Visual confirmation that the avatar stops
-within the 19-20 s window lives in ``mod/tests/manual/locomotion-e2e.md``.
+within the 19-20 s window is done by inspecting the recorded MP4.
 
 Like every file under ``tests/e2e/`` this requires the host-side
 ``just host-agent`` daemon plus a live Resonite client; the
@@ -115,9 +114,9 @@ async def _wait_for_camera_ready() -> None:
 def _scenario_command(elapsed: float) -> LocomotionCmd:
     """Return the command to send at ``elapsed`` seconds into the scenario.
 
-    Phase boundaries are 0/3/5/7/9/11/13/14/16/19/20 s — the manual
-    checklist (``mod/tests/manual/locomotion-e2e.md``) lists what each
-    phase should look like on screen.
+    Phase boundaries are 0/3/5/7/9/11/13/14/16/19/20 s. Each phase
+    exercises a single ``LocomotionCommand`` field so the recorded MP4
+    can be inspected per-segment.
     """
     if elapsed < 3.0:
         return LocomotionCmd(move_y=1.0)

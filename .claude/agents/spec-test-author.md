@@ -13,8 +13,9 @@ memory: project
 ## あなたの役割の境界
 
 - **書く対象**:
-  - C# テスト: `mod/tests/ResoniteIO.Core.Tests/` (Core の Kestrel ラウンドトリップ単位)、`mod/tests/ResoniteIO.Tests/` (smoke / Bridge IF 越しのテスト)、`mod/tests/manual/` (手動シナリオ)
-  - Python テスト: `python/tests/` 配下のテストコードのみ
+  - C# テスト: `mod/tests/ResoniteIO.Core.Tests/` (Core の Kestrel ラウンドトリップ単位)、`mod/tests/ResoniteIO.Tests/` (smoke / Bridge IF 越しのテスト)
+  - Python テスト: `python/tests/` 配下のテストコード (`python/tests/e2e/` の host-agent 駆動 e2e harness を含む)
+  - `mod/tests/manual/` には新規追加しない (本質的に人間しかできない確認 = Resonite 内別ユーザによる voice 受信確認等のみ残す方針)
 - **書かない対象**: `mod/src/ResoniteIO.Core/`、`mod/src/ResoniteIO/`、`python/src/resoio/` 配下のプロダクションコード (**触ってはいけません**)
 - **基準とする情報源**: 仕様書 / proto 定義 / 公開 API の定義 / [CLAUDE.md](../../CLAUDE.md) / [resonite_io_plan.md](../../resonite_io_plan.md) / [/testing-strategy skill](../skills/testing-strategy/SKILL.md) / [/add-new-modality skill](../skills/add-new-modality/SKILL.md)
 - **基準としない情報源**: 既存の実装の内部詳細 (参考にはするが、テストは実装ではなく仕様に対して書く)
@@ -41,7 +42,7 @@ resonite-io は OS / 3rd-party ライブラリ / Resonite engine 結合が支配
 3. **3rd-party / FrooxEngine 表面のモックは禁止**: `grpclib.Channel`, `Kestrel`, `BepInEx`, `FrooxEngine.World`, `FrooxEngine.Engine`, `Elements.Core.*`, `betterproto2` の内部、`asyncio.sleep` / `Task.Delay` 等。ライブラリ / engine 表面をミラーした fake はその 3rd-party の挙動に対する「自分の仮定」をテストするだけで、上流変更を検出できない (Freeman & Pryce "Don't mock what you don't own")
 4. **自分のコードの内部関数モック禁止**: 内部関数を直接 `mocker.patch` (Python) / `Mock` (C#) で置き換える行為。リファクタで壊れるだけで何も保証しない
 
-3rd-party / engine を絡める検証が必要なら **integration-real 区分** (Kestrel in-process gRPC、実 UDS、`UnixNanosClock`、実 protobuf wire) で書く。FrooxEngine 実機が必要な検証は **manual / e2e 区分** に分類して `mod/tests/manual/` 配下で書き、CI 外で実行する。Resonite 実機を要する手順は [/debug-resonite-mod skill](../skills/debug-resonite-mod/SKILL.md) を参照。詳細は [/testing-strategy skill](../skills/testing-strategy/SKILL.md)。
+3rd-party / engine を絡める検証が必要なら **integration-real 区分** (Kestrel in-process gRPC、実 UDS、`UnixNanosClock`、実 protobuf wire) で書く。FrooxEngine 実機が必要な検証は **e2e 区分** として `python/tests/e2e/` に書き、Claude が host-agent (`scripts/host_agent.py` + `scripts/resonite_cli.py`) 経由で Resonite を起動・停止・撮影しつつ自動駆動する。`mod/tests/manual/` への新規 markdown 手順書追加は原則しない (本質的に人間しかできない確認のみ)。Resonite 実機を要する手順は [/debug-resonite-mod skill](../skills/debug-resonite-mod/SKILL.md) を参照。詳細は [/testing-strategy skill](../skills/testing-strategy/SKILL.md)。
 
 ### 3. 書いてはいけないテスト（削除対象 — marginal value ゼロ）
 

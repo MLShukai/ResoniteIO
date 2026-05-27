@@ -50,20 +50,27 @@ resonite-io は **proto over UDS gRPC + Resonite engine** 結合が支配的な 
 - `mod/tests/ResoniteIO.Core.Tests/Common/` 配下に共通 fixture (Kestrel host harness 等) を集約。fake は `Common/Fakes/<Modality>BridgeFake.cs`
 - BepInEx 側 (`mod/src/ResoniteIO/`) は smoke 単位のみ `mod/tests/ResoniteIO.Tests/` で検証 (FrooxEngine 実機が必要な分は manual)
 
-### Manual — `mod/tests/manual/`
+### E2E — `python/tests/e2e/` (Claude 自動駆動が canonical)
 
-- Resonite 実機を起動して end-to-end で振る舞いを確認する手順群
-- 現状は markdown 手順書 (`<Scenario>.md`) として残し、ユーザーが手動で実行する。`.csproj` ベースの CLI driver 化は backlog
-- CI 自動収集対象外。`just deploy-mod` で plugin を配置してから手動で動かす
+- Resonite 実機を起動して end-to-end で振る舞いを確認するシナリオ群
+- **Claude が `scripts/resonite_cli.py` (host-agent bridge) 経由で起動・停止・撮影まで自動駆動する** のが基本路線。新規モダリティの実機検証は `python/tests/e2e/<modality>.py` を pytest harness として書く
+- CI 自動収集対象外 (`require_host_agent` autouse fixture で skip)。`just e2e-test` 経由で明示的に走らせる
+- `just deploy-mod` で plugin を配置してから動かす
+
+### Manual — `mod/tests/manual/` (本質的に人間しかできない確認だけ)
+
+- 残すのは Claude が自動化できない検証のみ (Resonite Settings UI でのデバイス手動切替、別アカウントで join しての voice 受信聴取、視覚/聴覚的な品質判断など)
+- 新規 markdown 手順書の追加は原則禁止。e2e harness で代替できるか先に検討する
 
 ## テスト 4 区分
 
-| 区分                       | 配置                                                                                     | 検証対象                                                                                   | モック許容                                                                             |
-| -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| **unit**                   | `python/tests/resoio/test_<file>.py`、`mod/tests/ResoniteIO.Core.Tests/<File>Tests.cs`   | 純粋ロジック (proto encoding、timestamp 計算、UDS path 解決、UnixNanosClock の単調性等)    | なし                                                                                   |
-| **integration-with-fakes** | 同上、`python/tests/fakes/` / `mod/tests/ResoniteIO.Core.Tests/Common/` から fake import | モジュール間結合 (`I<Modality>Bridge` 越し、`<Modality>Service` ↔ Bridge IF の契約)        | **自前 ABC のみ** (`FakeCameraBridge`, `FakeSpeakerBridge`, `FakeMicrophoneBridge` 等) |
-| **integration-real**       | 同上                                                                                     | adapter / proto wire / Kestrel + grpclib 結合点 (実 in-process server、実 UDS、実時刻)     | 原則なし。Kestrel `WebApplication.CreateBuilder` + `IServer` を実 socket で立てる      |
-| **manual / e2e**           | `mod/tests/manual/`                                                                      | end-to-end (実 Resonite、`just deploy-mod` 後の FrooxEngine + BepInEx + ResoniteIO loaded) | なし                                                                                   |
+| 区分                       | 配置                                                                                     | 検証対象                                                                                                                    | モック許容                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **unit**                   | `python/tests/resoio/test_<file>.py`、`mod/tests/ResoniteIO.Core.Tests/<File>Tests.cs`   | 純粋ロジック (proto encoding、timestamp 計算、UDS path 解決、UnixNanosClock の単調性等)                                     | なし                                                                                   |
+| **integration-with-fakes** | 同上、`python/tests/fakes/` / `mod/tests/ResoniteIO.Core.Tests/Common/` から fake import | モジュール間結合 (`I<Modality>Bridge` 越し、`<Modality>Service` ↔ Bridge IF の契約)                                         | **自前 ABC のみ** (`FakeCameraBridge`, `FakeSpeakerBridge`, `FakeMicrophoneBridge` 等) |
+| **integration-real**       | 同上                                                                                     | adapter / proto wire / Kestrel + grpclib 結合点 (実 in-process server、実 UDS、実時刻)                                      | 原則なし。Kestrel `WebApplication.CreateBuilder` + `IServer` を実 socket で立てる      |
+| **e2e (Claude 自動)**      | `python/tests/e2e/`                                                                      | end-to-end (実 Resonite、`just deploy-mod` 後の FrooxEngine + BepInEx + ResoniteIO loaded、Claude が host-agent 経由で駆動) | なし                                                                                   |
+| **manual (人間のみ)**      | `mod/tests/manual/`                                                                      | 本質的に人間しかできない確認のみ (UI 手動切替、別アカウントでの voice 受信確認 等)                                          | なし                                                                                   |
 
 新規テストを書く前に区分を決める。3rd-party / engine モックが必要に見えたら integration-real に分類できないか先に検討する。
 
@@ -195,13 +202,15 @@ C# 側の Kestrel server を立てるのが重い場合は、Python 側だけで
 
 `python/tests/conftest.py` に `uds_server` fixture として共通化する。
 
-## manual シナリオ (`mod/tests/manual/`)
+## e2e シナリオ (`python/tests/e2e/`)
 
-実 Resonite を起動して end-to-end で振る舞いを確認するシナリオ群。CI 自動収集対象外。`just deploy-mod` → `just resonite-start` → 手動操作 → `just log` で BepInEx LogOutput.log を tail して結果を判定する流れ。
+実 Resonite を起動して end-to-end で振る舞いを確認するシナリオ群。**Claude が host-agent 経由で自動駆動するのが canonical**。`just deploy-mod` → `just resonite-start` → pytest harness が gRPC client / Camera 録画 / `just log` 解析を回す → `just resonite-stop` の流れ。
 
-- 各シナリオは目的 / 前提 / 手順 / 期待結果 / 撤収 を明示的に書いた `<Scenario>.md` または `<Scenario>.cs` (CLI driver) で残す
+- 各シナリオは `python/tests/e2e/<scenario>.py` として書き、`require_host_agent` autouse fixture で skip 制御する
 - 状態を変える対称 API (Locomotion 前進 → 停止、Display 表示 → 非表示 等) を検証する場合は、起動直後の自然な状態から本命操作を呼んでも no-op と区別できないため、**逆操作 → 本操作 → 逆 → 本** の 4 step で書く。同じペアを 2 回繰り返すことで idempotence も確認できる
-- 結果のスクリーンショット / ログを残す場合は `mod/tests/manual/_artifacts/<scenario>/<YYYYMMDD_HHMMSS>/` (gitignore 済み) に保存する想定
+- アーティファクト (録画 MP4 / screenshot 等) は `python/tests/e2e/e2e_artifacts/` (gitignore 済み) に保存する
+
+`mod/tests/manual/` には Claude が自動化できない確認のみを残す (本質的に人間しかできない確認 = 別アカウントでの voice 受信聴取・視覚/聴覚品質判断等)。新規追加する前に e2e harness で代替できないか必ず検討する。
 
 Resonite 起動 / 停止 / ログ tail の手順は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。
 

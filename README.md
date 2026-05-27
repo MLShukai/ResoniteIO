@@ -125,9 +125,9 @@ just container-clean   # cache volume + image を完全削除 (destructive、hos
 - `.env` をリポジトリルートに置き、`.env.example` を参考に `ResonitePath` を設定する。`.env` は git 管理外。
 - 各言語の固有のセットアップ・ツール詳細は [python/README.md](python/README.md) と [mod/README.md](mod/README.md) を参照。
 
-## 実機 smoke test
+## 実機検証
 
-mod が Gale 経由起動の Resonite に正しくロードされるかを確認する手順は [mod/tests/manual/load-verification.md](mod/tests/manual/load-verification.md) を参照。
+e2e 検証は Claude が `scripts/host_agent.py` + `scripts/resonite_cli.py` (container ↔ host Resonite bridge) 経由で自動駆動する。`python/tests/e2e/` 配下の harness が canonical で、ユーザが手動で Resonite を立ち上げて確認する手順は、本質的に人間しかできない確認 (Resonite 内別ユーザによる voice 受信確認 → [mod/tests/manual/microphone-verification.md](mod/tests/manual/microphone-verification.md) など) に限定する。
 
 ## ライセンス
 

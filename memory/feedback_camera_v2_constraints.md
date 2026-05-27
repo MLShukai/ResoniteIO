@@ -109,7 +109,8 @@ DLL override 引数として通る。
   人間に伝える (commit `cf05254` で実施済み)
 - Renderer 側 BepInEx ログ (`gale/Renderer/BepInEx/LogOutput.log`) が空 /
   生成されない症状を見たら 99% Launch Options を疑う
-- `mod/tests/manual/renderer-plugin-load.md` のトラブルシュートが正式 reference
+- 切り分け手順は `just resonite-start` → `just log` (BepInEx LogOutput) で
+  Renderer plugin ロード行を grep。表示されなければ Steam Launch Options を確認
 
 ## 4. `IDisplayTextureSource.UnityTexture` は外部 desktop 取り込み用 (誤解しない)
 

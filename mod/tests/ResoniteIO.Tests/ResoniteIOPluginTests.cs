@@ -11,8 +11,8 @@ namespace ResoniteIO.Tests;
 /// BepInEx ランタイムが居ない環境で <see cref="ResoniteIOPlugin.Load"/> を
 /// 直接呼ぶと <c>BasePlugin</c> 内部の <c>Log</c> が初期化されておらず NRE になる。
 /// そのためここではアセンブリ名と <see cref="ResonitePluginAttribute"/> の
-/// 静的メタデータのみを確認する。E2E (Resonite 起動を伴うロード確認) は
-/// <c>mod/tests/manual/</c> 配下の手順書で扱う。
+/// 静的メタデータのみを確認する。Resonite 起動を伴うロード確認は
+/// <c>python/tests/e2e/</c> の harness が host-agent 経由で行う。
 /// </remarks>
 public sealed class ResoniteIOPluginTests
 {

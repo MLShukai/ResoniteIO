@@ -3,8 +3,9 @@
 Pushes the 440 Hz mono float32 fixture (length defined by
 ``fixtures/generate_sine.py``) into the engine's virtual
 ``AudioInput`` and asserts the server-returned summary matches the
-wire path. Audible verification is manual — see
-``mod/tests/manual/microphone-verification.md``.
+wire path. Audible verification (does another user actually hear
+the voice?) requires a second human in-world; that residual manual
+step lives in ``mod/tests/manual/microphone-verification.md``.
 
 Uses :class:`MicrophoneClient` directly so the chunking assertion
 stays anchored to the wire protocol, not CLI argument plumbing.

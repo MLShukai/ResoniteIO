@@ -119,8 +119,8 @@ are load-bearing and must NOT be cut.
     `Move.ExternalInput = new float3(MoveX * Velocity, 0, MoveY * Velocity)`)
     points back at this proto comment rather than repeating it.
     All other surfaces (Python `LocomotionCmd` docstring,
-    `ILocomotionBridge` POCO remarks, `mod/tests/manual/locomotion-e2e.md`
-    v0 section, e2e `_scenario_command`) deliberately defer to proto.
+    `ILocomotionBridge` POCO remarks, e2e `_scenario_command`)
+    deliberately defer to proto.
     Do NOT reintroduce a wire-side 0→1.0 fallback in the Bridge —
     it was removed at `d195212` precisely to keep proto value and
     applied multiplier in 1:1 correspondence.
