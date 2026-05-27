@@ -308,8 +308,8 @@ hash を用意する。
 
 ## 11. E1 実機実測値 (2026-05-18)
 
-Resonite を Gale 経由起動、container 内から `just e2e-camera-v2 --frames=120`
-で:
+Resonite を Gale 経由起動、container 内から 120 frame の Camera streaming
+harness (当時の `scripts/e2e_camera_v2.py`、後に削除) を回した実測:
 
 | 項目                                     | 実測値                                             |
 | ---------------------------------------- | -------------------------------------------------- |

@@ -9,7 +9,7 @@
 ## 前提
 
 - [load-verification.md](load-verification.md) と
-  [camera-v2-e2e.md](camera-v2-e2e.md) の前提条件すべて
+  [renderer-plugin-load.md](renderer-plugin-load.md) の前提条件すべて
 - Gale プロファイルに 6 plugin install 済み (`just check-gale` 全 ✓):
   BepisLoader / BepInExResoniteShim / BepisResoniteWrapper /
   BepInExRenderer / RenderiteHook / InterprocessLib
@@ -173,7 +173,10 @@ git log と `memory/feedback_locomotion_external_input.md` §2 で
 ### Camera phase は 30 fps 出るが mp4 が真っ黒
 
 Renderite framebuffer 経路に問題あり (Locomotion 固有ではない)。
-[camera-v2-e2e.md](camera-v2-e2e.md) の "screenshot が真っ黒" 節を参照。
+`OverlayCamera` が描画していない可能性 (loading screen 等)。何か world
+を読み込んだ状態で再試行する。host 側 desktop capture も真っ黒なら
+host_agent screenshot path の独立 issue
+(`just resonite-screenshot output=tmp/black.png` 単体で再現確認)。
 
 ### fast 前進 phase で速度差が見えない
 
