@@ -1,9 +1,10 @@
 using Grpc.Core;
-using ResoniteIO.Core.Tests.Helpers;
+using ResoniteIO.Core.Tests.Common;
+using ResoniteIO.Core.Tests.Common.Fakes;
 using ResoniteIO.V1;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests;
+namespace ResoniteIO.Core.Tests.Speaker;
 
 // SessionHostHarness は RESONITE_IO_SOCKET env var を書き換えるため、SessionHostEnv
 // collection 内で直列化する。

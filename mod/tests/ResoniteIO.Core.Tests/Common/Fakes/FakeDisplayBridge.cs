@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Display;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>テスト用 <see cref="IDisplayBridge"/>。Apply は request を <see cref="LastApplied"/>
 /// に保存しつつ proto "0 = 変更しない" を <see cref="CurrentState"/> に反映する。</summary>

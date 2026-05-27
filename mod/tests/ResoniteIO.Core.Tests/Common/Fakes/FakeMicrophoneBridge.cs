@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Microphone;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
 /// テスト用 <see cref="IMicrophoneBridge"/>。受信 frame / disconnect 履歴を

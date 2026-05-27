@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common;
 
 internal static class TestPolling
 {

@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ResoniteIO.Core.Speaker;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
 /// テスト用 <see cref="ISpeakerBridge"/>. 構成可能な frame シーケンスを yield する。

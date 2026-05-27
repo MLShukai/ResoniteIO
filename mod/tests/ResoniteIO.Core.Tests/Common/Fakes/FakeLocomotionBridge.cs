@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Locomotion;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
 /// テスト用 <see cref="ILocomotionBridge"/>。<see cref="SetState"/> /

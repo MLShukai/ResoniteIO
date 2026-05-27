@@ -1,8 +1,8 @@
 using ResoniteIO.Core.Session;
-using ResoniteIO.Core.Tests.Helpers;
+using ResoniteIO.Core.Tests.Common;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests;
+namespace ResoniteIO.Core.Tests.Session;
 
 [Collection("SessionHostEnv")]
 public sealed class SessionBridgeWiringTests

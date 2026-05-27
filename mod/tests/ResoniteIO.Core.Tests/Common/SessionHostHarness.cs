@@ -7,7 +7,7 @@ using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common;
 
 /// <summary>
 /// テスト用に <see cref="SessionHost"/> を tmp_path UDS 上で起動・停止する harness。

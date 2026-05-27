@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Logging;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common;
 
 /// <summary>
 /// Display 単体テスト用の最小 Kestrel + UDS gRPC host。
