@@ -17,7 +17,7 @@ foreground 状態では `Application.targetFrameRate=30` のまま。
 ## 前提
 
 - [load-verification.md](load-verification.md) と
-  [camera-v2-e2e.md](camera-v2-e2e.md) の前提条件すべて
+  [renderer-plugin-load.md](renderer-plugin-load.md) の前提条件すべて
 - container 内で `cd python && uv sync` 済み (DisplayClient を import できる
   状態)
 

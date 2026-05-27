@@ -341,10 +341,3 @@ resonite-status:
 # 例: `just resonite-screenshot output=tmp/e2e/desktop.png`
 resonite-screenshot output:
     python3 scripts/resonite_cli.py screenshot --output {{ output }}
-
-# Camera v2 の e2e を回す。Resonite が起動済み + host-agent が稼働中前提。
-# Camera 未実装段階では `--skip-camera` で screenshot のみ撮る dry run が可能。
-# 例: `just e2e-camera-v2 --skip-camera`
-#     `just e2e-camera-v2 --frames=120 --duration=5`
-e2e-camera-v2 *args:
-    cd python && uv run python ../scripts/e2e_camera_v2.py {{ args }}
