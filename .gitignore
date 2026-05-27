@@ -214,3 +214,4 @@ gale/
 # 並列 implementer が一時的に作る git worktree のルート。
 .claude/worktrees/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
