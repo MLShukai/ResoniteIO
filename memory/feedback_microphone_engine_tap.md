@@ -40,7 +40,7 @@ ______________________________________________________________________
 
 7. **HarmonyLib は不要**: Postfix patch は使わない。virtual device を **登録** すれば engine が `WriteSamples` を呼ぶサイドではなく、Mod 側 (Bridge) が能動的に `WriteSamples` を呼ぶ。Speaker と非対称。
 
-8. **`DefaultAudioInput` 昇格は Resonite UI 操作に委ねる**: 起動時に自動的に default 化すると user の既存 mic 設定 (Razer SoundBlaster 等の物理 mic 選択) を壊す。Settings → Audio Input → "ResoniteIOMicrophone" を手動選択する手順を `mod/tests/manual/microphone-verification.md` に記録。Python 側から default 切替する RPC は **意図的に持たない** (Resonite native の audio device 制御を侵食しない方針)。
+8. **`DefaultAudioInput` 昇格は Bridge ctor で `OverrideAudioInputIndex` 経由 (非永続) に自動化**: `FrooxEngineMicrophoneBridge` ctor の `RegisterAudioInput` 直後に `_audioSystem.OverrideAudioInputIndex = AudioInputs.IndexOf(_audioInput)` を set し、Dispose で自分の値と一致するときだけ null に revert する。`OverrideAudioInputIndex` は `_audioInputOverrideIndex` field を直に置く path で、`DefaultAudioInputIndex` getter で `_audioInputOverrideIndex ?? _defaultAudioInputIndex` と最優先される。**Settings ファイル (`AudioInputDeviceSettings.DevicePriorities`) は一切触らない** ので user の物理 mic 設定 (Razer SoundBlaster 等) は物理破壊しない。Resonite 終了で Override は消え、mod を外せば user の元 default mic に戻る。**旧方針 (UI 手動切替 + Python RPC は意図的に持たない) を 2026-05-27 に明示的に revoke**。理由は研究用途で毎回 UI 操作するコストが看過できないため。`isDefault` ctor 引数は引き続き `false` (これは Settings 永続書き込みフラグで Override とは独立、両方触ると user 設定を壊す)。Python 側から default 切替する RPC は依然として **持たない** (Bridge 内部で完結するため RPC 不要、Python は wire を流すだけ)。残存トレードオフ: user が物理 mic を使いたい場合は mod を外すか、将来的に opt-out config (BepInEx config / env var) を追加する (現状スコープ外)。
 
 ## Python push pace 設計
 
