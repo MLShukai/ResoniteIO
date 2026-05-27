@@ -1,5 +1,6 @@
 using Grpc.Core;
-using ResoniteIO.Core.Tests.Helpers;
+using ResoniteIO.Core.Tests.Common;
+using ResoniteIO.Core.Tests.Common.Fakes;
 using ResoniteIO.V1;
 using Xunit;
 
@@ -11,7 +12,7 @@ namespace ResoniteIO.Core.Tests.Display;
 /// Apply / Get RPC を end-to-end で配線できることを検証する統合テスト。
 /// </summary>
 /// <remarks>
-/// 単独 Service の round-trip は <see cref="DisplayServiceTests"/> (Helpers/DisplayServiceHost
+/// 単独 Service の round-trip は <see cref="DisplayServiceTests"/> (Common/DisplayServiceHost
 /// 経由) が担う。本テストは Wave 4 で SessionHost に DisplayService を mount した
 /// **wiring** の retro 検知を目的とする (例えば DI 登録漏れや MapGrpcService 漏れを
 /// 早期検出する)。

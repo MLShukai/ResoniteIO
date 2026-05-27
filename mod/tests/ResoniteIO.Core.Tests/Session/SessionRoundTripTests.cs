@@ -1,9 +1,9 @@
 using ResoniteIO.Core;
-using ResoniteIO.Core.Tests.Helpers;
+using ResoniteIO.Core.Tests.Common;
 using ResoniteIO.V1;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests;
+namespace ResoniteIO.Core.Tests.Session;
 
 // SessionHostHarness が RESONITE_IO_SOCKET env var を書き換えるため、これを使う全テストは
 // 同じ collection で直列化する。

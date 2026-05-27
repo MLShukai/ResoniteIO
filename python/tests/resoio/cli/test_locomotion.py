@@ -1,13 +1,13 @@
 import asyncio
 import io
 import os
+import pty
+import termios
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
 
 import pytest
-import pytest_mock
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
@@ -449,79 +449,91 @@ def test_socket_flag_accepted_on_drive(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_raw_tty_restores_original_state_on_exit(mocker: pytest_mock.MockerFixture):
-    fake_stream: Any = mocker.Mock()
-    fake_stream.fileno.return_value = 7
-    mocker.patch("resoio.cli.locomotion.os.isatty", return_value=True)
-    original_state = mocker.sentinel.original
-    tcgetattr = mocker.patch(
-        "resoio.cli.locomotion.termios.tcgetattr", return_value=original_state
-    )
-    tcsetattr = mocker.patch("resoio.cli.locomotion.termios.tcsetattr")
-    setcbreak = mocker.patch("resoio.cli.locomotion.tty.setcbreak")
-
-    with _raw_tty(fake_stream):
-        pass
-
-    tcgetattr.assert_called_once_with(7)
-    setcbreak.assert_called_once_with(7)
-    # The whole point of the context manager is this exact restore call.
-    tcsetattr.assert_called_once()
-    fd_arg, when_arg, state_arg = tcsetattr.call_args.args
-    assert fd_arg == 7
-    # termios.TCSADRAIN is an int; assert by value via the module reference
-    # to keep the test platform-agnostic.
-    import termios as _termios
-
-    assert when_arg == _termios.TCSADRAIN
-    assert state_arg is original_state
+def test_raw_tty_enters_cbreak_mode_inside_block_on_real_pty():
+    """Inside the context manager, the tty's termios state must differ from the
+    entry state — that is the externally observable effect of cbreak mode
+    (lflag's ICANON / ECHO bits cleared)."""
+    master_fd, slave_fd = pty.openpty()
+    try:
+        stream = os.fdopen(slave_fd, "r+b", buffering=0)
+        try:
+            before = termios.tcgetattr(slave_fd)
+            with _raw_tty(stream):  # type: ignore[arg-type]
+                during = termios.tcgetattr(slave_fd)
+            # cbreak clears ICANON + ECHO on lflag (index 3 in the
+            # termios attribute list); assert observably different
+            # without coupling the test to specific bit layouts.
+            assert during != before, (
+                "termios state inside _raw_tty must differ from the entry "
+                "state (cbreak mode should be in effect)"
+            )
+        finally:
+            stream.close()  # also closes slave_fd
+    finally:
+        os.close(master_fd)
 
 
-def test_raw_tty_restores_even_when_body_raises(mocker: pytest_mock.MockerFixture):
-    fake_stream: Any = mocker.Mock()
-    fake_stream.fileno.return_value = 9
-    mocker.patch("resoio.cli.locomotion.os.isatty", return_value=True)
-    original_state = mocker.sentinel.original
-    mocker.patch("resoio.cli.locomotion.termios.tcgetattr", return_value=original_state)
-    tcsetattr = mocker.patch("resoio.cli.locomotion.termios.tcsetattr")
-    mocker.patch("resoio.cli.locomotion.tty.setcbreak")
+def test_raw_tty_restores_original_state_on_normal_exit_on_real_pty():
+    """The whole point of the context manager: termios state at exit
+    must match the state at entry, observed directly on a real pty."""
+    master_fd, slave_fd = pty.openpty()
+    try:
+        stream = os.fdopen(slave_fd, "r+b", buffering=0)
+        try:
+            before = termios.tcgetattr(slave_fd)
+            with _raw_tty(stream):  # type: ignore[arg-type]
+                pass
+            after = termios.tcgetattr(slave_fd)
+            assert after == before
+        finally:
+            stream.close()
+    finally:
+        os.close(master_fd)
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with _raw_tty(fake_stream):
-            raise RuntimeError("boom")
 
-    tcsetattr.assert_called_once()
-    assert tcsetattr.call_args.args[2] is original_state
+def test_raw_tty_restores_original_state_when_body_raises_on_real_pty():
+    """Restore must run on exception — otherwise an uncaught error in the drive
+    loop would leave the user's terminal in cbreak mode."""
+    master_fd, slave_fd = pty.openpty()
+    try:
+        stream = os.fdopen(slave_fd, "r+b", buffering=0)
+        try:
+            before = termios.tcgetattr(slave_fd)
+            with pytest.raises(RuntimeError, match="boom"):
+                with _raw_tty(stream):  # type: ignore[arg-type]
+                    raise RuntimeError("boom")
+            after = termios.tcgetattr(slave_fd)
+            assert after == before
+        finally:
+            stream.close()
+    finally:
+        os.close(master_fd)
 
 
-def test_raw_tty_is_noop_for_non_tty_fd(mocker: pytest_mock.MockerFixture):
-    """Pipes and files must not crash _raw_tty — used by the round-trip
-    test."""
+def test_raw_tty_is_noop_for_non_tty_fd():
+    """Pipes are not tty fds; _raw_tty must yield cleanly without raising.
+
+    Observed by the round-trip test driving stdin via a pipe.
+    """
     r_fd, w_fd = os.pipe()
     try:
         stream = os.fdopen(r_fd, "rb", buffering=0)
-        tcgetattr = mocker.patch("resoio.cli.locomotion.termios.tcgetattr")
-        tcsetattr = mocker.patch("resoio.cli.locomotion.termios.tcsetattr")
         try:
+            # No exception is the contract — there is no "tty state" to
+            # observe on a pipe.
             with _raw_tty(stream):  # type: ignore[arg-type]
                 pass
         finally:
             stream.close()
-        tcgetattr.assert_not_called()
-        tcsetattr.assert_not_called()
     finally:
-        # stream.close() already closes r_fd; w_fd we own.
         os.close(w_fd)
 
 
-def test_raw_tty_is_noop_for_stream_without_fileno(mocker: pytest_mock.MockerFixture):
-    """StringIO-style streams report no fd and must short-circuit cleanly."""
-    tcgetattr = mocker.patch("resoio.cli.locomotion.termios.tcgetattr")
-    tcsetattr = mocker.patch("resoio.cli.locomotion.termios.tcsetattr")
+def test_raw_tty_is_noop_for_stream_without_fileno():
+    """StringIO has no fd; _raw_tty must short-circuit and yield without
+    raising rather than propagating an OSError."""
     with _raw_tty(io.StringIO()):
         pass
-    tcgetattr.assert_not_called()
-    tcsetattr.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -542,10 +554,16 @@ class _RecordingLocomotion(LocomotionBase):
     def __init__(self) -> None:
         self.received: list[LocomotionCommand] = []
         self.reset_requests: list[LocomotionResetRequest] = []
+        # Counts how many distinct Drive RPCs the server has handled.
+        # The default-path probe (_wait_for_bridge_ready) opens its own
+        # short-lived stream, so the probe-vs-no-probe contrast is
+        # directly observable here.
+        self.drive_call_count: int = 0
 
     async def drive(
         self, messages: AsyncIterator[LocomotionCommand]
     ) -> LocomotionDriveSummary:
+        self.drive_call_count += 1
         async for msg in messages:
             self.received.append(msg)
         return LocomotionDriveSummary(
@@ -700,43 +718,114 @@ async def test_drive_round_trip_via_cli(
     assert f"received_count={len(fake.received)}" in captured.out
 
 
-async def test_no_wait_skips_bridge_ready_probe(
+async def _run_drive_with_immediate_quit(
+    socket_path: Path,
+    *,
+    no_wait: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> int:
+    """Shared driver: hook stdin to a pipe pre-loaded with ``q`` and let
+    ``_run_drive`` exit on the first key. Used by the contrast pair
+    below to observe whether the bridge-readiness probe ran."""
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, b"q")
+        fake_stdin = os.fdopen(read_fd, "rb", buffering=0)
+        monkeypatch.setattr("sys.stdin", fake_stdin)
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        argv = ["locomotion", "drive"]
+        if no_wait:
+            argv.append("--no-wait")
+        try:
+            args = _build_parser().parse_args(argv)
+            return await asyncio.wait_for(_run_drive(args), timeout=5.0)
+        finally:
+            fake_stdin.close()
+    finally:
+        try:
+            os.close(write_fd)
+        except OSError:
+            pass
+
+
+async def test_no_wait_skips_neutral_probe_on_wire(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    mocker: pytest_mock.MockerFixture,
 ):
-    """`--no-wait` must short-circuit the FAILED_PRECONDITION retry loop."""
+    """`--no-wait` must short-circuit ``_wait_for_bridge_ready``. The probe
+    opens its own Drive stream and sends one neutral command; skipping it means
+    the server sees exactly **one** Drive RPC — the main drive loop that
+    immediately exits on the queued ``q``.
+
+    Paired with ``test_default_path_sends_neutral_probe_on_wire`` to
+    show the behaviour differs only by the presence of the probe.
+    """
     socket_path = tmp_path / "rio-loco.sock"
     fake = _RecordingLocomotion()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
-        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-        wait_mock = mocker.patch(
-            "resoio.cli.locomotion._wait_for_bridge_ready",
+        rc = await _run_drive_with_immediate_quit(
+            socket_path, no_wait=True, monkeypatch=monkeypatch
         )
-
-        read_fd, write_fd = os.pipe()
-        try:
-            # `q` immediately so the run is short.
-            os.write(write_fd, b"q")
-            fake_stdin = os.fdopen(read_fd, "rb", buffering=0)
-            monkeypatch.setattr("sys.stdin", fake_stdin)
-            try:
-                args = _build_parser().parse_args(["locomotion", "drive", "--no-wait"])
-                rc = await asyncio.wait_for(_run_drive(args), timeout=5.0)
-                assert rc == 0
-            finally:
-                fake_stdin.close()
-        finally:
-            try:
-                os.close(write_fd)
-            except OSError:
-                pass
-        wait_mock.assert_not_called()
+        assert rc == 0
     finally:
         server.close()
         await server.wait_closed()
+
+    # Only the main drive stream ran — no probe stream preceded it.
+    assert fake.drive_call_count == 1, (
+        f"--no-wait should suppress the readiness probe; got "
+        f"{fake.drive_call_count} Drive RPCs"
+    )
+
+
+async def test_default_path_sends_neutral_probe_on_wire(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Without ``--no-wait``, ``_run_drive`` invokes ``_wait_for_bridge_ready``
+    which opens a short-lived Drive stream and sends one neutral
+    ``LocomotionCommand`` before the main drive loop. The server therefore
+    observes **two** Drive RPCs: the probe, then the main loop.
+
+    The contrast against ``test_no_wait_skips_neutral_probe_on_wire``
+    pins the externally observable contract of the ``--no-wait`` flag
+    without resorting to mocking the internal helper.
+    """
+    socket_path = tmp_path / "rio-loco.sock"
+    fake = _RecordingLocomotion()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_drive_with_immediate_quit(
+            socket_path, no_wait=False, monkeypatch=monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    # Probe stream + main drive stream = 2 RPCs.
+    assert fake.drive_call_count == 2, (
+        f"default path should send a neutral readiness probe before the "
+        f"main drive stream; got {fake.drive_call_count} Drive RPCs"
+    )
+    # The neutral probe is the first command on the wire: all motion
+    # axes at 0 and jump cleared. ``velocity`` rides ``LocomotionCmd``'s
+    # 1.0 default (the wrapper documents why — bridge multiplies Move
+    # by velocity, so 0 would freeze the avatar on the next real cmd).
+    # That default is part of the public contract, not noise — pin it
+    # explicitly so a default-flip would surface here.
+    assert len(fake.received) >= 1
+    probe = fake.received[0]
+    assert probe.move_x == 0.0
+    assert probe.move_y == 0.0
+    assert probe.yaw_rate == 0.0
+    assert probe.pitch_rate == 0.0
+    assert probe.velocity == 1.0
+    assert probe.crouch == 0.0
+    assert probe.jump is False
 
 
 async def test_wait_for_bridge_ready_returns_on_success(

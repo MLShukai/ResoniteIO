@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Camera;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
 /// テスト用 <see cref="ICameraBridge"/>。Bridge 側 FrameId は内部カウンタで monotonic

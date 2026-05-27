@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Logging;
 
-namespace ResoniteIO.Core.Tests.Helpers;
+namespace ResoniteIO.Core.Tests.Common;
 
 internal sealed class NullLogSink : ILogSink
 {

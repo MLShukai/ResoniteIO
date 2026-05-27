@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace ResoniteIO.Core.Tests;
+namespace ResoniteIO.Core.Tests.Common;
 
 /// <summary>
 /// <see cref="UnixNanosClock"/> の振る舞いの単体テスト。

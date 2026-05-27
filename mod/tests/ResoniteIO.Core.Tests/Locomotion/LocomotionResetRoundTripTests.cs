@@ -1,6 +1,7 @@
 using Grpc.Core;
 using ResoniteIO.Core.Locomotion;
-using ResoniteIO.Core.Tests.Helpers;
+using ResoniteIO.Core.Tests.Common;
+using ResoniteIO.Core.Tests.Common.Fakes;
 using Xunit;
 using V1 = ResoniteIO.V1;
 
