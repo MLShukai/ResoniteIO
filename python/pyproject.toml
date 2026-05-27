@@ -44,6 +44,7 @@ addopts = [
 ]
 markers = [
   "e2e: end-to-end tests that require host-agent and a live Resonite client",
+  "api_contract: public API / proto wire contract pins (Hyrum's law mitigation, not behavior tests)",
 ]
 filterwarnings = [
   "ignore::DeprecationWarning",
