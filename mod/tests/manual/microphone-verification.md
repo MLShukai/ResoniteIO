@@ -17,7 +17,9 @@ device を `AudioSystem.RegisterAudioInput` で登録し、Python 側
 
 ## 前提
 
-- [load-verification.md](load-verification.md) の前提条件すべて
+- ResoniteIO mod が Gale 経由起動の Resonite に正しくロードされる状態
+  (確認: `just resonite-start` 後に `just log` で `Loading Plugin ResoniteIO`
+  が出る)
 - Gale プロファイルに必須 6 plugin install 済み (`just check-gale` 全 ✓)
 - Steam Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%`
 - host で `just host-agent` daemon が GUI session の端末で起動している

@@ -91,4 +91,4 @@ ______________________________________________________________________
 
 ## 6. 実機 mod load 検証手順
 
-[`mod/tests/manual/load-verification.md`](../../../mod/tests/manual/load-verification.md) — Resonite を Gale 経由で起動 → BepInEx log で ResoniteIO Plugin がロードされたか確認する手順書 (実機を要する)。
+`just resonite-start` (host-agent 経由で Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Claude が container 内から host-agent bridge 経由で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。

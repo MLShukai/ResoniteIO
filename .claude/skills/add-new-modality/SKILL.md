@@ -157,7 +157,7 @@ ______________________________________________________________________
 
 - xunit
 - **Core 側** (`ResoniteIO.Core.Tests`): Resonite 非依存なので **Kestrel ラウンドトリップを含む統合テストを書ける**。tmp_path UDS に SessionHost を bind、`Grpc.Net.Client` から実 RPC を投げて検証
-- **Mod 側** (`ResoniteIO.Tests`): FrooxEngine 依存があるため smoke test と Bridge adapter ロジック (engine API を呼ばない範囲) のみ。実 engine を要するシナリオは `mod/tests/manual/` に Markdown 手順書として残す
+- **Mod 側** (`ResoniteIO.Tests`): FrooxEngine 依存があるため smoke test と Bridge adapter ロジック (engine API を呼ばない範囲) のみ。実 engine を要するシナリオは `python/tests/e2e/<modality>.py` を Claude が host-agent 経由で自動駆動する。Claude が自動化できない確認のみ `mod/tests/manual/` に markdown で残す
 
 ### Test-only Service host
 

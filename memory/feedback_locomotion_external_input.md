@@ -322,12 +322,12 @@ HFR と LUVR の選択も「engine binding と完全に同じ rotation を採る
   body-local 変換には不向き
 - 新しい proto field (e.g. `body_relative: bool`) で world-fixed mode を
   opt-in したい場合のみ別経路を足す
-- 実機検証は 2 段階:
-  - 前進方向: `python/tests/e2e/locomotion.py` の 0-3 s phase と 9-11 s
-    phase で「yaw 旋回後に前進方向が画面上で変わる」ことを目視
-    ([locomotion-e2e.md](../../mod/tests/manual/locomotion-e2e.md))
-  - strafe 直交性: `mod/tests/manual/locomotion-drive-cli.md` の Pass 判定
-    「`d` / `a` 1 回押下で前後方向に visible なドリフトがない」を満たす
+- 実機検証は `python/tests/e2e/locomotion.py` (Claude が host-agent
+  経由で自動駆動する) の 20 s シナリオ MP4 を目視 / フレーム比較する:
+  - 前進方向: 0-3 s phase と 9-11 s phase で「yaw 旋回後に前進方向が
+    画面上で変わる」こと
+  - strafe 直交性: 5-7 s phase の `move_x=1.0` で前後方向に visible な
+    ドリフトがないこと
 
 関連: \[\[locomotion-headfacing-body-relative\]\] (spec-driven-implementer
 memory、HFR 採用時の定量計測 prototype 経緯)。
