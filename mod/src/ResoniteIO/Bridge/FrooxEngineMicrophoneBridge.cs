@@ -50,6 +50,11 @@ internal sealed class FrooxEngineMicrophoneBridge : IMicrophoneBridge, IDisposab
 
     private volatile bool _disposed;
 
+    // Bridge ctor で set した OverrideAudioInputIndex の値。Dispose で「自分が
+    // set した値と現在の Override が一致するときだけ」revert するために保持する
+    // (他 mod が後から override を上書きしているケースを破壊しないための防御)。
+    private int? _assignedOverrideIndex;
+
     public FrooxEngineMicrophoneBridge(Engine engine, ILogSink log)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -85,6 +90,37 @@ internal sealed class FrooxEngineMicrophoneBridge : IMicrophoneBridge, IDisposab
             _log.LogError($"Microphone Bridge: RegisterAudioInput threw: {ex}");
             _audioInput = null;
             return;
+        }
+
+        // virtual mic を engine の default mic に昇格させる (非永続)。
+        // AudioSystem.OverrideAudioInputIndex は Settings ファイル
+        // (DevicePriorities) を触らずに DefaultAudioInputIndex getter を上書き
+        // するため、user の物理 mic 設定を物理破壊しない。Resonite 終了で消える
+        // ので毎回 mod load 時に当たる。失敗しても Bridge 自体は機能を続ける
+        // (物理 mic が default のままで wire round-trip は動く)。
+        try
+        {
+            var index = _audioSystem.AudioInputs.IndexOf(_audioInput);
+            if (index >= 0)
+            {
+                _audioSystem.OverrideAudioInputIndex = index;
+                _assignedOverrideIndex = index;
+                _log.LogInfo(
+                    $"Microphone Bridge: OverrideAudioInputIndex set to {index} "
+                        + "(ResoniteIO virtual mic auto-promoted to default)"
+                );
+            }
+            else
+            {
+                _log.LogWarning(
+                    "Microphone Bridge: registered AudioInput not found in AudioInputs list; "
+                        + "default mic auto-promote skipped"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"Microphone Bridge: OverrideAudioInputIndex set threw: {ex.Message}");
         }
 
         // WorldFocused は新規 focus 時しか発火しないため、subscribe 前の snapshot で
@@ -321,6 +357,29 @@ internal sealed class FrooxEngineMicrophoneBridge : IMicrophoneBridge, IDisposab
             _cachedWorld = null;
         }
 
+        // 自分が set した Override だけ revert する。他 mod (現状存在しないが)
+        // が後から上書きしているケースは触らない。順序: revert override →
+        // AudioInputs.Remove → AudioInput.Reset。
+        if (_assignedOverrideIndex.HasValue && _audioSystem is not null)
+        {
+            try
+            {
+                if (_audioSystem.OverrideAudioInputIndex == _assignedOverrideIndex)
+                {
+                    _audioSystem.OverrideAudioInputIndex = null;
+                    _log.LogInfo(
+                        $"Microphone Bridge: cleared OverrideAudioInputIndex (was {_assignedOverrideIndex})"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(
+                    $"MicrophoneBridge: clearing OverrideAudioInputIndex threw: {ex.Message}"
+                );
+            }
+        }
+
         // AudioSystem に Unregister API が無い (decompile 確認済み) ため AudioInputs
         // List から直接 Remove する best-effort 経路。internal な Disconnected() は
         // 呼ばない (UserAudioStream subscriber は世代毎に re-bind するので不要)。
@@ -374,8 +433,10 @@ internal sealed class ResoniteIOAudioInput : AudioInput
             deviceId: "resoio-mic-virtual",
             input: engine.InputInterface,
             type: AudioInputType.CaptureDevice,
-            // 既存ユーザーの mic 設定を壊さないため default=false。Resonite UI で
-            // 明示的に選択させる前提 (manual 手順書参照)。
+            // isDefault は Resonite Settings (DevicePriorities) に永続書き込みする
+            // フラグなので false のまま。default 昇格は Bridge ctor で
+            // AudioSystem.OverrideAudioInputIndex を直接触る非永続経路を採用する
+            // (memory feedback_microphone_engine_tap.md 参照)。
             isDefault: false
         )
     {
