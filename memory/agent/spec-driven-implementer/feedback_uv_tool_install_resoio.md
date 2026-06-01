@@ -15,4 +15,4 @@ metadata:
 - Pass `--with-requirements python/uv.lock` is unsupported by `uv tool install` (only `--with`), so the practical fix is `uv tool install --editable . --force --with 'betterproto2==<pinned>'` aligned with the lock, or
 - Drop `uv tool install` and use a wrapper script that runs `uv run --project /workspace/python resoio "$@"` so the locked env is used.
 
-Verify by running `resoio --help` in a fresh container shell after `just container-init`.
+Verify by running `resoio --help` in a fresh container shell after `scripts/container-init.sh` runs (via the devcontainer `postCreateCommand`).

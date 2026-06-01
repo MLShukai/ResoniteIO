@@ -58,7 +58,7 @@ memory: project
 - proto 変更時は **必ず** `just gen-proto` を再実行し、生成物の差分も同じ commit に含める
 - 通信は `betterproto2[grpclib]` (async)。同期 gRPC API は使わない
 - 依存追加: 新規 runtime dep はユーザー確認必須。stdlib / .NET BCL で済むなら追加しない
-- ビルド / テスト / gen-proto は **コンテナ内で実行する前提** (`just container-shell`)
+- ビルド / テスト / gen-proto は **コンテナ内で実行する前提** (devcontainer に入って attach)
 
 ## ワークフロー
 

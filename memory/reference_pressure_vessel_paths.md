@@ -38,7 +38,7 @@ Steam で Resonite を起動した際、Resonite (BepInEx + Renderite.Host) は
 
 resonite-io は **`$HOME/.resonite-io/`** を本番 gRPC UDS の socket dir として
 採用 (Mod / Python / Docker container すべて)。container は username が
-`dev` 固定なので、docker-compose.yml で `${HOST_HOME}/.resonite-io` を
+`dev` 固定なので、compose.yml で `${HOME}/.resonite-io` を
 `/home/dev/.resonite-io` に bind して 3 つの mount namespace
 (host shell / pressure-vessel / container) が同じ inode に到達するように
 する。`XDG_RUNTIME_DIR` は使わない。

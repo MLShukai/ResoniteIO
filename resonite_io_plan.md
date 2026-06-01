@@ -123,15 +123,16 @@ ______________________________________________________________________
 ホスト側に必要なのは **`docker` / `docker compose v2` / `just` の 3 つだけ**。
 .NET SDK / uv / protoc / pre-commit はすべて `debian:bookworm-slim` ベースの単一 image に同梱。
 
-- [x] `Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt)
-- [x] `docker-compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照)
-- [x] `scripts/container-init.sh` (container 内 deps restore: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
+- [x] `.devcontainer/Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt)
+- [x] `compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照。`build:` は `context: .devcontainer` / `dockerfile: Dockerfile`)
+- [x] `.devcontainer/devcontainer.json` (compose 参照) + `.devcontainer/initialize.sh` (host 側 pre-create フック)
+- [x] `scripts/container-init.sh` (container 内 deps restore: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink。devcontainer の `postCreateCommand` から呼ばれる)
 - [x] `just init` (host 側 one-time setup: docker / `.env` / Gale プロファイル確認)
 - [x] dotnet local tools (`.config/dotnet-tools.json`): `csharpier`, `tcli` (Thunderstore packaging), `ilspycmd` (decompile)
 - [x] `pre-commit` (ruff / pyupgrade / docformatter / mdformat / codespell / uv-lock / pygrep / shellcheck / shfmt)
 - [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
 - ~~`scripts/setup.sh`~~ (廃止: Docker 環境に置き換え)
-- [x] **UDS socket 共有ディレクトリの bind**: 当初は `$XDG_RUNTIME_DIR/resonite-io/` を採用予定だったが、Step 2 実装時に **pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆い、host 側 IPC を通さない**ことが判明 (詳細: `memory/reference_pressure_vessel_paths.md`)。最終的に `$HOME/.resonite-io/` を host / container 双方で同一絶対パスとして rw bind 共有する方式に変更 (`docker-compose.yml` の long-form bind: `${HOST_HOME}/.resonite-io:/home/dev/.resonite-io:rw`、`HOST_HOME` は justfile が `env_var('HOME')` から動的注入)。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達する。host 側ディレクトリは `just container-up` が `0700` で事前作成 (Docker 任せだと root 所有になる)。socket ファイル名は mod 側で `resonite-{Process.Id}.sock` を自動命名 (Step 2 で実装済み)。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の優先順で探索 (`.env` への記述は通常不要)。
+- [x] **UDS socket 共有ディレクトリの bind**: 当初は `$XDG_RUNTIME_DIR/resonite-io/` を採用予定だったが、Step 2 実装時に **pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆い、host 側 IPC を通さない**ことが判明 (詳細: `memory/reference_pressure_vessel_paths.md`)。最終的に `$HOME/.resonite-io/` を host / container 双方で同一絶対パスとして rw bind 共有する方式に変更 (`compose.yml` の long-form bind: `${HOME}/.resonite-io:/home/dev/.resonite-io:rw`、`HOME` は host shell から解決)。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達する。host 側ディレクトリは devcontainer の `initializeCommand` が `0700` で事前作成 (Docker 任せだと root 所有になる)。同 `initializeCommand` が host uid/gid を `.env` に記録し、build-arg でコンテナ user に一致させる。socket ファイル名は mod 側で `resonite-{Process.Id}.sock` を自動命名 (Step 2 で実装済み)。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の優先順で探索 (`.env` への記述は通常不要)。
 - [x] **Container ↔ Host Resonite debug bridge**: Step 2 で `scripts/host_agent.py` (host 常駐 daemon) + `scripts/resonite_cli.py` (container 側 client) を追加。container 内 `just resonite-start/stop/status` で host の Resonite を Gale 経由で起動・停止できる。トランスポートは本番 IPC と分離した `$HOME/.resonite-io-debug/host-agent.sock` (同じく rw bind)。print-debug (`just log`) と並ぶ二本目の debug 経路で、proto / Core / mod を一切触らない。
 
 ### C. モノレポ構造
@@ -145,9 +146,12 @@ ______________________________________________________________________
 
 ```text
 resonite-io/
-├── Dockerfile                     # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath ro bind / ~/.resonite-io{,-debug}/ rw bind)
-├── justfile                       # ルートタスクランナー (build / test / container-* / resonite-* / host-agent)
+├── compose.yml                    # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath ro bind / ~/.resonite-io{,-debug}/ rw bind、build context は .devcontainer/)
+├── .devcontainer/
+│   ├── devcontainer.json          # compose 参照 (initializeCommand / postCreateCommand)
+│   ├── Dockerfile                 # 開発コンテナ image (debian + .NET 10 + uv + protoc)
+│   └── initialize.sh              # host 側 pre-create フック (~/.resonite-io{,-debug}/ 0700 作成 + uid/gid を .env に記録)
+├── justfile                       # ルートタスクランナー (build / test / resonite-* / host-agent)
 ├── buf.yaml                       # proto lint/breaking (modules: proto/、SERVICE_SUFFIX + RPC_*_STANDARD_NAME を except)
 ├── .pre-commit-config.yaml
 ├── .env.example                   # ResonitePath / GaleProfile / GaleBin の雛形 (.env は gitignore)
@@ -229,8 +233,7 @@ resonite-io/
 | 経路                          | 役割                                                                          |
 | ----------------------------- | ----------------------------------------------------------------------------- |
 | `just init`                   | host 側 one-time setup (docker / `.env` / Gale プロファイル確認、冪等)        |
-| `just container-build`        | 開発 image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools) |
-| `just container-up` / `-init` | サービス起動 + container 内 deps 解決                                         |
+| devcontainer                  | `just init` 後に「Reopen in Container」/ `devcontainer up` で起動。image build + deps 解決 (`postCreateCommand` = `container-init.sh`) を自動実行 |
 | `just gen-proto`              | Python 側コード生成 (C# は csproj `<Protobuf>` で build-time 生成)            |
 | `just deploy-mod`             | `dotnet build` → csproj の PostBuild Target で `$(GalePath)/BepInEx/plugins/` |
 | `just decompile`              | ILSpy で Resonite アセンブリを project 形式で `decompiled/` に展開            |
@@ -300,7 +303,7 @@ ______________________________________________________________________
 - ✅ **C# は二層構成**: `ResoniteIO.Core` (pure library) と `ResoniteIO` (BepInEx mod アダプタ)。Mod は Core を `ProjectReference` し、Bridge インターフェイス経由で engine 依存処理を注入する
 - ✅ **C# proto 生成は Core 側に集約**。`<Protobuf GrpcServices="Server" />` は `ResoniteIO.Core.csproj` に置く。Mod 側 csproj は Core への ProjectReference のみで proto 直接参照は持たない
 - ✅ **C# gRPC server**: `Grpc.AspNetCore.Server` (Kestrel + UDS) を Core 側で使用、`WebApplication.CreateSlimBuilder()` で最小構成 (Reflection 等のオマケは含めない)
-- ✅ **UDS socket path**: host と container で **`$HOME/.resonite-io/`** を同一絶対パスで rw bind 共有 (`docker-compose.yml` long-form bind + `${HOST_HOME}` を justfile が `env_var('HOME')` から動的注入。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達)。`$XDG_RUNTIME_DIR/resonite-io/` を当初想定したが pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆うため不採用 (詳細: `memory/reference_pressure_vessel_paths.md`)。socket ファイル名は mod が `resonite-{Process.Id}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは `just container-up` が `~/.resonite-io{,-debug}/` を 0700 で先に作成 (`create_host_path: false` で fail-fast)。
+- ✅ **UDS socket path**: host と container で **`$HOME/.resonite-io/`** を同一絶対パスで rw bind 共有 (`compose.yml` long-form bind + `${HOME}` を host shell から解決。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達)。`$XDG_RUNTIME_DIR/resonite-io/` を当初想定したが pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆うため不採用 (詳細: `memory/reference_pressure_vessel_paths.md`)。socket ファイル名は mod が `resonite-{Process.Id}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは devcontainer の `initializeCommand` が `~/.resonite-io{,-debug}/` を 0700 で先に作成 (`create_host_path: false` で fail-fast)。
 - ✅ **AspNetCore shared framework の同梱**: Kestrel が要求する `Microsoft.AspNetCore.*` は framework reference のため、`CopyLocalLockFileAssemblies=true` でも bin/ に出ない。`ResoniteIO.csproj` の `CopyAspNetCoreSharedFrameworkRuntime` Target で `$(NetCoreRoot)shared/Microsoft.AspNetCore.App/$(BundledNETCoreAppPackageVersion)/*.dll` を TargetDir にコピーし、PostBuild の PluginFiles glob で gale 配下に同梱する (Step 2 Phase 4 で実機検証済み)。`Microsoft.NETCore.App` は Resonite ランタイムが既に持っているため include 不要。
 - ✅ **Resonite 同梱 DLL との version skew 対策**: `mod/src/ResoniteIO/Loading/PluginAssemblyResolver.cs` が plugin folder を優先する resolver を attach し、Resonite 同梱の旧 `Google.Protobuf` より Core 同梱版を解決させる。Plugin.Load では resolver 接続前に Core 型を絶対触らない (触ると旧 Protobuf 解決で `TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'`)。
 - ✅ **Container ↔ Host Resonite debug bridge**: Step 2 で `scripts/host_agent.py` + `scripts/resonite_cli.py` を追加。本番 IPC とは分離した `$HOME/.resonite-io-debug/host-agent.sock` を使う。kill 範囲は `Resonite.exe` / `Renderite.Renderer.exe` の名前ベース pkill のみ (Proton / pressure-vessel / Steam reaper には触らない)。GUI session 必須 (gale は `--no-gui` でもディスプレイを要求するため SSH only セッションでは fail-fast)。

@@ -246,7 +246,7 @@ Resonite は Linux では Steam Proton (Wine) 経由で動く。container ↔ ho
 
 - container 内から `just resonite-start` / `just resonite-stop` を叩くと、host 側 `scripts/host_agent.py` 経由で Steam が起動 / 停止する
 - BepInEx のログは host 側 `gale/BepInEx/LogOutput.log` に出る。container 内から `just log` で tail -F できる
-- UDS path は host から見て `$HOME/.resonite-io/`、container からは bind-mount された同 path。permission は 0700 必須 (`just container-up` で事前作成済み)
+- UDS path は host から見て `$HOME/.resonite-io/`、container からは bind-mount された同 path。permission は 0700 必須 (devcontainer の `initializeCommand` で事前作成済み)
 - mod 配置は `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL + PDB を書き込む形
 
 ### Resonite engine thread / SafeShutdown
