@@ -114,7 +114,8 @@ def _ensure_socket_dir(sock_path: Path) -> None:
     parent = sock_path.parent
     if not parent.is_dir():
         raise StartupError(
-            f"{parent} が見当たりません。`just container-up` で host 側 dir を作成してください。"
+            f"{parent} が見当たりません。devcontainer 起動時 (initializeCommand) に作成されます。"
+            "手動なら `bash .devcontainer/initialize.sh` を実行してください。"
         )
 
 

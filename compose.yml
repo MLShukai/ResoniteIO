@@ -1,7 +1,8 @@
-# Docker Compose 開発環境定義。
+# Docker Compose 開発環境定義 (devcontainer の裏で動く dev サービス)。
 #
-# - `name: resonite-io-${USER}` でプロジェクト・コンテナ・volume を ${USER}
-#   名前空間化し、同一ホストで複数ユーザーが衝突せず共存できるようにする。
+# - `.devcontainer/devcontainer.json` がこの compose を参照する。host 側の
+#   準備 (UDS dir 作成 / uid/gid 注入) は devcontainer の initializeCommand
+#   (`.devcontainer/initialize.sh`) が行う。
 # - host repo を `/workspace` に rw bind する。dev ユーザーの UID/GID を host と
 #   一致させているため、container 内で生成した成果物は host から所有権そのまま見える。
 # - host 側 ${ResonitePath} (Resonite 実行ディレクトリ) を ro bind するのは
@@ -9,35 +10,38 @@
 #   コンテナ内では `environment: ResonitePath: /resonite` で上書きする。
 # - mod の deploy 先は `/workspace/gale` (= host repo 直下の Gale プロファイル)。
 #   コンテナ内では `environment: GalePath: /workspace/gale` で csproj が deploy 先を解決。
-# - ${HOST_UID} / ${HOST_GID} は justfile の container-* レシピが
-#   `id -u` / `id -g` から動的に注入する。.env には書かない。
+# - build-arg の ${HOST_UID} / ${HOST_GID} は `.devcontainer/initialize.sh` が
+#   `id -u` / `id -g` から .env に冪等 upsert する。compose 方式の devcontainer
+#   では updateRemoteUserUID が効かないため、build-arg 経由で UID/GID を揃える。
 # - 本番 gRPC UDS の socket dir は host の `${HOME}/.resonite-io/`。pressure-vessel
 #   は host の `/home/$USER` を sandbox に bind-mount するため Resonite 上の mod
 #   からも同じパスで書き込める。container 側では username が異なる
 #   (host=任意 / container=`dev`) ので `/home/dev/.resonite-io/` に bind する
 #   ことで、3 つの mount namespace (host / pressure-vessel / container) が
 #   同じ inode に到達できるようにする。
-#   host 側ディレクトリは `just container-up` が 0700 で先に作成する
+#   host 側ディレクトリは `.devcontainer/initialize.sh` が 0700 で先に作成する
 #   (Docker 任せだと root 所有で作られ、mod が bind できなくなる)。
-# - `${HOST_HOME}/.resonite-io-debug` も同様に rw bind する。こちらは
+# - `${HOME}/.resonite-io-debug` も同様に rw bind する。こちらは
 #   container 内 `scripts/resonite_cli.py` から host 常駐の `scripts/host_agent.py`
 #   を叩く debug bridge 専用 UDS (`host-agent.sock`)。本番 gRPC IPC とは
 #   ディレクトリ単位で分離し、mod 側の socket 探索が誤って拾わないようにする。
-# - host 側 path は `${HOST_HOME}` を justfile が `echo $HOME` から動的に注入。
-#   .env で固定しない (利用者ごとに異なるため)。
+# - bind source の `${HOME}` は docker compose が host の環境変数から展開する。
 
-name: resonite-io-${USER}
+name: resonite-io
 
 services:
   dev:
     build:
-      context: .
+      # Dockerfile は .devcontainer/ 配下。build context も .devcontainer/ に絞る
+      # (Dockerfile は repo ファイルを COPY しないため context は最小で良い)。
+      # これにより repo root を context にせずに済み、.dockerignore も不要。
+      context: .devcontainer
       dockerfile: Dockerfile
       args:
-        USER_UID: ${HOST_UID}
-        USER_GID: ${HOST_GID}
-    image: resonite-io-dev:${USER}
-    container_name: resonite-io-dev-${USER}
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    image: resonite-io-dev
+    container_name: resonite-io-dev
     hostname: resonite-io-dev
     working_dir: /workspace
     command: ["sleep", "infinity"]
@@ -56,18 +60,18 @@ services:
       # host=任意ユーザー / container=`dev` で username が異なるため、同じ
       # 物理ディレクトリを container 内では `/home/dev/.resonite-io/` に bind
       # することで、双方の `Path.home()` / `$HOME` 解決が同じ inode を指す。
-      # host 側ディレクトリは justfile container-up が事前に 0700 で作成する
+      # host 側ディレクトリは .devcontainer/initialize.sh が事前に 0700 で作成する
       # (Docker 任せだと root 所有で生成される)。create_host_path: false で
       # 未作成時に fail-fast。
       - type: bind
-        source: ${HOST_HOME}/.resonite-io
+        source: ${HOME}/.resonite-io
         target: /home/dev/.resonite-io
         bind:
           create_host_path: false
       # Debug bridge UDS 共有: container 内 scripts/resonite_cli.py が host 常駐の
       # scripts/host_agent.py を叩く debug 専用 socket dir。本番 IPC とは別 dir。
       - type: bind
-        source: ${HOST_HOME}/.resonite-io-debug
+        source: ${HOME}/.resonite-io-debug
         target: /home/dev/.resonite-io-debug
         bind:
           create_host_path: false
@@ -78,8 +82,8 @@ services:
 
 volumes:
   cache-nuget:
-    name: resonite-io-cache-nuget-${USER}
+    name: resonite-io-cache-nuget
   cache-uv:
-    name: resonite-io-cache-uv-${USER}
+    name: resonite-io-cache-uv
   cache-claude:
-    name: resonite-io-cache-claude-${USER}
+    name: resonite-io-cache-claude

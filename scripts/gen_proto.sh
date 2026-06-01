@@ -59,7 +59,7 @@ main() {
     return 0
   fi
 
-  have uv || die "uv is required but not installed. Use the Docker dev environment (just container-up) or install uv on the host."
+  have uv || die "uv is required but not installed. Use the devcontainer dev environment or install uv on the host."
 
   # 出力ディレクトリを毎回 wipe して再生成 (冪等性)。
   log "Cleaning $PYTHON_OUT"

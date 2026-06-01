@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resoio CLI bash completion. Sourced from /etc/bash.bashrc inside the dev
 # container. Idempotent — re-sourcing is safe and a no-op when `resoio` is not
-# yet on PATH (e.g. before `just container-init` runs uv sync) or when the
+# yet on PATH (e.g. before the devcontainer postCreateCommand runs uv sync) or when the
 # argcomplete helper cannot be located.
 #
 # `register-python-argcomplete` ships in the project's uv-managed venv at

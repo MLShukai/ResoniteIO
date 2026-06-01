@@ -1,0 +1,38 @@
+{
+  // resonite-io 開発環境。compose ベース (compose.yml の dev サービスを使う)。
+  "name": "resonite-io",
+  "dockerComposeFile": ["../compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "dev",
+  // compose の command (sleep infinity) を尊重する。
+  "overrideCommand": false,
+  // host 側で UDS dir を 0700 作成し、host uid/gid を .env に upsert する (compose の
+  // build-arg が読む)。compose 方式では updateRemoteUserUID が効かないため必須。
+  "initializeCommand": "bash .devcontainer/initialize.sh",
+  // deps 解決 (dotnet tool restore + uv sync + pre-commit + Claude 設定 symlink)。
+  "postCreateCommand": "bash scripts/container-init.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "nefrob.vscode-just-syntax",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "csharpier.csharpier-vscode",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-containers",
+        "bufbuild.vscode-buf",
+        "drblury.protobuf-vsc",
+        "redhat.vscode-yaml",
+        "editorconfig.editorconfig",
+        "davidanson.vscode-markdownlint",
+        "mikestead.dotenv"
+      ]
+    }
+  }
+}
