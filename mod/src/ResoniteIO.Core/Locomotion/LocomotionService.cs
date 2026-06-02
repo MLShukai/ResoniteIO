@@ -170,8 +170,9 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
 
     private static LocomotionInput MapFromProto(V1.LocomotionCommand proto) =>
         new(
-            MoveX: proto.MoveX,
-            MoveY: proto.MoveY,
+            MoveForward: proto.MoveForward,
+            MoveRight: proto.MoveRight,
+            MoveUp: proto.MoveUp,
             YawRate: proto.YawRate,
             PitchRate: proto.PitchRate,
             Jump: proto.Jump,

@@ -1,12 +1,15 @@
 """E2E: drive Locomotion + record Camera to MP4 in a single asyncio run.
 
-The 20 s scenario walks the desktop control set in 10 phases (forward,
-fast forward via velocity=2.0, right strafe, idle, right yaw, look up,
-jump, crouch, pre-reset forward, post-reset idle) so the resulting MP4
-is a single visual proof that every ``LocomotionCommand`` field reaches
-the engine and that the ``Reset`` RPC clears in-flight state. Camera
-frames are streamed in parallel at 30 fps so the recording is
-synchronised with the command timeline.
+The 20 s scenario walks the desktop control set in 11 phases (forward,
+fast forward via velocity=2.0, right strafe, world-up, idle, right yaw,
+look up, jump, crouch, pre-reset forward, post-reset idle) so the
+resulting MP4 is a single visual proof that every ``LocomotionCommand``
+field reaches the engine and that the ``Reset`` RPC clears in-flight
+state. The ``move_up`` (world-up) phase is wire-only: the default Walk
+locomotion module produces no visible vertical motion, so it confirms
+the field is sent, not that the avatar rises. Camera frames are
+streamed in parallel at 30 fps so the recording is synchronised with
+the command timeline.
 
 The Bridge is a stateful repeater (mod re-injects the last command into
 ``ExternalInput`` every engine tick), so a single command is enough to
@@ -19,13 +22,13 @@ additionally requires a walk-capable active module: the default home
 world already satisfies this, but Teleport / NoClip / NoLocomotion
 worlds need a manual switch within the retry budget.
 
-The Reset phase (16-20 s) drives ``move_y=1.0`` for 3 s, then a parallel
+The Reset phase (16-20 s) drives ``move_forward=1.0`` for 3 s, then a parallel
 ``LocomotionClient.reset()`` from a **second** client fires at 19.0 s
 (the primary client is busy with ``drive()``) while the primary client
 keeps sending ``LocomotionCmd()`` (neutral) for the remaining 1 s.
 Because the Bridge re-injects the last command every tick, the post-
 reset idle phase MUST send neutral commands — sending nothing would let
-the previously-held ``move_y=1.0`` survive at the engine, masking the
+the previously-held ``move_forward=1.0`` survive at the engine, masking the
 visible effect of Reset. Visual confirmation that the avatar stops
 within the 19-20 s window is done by inspecting the recorded MP4.
 
@@ -67,7 +70,7 @@ _MIN_COMMANDS = 300
 # least 1 s on each side: the pre-reset drive (16-19 s) demonstrates
 # state-held forward motion, then Reset clears it; the post-reset idle
 # (19-20 s) sends LocomotionCmd() so the visible effect is the avatar
-# stopping rather than the previous move_y=1.0 surviving in the bridge.
+# stopping rather than the previous move_forward=1.0 surviving in the bridge.
 _RESET_TRIGGER_S = 19.0
 
 # Camera recording mirrors ``camera_stream.py`` (640x480 RGBA8 @ 30 fps).
@@ -114,22 +117,29 @@ async def _wait_for_camera_ready() -> None:
 def _scenario_command(elapsed: float) -> LocomotionCmd:
     """Return the command to send at ``elapsed`` seconds into the scenario.
 
-    Phase boundaries are 0/3/5/7/9/11/13/14/16/19/20 s. Each phase
+    Phase boundaries are 0/3/5/7/8/9/11/13/14/16/19/20 s. Each phase
     exercises a single ``LocomotionCommand`` field so the recorded MP4
-    can be inspected per-segment.
+    can be inspected per-segment (the 7-8 s ``move_up`` phase is
+    wire-only — Walk produces no visible vertical motion).
     """
     if elapsed < 3.0:
-        return LocomotionCmd(move_y=1.0)
+        return LocomotionCmd(move_forward=1.0)
     if elapsed < 5.0:
         # Same forward input as the previous phase; velocity=2.0 must
         # produce a visibly larger travel distance on the recording.
-        return LocomotionCmd(move_y=1.0, velocity=2.0)
+        return LocomotionCmd(move_forward=1.0, velocity=2.0)
     if elapsed < 7.0:
-        return LocomotionCmd(move_x=1.0)
+        return LocomotionCmd(move_right=1.0)
+    if elapsed < 8.0:
+        # View-independent absolute world-up. With the default Walk
+        # locomotion module this produces no visible vertical motion, so
+        # this phase only proves the field reaches the wire / bridge
+        # (no visual assertion is made on it).
+        return LocomotionCmd(move_up=1.0)
     if elapsed < 9.0:
         # Send neutral so the stateful repeater clears the previously held
-        # strafe input on the next tick (sending nothing would let the
-        # repeater hold move_x=1.0 indefinitely).
+        # strafe / vertical input on the next tick (sending nothing would
+        # let the repeater hold the last command indefinitely).
         return LocomotionCmd()
     if elapsed < 11.0:
         return LocomotionCmd(yaw_rate=0.5)
@@ -147,7 +157,7 @@ def _scenario_command(elapsed: float) -> LocomotionCmd:
         # command would suffice with the stateful repeater, but the
         # harness keeps sending at 30 Hz to maintain a stable wire-level
         # observable timeline.
-        return LocomotionCmd(move_y=1.0)
+        return LocomotionCmd(move_forward=1.0)
     # Post-reset idle: explicitly send LocomotionCmd() so any state the
     # bridge held before Reset is overwritten by the next tick too. The
     # visible effect (avatar stops moving inside this 1 s window) is the

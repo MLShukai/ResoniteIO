@@ -45,8 +45,9 @@ public interface ILocomotionBridge
 /// <summary>proto 生成型 <c>V1.LocomotionCommand</c> から独立した Core 層 POCO。</summary>
 /// <remarks>各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c>。</remarks>
 public readonly record struct LocomotionInput(
-    float MoveX,
-    float MoveY,
+    float MoveForward,
+    float MoveRight,
+    float MoveUp,
     float YawRate,
     float PitchRate,
     bool Jump,
@@ -61,8 +62,9 @@ public readonly record struct LocomotionInput(
     /// </summary>
     public static LocomotionInput Neutral { get; } =
         new(
-            MoveX: 0f,
-            MoveY: 0f,
+            MoveForward: 0f,
+            MoveRight: 0f,
+            MoveUp: 0f,
             YawRate: 0f,
             PitchRate: 0f,
             Jump: false,
@@ -82,7 +84,7 @@ public readonly record struct LocomotionInput(
         var state = this;
         if (flags.HasFlag(LocomotionResetFlags.Move))
         {
-            state = state with { MoveX = 0f, MoveY = 0f, Velocity = 1.0f };
+            state = state with { MoveForward = 0f, MoveRight = 0f, MoveUp = 0f, Velocity = 1.0f };
         }
         if (flags.HasFlag(LocomotionResetFlags.Look))
         {

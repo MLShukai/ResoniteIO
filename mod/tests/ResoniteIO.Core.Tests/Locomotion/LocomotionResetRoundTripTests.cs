@@ -136,8 +136,9 @@ public sealed class LocomotionResetRoundTripTests
 
         var sent = new V1.LocomotionCommand
         {
-            MoveX = 0.5f,
-            MoveY = 1.0f,
+            MoveForward = 1.0f,
+            MoveRight = 0.5f,
+            MoveUp = -0.5f,
             YawRate = 0.25f,
             PitchRate = 0.1f,
             Jump = true,
@@ -154,7 +155,8 @@ public sealed class LocomotionResetRoundTripTests
 
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
         var lastSetState = bridge.SetStates[^1];
-        Assert.Equal(sent.MoveY, lastSetState.MoveY);
+        Assert.Equal(sent.MoveForward, lastSetState.MoveForward);
+        Assert.Equal(sent.MoveUp, lastSetState.MoveUp);
 
         var summary = await client.ResetAsync(new V1.LocomotionResetRequest());
 
@@ -169,8 +171,9 @@ public sealed class LocomotionResetRoundTripTests
         Assert.Equal(LocomotionResetFlags.All, bridge.Resets[0]);
 
         var expectedFinal = lastSetState.ApplyReset(bridge.Resets[0]);
-        Assert.Equal(0f, expectedFinal.MoveX);
-        Assert.Equal(0f, expectedFinal.MoveY);
+        Assert.Equal(0f, expectedFinal.MoveForward);
+        Assert.Equal(0f, expectedFinal.MoveRight);
+        Assert.Equal(0f, expectedFinal.MoveUp);
         Assert.Equal(0f, expectedFinal.YawRate);
         Assert.Equal(0f, expectedFinal.PitchRate);
         Assert.False(expectedFinal.Jump);
@@ -189,7 +192,7 @@ public sealed class LocomotionResetRoundTripTests
 
         using var call = client.Drive();
 
-        await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 1.0f });
+        await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveForward = 1.0f });
 
         var summary = await client.ResetAsync(new V1.LocomotionResetRequest { Move = true });
         Assert.True(summary.Move);
@@ -211,7 +214,7 @@ public sealed class LocomotionResetRoundTripTests
     [Fact]
     public async Task Reset_OrderingWithSetState_LatestSetStatePrevails()
     {
-        // Reset(Move) を先に発火し、後続の SetState(MoveY=1) が "後勝ち" で
+        // Reset(Move) を先に発火し、後続の SetState(MoveForward=1) が "後勝ち" で
         // bridge.SetStates の末尾に記録されることを timeline で示す。
         // (Bridge 側は append-only な list なので derived state ではなく
         //  SetStates[^1] と Resets を直接 assert する)。
@@ -224,7 +227,7 @@ public sealed class LocomotionResetRoundTripTests
 
         using (var call = client.Drive())
         {
-            await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 1.0f });
+            await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveForward = 1.0f });
             await call.RequestStream.CompleteAsync();
             _ = await call.ResponseAsync;
         }
@@ -232,7 +235,7 @@ public sealed class LocomotionResetRoundTripTests
         Assert.Single(bridge.Resets);
         Assert.Equal(LocomotionResetFlags.Move, bridge.Resets[0]);
         Assert.Single(bridge.SetStates);
-        Assert.Equal(1.0f, bridge.SetStates[^1].MoveY);
+        Assert.Equal(1.0f, bridge.SetStates[^1].MoveForward);
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
     }
 
@@ -252,7 +255,7 @@ public sealed class LocomotionResetRoundTripTests
         using (var cts = new CancellationTokenSource())
         {
             using var call = client.Drive(cancellationToken: cts.Token);
-            await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 0.5f });
+            await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveForward = 0.5f });
             cts.Cancel();
 
             try
@@ -274,7 +277,7 @@ public sealed class LocomotionResetRoundTripTests
 
         using (var call2 = client.Drive())
         {
-            await call2.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 1.0f });
+            await call2.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveForward = 1.0f });
             await call2.RequestStream.CompleteAsync();
             _ = await call2.ResponseAsync;
         }
@@ -282,7 +285,7 @@ public sealed class LocomotionResetRoundTripTests
         // 2nd Drive の SetState は 1st とは独立した append。Disconnects は
         // Cancelled (1st) + Graceful (2nd) の 2 件、最後は Graceful。
         Assert.Equal(setStatesBeforeReconnect + 1, bridge.SetStates.Count);
-        Assert.Equal(1.0f, bridge.SetStates[^1].MoveY);
+        Assert.Equal(1.0f, bridge.SetStates[^1].MoveForward);
         Assert.Equal(2, bridge.Disconnects.Count);
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
     }

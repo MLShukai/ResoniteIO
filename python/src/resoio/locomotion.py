@@ -55,8 +55,9 @@ class LocomotionCmd:
     pulse) are canon in ``proto/resonite_io/v1/locomotion.proto``.
     """
 
-    move_x: float = 0.0
-    move_y: float = 0.0
+    move_forward: float = 0.0
+    move_right: float = 0.0
+    move_up: float = 0.0
     yaw_rate: float = 0.0
     pitch_rate: float = 0.0
     jump: bool = False
@@ -155,8 +156,9 @@ class LocomotionClient:
         async def _wire() -> AsyncIterator[LocomotionCommand]:
             async for cmd in commands:
                 yield LocomotionCommand(
-                    move_x=cmd.move_x,
-                    move_y=cmd.move_y,
+                    move_forward=cmd.move_forward,
+                    move_right=cmd.move_right,
+                    move_up=cmd.move_up,
                     yaw_rate=cmd.yaw_rate,
                     pitch_rate=cmd.pitch_rate,
                     jump=cmd.jump,
@@ -183,8 +185,9 @@ class LocomotionClient:
         """Reset selected locomotion fields on the bridge.
 
         Each flag clears the corresponding group: ``move`` →
-        ``move_x`` / ``move_y`` / ``velocity`` back to ``(0, 0, 1.0)``,
-        ``look`` → ``yaw_rate`` / ``pitch_rate`` to ``0``, ``crouch``
+        ``move_forward`` / ``move_right`` / ``move_up`` / ``velocity``
+        back to ``(0, 0, 0, 1.0)``, ``look`` → ``yaw_rate`` /
+        ``pitch_rate`` to ``0``, ``crouch``
         → ``0``, ``jump`` → drop an un-consumed pulse. Calling with all
         defaults (every flag ``False``) means "reset everything"; the
         service canonicalises that to all-true because proto3 cannot

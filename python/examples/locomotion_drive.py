@@ -34,15 +34,15 @@ def scenario_command(elapsed: float) -> LocomotionCmd:
     stop the avatar; the dataclass wrapper exists to avoid that pitfall.
     """
     if elapsed < 2.0:
-        return LocomotionCmd(move_y=1.0)
+        return LocomotionCmd(move_forward=1.0)
     if elapsed < 3.0:
-        return LocomotionCmd(move_x=1.0)
+        return LocomotionCmd(move_right=1.0)
     if elapsed < 4.0:
         return LocomotionCmd(yaw_rate=0.5)
     if elapsed < 5.0:
         return LocomotionCmd(jump=True)
     # Final neutral LocomotionCmd() required: bridge holds the last
-    # command; sending nothing would let move_y=1.0 survive on the
+    # command; sending nothing would let move_forward=1.0 survive on the
     # stateful repeater.
     return LocomotionCmd()
 

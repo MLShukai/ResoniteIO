@@ -231,35 +231,42 @@ class LocomotionCommand(betterproto2.Message):
     送れば mod 側 Bridge が engine update tick ごとに再注入する。
     """
 
-    move_x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
+    move_forward: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
     """
-    Strafe: -1=left, +1=right.
-    """
-
-    move_y: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
-    """
-    Forward: -1=backward, +1=forward.
+    -1=back, +1=forward。視点方向 (fly/noclip では向いた方向、walk では水平)。
     """
 
-    yaw_rate: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
+    move_right: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
+    """
+    -1=left, +1=right (strafe)。
+    """
+
+    move_up: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
+    """
+    -1=down, +1=up。**ワールド絶対**上下 (視点 pitch と独立)。
+    SmoothLocomotion の Move に効き fly/noclip で上下移動、歩行系では engine が
+    自動的に無視。proto3 wire default 0 = 中立 (velocity と違い 0 が単位元)。
+    """
+
+    yaw_rate: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
     """
     Yaw angular rate, positive=right.
     """
 
-    pitch_rate: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
+    pitch_rate: "float" = betterproto2.field(5, betterproto2.TYPE_FLOAT)
     """
     Pitch angular rate, positive=up. Bridge は符号反転せず engine にそのまま
     渡す (decompile からは反転が必要に見えるが実機検証で逆挙動を確認、
     feedback_locomotion_external_input.md §2 参照)。
     """
 
-    jump: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    jump: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
     """
     Space 相当の **pulse**。Bridge は受信した次 1 engine tick だけ apply し
     latch を下げる (consume-once)。client 側で false に戻す責務は無い。
     """
 
-    velocity: "float" = betterproto2.field(6, betterproto2.TYPE_FLOAT)
+    velocity: "float" = betterproto2.field(7, betterproto2.TYPE_FLOAT)
     """
     Move に掛けるスカラー倍率。**単位元は 1.0** (通常歩行)。Python
     `LocomotionCmd.velocity` は default=1.0 を保証し、Bridge は proto.velocity
@@ -271,12 +278,12 @@ class LocomotionCommand(betterproto2.Message):
     回避済み)。**ここが velocity セマンティクスの正典。**
     """
 
-    crouch: "float" = betterproto2.field(7, betterproto2.TYPE_FLOAT)
+    crouch: "float" = betterproto2.field(8, betterproto2.TYPE_FLOAT)
     """
     Crouch 強度 [0..1]。
     """
 
-    unix_nanos: "int" = betterproto2.field(8, betterproto2.TYPE_INT64)
+    unix_nanos: "int" = betterproto2.field(9, betterproto2.TYPE_INT64)
     """
     クライアント送信時刻 (UTC ナノ秒)。受信側 latency 計測用、optional (0 で skip)。
     """
@@ -326,7 +333,7 @@ class LocomotionResetRequest(betterproto2.Message):
 
     move: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
     """
-    move_x / move_y / velocity を中立 (0, 0, 1.0) へ。
+    move_forward / move_right / move_up / velocity を中立 (0, 0, 0, 1.0) へ。
     """
 
     look: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
