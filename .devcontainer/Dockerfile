@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libatomic1 \
         libicu72 \
         netcat-openbsd \
+        openssh-client \
         ffmpeg \
         python3 \
         shellcheck \
