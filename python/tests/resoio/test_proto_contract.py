@@ -35,6 +35,14 @@ from resoio._generated.resonite_io.v1 import (
     CameraFrame,
     CameraFrameFormat,
     CameraStreamRequest,
+    ContextMenuCloseRequest,
+    ContextMenuGetStateRequest,
+    ContextMenuHand,
+    ContextMenuHighlightRequest,
+    ContextMenuInvokeRequest,
+    ContextMenuItem,
+    ContextMenuOpenRequest,
+    ContextMenuState,
     DisplayApplyResponse,
     DisplayConfig,
     DisplayGetRequest,
@@ -155,6 +163,39 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     },
     DisplayGetRequest: {},
     DisplayApplyResponse: {},
+    # ContextMenu
+    ContextMenuItem: {
+        "index": 1,
+        "label": 2,
+        "enabled": 3,
+        "has_icon": 4,
+        "color_r": 5,
+        "color_g": 6,
+        "color_b": 7,
+        "color_a": 8,
+    },
+    ContextMenuState: {
+        "is_open": 1,
+        "items": 2,
+        "highlighted_index": 3,
+    },
+    ContextMenuOpenRequest: {
+        "hand": 1,
+    },
+    ContextMenuCloseRequest: {
+        "hand": 1,
+    },
+    ContextMenuGetStateRequest: {
+        "hand": 1,
+    },
+    ContextMenuHighlightRequest: {
+        "hand": 1,
+        "index": 2,
+    },
+    ContextMenuInvokeRequest: {
+        "hand": 1,
+        "index": 2,
+    },
     # Session
     PingRequest: {
         "message": 1,
@@ -187,6 +228,12 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
     CameraFrameFormat: {
         "UNSPECIFIED": 0,
         "RGBA8": 1,
+    },
+    ContextMenuHand: {
+        "UNSPECIFIED": 0,
+        "PRIMARY": 1,
+        "LEFT": 2,
+        "RIGHT": 3,
     },
 }
 

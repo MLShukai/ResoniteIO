@@ -1,5 +1,6 @@
 using System.Reflection;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -62,6 +63,12 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Camera.CameraService",
             "ResoniteIO.Core.Camera.ICameraBridge",
             "ResoniteIO.Core.Camera.PushedFrameCameraBridge",
+            "ResoniteIO.Core.ContextMenu.ContextMenuHandSelector",
+            "ResoniteIO.Core.ContextMenu.ContextMenuItemSnapshot",
+            "ResoniteIO.Core.ContextMenu.ContextMenuNotReadyException",
+            "ResoniteIO.Core.ContextMenu.ContextMenuService",
+            "ResoniteIO.Core.ContextMenu.ContextMenuStateSnapshot",
+            "ResoniteIO.Core.ContextMenu.IContextMenuBridge",
             "ResoniteIO.Core.Display.DisplayConfigSnapshot",
             "ResoniteIO.Core.Display.DisplayNotReadyException",
             "ResoniteIO.Core.Display.DisplayService",
@@ -121,6 +128,17 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.CameraFrameFormat",
             "ResoniteIO.V1.CameraReflection",
             "ResoniteIO.V1.CameraStreamRequest",
+            "ResoniteIO.V1.ContextMenu",
+            "ResoniteIO.V1.ContextMenu+ContextMenuBase",
+            "ResoniteIO.V1.ContextMenuCloseRequest",
+            "ResoniteIO.V1.ContextMenuGetStateRequest",
+            "ResoniteIO.V1.ContextMenuHand",
+            "ResoniteIO.V1.ContextMenuHighlightRequest",
+            "ResoniteIO.V1.ContextMenuInvokeRequest",
+            "ResoniteIO.V1.ContextMenuItem",
+            "ResoniteIO.V1.ContextMenuOpenRequest",
+            "ResoniteIO.V1.ContextMenuReflection",
+            "ResoniteIO.V1.ContextMenuState",
             "ResoniteIO.V1.Display",
             "ResoniteIO.V1.Display+DisplayBase",
             "ResoniteIO.V1.DisplayApplyResponse",
@@ -164,6 +182,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(SpeakerNotReadyException))]
     [InlineData(typeof(MicrophoneNotReadyException))]
     [InlineData(typeof(DisplayNotReadyException))]
+    [InlineData(typeof(ContextMenuNotReadyException))]
     [Trait("Category", "ApiContract")]
     public void PublicNotReadyException_DerivesDirectlyFromException(Type exceptionType)
     {
@@ -275,6 +294,29 @@ public sealed class ApiContractTests
             typeof(IDisplayBridge),
             ("ApplyAsync", new[] { typeof(DisplayConfigSnapshot), typeof(CancellationToken) }),
             ("GetAsync", new[] { typeof(CancellationToken) })
+        );
+    }
+
+    /// <summary>
+    /// <see cref="IContextMenuBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IContextMenuBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IContextMenuBridge),
+            ("OpenAsync", new[] { typeof(ContextMenuHandSelector), typeof(CancellationToken) }),
+            ("CloseAsync", new[] { typeof(ContextMenuHandSelector), typeof(CancellationToken) }),
+            ("GetStateAsync", new[] { typeof(ContextMenuHandSelector), typeof(CancellationToken) }),
+            (
+                "HighlightAsync",
+                new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
+            ),
+            (
+                "InvokeAsync",
+                new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
+            )
         );
     }
 

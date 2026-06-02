@@ -3,6 +3,11 @@
 from importlib.metadata import version as _version
 
 from resoio.camera import CameraClient, Frame
+from resoio.context_menu import (
+    ContextMenuClient,
+    ContextMenuItem,
+    ContextMenuState,
+)
 from resoio.display import DisplayClient, DisplayInfo
 from resoio.locomotion import (
     DriveSummary,
@@ -37,6 +42,9 @@ __all__ = [
     "AmbiguousSocketError",
     "AudioChunk",
     "CameraClient",
+    "ContextMenuClient",
+    "ContextMenuItem",
+    "ContextMenuState",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",

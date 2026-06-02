@@ -1,0 +1,95 @@
+// ContextMenu service: Resonite の `T` キーで開くリング状 (radial) コンテキスト
+// メニューを engine 経由で操作する modality。AI エージェントから「開く / 閉じる」
+// 「開いているメニューの項目を列挙する」「項目をハイライト / 実行する」を行う。
+//
+// メニューを開く操作は、空のリングを開くだけの public API (`ContextMenu.OpenMenu`)
+// ではなく、標準項目 (移動 / ツール / Undo・Redo / Save 等) を生成する private な
+// `InteractionHandler.OpenContextMenu(MenuOptions.Default)` を engine 側で reflection
+// 起動して再現する。列挙 / ハイライト / 実行 / 閉じるは public API で行う。
+//
+// 「ハイライト (Highlight)」と「実行 (Invoke)」は別 RPC に分ける。Highlight は項目を
+// 選択状態にするのみ (副作用なし)、Invoke は項目のボタンアクションを実際に実行する
+// (サブメニューへの遷移 / ツール切替等が起きうる)。Highlight / Invoke は対象を
+// `index` (列挙順 = ArcLayout 子順) で指定する。
+//
+// Display と異なり engine への dispatch は同期マーシャル (`RunSynchronously` +
+// `TaskCompletionSource`) で行うため、各 RPC は操作適用後の `ContextMenuState` を
+// engine thread 上で読み取って返す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// 操作対象の InteractionHandler (手) を指定する。
+enum ContextMenuHand {
+  // 未指定。サーバは desktop の primary hand (`InputInterface.PrimaryHand`) として扱う。
+  CONTEXT_MENU_HAND_UNSPECIFIED = 0;
+  // primary hand 明示 (UNSPECIFIED と同じ)。
+  CONTEXT_MENU_HAND_PRIMARY = 1;
+  CONTEXT_MENU_HAND_LEFT = 2;
+  CONTEXT_MENU_HAND_RIGHT = 3;
+}
+
+// radial メニュー上の 1 項目。
+message ContextMenuItem {
+  // 列挙順 (ArcLayout 子順)。Highlight / Invoke はこの index を指定する。
+  int32 index = 1;
+  // 項目ラベル (toggle 項目等で空文字のことがある)。
+  string label = 2;
+  // 項目のボタンが有効か (`Button.Enabled`)。
+  bool enabled = 3;
+  // アイコン (sprite) を持つか (`ContextMenuItem.HasSprite`)。
+  bool has_icon = 4;
+  // 項目色 (RGBA、各成分 0.0〜1.0)。
+  float color_r = 5;
+  float color_g = 6;
+  float color_b = 7;
+  float color_a = 8;
+}
+
+// 現在のコンテキストメニューの状態スナップショット。
+message ContextMenuState {
+  // メニューが開いているか (`InteractionHandler.IsContextMenuOpen`)。
+  bool is_open = 1;
+  // 開いている場合の項目一覧 (閉じているときは空)。
+  repeated ContextMenuItem items = 2;
+  // ハイライト中の項目 index。無ければ -1。
+  int32 highlighted_index = 3;
+}
+
+message ContextMenuOpenRequest {
+  ContextMenuHand hand = 1;
+}
+
+message ContextMenuCloseRequest {
+  ContextMenuHand hand = 1;
+}
+
+message ContextMenuGetStateRequest {
+  ContextMenuHand hand = 1;
+}
+
+message ContextMenuHighlightRequest {
+  ContextMenuHand hand = 1;
+  int32 index = 2;
+}
+
+message ContextMenuInvokeRequest {
+  ContextMenuHand hand = 1;
+  int32 index = 2;
+}
+
+service ContextMenu {
+  // 標準項目入りのコンテキストメニューを開く。開き終える (Opened) まで待ってから
+  // 状態を返す。既に開いている場合は no-op で現状態を返す。
+  rpc Open(ContextMenuOpenRequest) returns (ContextMenuState);
+  // コンテキストメニューを閉じる。
+  rpc Close(ContextMenuCloseRequest) returns (ContextMenuState);
+  // 現在の状態 (開閉 / 項目一覧 / ハイライト) を取得する。
+  rpc GetState(ContextMenuGetStateRequest) returns (ContextMenuState);
+  // 指定 index の項目をハイライト (選択状態に) する。実行はしない。
+  rpc Highlight(ContextMenuHighlightRequest) returns (ContextMenuState);
+  // 指定 index の項目のアクションを実行する。
+  rpc Invoke(ContextMenuInvokeRequest) returns (ContextMenuState);
+}
