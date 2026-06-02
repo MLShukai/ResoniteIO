@@ -45,6 +45,9 @@ _EXPECTED_PUBLIC_NAMES = (
     "AmbiguousSocketError",
     "AudioChunk",
     "CameraClient",
+    "ContextMenuClient",
+    "ContextMenuItem",
+    "ContextMenuState",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
@@ -115,6 +118,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "MicrophoneClient",
         "LocomotionClient",
         "DisplayClient",
+        "ContextMenuClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):

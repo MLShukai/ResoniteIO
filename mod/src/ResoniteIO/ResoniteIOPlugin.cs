@@ -9,6 +9,7 @@ using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
@@ -50,6 +51,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineLocomotionBridge? _locomotionBridge;
     private FrooxEngineMicrophoneBridge? _microphoneBridge;
     private FrooxEngineSpeakerBridge? _speakerBridge;
+    private FrooxEngineContextMenuBridge? _contextMenuBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -108,6 +110,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _speakerBridge = new FrooxEngineSpeakerBridge(Engine.Current, _logSink);
 
+            _contextMenuBridge = new FrooxEngineContextMenuBridge(Engine.Current, _logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -116,7 +120,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _displayBridge,
                 _locomotionBridge,
                 _speakerBridge,
-                _microphoneBridge
+                _microphoneBridge,
+                contextMenuBridge: _contextMenuBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -168,6 +173,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
         SafeDispose(_speakerBridge, nameof(_speakerBridge));
         _speakerBridge = null;
+
+        // ContextMenuBridge は engine 状態を保持せず IDisposable でもないため
+        // (reflection MethodInfo は static cache)、参照 null 化のみで足りる。
+        _contextMenuBridge = null;
 
         SafeDispose(_sessionBridge, nameof(_sessionBridge));
         _sessionBridge = null;
