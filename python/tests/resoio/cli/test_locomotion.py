@@ -40,34 +40,77 @@ def _apply(state: _DriveState, key: str, look_rate: float = 1.0) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Move toggles (w/s, a/d)
+# Move toggles (w/s forward, a/d right) — direction-named axes
 # ---------------------------------------------------------------------------
 
 
-def test_w_toggles_move_y_forward_and_back_to_neutral():
+def test_w_toggles_forward_and_back_to_neutral():
     state = _DriveState()
     assert _apply(state, "w") is False
-    assert state.move_y == 1.0
+    assert state.forward == 1.0
     assert _apply(state, "w") is False
-    assert state.move_y == 0.0
+    assert state.forward == 0.0
 
 
 def test_s_cancels_held_w_then_flips_negative():
-    state = _DriveState(move_y=1.0)
+    state = _DriveState(forward=1.0)
     assert _apply(state, "s") is False
-    assert state.move_y == 0.0  # exclusive cancel
+    assert state.forward == 0.0  # exclusive cancel
     assert _apply(state, "s") is False
-    assert state.move_y == -1.0
+    assert state.forward == -1.0
 
 
-def test_a_and_d_are_exclusive_on_move_x():
+def test_a_and_d_are_exclusive_on_right():
+    # d -> right=+1, a -> right=-1; pressing the opposite cancels to 0.
     state = _DriveState()
     _apply(state, "d")
-    assert state.move_x == 1.0
+    assert state.right == 1.0
     _apply(state, "a")
-    assert state.move_x == 0.0  # d cancelled by a
+    assert state.right == 0.0  # d cancelled by a
     _apply(state, "a")
-    assert state.move_x == -1.0
+    assert state.right == -1.0
+
+
+# ---------------------------------------------------------------------------
+# Vertical move toggles (r up, f down) — view-independent absolute world up/down
+# ---------------------------------------------------------------------------
+
+
+def test_r_toggles_up_and_back_to_neutral():
+    state = _DriveState()
+    assert _apply(state, "r") is False
+    assert state.up == 1.0
+    assert _apply(state, "r") is False
+    assert state.up == 0.0
+
+
+def test_f_cancels_held_r_then_flips_negative():
+    # r -> up=+1; f while up held cancels to 0; second f flips to down=-1.
+    # Mirrors the w/s exclusive pair semantics on the vertical axis.
+    state = _DriveState(up=1.0)
+    assert _apply(state, "f") is False
+    assert state.up == 0.0  # exclusive cancel
+    assert _apply(state, "f") is False
+    assert state.up == -1.0
+
+
+def test_r_cancels_held_f_then_flips_positive():
+    # Symmetry of the f/r pair: f -> down=-1, r cancels to 0, second r flips up.
+    state = _DriveState(up=-1.0)
+    assert _apply(state, "r") is False
+    assert state.up == 0.0
+    assert _apply(state, "r") is False
+    assert state.up == 1.0
+
+
+def test_up_axis_is_independent_of_forward_and_right():
+    # The vertical axis is a separate world-absolute axis — toggling it must
+    # not disturb the horizontal move axes.
+    state = _DriveState(forward=1.0, right=-1.0)
+    _apply(state, "r")
+    assert state.up == 1.0
+    assert state.forward == 1.0
+    assert state.right == -1.0
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +118,7 @@ def test_a_and_d_are_exclusive_on_move_x():
 # ---------------------------------------------------------------------------
 
 
-def test_up_toggles_pitch_at_look_rate():
+def test_up_arrow_toggles_pitch_at_look_rate():
     state = _DriveState()
     _apply(state, "UP", 0.5)
     assert state.pitch_rate == 0.5
@@ -83,7 +126,7 @@ def test_up_toggles_pitch_at_look_rate():
     assert state.pitch_rate == 0.0
 
 
-def test_down_cancels_up_then_flips_negative():
+def test_down_arrow_cancels_up_then_flips_negative():
     state = _DriveState(pitch_rate=0.5)
     _apply(state, "DOWN", 0.5)
     assert state.pitch_rate == 0.0
@@ -91,7 +134,7 @@ def test_down_cancels_up_then_flips_negative():
     assert state.pitch_rate == -0.5
 
 
-def test_left_and_right_are_exclusive_on_yaw():
+def test_left_and_right_arrows_are_exclusive_on_yaw():
     state = _DriveState()
     _apply(state, "RIGHT", 0.5)
     assert state.yaw_rate == 0.5
@@ -121,6 +164,21 @@ def test_to_cmd_velocity_reflects_sprint_state():
     assert state.to_cmd(2.0).velocity == 2.0
     # Custom sprint magnitude propagates through to the cmd.
     assert state.to_cmd(3.5).velocity == 3.5
+
+
+# ---------------------------------------------------------------------------
+# to_cmd carries all three direction-named move axes
+# ---------------------------------------------------------------------------
+
+
+def test_to_cmd_carries_forward_right_and_up():
+    # to_cmd must map the held vertical axis onto LocomotionCmd.move_up, and
+    # the horizontal axes onto move_forward / move_right, with no cross-talk.
+    state = _DriveState(forward=1.0, right=-1.0, up=1.0)
+    cmd = state.to_cmd(2.0)
+    assert cmd.move_forward == 1.0
+    assert cmd.move_right == -1.0
+    assert cmd.move_up == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -175,8 +233,9 @@ def test_to_cmd_is_pure_read_no_mutation():
     etc.) cannot accidentally swallow a jump pulse.
     """
     state = _DriveState(
-        move_y=1.0,
-        move_x=-1.0,
+        forward=1.0,
+        right=-1.0,
+        up=1.0,
         yaw_rate=0.5,
         pitch_rate=-0.5,
         sprint_on=True,
@@ -184,8 +243,9 @@ def test_to_cmd_is_pure_read_no_mutation():
         jump_pending=True,
     )
     before = _DriveState(
-        move_y=state.move_y,
-        move_x=state.move_x,
+        forward=state.forward,
+        right=state.right,
+        up=state.up,
         yaw_rate=state.yaw_rate,
         pitch_rate=state.pitch_rate,
         sprint_on=state.sprint_on,
@@ -200,8 +260,9 @@ def test_to_cmd_consume_jump_drains_pending_latch_only():
     """``consume_jump=True`` drains ``jump_pending`` (the single drain site
     used by the wire producer) and leaves every other field untouched."""
     state = _DriveState(
-        move_y=1.0,
-        move_x=-1.0,
+        forward=1.0,
+        right=-1.0,
+        up=1.0,
         yaw_rate=0.5,
         pitch_rate=-0.5,
         sprint_on=True,
@@ -213,8 +274,9 @@ def test_to_cmd_consume_jump_drains_pending_latch_only():
     assert first.jump is True
     assert state.jump_pending is False
     # Non-jump axes survive the drain unchanged.
-    assert state.move_y == 1.0
-    assert state.move_x == -1.0
+    assert state.forward == 1.0
+    assert state.right == -1.0
+    assert state.up == 1.0
     assert state.sprint_on is True
     assert state.crouch_on is True
 
@@ -231,8 +293,9 @@ def test_to_cmd_consume_jump_drains_pending_latch_only():
 
 def test_x_resets_all_axes_to_neutral():
     state = _DriveState(
-        move_y=1.0,
-        move_x=-1.0,
+        forward=1.0,
+        right=-1.0,
+        up=1.0,
         yaw_rate=0.5,
         pitch_rate=-0.5,
         sprint_on=True,
@@ -244,9 +307,19 @@ def test_x_resets_all_axes_to_neutral():
 
 
 def test_zero_resets_all_axes_to_neutral():
-    state = _DriveState(move_y=1.0, sprint_on=True)
+    state = _DriveState(forward=1.0, up=1.0, sprint_on=True)
     _apply(state, "0")
     assert state == _DriveState()
+
+
+def test_reset_zeroes_all_three_move_axes():
+    # reset() is the x/0 stop-all; the vertical axis must be cleared too,
+    # otherwise a held up/down would survive a "stop all".
+    state = _DriveState(forward=1.0, right=-1.0, up=1.0)
+    state.reset()
+    assert state.forward == 0.0
+    assert state.right == 0.0
+    assert state.up == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +328,10 @@ def test_zero_resets_all_axes_to_neutral():
 
 
 def test_q_returns_true_to_signal_exit():
-    state = _DriveState(move_y=1.0)
+    state = _DriveState(forward=1.0)
     assert _apply(state, "q") is True
     # State is not touched by the exit key — caller handles teardown.
-    assert state.move_y == 1.0
+    assert state.forward == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +345,15 @@ def test_state_changing_key_sets_wake_signal():
     state = _DriveState()
     event = asyncio.Event()
     _apply_key(state, "w", 1.0, event)
+    assert event.is_set()
+
+
+def test_vertical_key_sets_wake_signal():
+    """``r`` mutates state (sets the vertical axis) and must wake the producer
+    so the new move_up reaches the wire."""
+    state = _DriveState()
+    event = asyncio.Event()
+    _apply_key(state, "r", 1.0, event)
     assert event.is_set()
 
 
@@ -302,10 +384,11 @@ def test_quit_key_does_not_set_wake_signal():
 
 
 def test_unrecognised_keys_are_noop():
-    state = _DriveState(move_y=1.0)
+    state = _DriveState(forward=1.0)
     before = _DriveState(
-        move_y=state.move_y,
-        move_x=state.move_x,
+        forward=state.forward,
+        right=state.right,
+        up=state.up,
         yaw_rate=state.yaw_rate,
         pitch_rate=state.pitch_rate,
         sprint_on=state.sprint_on,
@@ -326,6 +409,8 @@ def test_parser_passes_through_ascii_printables():
     parser = _KeyParser()
     assert parser.feed(ord("w")) == ["w"]
     assert parser.feed(ord("a")) == ["a"]
+    assert parser.feed(ord("r")) == ["r"]
+    assert parser.feed(ord("f")) == ["f"]
     assert parser.feed(ord(" ")) == [" "]
 
 
@@ -386,7 +471,7 @@ def test_parser_handles_back_to_back_inputs():
 
 
 def test_format_status_contains_key_field_labels():
-    state = _DriveState(move_y=1.0, sprint_on=True)
+    state = _DriveState(forward=1.0, sprint_on=True)
     line = _format_status(state, 2.0)
     assert "move" in line
     assert "look" in line
@@ -597,6 +682,11 @@ async def test_drive_round_trip_via_cli(
     + an in-process server. ``os.pipe()`` feeds the canned key sequence so
     no real tty is needed; ``_raw_tty`` no-ops on the pipe fd, which is
     the same shape SSH-piped invocations end up using.
+
+    The ``r`` keystroke is included so the new vertical axis is exercised
+    end-to-end: a fake-server-received command must carry
+    ``move_up == 1.0``, proving the axis traverses _DriveState -> to_cmd
+    -> LocomotionCmd -> wire intact.
     """
     socket_path = tmp_path / "rio-loco.sock"
     fake = _RecordingLocomotion()
@@ -616,14 +706,15 @@ async def test_drive_round_trip_via_cli(
             # arrive after the producer has had a chance to emit the
             # earlier state changes, otherwise the stop event trips
             # before they reach the wire):
-            #   w           : forward                       -> move_y = +1
+            #   w           : forward                       -> move_forward = +1
             #   t           : sprint on                     -> velocity = 2.0
             #   space       : jump pulse (one tick only)    -> jump = True once
+            #   r           : world-up                      -> move_up = +1
             #   ESC [ A     : look up                       -> pitch_rate = +1.0
             #   x           : stop all                      -> neutral
             #   q           : exit, drive RPC summary       -> received_count > 0
             async def feed_keys() -> None:
-                key_chunks = [b"w", b"t", b" ", b"\x1b[A", b"x", b"q"]
+                key_chunks = [b"w", b"t", b" ", b"r", b"\x1b[A", b"x", b"q"]
                 # Give the drive loop time to start and emit the
                 # initial neutral command before the first keypress.
                 await asyncio.sleep(0.05)
@@ -668,32 +759,37 @@ async def test_drive_round_trip_via_cli(
         server.close()
         await server.wait_closed()
 
-    # At least the initial neutral + the four state-changing keys produced
+    # At least the initial neutral + the five state-changing keys produced
     # ticks before `q` was processed. Exact count is loop-pacing dependent.
     assert len(fake.received) >= 4, (
         f"expected several ticks before exit, got {len(fake.received)}"
     )
 
     # Forward toggle landed at some tick.
-    assert any(c.move_y == 1.0 for c in fake.received), (
-        "no command had move_y=1.0 after `w` keypress"
+    assert any(c.move_forward == 1.0 for c in fake.received), (
+        "no command had move_forward=1.0 after `w` keypress"
     )
-    # Sprint toggle: at some point move_y=+1 with velocity=2.0.
-    assert any(c.move_y == 1.0 and c.velocity == 2.0 for c in fake.received), (
+    # Sprint toggle: at some point move_forward=+1 with velocity=2.0.
+    assert any(c.move_forward == 1.0 and c.velocity == 2.0 for c in fake.received), (
         "no command had velocity=2.0 after `t` keypress"
     )
     # Jump pulse: exactly one tick carries jump=True.
     jump_count = sum(1 for c in fake.received if c.jump)
     assert jump_count == 1, f"jump pulse should fire exactly once, got {jump_count}"
+    # World-up: at some point move_up=+1.0 (the new view-independent axis).
+    assert any(c.move_up == 1.0 for c in fake.received), (
+        "no command had move_up=1.0 after `r` keypress"
+    )
     # Look up: at some point pitch_rate=+1.0.
     assert any(c.pitch_rate == 1.0 for c in fake.received), (
         "no command had pitch_rate=+1.0 after UP arrow keypress"
     )
     # Last command was emitted after `x` (stop-all) and before `q` (exit),
-    # so it must be neutral.
+    # so it must be neutral — including the vertical axis.
     last = fake.received[-1]
-    assert last.move_x == 0.0
-    assert last.move_y == 0.0
+    assert last.move_forward == 0.0
+    assert last.move_right == 0.0
+    assert last.move_up == 0.0
     assert last.yaw_rate == 0.0
     assert last.pitch_rate == 0.0
     assert last.jump is False
@@ -812,15 +908,17 @@ async def test_default_path_sends_neutral_probe_on_wire(
         f"main drive stream; got {fake.drive_call_count} Drive RPCs"
     )
     # The neutral probe is the first command on the wire: all motion
-    # axes at 0 and jump cleared. ``velocity`` rides ``LocomotionCmd``'s
-    # 1.0 default (the wrapper documents why — bridge multiplies Move
-    # by velocity, so 0 would freeze the avatar on the next real cmd).
-    # That default is part of the public contract, not noise — pin it
-    # explicitly so a default-flip would surface here.
+    # axes at 0 (including the new vertical move_up) and jump cleared.
+    # ``velocity`` rides ``LocomotionCmd``'s 1.0 default (the wrapper
+    # documents why — bridge multiplies Move by velocity, so 0 would
+    # freeze the avatar on the next real cmd). That default is part of
+    # the public contract, not noise — pin it explicitly so a
+    # default-flip would surface here.
     assert len(fake.received) >= 1
     probe = fake.received[0]
-    assert probe.move_x == 0.0
-    assert probe.move_y == 0.0
+    assert probe.move_forward == 0.0
+    assert probe.move_right == 0.0
+    assert probe.move_up == 0.0
     assert probe.yaw_rate == 0.0
     assert probe.pitch_rate == 0.0
     assert probe.velocity == 1.0
@@ -846,7 +944,7 @@ async def test_wait_for_bridge_ready_returns_on_success(
         )
         # One neutral probe was sent and recorded.
         assert len(fake.received) == 1
-        assert fake.received[0].move_y == 0.0
+        assert fake.received[0].move_forward == 0.0
     finally:
         server.close()
         await server.wait_closed()

@@ -41,8 +41,9 @@ class _DriveState:
     :attr:`jump_pending`.
     """
 
-    move_y: float = 0.0
-    move_x: float = 0.0
+    forward: float = 0.0
+    right: float = 0.0
+    up: float = 0.0
     yaw_rate: float = 0.0
     pitch_rate: float = 0.0
     sprint_on: bool = False
@@ -68,8 +69,9 @@ class _DriveState:
         in exactly one place.
         """
         cmd = LocomotionCmd(
-            move_x=self.move_x,
-            move_y=self.move_y,
+            move_forward=self.forward,
+            move_right=self.right,
+            move_up=self.up,
             yaw_rate=self.yaw_rate,
             pitch_rate=self.pitch_rate,
             jump=self.jump_pending,
@@ -82,8 +84,9 @@ class _DriveState:
 
     def reset(self) -> None:
         """Reset every axis to neutral (the ``x`` / ``0`` stop-all key)."""
-        self.move_y = 0.0
-        self.move_x = 0.0
+        self.forward = 0.0
+        self.right = 0.0
+        self.up = 0.0
         self.yaw_rate = 0.0
         self.pitch_rate = 0.0
         self.sprint_on = False
@@ -157,13 +160,17 @@ def _apply_key(
     """
     match key:
         case "w":
-            state.move_y = 1.0 if state.move_y == 0.0 else 0.0
+            state.forward = 1.0 if state.forward == 0.0 else 0.0
         case "s":
-            state.move_y = -1.0 if state.move_y == 0.0 else 0.0
+            state.forward = -1.0 if state.forward == 0.0 else 0.0
         case "a":
-            state.move_x = -1.0 if state.move_x == 0.0 else 0.0
+            state.right = -1.0 if state.right == 0.0 else 0.0
         case "d":
-            state.move_x = 1.0 if state.move_x == 0.0 else 0.0
+            state.right = 1.0 if state.right == 0.0 else 0.0
+        case "r":
+            state.up = 1.0 if state.up == 0.0 else 0.0
+        case "f":
+            state.up = -1.0 if state.up == 0.0 else 0.0
         case "LEFT":
             state.yaw_rate = -look_rate if state.yaw_rate == 0.0 else 0.0
         case "RIGHT":
@@ -201,7 +208,7 @@ def _format_status(state: _DriveState, sprint_velocity: float) -> str:
     velocity = sprint_velocity if state.sprint_on else 1.0
     crouch_state = "on" if state.crouch_on else "off"
     return (
-        f"move=({state.move_x:+.1f},{state.move_y:+.1f}) "
+        f"move=(fwd{state.forward:+.1f},right{state.right:+.1f},up{state.up:+.1f}) "
         f"look=({state.yaw_rate:+.1f},{state.pitch_rate:+.1f}) "
         f"velocity={velocity:.2f} crouch={crouch_state}"
     )
@@ -248,8 +255,9 @@ def register(
         help="Interactive WASD drive over the Resonite IO UDS.",
         description=(
             "Open a Locomotion stream and translate keyboard input "
-            "(WASD + arrows + Space/t/c/x/q) into LocomotionCommand "
-            "messages. The mod-side bridge is a stateful repeater, so "
+            "(WASD + r/f + arrows + Space/t/c/x/q) into LocomotionCommand "
+            "messages. r / f は上昇 / 下降 (fly/noclip 中のみ有効)。 "
+            "The mod-side bridge is a stateful repeater, so "
             "this CLI emits exactly one command per state-altering key "
             "press — no fixed tick rate is required."
         ),
@@ -369,6 +377,7 @@ def _print_help(stream: TextIO, *, sprint: float, look_rate: float) -> None:
         "resoio locomotion drive — interactive controls\n"
         "  w / s : forward / back toggle (mutually exclusive)\n"
         "  a / d : strafe left / right toggle (mutually exclusive)\n"
+        "  r / f : 上昇 / 下降 (fly/noclip 中のみ有効)\n"
         "  LEFT/RIGHT arrows : yaw left / right toggle\n"
         "  UP/DOWN arrows    : look up / down toggle\n"
         "  Space : jump pulse (one tick)\n"

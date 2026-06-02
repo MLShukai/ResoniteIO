@@ -113,14 +113,15 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     },
     # Locomotion
     LocomotionCommand: {
-        "move_x": 1,
-        "move_y": 2,
-        "yaw_rate": 3,
-        "pitch_rate": 4,
-        "jump": 5,
-        "velocity": 6,
-        "crouch": 7,
-        "unix_nanos": 8,
+        "move_forward": 1,
+        "move_right": 2,
+        "move_up": 3,
+        "yaw_rate": 4,
+        "pitch_rate": 5,
+        "jump": 6,
+        "velocity": 7,
+        "crouch": 8,
+        "unix_nanos": 9,
     },
     LocomotionDriveSummary: {
         "received_count": 1,

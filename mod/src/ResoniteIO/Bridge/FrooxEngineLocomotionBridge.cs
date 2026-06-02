@@ -343,10 +343,21 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             var viewRot = world.LocalUserViewRotation;
             var worldForward = viewRot * float3.Forward;
             var worldRight = viewRot * float3.Right;
+            // move_up は view-rotation を掛けない絶対 world-up。fwd/right と違い
+            // 視点 pitch から独立させるため float3.Up を直接使い、Move が Slot-local
+            // なので slot-local に変換してから合成する。モード差は Bridge では分岐せず
+            // engine の active module が解釈する (Walk は Move を `.x_z` 射影して垂直
+            // 成分を破棄 → move_up は無視され歩行を乱さない、NoClip/fly は 3 成分を
+            // そのまま使い上下移動になる)。よって Bridge は 1 ベクトルを書くだけでよい。
+            var worldUp = float3.Up;
             var slotForward = userRoot.Slot.GlobalDirectionToLocal(in worldForward);
             var slotRight = userRoot.Slot.GlobalDirectionToLocal(in worldRight);
+            var slotUp = userRoot.Slot.GlobalDirectionToLocal(in worldUp);
 
-            var slotMove = snapshot.MoveX * slotRight + snapshot.MoveY * slotForward;
+            var slotMove =
+                snapshot.MoveRight * slotRight
+                + snapshot.MoveForward * slotForward
+                + snapshot.MoveUp * slotUp;
             normalInput.Move.ExternalInput = slotMove * snapshot.Velocity;
         }
 

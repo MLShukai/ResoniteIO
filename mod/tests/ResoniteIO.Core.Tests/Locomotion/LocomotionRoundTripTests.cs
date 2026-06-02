@@ -25,13 +25,16 @@ public sealed class LocomotionRoundTripTests
         var client = new V1.Locomotion.LocomotionClient(channel);
 
         // 全 field の proto → Core POCO mapping を 1 round-trip で確認する。
+        // 移動 3 軸 (MoveForward / MoveRight / MoveUp) は別々の値を載せ、
+        // 取り違え (例: MoveUp が MoveRight に流れ込む) を検出可能にする。
         var commands = new[]
         {
-            new V1.LocomotionCommand { MoveY = 1.0f, UnixNanos = 1L },
+            new V1.LocomotionCommand { MoveForward = 1.0f, UnixNanos = 1L },
             new V1.LocomotionCommand
             {
-                MoveX = 1.0f,
-                MoveY = 1.0f,
+                MoveForward = 0.25f,
+                MoveRight = 0.5f,
+                MoveUp = -0.75f,
                 Velocity = 3.0f,
                 UnixNanos = 2L,
             },
@@ -67,12 +70,14 @@ public sealed class LocomotionRoundTripTests
         // Service は proto.Velocity を素のまま POCO に詰めるだけ (proto3 wire
         // default = 0)。convenience default=1.0 は Python `LocomotionCmd` 側で
         // 担保する設計のため、ここで 0 のまま見えるのは規約通り。
-        Assert.Equal(1.0f, setStates[0].MoveY);
+        Assert.Equal(1.0f, setStates[0].MoveForward);
         Assert.Equal(0f, setStates[0].Velocity);
         Assert.Equal(1L, setStates[0].UnixNanos);
 
-        Assert.Equal(1.0f, setStates[1].MoveX);
-        Assert.Equal(1.0f, setStates[1].MoveY);
+        // 移動 3 軸が別フィールドへ独立に保存される (取り違えなし)。
+        Assert.Equal(0.25f, setStates[1].MoveForward);
+        Assert.Equal(0.5f, setStates[1].MoveRight);
+        Assert.Equal(-0.75f, setStates[1].MoveUp);
         Assert.Equal(3.0f, setStates[1].Velocity);
 
         Assert.Equal(0.5f, setStates[2].YawRate);
@@ -97,7 +102,7 @@ public sealed class LocomotionRoundTripTests
         using var cts = new CancellationTokenSource();
         using var call = client.Drive(cancellationToken: cts.Token);
 
-        await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveY = 1.0f });
+        await call.RequestStream.WriteAsync(new V1.LocomotionCommand { MoveForward = 1.0f });
         cts.Cancel();
 
         try

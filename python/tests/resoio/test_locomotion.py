@@ -88,9 +88,14 @@ class TestLocomotionClient:
         await server.start(path=str(socket_path))
         try:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            # Move 3 軸 (forward / right / up) を別々の値で送り、特に視点独立の
+            # 絶対ワールド上下軸 move_up が独立フィールドとして wire を通ることを
+            # 確認する (取り違えで right や forward に紛れ込まないこと)。
             scenario = [
-                LocomotionCmd(move_y=1.0),
-                LocomotionCmd(move_x=1.0, velocity=2.5),
+                LocomotionCmd(move_forward=1.0),
+                LocomotionCmd(move_right=1.0, velocity=2.5),
+                LocomotionCmd(move_up=1.0),
+                LocomotionCmd(move_forward=0.25, move_right=-0.5, move_up=-0.75),
                 LocomotionCmd(yaw_rate=0.5, pitch_rate=-0.25, crouch=1.0, jump=True),
             ]
             async with LocomotionClient() as client:
@@ -104,8 +109,9 @@ class TestLocomotionClient:
 
             assert len(fake.received) == len(scenario)
             for sent, got in zip(scenario, fake.received, strict=True):
-                assert got.move_x == sent.move_x
-                assert got.move_y == sent.move_y
+                assert got.move_forward == sent.move_forward
+                assert got.move_right == sent.move_right
+                assert got.move_up == sent.move_up
                 assert got.yaw_rate == sent.yaw_rate
                 assert got.pitch_rate == sent.pitch_rate
                 assert got.jump == sent.jump
@@ -131,9 +137,9 @@ class TestLocomotionClient:
         try:
             monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
             scenario = [
-                LocomotionCmd(move_y=1.0),
-                LocomotionCmd(move_y=1.0),
-                LocomotionCmd(move_y=1.0),
+                LocomotionCmd(move_forward=1.0),
+                LocomotionCmd(move_forward=1.0),
+                LocomotionCmd(move_forward=1.0),
             ]
             async with LocomotionClient() as client:
                 with pytest.raises(grpclib.GRPCError) as excinfo:

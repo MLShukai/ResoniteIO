@@ -116,7 +116,8 @@ are load-bearing and must NOT be cut.
     で未指定だと wire default 0 で Move が 0 倍される" — this is the
     **single canonical surface**. The Bridge inline comment in
     `FrooxEngineLocomotionBridge.ApplyAsync` (just above
-    `Move.ExternalInput = new float3(MoveX * Velocity, 0, MoveY * Velocity)`)
+    `Move.ExternalInput = slotMove * Velocity` where `slotMove`
+    combines `MoveRight` / `MoveForward` / `MoveUp`)
     points back at this proto comment rather than repeating it.
     All other surfaces (Python `LocomotionCmd` docstring,
     `ILocomotionBridge` POCO remarks, e2e `_scenario_command`)
@@ -145,7 +146,7 @@ are load-bearing and must NOT be cut.
 18. **Move body-local rotation via `HeadFacingRotation`** in
     `FrooxEngineLocomotionBridge.ApplyToEngine`: `Move.ExternalInput`
     is interpreted in `UserRoot.Slot` coordinates, not world. A naive
-    world-axis write (`new float3(MoveX, 0, MoveY)`) silently produces
+    world-axis write (`new float3(MoveRight, 0, MoveForward)`) silently produces
     world-fixed locomotion that ignores head yaw — the e2e RPC still
     completes, but the avatar walks in the wrong direction (2026-05-19
     bug). The block computing `headRot * float3.Forward` /
@@ -155,7 +156,8 @@ are load-bearing and must NOT be cut.
     quantitative 87.1° verification that locked it in. Removing the
     rotation, or switching to `LocalUserViewRotation` without
     accounting for pitch sink, regresses the fix. Proto contract is
-    unchanged (MoveX = Strafe / Right axis, MoveY = Forward axis).
+    unchanged (MoveRight = Strafe / Right axis, MoveForward = Forward
+    axis, MoveUp = world-absolute vertical axis).
 19. **`PushedAudioFrameSpeakerBridge` cap=32 + `DropWrite`**
     (`mod/src/ResoniteIO.Core/Speaker/PushedAudioFrameSpeakerBridge.cs`):
     cap=32 ≈ 680 ms buffer at typical 1024-sample/21 ms @ 48 kHz
