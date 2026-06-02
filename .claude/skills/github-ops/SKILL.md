@@ -18,7 +18,7 @@ ______________________________________________________________________
 
 ### 経路 A: `GH_TOKEN` 環境変数 (推奨)
 
-- host の `.env` または shell に `GH_TOKEN=ghp_xxx` (または fine-grained PAT) を入れ、`docker-compose.yml` の `environment:` で container に流す
+- host の `.env` または shell に `GH_TOKEN=ghp_xxx` (または fine-grained PAT) を入れ、`compose.yml` の `environment:` で container に流す
 - `gh` は `GH_TOKEN` を最優先で参照するため `gh auth login` 不要
 - PAT に必要な scope: `repo` (private repo を扱うなら) / `workflow` (CI 設定を触るなら) / `read:org`
 - token の漏洩を避けるため `.env` は gitignore 済みであることを確認 (`git check-ignore -v .env`)
@@ -156,7 +156,7 @@ ______________________________________________________________________
 
 ### `gh: command not found`
 
-Dockerfile に gh インストール step は入っているはず ([Dockerfile](../../../Dockerfile))。image が古い場合は `just container-build` で再ビルドする。
+Dockerfile に gh インストール step は入っているはず ([Dockerfile](../../../.devcontainer/Dockerfile))。image が古い場合は devcontainer を再ビルドする (VS Code「Dev Containers: Rebuild Container」、または `docker compose -f compose.yml build`)。
 
 ### `HTTP 401: Bad credentials`
 
@@ -174,7 +174,7 @@ ______________________________________________________________________
 
 ## 9. 関連設定・参照
 
-- [`Dockerfile`](../../../Dockerfile) — `gh` apt パッケージのインストール block
+- [`Dockerfile`](../../../.devcontainer/Dockerfile) — `gh` apt パッケージのインストール block
 - [`.claude/settings.container.json`](../../settings.container.json) — `Bash(git push:*)` / `Bash(gh:*)` の allow 設定
 - [`CLAUDE.md`](../../../CLAUDE.md) — Git 運用節 (branch / commit 命名規約)
 - [`memory/feedback_git_no_pager.md`](../../../memory/feedback_git_no_pager.md) — `git --no-pager` は不要 (`gh` 側も同様に pager 自動 bypass)

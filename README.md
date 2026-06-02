@@ -12,14 +12,14 @@ mod/               C# 側 (BepisLoader mod, .NET 10)
 python/            Python 側 (resoio, uv + betterproto2 + grpclib)
 scripts/           gen_proto / decompile / container-init のシェルスクリプト
 gale/              Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
-Dockerfile         開発コンテナ image (debian + .NET 10 + uv + protoc)
-docker-compose.yml dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
+compose.yml        dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
+.devcontainer/     devcontainer.json (compose 参照) / Dockerfile (debian + .NET 10 + uv + protoc) / initialize.sh (host 側 pre-create フック)
 justfile           ルートタスクランナー (全レシピ)
 ```
 
 ## Quick Start
 
-ホスト側に必要なもの: `docker` (24+) / `docker compose v2` / `just` / **[Gale](https://github.com/Kesomannen/gale) v1.5.4+** (Resonite mod manager)
+ホスト側に必要なもの: `docker` (24+) / `docker compose v2` / `just` / **[Gale](https://github.com/Kesomannen/gale) v1.5.4+** (Resonite mod manager)、および devcontainer を開くための **VS Code (Dev Containers 拡張) もしくは Zed もしくは [devcontainer CLI](https://github.com/devcontainers/cli)** のいずれか。
 
 開発ツール (.NET 10 SDK / uv / protoc / pre-commit など) はすべてコンテナ内に閉じている。
 
@@ -65,28 +65,34 @@ RenderiteHook が deploy した hook 版 `winhttp.dll` が読まれない。
 `host_agent.py` から env で渡しても Steam が sanitize するため通らない
 (Steam Launch Options が唯一の経路)。
 
-### 2. Docker image をビルド
+### 2. devcontainer を開く
+
+`just init` を通したら、リポジトリを devcontainer として開く。エディタ別に:
+
+- **VS Code**: コマンドパレットから「Dev Containers: Reopen in Container」(要 Dev Containers 拡張)
+- **Zed**: dev container として開く (Zed の devcontainer サポート)
+- **CLI (任意・headless / CI 用)**: `@devcontainers/cli` を入れて以下 (既定では未インストール):
+
+  ```sh
+  devcontainer up --workspace-folder .
+  devcontainer exec --workspace-folder . bash
+  ```
+
+`initializeCommand` / `postCreateCommand` のサポート範囲はエディタによって差があるが、
+core (compose + service + workspaceFolder) はどのエディタでも動く前提。
+
+devcontainer 起動時に以下が自動で走る:
+
+- `initializeCommand` (host 側、作成前): `~/.resonite-io` と `~/.resonite-io-debug` を 0700 で作成し、
+  host の UID/GID を `.env` に記録する (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。
+- `postCreateCommand` (container 内、作成後): `scripts/container-init.sh` を実行
+  = `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink。
+
+### 3. 開発
+
+devcontainer に入った後は、コンテナ内ターミナルで従来どおり:
 
 ```sh
-just container-build
-```
-
-UID/GID は host user と一致した形で焼かれる。host user が変わったら再ビルドが必要。
-
-### 3. コンテナ起動 + 依存解決
-
-```sh
-just container-up      # サービス起動 (sleep infinity で常駐)
-just container-init    # container 内で dotnet tool restore + uv sync + pre-commit install
-```
-
-`container-init` は冪等。依存追加や lock 更新後に再実行する。
-
-### 4. 開発
-
-```sh
-just container-shell   # コンテナ内 bash に attach
-# 以下、コンテナ内で:
 just --list            # 利用可能なレシピ一覧
 just gen-proto         # proto から Python 側コード生成
 just build             # mod ビルド
@@ -95,12 +101,10 @@ just deploy-mod        # gale/BepInEx/plugins/ResoniteIO/ に DLL を配置
 
 deploy された DLL は host user 所有になっている (UID/GID マッピング済み)。
 
-### 5. 後片付け
+### 4. 後片付け
 
-```sh
-just container-down    # コンテナ停止 (volume は残す)
-just container-clean   # cache volume + image を完全削除 (destructive、host repo には影響しない)
-```
+VS Code / Zed の devcontainer 停止操作で停止する。CLI を使う場合は `docker compose` を直接叩く
+(例: `docker compose down`、image / volume まで消すなら `docker compose down --rmi all -v`)。
 
 ## 主なレシピ
 
@@ -117,7 +121,7 @@ just container-clean   # cache volume + image を完全削除 (destructive、hos
 | `just check-gale` | Gale profile に BepisLoader / 必須 plugin が揃っているか検証           |
 | `just clean`      | 各言語の build/cache 出力を削除                                        |
 
-サブレシピ (`py-test` / `mod-build` 等) は片側だけ動かしたいときに利用する。Container 系レシピは [CLAUDE.md](CLAUDE.md) §コマンド 参照。
+サブレシピ (`py-test` / `mod-build` 等) は片側だけ動かしたいときに利用する。コンテナの起動・停止は justfile レシピではなく devcontainer (VS Code / Zed / `devcontainer` CLI) で行う ([CLAUDE.md](CLAUDE.md) §実行環境 参照)。
 
 ## 開発フロー
 

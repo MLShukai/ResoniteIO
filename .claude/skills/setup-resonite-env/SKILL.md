@@ -6,7 +6,7 @@ version: 0.1.0
 
 # Setup Resonite-IO Dev Environment
 
-resonite-io をホストで動かすために必要な準備の一覧と落とし穴の解説。ホスト側で必要なものは **`docker` / `docker compose v2` / `just` の 3 つだけ**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。
+resonite-io をホストで動かすために必要な準備の一覧と落とし穴の解説。ホスト側で必要なものは **`docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。
 
 ______________________________________________________________________
 
@@ -14,7 +14,7 @@ ______________________________________________________________________
 
 開発ツール (.NET 10 SDK / uv / protoc / dotnet local tools / pre-commit) は **`debian:bookworm-slim` ベースの単一 image** に同梱し、host にはインストールしない。
 
-- `docker-compose.yml` は `name: resonite-io-${USER}` で **user 単位の名前空間** に分離 (同一ホストの複数アカウント / 複数 worktree が衝突しない)
+- `compose.yml` は `name: resonite-io-${USER}` で **user 単位の名前空間** に分離 (同一ホストの複数アカウント / 複数 worktree が衝突しない)。`.devcontainer/devcontainer.json` がこの compose を参照する
 - 作業ディレクトリは **host repo を `/workspace` に直接 rw bind**。host 側の編集が即座に container 側に反映され、container 内の build 成果物 (`bin/`, `obj/`, `python/.venv/` 等) も `.gitignore` 経由で host 側に出る
 - Resonite フォルダは `/resonite` に **read-only bind** のみ (FrooxEngine.dll 等の HintPath 参照専用; mod の deploy 先ではない)
 - Gale プロファイル (`./gale/`) は `/workspace/gale` 経由で参照する (`environment.GalePath: /workspace/gale` が csproj の deploy 先を解決)
@@ -26,10 +26,11 @@ ______________________________________________________________________
 
 1. `.env.example` を `.env` にコピーし、`ResonitePath` を Steam の Resonite 実行ファイルディレクトリ絶対パスに設定。必要に応じて `GaleProfile` / `GaleBin` も
 2. `just init` を host 側で実行 — docker / docker compose v2 検出 → `.env` 検証 → `ResonitePath` 検証 → Gale プロファイル確認を冪等に実施
-3. `just container-build` (image をビルド、`--no-cache` 固定)
-4. `just container-up` (サービス起動、`~/.resonite-io{,-debug}/` を 0700 で事前作成)
-5. `just container-init` (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
-6. `just container-shell` でコンテナに attach
+3. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash` (`@devcontainers/cli`、既定では未インストール)
+4. devcontainer が自動実行する:
+   - `initializeCommand` (host 側・作成前): `~/.resonite-io{,-debug}/` を 0700 で事前作成し、host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)
+   - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
+5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する
 
 ______________________________________________________________________
 

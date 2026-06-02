@@ -83,7 +83,7 @@ memory: project
   - Python: `ruff` (line-length 88, double quotes, isort combine-as-imports)
   - C#: `csharpier` (フォーマット差分なし)
 - 既存パターンを尊重: 周辺コードの命名・構造・スタイルに合わせる。自分の好みで「直す」ことはしない
-- ビルド / テスト / gen-proto は **コンテナ内で実行する前提** (`just container-shell` で attach)
+- ビルド / テスト / gen-proto は **コンテナ内で実行する前提** (devcontainer に入って attach)
 
 ## ワークフロー
 

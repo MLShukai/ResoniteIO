@@ -64,10 +64,10 @@ init:
     fi
     @just check-gale
     @echo ""
-    @echo "[init] All preconditions satisfied. Next:"
-    @echo "    just container-build      # 初回のみ"
-    @echo "    just container-up"
-    @echo "    just container-init       # container 内 deps 解決"
+    @echo "[init] All preconditions satisfied. Next, open the dev container:"
+    @echo "    VS Code: コマンドパレットから 'Dev Containers: Reopen in Container'"
+    @echo "    Zed:     dev container として開く"
+    @echo "    CLI:     devcontainer up --workspace-folder .   # 任意"
 
 # proto から Python 側の生成コードを再生成する。C# 側は dotnet build で自動生成。
 gen-proto:
@@ -259,48 +259,6 @@ clean-py:
     rm -rf python/.coverage
     find python -type d -name '__pycache__' -prune -exec rm -rf {} +
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
-
-# ===== Container ============================================================
-
-# docker-compose.yml の ${HOST_UID} / ${HOST_GID} / ${HOST_HOME} 解釈に必要。
-# export 付きの just 変数は全レシピに環境変数として注入される。
-export HOST_UID := `id -u`
-export HOST_GID := `id -g`
-# host の HOME を docker-compose.yml に渡す (`~/.resonite-io/` の bind source 用)。
-# 利用者ごとに /home/<USER> が異なるため .env で固定せず just から動的に注入。
-export HOST_HOME := env_var('HOME')
-
-container-build:
-    docker compose build --no-cache
-
-# ResonitePath 未設定だと /resonite bind が壊れるため事前に明示失敗させる。
-# Gale プロファイルの設置確認は `just init` の責務 (本レシピは container 起動のみ)。
-container-up:
-    @: "${ResonitePath:?ResonitePath が未設定です。'just init' を先に実行してください。}"
-    # UDS socket 用 host ディレクトリを 0700 で先に作る。Docker 任せだと root 所有
-    # で生成され、mod (host UID) が bind できなくなる。
-    # ~/.resonite-io/      : gRPC IPC (mod ↔ Python)
-    # ~/.resonite-io-debug/: debug bridge (container ↔ host-agent)
-    @for sub in .resonite-io .resonite-io-debug; do \
-        SOCK_DIR="$HOST_HOME/$sub"; \
-        mkdir -p "$SOCK_DIR" && chmod 0700 "$SOCK_DIR"; \
-    done
-    docker compose up -d
-
-container-down:
-    docker compose down
-
-# container 内で deps を解決する冪等レシピ (dotnet tool restore + uv sync +
-# pre-commit install + Claude settings symlink)。依存追加 / lock 更新後に再実行する。
-container-init:
-    docker compose exec dev bash scripts/container-init.sh
-
-container-shell:
-    docker compose exec dev bash
-
-# image / network / cache volume を撤去 (destructive、host repo は影響しない)。
-container-clean:
-    docker compose down -v --rmi local --remove-orphans
 
 # ===== Host bridge (Resonite debug) =========================================
 #

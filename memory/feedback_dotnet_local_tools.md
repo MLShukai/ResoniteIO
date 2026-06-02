@@ -12,6 +12,6 @@ C# 側で必要な .NET CLI ツール (csharpier 等) は **`.config/dotnet-tool
 **How to apply:**
 
 - 新しい .NET CLI ツールを足すときは `dotnet tool install <name>` (global の `-g` 無し) を `.config/dotnet-tools.json` 配下で行う
-- `scripts/container-init.sh` の `restore_dotnet_tools` (`just container-init` から呼ばれる) が `dotnet tool restore` で manifest を反映する流れに乗せる
+- `scripts/container-init.sh` の `restore_dotnet_tools` (devcontainer の `postCreateCommand` から呼ばれる) が `dotnet tool restore` で manifest を反映する流れに乗せる
 - `.pre-commit-config.yaml` / justfile / README からの呼び出しは **`dotnet csharpier ...` 形式** を使う (`csharpier ...` 直叩きは NG: PATH 依存に戻る)
 - global tools (`-g`) を新たに増やしたくなったら、まず local tool 化を検討する
