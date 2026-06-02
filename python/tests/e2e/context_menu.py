@@ -36,6 +36,12 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
 
+# The bridge becomes ready (FocusedWorld present) before the home world has
+# finished loading + presenting. Give the home world ~20 s to settle after the
+# first ready response so the desktop is fully rendered (cursor placed, world
+# loaded) before driving the menu and grabbing screenshots.
+_HOME_LOAD_SETTLE_S = 20.0
+
 # Give the radial menu a moment to finish its open/close lerp + the renderer a
 # frame to present before grabbing the desktop, so screenshots are not torn
 # mid-animation. Kept short because the desktop radial menu is transient and
@@ -105,7 +111,10 @@ class TestContextMenu:
             _screenshot(out_dir, f"{step}.png")
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, menu closed.
+            # 0. baseline: engine ready, menu closed. Wait for the home world to
+            #    finish loading/presenting before the first capture.
+            initial = await wait_for_ready()
+            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
             initial = await wait_for_ready()
             record("00_initial", initial)
             await settle_shot("00_initial")
