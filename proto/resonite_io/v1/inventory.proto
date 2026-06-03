@@ -1,0 +1,129 @@
+// Inventory service: ローカルユーザの個人インベントリ (Resonite の Inventory) を
+// bash-like なファイル操作で読み書きする unary modality。AI エージェントから
+// 「列挙 (ls) / フォルダ作成 (mkdir) / コピー (cp) / 移動 (mv) / 削除 (rm)」と
+// 「アイテムをワールドに spawn」を行う。
+//
+// cwd という概念はサーバ/bridge 側には存在しない (STATELESS)。全 RPC は
+// 解決済みの絶対パス (例 "/Inventory/MyFolder") を受け取る。相対パス解決 /
+// cd / pwd は Python CLI の REPL がクライアント側で行う。
+//
+// directory を対象にする削除/コピーは recursive フラグ (cp -r / rm -r) が必須。
+// フラグ無しで directory を指定した場合サーバは FailedPrecondition を返す
+// (bash の "is a directory" 相当)。mv は directory でもフラグ不要で再帰する。
+// directory の cp -r / mv / rm -r は cloud record を 1 件ずつ操作する O(n) で
+// アトミックではない (途中失敗で部分適用が残りうる)。
+//
+// ContextMenu / Display と同じく engine への dispatch は graph を触る spawn のみ
+// 同期マーシャル (RunSynchronously) で行い、cloud record CRUD は async REST。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// インベントリエントリの種別 (Resonite の Record.RecordType に対応)。
+enum InventoryEntryKind {
+  INVENTORY_ENTRY_KIND_UNSPECIFIED = 0;
+  INVENTORY_ENTRY_KIND_DIRECTORY = 1;
+  INVENTORY_ENTRY_KIND_OBJECT = 2;
+  INVENTORY_ENTRY_KIND_WORLD = 3;
+  INVENTORY_ENTRY_KIND_LINK = 4;
+  INVENTORY_ENTRY_KIND_UNKNOWN = 5;
+}
+
+// インベントリ内の 1 エントリ (フォルダまたはアイテムレコード)。
+message InventoryEntry {
+  // 表示名 (例 "MyAvatar")。
+  string name = 1;
+  // ルートからの絶対パス (例 "/Inventory/Avatars/MyAvatar")。
+  string path = 2;
+  // 種別 (ディレクトリ / オブジェクト / ワールド / リンク / 不明)。
+  InventoryEntryKind kind = 3;
+  // レコード ID (ディレクトリには無いことがあり、その場合は空文字)。
+  string record_id = 4;
+  // アイテムの asset URI (フォルダ / 未解決時は空文字)。
+  string asset_uri = 5;
+  // 公開フラグ (レコードの IsPublic)。
+  bool is_public = 6;
+  // 最終更新時刻 (Unix epoch からのナノ秒、不明なら 0)。
+  int64 last_modified_unix_nanos = 7;
+}
+
+// List RPC が返すディレクトリ内容のスナップショット。
+message InventoryListing {
+  // 列挙対象だった解決済み絶対パス。
+  string path = 1;
+  // 直下のエントリ (順不同 — クライアント側でソートする)。
+  repeated InventoryEntry entries = 2;
+}
+
+// 変更系 (MakeDir / Copy / Move / Remove) の小さな結果。
+message InventoryMutationResult {
+  // 操作後に得られた主たるパス (mkdir/cp/mv は作成/移動先、rm は削除されたパス)。
+  string path = 1;
+  // 関係する場合のレコード ID (mkdir したフォルダ / コピー先レコード等、無ければ空)。
+  string record_id = 2;
+}
+
+// Spawn RPC の結果。
+message InventorySpawnResult {
+  // spawn 元のインベントリパス。
+  string source_path = 1;
+  // 生成されたワールド内 Slot の参照 ID (RefID の文字列表現、不明なら空)。
+  string spawned_slot_id = 2;
+  // spawned slot の表示名。
+  string spawned_slot_name = 3;
+}
+
+message InventoryListRequest {
+  // 列挙する解決済み絶対パス。
+  string path = 1;
+}
+
+message InventoryMakeDirRequest {
+  // 作成するフォルダの解決済み絶対パス。
+  string path = 1;
+}
+
+message InventoryCopyRequest {
+  // コピー元の解決済み絶対パス。
+  string source_path = 1;
+  // コピー先の解決済み絶対パス。
+  string destination_path = 2;
+  // directory をコピーする場合は true 必須 (cp -r)。leaf item には不要。
+  bool recursive = 3;
+}
+
+message InventoryMoveRequest {
+  // 移動元の解決済み絶対パス。
+  string source_path = 1;
+  // 移動先の解決済み絶対パス。
+  string destination_path = 2;
+}
+
+message InventoryRemoveRequest {
+  // 削除する解決済み絶対パス。
+  string path = 1;
+  // directory を削除する場合は true 必須 (rm -r)。leaf item には不要。
+  bool recursive = 2;
+}
+
+message InventorySpawnRequest {
+  // ワールドに spawn するアイテムの解決済み絶対パス。
+  string path = 1;
+}
+
+service Inventory {
+  // 指定パス直下のエントリを列挙する (ls)。
+  rpc List(InventoryListRequest) returns (InventoryListing);
+  // 指定パスにフォルダを作成する (mkdir)。
+  rpc MakeDir(InventoryMakeDirRequest) returns (InventoryMutationResult);
+  // source を destination にコピーする (cp / cp -r)。
+  rpc Copy(InventoryCopyRequest) returns (InventoryMutationResult);
+  // source を destination に移動する (mv、directory も再帰)。
+  rpc Move(InventoryMoveRequest) returns (InventoryMutationResult);
+  // 指定パスのエントリを削除する (rm / rm -r)。
+  rpc Remove(InventoryRemoveRequest) returns (InventoryMutationResult);
+  // 指定アイテムを現在のワールドに spawn する。
+  rpc Spawn(InventorySpawnRequest) returns (InventorySpawnResult);
+}
