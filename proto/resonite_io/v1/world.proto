@@ -1,0 +1,219 @@
+// World service: Resonite の「Esc メニュー → ワールドタブ」相当の操作を
+// engine API 直叩きで提供する modality。UI は駆動せず、FrooxEngine の
+// Userspace / SessionsManager / RecordsManager / WorldManager を直接叩く。
+//
+// 2 系統のデータソースをカバーする:
+//   - ライブセッション (SessionsManager): 起動中のセッション一覧。アクティブ /
+//     フレンド / ヘッドレスの filter と検索・ページングを提供 (ListSessions)。
+//   - ワールドレコード (RecordsManager): 公開 / 注目 / カテゴリ / 自分の /
+//     グループの保存済みワールド。tag / owner / featured + sort でサーバ側
+//     ページング (ListRecords)。「ランダム」タブは sort=RANDOM で実現する。
+//
+// ワールド移動は Userspace.OpenWorld の Relation=Nest 方針: 現ワールドを保持
+// したまま新ワールドを開く。複数ワールドを同時に開き、handle 指定の Focus /
+// Leave で管理する。サムネイルは URL 文字列のみを返す (画像バイトは取得しない)。
+//
+// RPC は全て unary。タイムスタンプは UnixNanos (UnixNanosClock 由来) で載せる。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// ライブセッション 1 件の情報 (ブラウザのタイル相当)。
+message WorldSession {
+  string session_id = 1;
+  string name = 2;
+  string description = 3;
+  string host_user_id = 4;
+  string host_username = 5;
+  // join 先 URI 群 (Join に session_id を渡せば mod 側で解決するため通常は参照のみ)。
+  repeated string session_urls = 6;
+  // SessionInfo.ThumbnailUrl をそのまま載せる (空もありうる)。
+  string thumbnail_url = 7;
+  int32 joined_users = 8;
+  int32 active_users = 9;
+  int32 maximum_users = 10;
+  repeated string tags = 11;
+  // SessionAccessLevel の enum 名 (例 "Anyone" / "ContactsPlus")。
+  string access_level = 12;
+  bool headless_host = 13;
+  bool mobile_friendly = 14;
+  string corresponding_world_id = 15;
+  string universe_id = 16;
+  int64 session_begin_unix_nanos = 17;
+  int64 last_update_unix_nanos = 18;
+}
+
+// ワールドレコード 1 件の情報 (保存済みワールド / テンプレート)。
+message WorldRecord {
+  string record_id = 1;
+  string owner_id = 2;
+  string name = 3;
+  string description = 4;
+  // Record のサムネ URI をそのまま載せる (空もありうる)。
+  string thumbnail_url = 5;
+  repeated string tags = 6;
+  // resrec:// 形式の record URI。
+  string record_url = 7;
+  int64 last_modification_unix_nanos = 8;
+}
+
+// ローカルに開いているワールド 1 件 (Nest で複数並びうる)。
+message OpenWorld {
+  // World.LocalWorldHandle。Focus / Leave の識別子。
+  int32 handle = 1;
+  string session_id = 2;
+  string name = 3;
+  // WorldManager.FocusedWorld と一致するなら true。
+  bool focused = 4;
+  int32 user_count = 5;
+  string access_level = 6;
+}
+
+// ライブセッションの filter (左タブ相当)。UNSPECIFIED は「filter なし = 全件」。
+enum SessionFilter {
+  SESSION_FILTER_UNSPECIFIED = 0;
+  SESSION_FILTER_FRIENDS = 1;
+  SESSION_FILTER_HEADLESS = 2;
+}
+
+// ワールドレコードのソース (左タブ相当)。UNSPECIFIED は既定で PUBLIC 扱い。
+enum RecordSource {
+  RECORD_SOURCE_UNSPECIFIED = 0;
+  RECORD_SOURCE_PUBLIC = 1;
+  RECORD_SOURCE_FEATURED = 2;
+  RECORD_SOURCE_OWN = 3;
+  RECORD_SOURCE_GROUP = 4;
+}
+
+// レコード検索の並べ替え (SearchSortParameter にマップ)。
+// UNSPECIFIED は既定で CREATION_DATE 扱い。
+enum RecordSort {
+  RECORD_SORT_UNSPECIFIED = 0;
+  RECORD_SORT_CREATION_DATE = 1;
+  RECORD_SORT_LAST_UPDATE = 2;
+  RECORD_SORT_FIRST_PUBLISH = 3;
+  RECORD_SORT_TOTAL_VISITS = 4;
+  RECORD_SORT_NAME = 5;
+  // 「ランダム」タブ相当。
+  RECORD_SORT_RANDOM = 6;
+}
+
+// 並べ替え方向 (SearchSortDirection にマップ)。
+// UNSPECIFIED は既定で DESCENDING 扱い。
+enum RecordSortDirection {
+  RECORD_SORT_DIRECTION_UNSPECIFIED = 0;
+  RECORD_SORT_DIRECTION_DESCENDING = 1;
+  RECORD_SORT_DIRECTION_ASCENDING = 2;
+}
+
+message ListSessionsRequest {
+  // name 部分一致 (大文字小文字無視、client→mod 側でフィルタ)。空なら全件。
+  string search = 1;
+  SessionFilter filter = 2;
+  // 0 なら下限なし。
+  int32 min_active_users = 3;
+  // 0-based ページ番号。
+  uint32 page = 4;
+  // 1 ページあたり件数。0 なら無制限 (全件返す)。
+  uint32 page_size = 5;
+}
+
+message ListSessionsResponse {
+  repeated WorldSession sessions = 1;
+  // ページング前の総件数。
+  uint32 total_count = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+
+message ListRecordsRequest {
+  RecordSource source = 1;
+  // カテゴリ tag 等 (例 "game" / "avatar")。AND 条件。
+  repeated string required_tags = 2;
+  // GROUP / 特定 owner の OWN を引く場合の owner id。空なら OWN=ログインユーザ。
+  string owner_id = 3;
+  // サーバ側ページング。
+  uint32 offset = 4;
+  // 取得件数。0 なら既定 (60)。
+  uint32 count = 5;
+  RecordSort sort = 6;
+  RecordSortDirection sort_direction = 7;
+}
+
+message ListRecordsResponse {
+  repeated WorldRecord records = 1;
+  // まだ続きがあるか。
+  bool has_more = 2;
+  uint32 offset = 3;
+}
+
+message JoinRequest {
+  // session_id で解決するか (優先)、session_url を直接指定するかのいずれか。
+  string session_id = 1;
+  string session_url = 2;
+  // join 後に focus するか (Userspace の AutoFocus に対応)。
+  bool focus = 3;
+}
+
+message JoinResponse {
+  OpenWorld world = 1;
+}
+
+message StartWorldRequest {
+  string record_id = 1;
+  string owner_id = 2;
+  bool focus = 3;
+}
+
+message StartWorldResponse {
+  OpenWorld world = 1;
+}
+
+message ListOpenWorldsRequest {}
+
+message ListOpenWorldsResponse {
+  repeated OpenWorld worlds = 1;
+}
+
+message FocusRequest {
+  int32 handle = 1;
+}
+
+message FocusResponse {
+  OpenWorld world = 1;
+}
+
+message LeaveRequest {
+  int32 handle = 1;
+}
+
+message LeaveResponse {}
+
+message GetCurrentRequest {}
+
+message GetCurrentResponse {
+  OpenWorld world = 1;
+  // userspace のみ (移動可能なワールドに focus していない) なら false。
+  bool has_world = 2;
+}
+
+service World {
+  // ライブセッション一覧。filter / 検索 / ページングは mod・Service 側で適用。
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  // ワールドレコード一覧。sort=RANDOM で「ランダム」タブ相当。
+  rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse);
+  // 既存セッションへ join (Relation=Nest)。
+  rpc Join(JoinRequest) returns (JoinResponse);
+  // ワールドレコードから新規セッションを起動 (Relation=Nest)。
+  rpc StartWorld(StartWorldRequest) returns (StartWorldResponse);
+  // ローカルに開いているワールド一覧。
+  rpc ListOpenWorlds(ListOpenWorldsRequest) returns (ListOpenWorldsResponse);
+  // handle 指定でワールドを focus。
+  rpc Focus(FocusRequest) returns (FocusResponse);
+  // handle 指定でワールドから退出 (Userspace.LeaveSession)。
+  rpc Leave(LeaveRequest) returns (LeaveResponse);
+  // 現在 focus 中のワールド。
+  rpc GetCurrent(GetCurrentRequest) returns (GetCurrentResponse);
+}
