@@ -50,10 +50,13 @@ resonite-io は **proto over UDS gRPC + Resonite engine** 結合が支配的な 
 - `mod/tests/ResoniteIO.Core.Tests/Common/` 配下に共通 fixture (Kestrel host harness 等) を集約。fake は `Common/Fakes/<Modality>BridgeFake.cs`
 - BepInEx 側 (`mod/src/ResoniteIO/`) は smoke 単位のみ `mod/tests/ResoniteIO.Tests/` で検証 (FrooxEngine 実機が必要な分は manual)
 
-### E2E — `python/tests/e2e/` (Claude 自動駆動が canonical)
+### E2E — `python/tests/e2e/` (Claude 自動駆動が canonical・新規モダリティで必須)
 
 - Resonite 実機を起動して end-to-end で振る舞いを確認するシナリオ群
 - **Claude が `scripts/resonite_cli.py` (host-agent bridge) 経由で起動・停止・撮影まで自動駆動する** のが基本路線。新規モダリティの実機検証は `python/tests/e2e/<modality>.py` を pytest harness として書く
+- **新規モダリティでは e2e を必ず Claude が実装し、自分で実行して検証する (任意ではない)**。`just test` の green だけで「完了」としない。e2e green + 後述の screenshot 目視まで到達して初めて完了とする (`just resonite-status` で起動可否を事前確認する規約に従う)
+- **状態変化を伴う実機操作 (ワールド移動・focus・UI 変化・カメラ描画変化など) は、API 戻り値の assert に加えて `scripts/resonite_cli.py screenshot` (= `python/tests/e2e/<modality>.py` 内の `_screenshot()` ヘルパー) で操作前後の screenshot を撮り、実際に状態が変わったことを目視確認する**。screenshot は `python/tests/e2e/e2e_artifacts/` (gitignore 済) に保存する
+- 実機の cloud 依存ステップ (公開セッション一覧/join 等) は対象が不安定なため、候補リトライ + 決定的な fallback (例: 自分の record からの起動) + 空 cloud 時の明示 skip で flaky を避ける
 - CI 自動収集対象外 (`require_host_agent` autouse fixture で skip)。`just e2e-test` 経由で明示的に走らせる
 - `just deploy-mod` で plugin を配置してから動かす
 
@@ -208,6 +211,7 @@ C# 側の Kestrel server を立てるのが重い場合は、Python 側だけで
 
 - 各シナリオは `python/tests/e2e/<scenario>.py` として書き、`require_host_agent` autouse fixture で skip 制御する
 - 状態を変える対称 API (Locomotion 前進 → 停止、Display 表示 → 非表示 等) を検証する場合は、起動直後の自然な状態から本命操作を呼んでも no-op と区別できないため、**逆操作 → 本操作 → 逆 → 本** の 4 step で書く。同じペアを 2 回繰り返すことで idempotence も確認できる
+- **可視的な状態変化を伴う操作 (ワールド移動・focus・UI 変化等) は、API 戻り値 assert に加えて操作前後で `_screenshot()` (`scripts/resonite_cli.py screenshot`) を撮り、実際に変化したことを目視確認する** (例: `world.py` の join 前後 / focus 前後)。screenshot 検証まで含めて初めて e2e 完了とする
 - アーティファクト (録画 MP4 / screenshot 等) は `python/tests/e2e/e2e_artifacts/` (gitignore 済み) に保存する
 
 `mod/tests/manual/` には Claude が自動化できない確認のみを残す (本質的に人間しかできない確認 = 別アカウントでの voice 受信聴取・視覚/聴覚品質判断等)。新規追加する前に e2e harness で代替できないか必ず検討する。
