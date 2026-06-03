@@ -118,6 +118,21 @@
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- Inventory Bridge: cloud record の型 / API。FrooxEngine.Store は Record、
+         SkyFrost.Base は RecordsManager / CloudResult / RecordHelper を提供する。
+         Resonite engine が同梱しているため Private=False で出力に含めない。 -->
+    <Reference Include="FrooxEngine.Store">
+      <HintPath>$(GamePath)FrooxEngine.Store.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SkyFrost.Base">
+      <HintPath>$(GamePath)SkyFrost.Base.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SkyFrost.Base.Models">
+      <HintPath>$(GamePath)SkyFrost.Base.Models.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <!-- Awwdio: Resonite が同梱する WASAPI 抽象 (AudioOutputDriver の基底
          IAudioDeviceOutput / AudioDeviceOutput を提供)。Speaker Bridge が
          AudioSystem.PrimaryOutput を読むために必要。Private=False で出力に含めない

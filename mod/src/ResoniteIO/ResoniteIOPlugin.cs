@@ -52,6 +52,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineMicrophoneBridge? _microphoneBridge;
     private FrooxEngineSpeakerBridge? _speakerBridge;
     private FrooxEngineContextMenuBridge? _contextMenuBridge;
+    private FrooxEngineInventoryBridge? _inventoryBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -112,6 +113,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _contextMenuBridge = new FrooxEngineContextMenuBridge(Engine.Current, _logSink);
 
+            _inventoryBridge = new FrooxEngineInventoryBridge(Engine.Current, _logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -121,7 +124,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _locomotionBridge,
                 _speakerBridge,
                 _microphoneBridge,
-                contextMenuBridge: _contextMenuBridge
+                contextMenuBridge: _contextMenuBridge,
+                inventoryBridge: _inventoryBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -177,6 +181,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // ContextMenuBridge は engine 状態を保持せず IDisposable でもないため
         // (reflection MethodInfo は static cache)、参照 null 化のみで足りる。
         _contextMenuBridge = null;
+
+        // InventoryBridge も streaming 状態 (Channel / Harmony / ExternalInput) を持たず
+        // 各 RPC が one-shot で cloud REST / engine marshal するだけなので参照 null 化で足りる。
+        _inventoryBridge = null;
 
         SafeDispose(_sessionBridge, nameof(_sessionBridge));
         _sessionBridge = null;
