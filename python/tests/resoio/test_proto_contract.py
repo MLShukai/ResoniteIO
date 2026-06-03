@@ -47,6 +47,17 @@ from resoio._generated.resonite_io.v1 import (
     DisplayConfig,
     DisplayGetRequest,
     DisplayState,
+    InventoryCopyRequest,
+    InventoryEntry,
+    InventoryEntryKind,
+    InventoryListing,
+    InventoryListRequest,
+    InventoryMakeDirRequest,
+    InventoryMoveRequest,
+    InventoryMutationResult,
+    InventoryRemoveRequest,
+    InventorySpawnRequest,
+    InventorySpawnResult,
     LocomotionCommand,
     LocomotionDriveSummary,
     LocomotionResetRequest,
@@ -196,6 +207,51 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "hand": 1,
         "index": 2,
     },
+    # Inventory
+    InventoryEntry: {
+        "name": 1,
+        "path": 2,
+        "kind": 3,
+        "record_id": 4,
+        "asset_uri": 5,
+        "is_public": 6,
+        "last_modified_unix_nanos": 7,
+    },
+    InventoryListing: {
+        "path": 1,
+        "entries": 2,
+    },
+    InventoryMutationResult: {
+        "path": 1,
+        "record_id": 2,
+    },
+    InventorySpawnResult: {
+        "source_path": 1,
+        "spawned_slot_id": 2,
+        "spawned_slot_name": 3,
+    },
+    InventoryListRequest: {
+        "path": 1,
+    },
+    InventoryMakeDirRequest: {
+        "path": 1,
+    },
+    InventoryCopyRequest: {
+        "source_path": 1,
+        "destination_path": 2,
+        "recursive": 3,
+    },
+    InventoryMoveRequest: {
+        "source_path": 1,
+        "destination_path": 2,
+    },
+    InventoryRemoveRequest: {
+        "path": 1,
+        "recursive": 2,
+    },
+    InventorySpawnRequest: {
+        "path": 1,
+    },
     # Session
     PingRequest: {
         "message": 1,
@@ -234,6 +290,14 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "PRIMARY": 1,
         "LEFT": 2,
         "RIGHT": 3,
+    },
+    InventoryEntryKind: {
+        "UNSPECIFIED": 0,
+        "DIRECTORY": 1,
+        "OBJECT": 2,
+        "WORLD": 3,
+        "LINK": 4,
+        "UNKNOWN": 5,
     },
 }
 

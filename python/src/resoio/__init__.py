@@ -9,6 +9,14 @@ from resoio.context_menu import (
     ContextMenuState,
 )
 from resoio.display import DisplayClient, DisplayInfo
+from resoio.inventory import (
+    InventoryClient,
+    InventoryEntry,
+    InventoryEntryKind,
+    InventoryListing,
+    InventoryMutationResult,
+    InventorySpawnResult,
+)
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
@@ -49,6 +57,12 @@ __all__ = [
     "DisplayInfo",
     "DriveSummary",
     "Frame",
+    "InventoryClient",
+    "InventoryEntry",
+    "InventoryEntryKind",
+    "InventoryListing",
+    "InventoryMutationResult",
+    "InventorySpawnResult",
     "LocomotionClient",
     "LocomotionCmd",
     "MicrophoneAudioChunk",

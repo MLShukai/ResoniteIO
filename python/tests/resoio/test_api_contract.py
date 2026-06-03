@@ -52,6 +52,12 @@ _EXPECTED_PUBLIC_NAMES = (
     "DisplayInfo",
     "DriveSummary",
     "Frame",
+    "InventoryClient",
+    "InventoryEntry",
+    "InventoryEntryKind",
+    "InventoryListing",
+    "InventoryMutationResult",
+    "InventorySpawnResult",
     "LocomotionClient",
     "LocomotionCmd",
     "MicrophoneAudioChunk",
@@ -119,6 +125,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "LocomotionClient",
         "DisplayClient",
         "ContextMenuClient",
+        "InventoryClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):
