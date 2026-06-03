@@ -57,10 +57,20 @@ _EXPECTED_PUBLIC_NAMES = (
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OpenWorld",
+    "RecordPage",
+    "RecordSort",
+    "RecordSortDirection",
+    "RecordSource",
     "ResetSummary",
     "SessionClient",
+    "SessionFilter",
+    "SessionPage",
     "SocketNotFoundError",
     "SpeakerClient",
+    "WorldClient",
+    "WorldRecord",
+    "WorldSession",
     "__version__",
 )
 
@@ -119,6 +129,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "LocomotionClient",
         "DisplayClient",
         "ContextMenuClient",
+        "WorldClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):
@@ -129,3 +140,63 @@ def test_client_class_is_importable_from_resoio(client_name: str):
     assert isinstance(client_cls, type), (
         f"resoio.{client_name} is {type(client_cls).__name__}, expected a class"
     )
+
+
+# ---------------------------------------------------------------------------
+# Public World enum member values
+#
+# These are the *public* (resoio-namespace) enums, NOT the generated wire
+# enums. They are deliberately offset from the wire (the wire carries an
+# extra ``UNSPECIFIED = 0`` slot the public enums fold into a documented
+# default head: ALL / PUBLIC / CREATION_DATE / DESCENDING). Pinning their
+# member values here freezes the public surface a downstream caller writes
+# against (e.g. ``RecordSort.RANDOM``); the wire-value mapping is pinned
+# separately in ``test_proto_contract.py``. This is a contract pin, not a
+# behaviour test — an intentional change updates this snapshot in the same
+# commit.
+# ---------------------------------------------------------------------------
+
+
+_EXPECTED_WORLD_ENUM_VALUES: dict[str, dict[str, int]] = {
+    "SessionFilter": {
+        "ALL": 0,
+        "FRIENDS": 1,
+        "HEADLESS": 2,
+    },
+    "RecordSource": {
+        "PUBLIC": 0,
+        "FEATURED": 1,
+        "OWN": 2,
+        "GROUP": 3,
+    },
+    "RecordSort": {
+        "CREATION_DATE": 0,
+        "LAST_UPDATE": 1,
+        "FIRST_PUBLISH": 2,
+        "TOTAL_VISITS": 3,
+        "NAME": 4,
+        "RANDOM": 5,
+    },
+    "RecordSortDirection": {
+        "DESCENDING": 0,
+        "ASCENDING": 1,
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("enum_name", "expected"),
+    list(_EXPECTED_WORLD_ENUM_VALUES.items()),
+)
+def test_public_world_enum_members_match_snapshot(
+    enum_name: str, expected: dict[str, int]
+):
+    """Pin each public World enum's member-name -> value.
+
+    Downstream code references these by name (``RecordSource.OWN``); the
+    int values are the documented public contract (offset from the wire
+    enums on purpose). A rename or renumber here is a breaking change.
+    """
+    enum_cls = getattr(resoio, enum_name)
+    actual = {member.name: member.value for member in enum_cls}
+    assert actual == expected
