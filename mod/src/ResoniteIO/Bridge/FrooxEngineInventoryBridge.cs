@@ -395,7 +395,15 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
         ct.ThrowIfCancellationRequested();
         try
         {
-            await _engine.RecordManager.SaveRecord(record).ConfigureAwait(false);
+            // SaveRecord 自体は upload task を recordsToSync キューに enqueue して即座に返す。
+            // cloud に反映され後続の List / GetRecordAtPath から見えることを保証するには、
+            // 返ってきた upload task の完了 (RecordUploadTaskBase.Task) を待つ必要がある
+            // (engine 側も EngineSkyFrostExtensions で saveResult.task.Task を await する)。
+            var result = await _engine.RecordManager.SaveRecord(record).ConfigureAwait(false);
+            if (result.task is not null)
+            {
+                await result.task.Task.ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
