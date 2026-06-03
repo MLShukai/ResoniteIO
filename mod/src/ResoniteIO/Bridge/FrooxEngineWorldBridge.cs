@@ -293,6 +293,10 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         );
     }
 
+    /// <summary>
+    /// session を filter 条件に照合する。Friends は host が相互フォロー contact、または
+    /// session 内に在席 contact が居れば一致 (contacts 未準備なら除外)。
+    /// </summary>
     private bool MatchesFilter(SessionInfo info, SessionFilter filter)
     {
         switch (filter)
@@ -313,6 +317,10 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         }
     }
 
+    /// <summary>
+    /// join 先 URI を解決する。session_url 指定ならそれを直接、session_id 指定なら cloud の
+    /// session cache (<c>TryGetInfo</c>) を引いて URL 群を得る。どちらも無効なら NotFound。
+    /// </summary>
     private List<Uri> ResolveJoinUris(JoinTarget target)
     {
         if (!string.IsNullOrEmpty(target.SessionUrl))
@@ -478,30 +486,13 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
     /// <summary>
     /// engine update tick 上で <paramref name="fn"/> (engine API を呼ぶ <see cref="Task"/> 起動)
-    /// を実行し、その完了まで await する。
+    /// を実行し、その完了まで await する。<see cref="RunOnEngineAsync{T}"/> が engine thread 上で
+    /// <paramref name="fn"/> を起動して得た <see cref="Task"/> を、続けて await する。
     /// </summary>
     private async Task RunOnEngineTaskAsync(Func<Task> fn, CancellationToken ct)
     {
-        var world = ResolveDispatchWorld();
-        var tcs = new TaskCompletionSource<Task>(
-            TaskCreationOptions.RunContinuationsAsynchronously
-        );
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.TrySetResult(fn());
-            }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            var inner = await tcs.Task.ConfigureAwait(false);
-            await inner.ConfigureAwait(false);
-        }
+        var inner = await RunOnEngineAsync(fn, ct).ConfigureAwait(false);
+        await inner.ConfigureAwait(false);
     }
 
     /// <summary>engine thread への marshal 先 world を解決する。userspace world を優先する。</summary>

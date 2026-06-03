@@ -145,13 +145,19 @@ public interface IWorldBridge
     /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
     Task<RecordPage> ListRecordsAsync(RecordListQuery query, CancellationToken ct);
 
-    /// <summary>既存セッションへ join し、開いたワールドの snapshot を返す。</summary>
-    /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
+    /// <summary>
+    /// 既存セッションへ Relation=Nest で join し、world が Running に達するまで待ってから
+    /// 開いたワールドの snapshot を返す (戻り値は SessionId / 名前が確定済み)。
+    /// </summary>
+    /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない、または join が拒否 / timeout した。</exception>
     /// <exception cref="WorldNotFoundException">session id / url が解決できない。</exception>
     Task<OpenWorldSnapshot> JoinAsync(JoinTarget target, CancellationToken ct);
 
-    /// <summary>レコードから新規セッションを起動し、開いたワールドの snapshot を返す。</summary>
-    /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
+    /// <summary>
+    /// レコードから Relation=Nest で新規セッションを起動し、world が Running に達するまで
+    /// 待ってから開いたワールドの snapshot を返す。
+    /// </summary>
+    /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない、または起動が失敗 / timeout した。</exception>
     /// <exception cref="WorldNotFoundException">record id が解決できない。</exception>
     Task<OpenWorldSnapshot> StartWorldAsync(StartWorldTarget target, CancellationToken ct);
 

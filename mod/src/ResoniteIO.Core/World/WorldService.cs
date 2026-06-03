@@ -24,13 +24,15 @@ public sealed class WorldService : V1.World.WorldBase
         _bridge = bridge;
     }
 
+    /// <summary>
+    /// filter 済み全件を bridge から受け取り、Service 側で page / page_size に slice する
+    /// (total_count は slice 前の全件数)。page_size=0 は全件を 1 ページで返す。
+    /// </summary>
     public override async Task<V1.ListSessionsResponse> ListSessions(
         V1.ListSessionsRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("ListSessions");
-
         var query = new SessionListQuery
         {
             Search = request.Search,
@@ -38,17 +40,12 @@ public sealed class WorldService : V1.World.WorldBase
             MinActiveUsers = request.MinActiveUsers,
         };
 
-        IReadOnlyList<WorldSessionSnapshot> sessions;
-        try
-        {
-            sessions = await bridge
-                .ListSessionsAsync(query, context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("ListSessions", ex, context);
-        }
+        var sessions = await CallBridgeAsync(
+                "ListSessions",
+                context,
+                (bridge, ct) => bridge.ListSessionsAsync(query, ct)
+            )
+            .ConfigureAwait(false);
 
         var totalCount = sessions.Count;
         var page = request.Page;
@@ -73,13 +70,12 @@ public sealed class WorldService : V1.World.WorldBase
         return response;
     }
 
+    /// <summary>サーバ側ページング (offset / count) を bridge に委ね、結果をそのまま返す。</summary>
     public override async Task<V1.ListRecordsResponse> ListRecords(
         V1.ListRecordsRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("ListRecords");
-
         var query = new RecordListQuery
         {
             Source = MapSource(request.Source),
@@ -91,17 +87,12 @@ public sealed class WorldService : V1.World.WorldBase
             SortDirection = MapSortDirection(request.SortDirection),
         };
 
-        RecordPage pageResult;
-        try
-        {
-            pageResult = await bridge
-                .ListRecordsAsync(query, context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("ListRecords", ex, context);
-        }
+        var pageResult = await CallBridgeAsync(
+                "ListRecords",
+                context,
+                (bridge, ct) => bridge.ListRecordsAsync(query, ct)
+            )
+            .ConfigureAwait(false);
 
         var response = new V1.ListRecordsResponse
         {
@@ -115,13 +106,12 @@ public sealed class WorldService : V1.World.WorldBase
         return response;
     }
 
+    /// <summary>既存セッションへ join する (bridge が Running まで block する)。</summary>
     public override async Task<V1.JoinResponse> Join(
         V1.JoinRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Join");
-
         var target = new JoinTarget
         {
             SessionId = request.SessionId,
@@ -129,26 +119,22 @@ public sealed class WorldService : V1.World.WorldBase
             Focus = request.Focus,
         };
 
-        OpenWorldSnapshot world;
-        try
-        {
-            world = await bridge.JoinAsync(target, context.CancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("Join", ex, context);
-        }
+        var world = await CallBridgeAsync(
+                "Join",
+                context,
+                (bridge, ct) => bridge.JoinAsync(target, ct)
+            )
+            .ConfigureAwait(false);
 
         return new V1.JoinResponse { World = ToProto(world) };
     }
 
+    /// <summary>レコードから新規セッションを起動する (bridge が Running まで block する)。</summary>
     public override async Task<V1.StartWorldResponse> StartWorld(
         V1.StartWorldRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("StartWorld");
-
         var target = new StartWorldTarget
         {
             RecordId = request.RecordId,
@@ -156,39 +142,28 @@ public sealed class WorldService : V1.World.WorldBase
             Focus = request.Focus,
         };
 
-        OpenWorldSnapshot world;
-        try
-        {
-            world = await bridge
-                .StartWorldAsync(target, context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("StartWorld", ex, context);
-        }
+        var world = await CallBridgeAsync(
+                "StartWorld",
+                context,
+                (bridge, ct) => bridge.StartWorldAsync(target, ct)
+            )
+            .ConfigureAwait(false);
 
         return new V1.StartWorldResponse { World = ToProto(world) };
     }
 
+    /// <summary>ローカルに開いているワールド (userspace 除く) を列挙する。</summary>
     public override async Task<V1.ListOpenWorldsResponse> ListOpenWorlds(
         V1.ListOpenWorldsRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("ListOpenWorlds");
-
-        IReadOnlyList<OpenWorldSnapshot> worlds;
-        try
-        {
-            worlds = await bridge
-                .ListOpenWorldsAsync(context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("ListOpenWorlds", ex, context);
-        }
+        var worlds = await CallBridgeAsync(
+                "ListOpenWorlds",
+                context,
+                (bridge, ct) => bridge.ListOpenWorldsAsync(ct)
+            )
+            .ConfigureAwait(false);
 
         var response = new V1.ListOpenWorldsResponse();
         foreach (var world in worlds)
@@ -198,65 +173,57 @@ public sealed class WorldService : V1.World.WorldBase
         return response;
     }
 
+    /// <summary>handle 指定のワールドを focus し、その snapshot を返す。</summary>
     public override async Task<V1.FocusResponse> Focus(
         V1.FocusRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Focus");
-
-        OpenWorldSnapshot world;
-        try
-        {
-            world = await bridge
-                .FocusAsync(request.Handle, context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("Focus", ex, context);
-        }
+        var world = await CallBridgeAsync(
+                "Focus",
+                context,
+                (bridge, ct) => bridge.FocusAsync(request.Handle, ct)
+            )
+            .ConfigureAwait(false);
 
         return new V1.FocusResponse { World = ToProto(world) };
     }
 
+    /// <summary>handle 指定のワールドから退出する。</summary>
     public override async Task<V1.LeaveResponse> Leave(
         V1.LeaveRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Leave");
-
-        try
-        {
-            await bridge
-                .LeaveAsync(request.Handle, context.CancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("Leave", ex, context);
-        }
+        await CallBridgeAsync(
+                "Leave",
+                context,
+                async (bridge, ct) =>
+                {
+                    await bridge.LeaveAsync(request.Handle, ct).ConfigureAwait(false);
+                    return true;
+                }
+            )
+            .ConfigureAwait(false);
 
         return new V1.LeaveResponse();
     }
 
+    /// <summary>
+    /// focus 中のワールド snapshot を返す。focus 中が無い (userspace のみ) 場合は
+    /// <c>has_world=false</c> を返す。
+    /// </summary>
     public override async Task<V1.GetCurrentResponse> GetCurrent(
         V1.GetCurrentRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("GetCurrent");
-
-        OpenWorldSnapshot? world;
-        try
-        {
-            world = await bridge.GetCurrentAsync(context.CancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw Translate("GetCurrent", ex, context);
-        }
+        var world = await CallBridgeAsync(
+                "GetCurrent",
+                context,
+                (bridge, ct) => bridge.GetCurrentAsync(ct)
+            )
+            .ConfigureAwait(false);
 
         var response = new V1.GetCurrentResponse { HasWorld = world is not null };
         if (world is not null)
@@ -266,7 +233,17 @@ public sealed class WorldService : V1.World.WorldBase
         return response;
     }
 
-    private IWorldBridge RequireBridge(string rpc)
+    /// <summary>
+    /// bridge 未登録なら <c>Unavailable</c>、bridge 呼び出しが投げた例外は
+    /// gRPC Status (FailedPrecondition / NotFound / Internal) に翻訳する共通ラッパ。
+    /// client cancel (<see cref="OperationCanceledException"/> / <see cref="IOException"/> かつ
+    /// token cancel 済み) はそのまま伝播させる。
+    /// </summary>
+    private async Task<T> CallBridgeAsync<T>(
+        string rpc,
+        ServerCallContext context,
+        Func<IWorldBridge, CancellationToken, Task<T>> call
+    )
     {
         if (_bridge is null)
         {
@@ -278,20 +255,22 @@ public sealed class WorldService : V1.World.WorldBase
             );
         }
 
-        return _bridge;
+        try
+        {
+            return await call(_bridge, context.CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+            when (ex is not (OperationCanceledException or IOException)
+                || !context.CancellationToken.IsCancellationRequested
+            )
+        {
+            // client cancel は filter で除外され、ここには来ない (そのまま伝播)。
+            throw Translate(rpc, ex);
+        }
     }
 
-    private RpcException Translate(string rpc, Exception ex, ServerCallContext context)
+    private RpcException Translate(string rpc, Exception ex)
     {
-        if (
-            ex is OperationCanceledException or IOException
-            && context.CancellationToken.IsCancellationRequested
-        )
-        {
-            // client cancelled: そのまま伝播させる。
-            throw ex;
-        }
-
         switch (ex)
         {
             case WorldNotReadyException notReady:

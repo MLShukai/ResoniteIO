@@ -123,24 +123,6 @@ _RECORD_SORT_DIRECTION_TO_WIRE: dict[RecordSortDirection, _WireRecordSortDirecti
 }
 
 
-def _session_filter_to_wire(value: SessionFilter) -> _WireSessionFilter:
-    return _SESSION_FILTER_TO_WIRE[value]
-
-
-def _record_source_to_wire(value: RecordSource) -> _WireRecordSource:
-    return _RECORD_SOURCE_TO_WIRE[value]
-
-
-def _record_sort_to_wire(value: RecordSort) -> _WireRecordSort:
-    return _RECORD_SORT_TO_WIRE[value]
-
-
-def _record_sort_direction_to_wire(
-    value: RecordSortDirection,
-) -> _WireRecordSortDirection:
-    return _RECORD_SORT_DIRECTION_TO_WIRE[value]
-
-
 @dataclass(frozen=True, slots=True)
 class WorldSession:
     """One live session (a tile in the world browser)."""
@@ -257,6 +239,14 @@ def _open_world_from_wire(wire: _WireOpenWorld) -> OpenWorld:
     )
 
 
+def _open_world_from_response(wire: _WireOpenWorld | None) -> OpenWorld:
+    """Convert the optional ``OpenWorld`` a single-world response promised to
+    populate, raising if the server left it unset."""
+    if wire is None:
+        raise RuntimeError("World response did not include an OpenWorld.")
+    return _open_world_from_wire(wire)
+
+
 class WorldClient:
     """Async client for the Resonite IO ``World`` service over a UDS.
 
@@ -318,7 +308,7 @@ class WorldClient:
         stub = self._require_stub()
         request = ListSessionsRequest(
             search=search,
-            filter=_session_filter_to_wire(filter),
+            filter=_SESSION_FILTER_TO_WIRE[filter],
             min_active_users=min_active_users,
             page=page,
             page_size=page_size,
@@ -345,13 +335,13 @@ class WorldClient:
         """List world records (use ``sort=RANDOM`` for the random tab)."""
         stub = self._require_stub()
         request = ListRecordsRequest(
-            source=_record_source_to_wire(source),
+            source=_RECORD_SOURCE_TO_WIRE[source],
             required_tags=list(required_tags),
             owner_id=owner_id,
             offset=offset,
             count=count,
-            sort=_record_sort_to_wire(sort),
-            sort_direction=_record_sort_direction_to_wire(sort_direction),
+            sort=_RECORD_SORT_TO_WIRE[sort],
+            sort_direction=_RECORD_SORT_DIRECTION_TO_WIRE[sort_direction],
         )
         response = await stub.list_records(request)
         return RecordPage(
@@ -380,7 +370,7 @@ class WorldClient:
             focus=focus,
         )
         response = await stub.join(request)
-        return _open_world_from_wire(_require_world(response.world))
+        return _open_world_from_response(response.world)
 
     async def start_world(
         self,
@@ -397,7 +387,7 @@ class WorldClient:
             focus=focus,
         )
         response = await stub.start_world(request)
-        return _open_world_from_wire(_require_world(response.world))
+        return _open_world_from_response(response.world)
 
     async def list_open_worlds(self) -> list[OpenWorld]:
         """List the locally-open worlds."""
@@ -409,7 +399,7 @@ class WorldClient:
         """Focus a locally-open world by handle."""
         stub = self._require_stub()
         response = await stub.focus(FocusRequest(handle=handle))
-        return _open_world_from_wire(_require_world(response.world))
+        return _open_world_from_response(response.world)
 
     async def leave(self, handle: int) -> None:
         """Leave a locally-open world by handle."""
@@ -423,12 +413,4 @@ class WorldClient:
         response = await stub.get_current(GetCurrentRequest())
         if not response.has_world:
             return None
-        return _open_world_from_wire(_require_world(response.world))
-
-
-def _require_world(world: _WireOpenWorld | None) -> _WireOpenWorld:
-    """Unwrap an optional wire ``OpenWorld`` the server promised to
-    populate."""
-    if world is None:
-        raise RuntimeError("World response did not include an OpenWorld.")
-    return world
+        return _open_world_from_response(response.world)
