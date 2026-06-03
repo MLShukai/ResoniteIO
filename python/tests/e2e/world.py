@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +29,13 @@ import grpclib
 import pytest
 from grpclib.const import Status
 
-from resoio.world import OpenWorld, RecordSort, RecordSource, WorldClient
+from resoio.world import (
+    OpenWorld,
+    RecordSort,
+    RecordSource,
+    WorldClient,
+    WorldSession,
+)
 from tests.helpers import mark_e2e
 
 # parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
@@ -75,6 +82,66 @@ def _format_world(world: OpenWorld | None) -> str:
         f"handle={world.handle} session_id={world.session_id!r} "
         f"name={world.name!r} focused={world.focused} "
         f"users={world.user_count} access={world.access_level!r}"
+    )
+
+
+# Cap how many candidates we attempt so a hostile cloud can't stall the run.
+_MAX_JOIN_CANDIDATES = 6
+_MAX_START_CANDIDATES = 5
+
+
+async def _acquire_world(
+    world: WorldClient,
+    sessions: list[WorldSession],
+    record: Callable[[str, str], None],
+) -> OpenWorld:
+    """Move into a world and return its ``OpenWorld``.
+
+    Public sessions vary in compatibility / access, so any single join can
+    be legitimately rejected (the bridge surfaces that as
+    ``FAILED_PRECONDITION``). Try several joinable candidates (``Anyone``
+    access, proven-loadable ones — those with active users — first), then
+    fall back to starting one of our OWN world records. ``pytest.skip`` only
+    if neither path yields a running world.
+    """
+    candidates = [s for s in sessions if s.session_id and s.access_level == "Anyone"]
+    candidates.sort(key=lambda s: s.active_users, reverse=True)
+    tried: list[str] = []
+
+    for cand in candidates[:_MAX_JOIN_CANDIDATES]:
+        try:
+            joined = await world.join(session_id=cand.session_id)
+            record(
+                "02b_acquire",
+                f"joined live session {cand.session_id!r} ({cand.name!r}) "
+                f"after {len(tried)} rejected candidate(s)",
+            )
+            return joined
+        except grpclib.exceptions.GRPCError as exc:
+            tried.append(f"join {cand.session_id!r}: {exc.status.name} {exc.message!r}")
+
+    # Fallback: start one of our own world records (deterministic, always
+    # version-compatible, fast to reach Running).
+    own = await world.list_records(source=RecordSource.OWN, count=10)
+    for own_rec in own.records[:_MAX_START_CANDIDATES]:
+        try:
+            started = await world.start_world(
+                record_id=own_rec.record_id, owner_id=own_rec.owner_id
+            )
+            record(
+                "02b_acquire",
+                f"started OWN record {own_rec.record_id!r} ({own_rec.name!r}) "
+                f"after {len(tried)} live-join rejection(s)",
+            )
+            return started
+        except grpclib.exceptions.GRPCError as exc:
+            tried.append(
+                f"start {own_rec.record_id!r}: {exc.status.name} {exc.message!r}"
+            )
+
+    pytest.skip(
+        "No joinable live session and no startable OWN world; cannot drive the "
+        "movement scenario. Attempts:\n" + "\n".join(tried)
     )
 
 
@@ -140,15 +207,16 @@ class TestWorld:
                         "No live sessions visible to this account; cannot drive "
                         "the join/focus/leave scenario (needs a non-empty cloud)."
                     )
-                target = page.sessions[0]
-                assert target.session_id, "first session must carry a session_id"
-
-                # 2. join the first session (Nest keeps the home world).
+                # 2. move into a world: try joinable live sessions, falling
+                #    back to starting an OWN world. Nest keeps the home world
+                #    open alongside the new one.
                 await settle_shot("02_before_join", 0.5)
-                joined = await world.join(session_id=target.session_id)
+                joined = await _acquire_world(world, page.sessions, record)
                 record("03_joined", _format_world(joined))
                 await settle_shot("03_after_join", _WORLD_TRANSITION_SETTLE_S)
-                assert joined.session_id == target.session_id
+                assert joined.session_id, (
+                    "the joined/started world must carry a session_id"
+                )
 
                 # get_current must reflect the world we just joined.
                 current = await world.get_current()
@@ -174,7 +242,13 @@ class TestWorld:
                 # 4. focus a *different* open world if one exists (e.g. the
                 #    home/userspace world Nest kept open), then assert the
                 #    switch took effect.
-                others = [w for w in open_worlds if w.session_id != joined.session_id]
+                # Require a session_id so we focus a real loaded world (e.g.
+                # the home world Nest kept open), never a half-dead leftover.
+                others = [
+                    w
+                    for w in open_worlds
+                    if w.session_id and w.session_id != joined.session_id
+                ]
                 if others:
                     other = others[0]
                     await settle_shot("06_before_focus", 0.5)
