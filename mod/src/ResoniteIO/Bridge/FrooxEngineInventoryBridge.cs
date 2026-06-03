@@ -51,22 +51,35 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
     public async Task<InventoryListingSnapshot> ListAsync(string path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var ownerId = RequireOwnerId();
         var enginePath = ToEnginePath(path);
 
-        // 非ルートは directory record の存在を確認 (GetRecords は欠落パスでも空を返すため)。
-        if (!IsRoot(enginePath))
+        string listOwnerId;
+        string listEnginePath;
+        if (IsRoot(enginePath))
         {
-            var dir = await ResolveRecordAsync(ownerId, enginePath, path, ct).ConfigureAwait(false);
-            if (!IsDirectory(dir))
+            listOwnerId = RequireOwnerId();
+            listEnginePath = InventoryRoot;
+        }
+        else
+        {
+            // 途中のリンクを辿って実体の owner/path を得る。最終要素がリンクなら
+            // リンク先の dir を列挙する (Resonite Essentials のような共有フォルダ対応)。
+            var resolved = await ResolveLocationAsync(path, ct).ConfigureAwait(false);
+            if (
+                !IsDirectory(resolved.record)
+                && !string.Equals(resolved.record.RecordType, "link", StringComparison.Ordinal)
+            )
             {
                 throw new InventoryNotFoundException($"{path} is not a directory.");
             }
+            listOwnerId = resolved.ownerId;
+            listEnginePath = resolved.enginePath;
         }
 
-        var children = await GetChildrenAsync(ownerId, enginePath, ct).ConfigureAwait(false);
-        var entries = children.Select(MapEntry).ToList();
-        return new InventoryListingSnapshot(ToClientPath(enginePath), entries);
+        var children = await GetChildrenAsync(listOwnerId, listEnginePath, ct)
+            .ConfigureAwait(false);
+        var entries = children.Select(child => MapEntry(child, path)).ToList();
+        return new InventoryListingSnapshot(path, entries);
     }
 
     /// <inheritdoc/>
@@ -82,10 +95,137 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
             throw new InventoryConflictException($"{path} already exists.");
         }
 
-        var record = RecordHelper.CreateForDirectory<Record>(ownerId, parent, name);
-        await SaveAsync(record, ct).ConfigureAwait(false);
+        // 親パスを "Inventory" 配下の相対表現にする (例: Inventory\A\B → "A"、Inventory\X → "")。
+        var parentRelative = string.Equals(parent, InventoryRoot, StringComparison.Ordinal)
+            ? string.Empty
+            : parent.Substring(InventoryRoot.Length + 1);
+
+        var record = await CreateDirectoryRecordAsync(ownerId, parent, name, parentRelative, ct)
+            .ConfigureAwait(false);
         _log.LogInfo($"[ResoniteIO] Inventory.MakeDir: {path}");
         return new InventoryMutationSnapshot(path, record.RecordId ?? string.Empty);
+    }
+
+    /// <summary>
+    /// directory record を作成する。可能なら engine の live model
+    /// (<see cref="RecordDirectory.AddSubdirectory(string, bool)"/>) を engine thread で叩いて
+    /// 開いている InventoryBrowser に subdirectory として即時反映させる。
+    /// live model が使えない / genuine conflict 以外で失敗した場合は、直接 record を作る fallback に落ちる。
+    /// どちらの経路でも cloud record の durability (upload 完了待ち) は <see cref="SaveAsync"/> で保証する。
+    /// </summary>
+    private async Task<Record> CreateDirectoryRecordAsync(
+        string ownerId,
+        string parent,
+        string name,
+        string parentRelative,
+        CancellationToken ct
+    )
+    {
+        ct.ThrowIfCancellationRequested();
+        var rootDir = _engine.Cloud.InventoryRootDirectory;
+        if (rootDir is not null)
+        {
+            try
+            {
+                var record = await AddSubdirectoryViaLiveModelAsync(
+                        rootDir,
+                        parentRelative,
+                        name,
+                        ct
+                    )
+                    .ConfigureAwait(false);
+                // AddSubdirectory 内部の SaveRecord は fire-and-forget。同一 RecordId で
+                // upsert し upload 完了を待って durability を担保する。
+                await SaveAsync(record, ct).ConfigureAwait(false);
+                _log.LogInfo("[ResoniteIO] Inventory.MakeDir via live-model");
+                return record;
+            }
+            catch (InventoryConflictException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogInfo(
+                    $"[ResoniteIO] Inventory.MakeDir live-model failed ({ex.Message}); falling back to direct."
+                );
+            }
+        }
+
+        // fallback: 直接 directory record を作って保存する。
+        var direct = RecordHelper.CreateForDirectory<Record>(ownerId, parent, name);
+        await SaveAsync(direct, ct).ConfigureAwait(false);
+        _log.LogInfo("[ResoniteIO] Inventory.MakeDir via direct fallback");
+        return direct;
+    }
+
+    /// <summary>
+    /// engine update thread 上で親 <see cref="RecordDirectory"/> を解決し
+    /// <see cref="RecordDirectory.AddSubdirectory(string, bool)"/> を呼ぶ。
+    /// 既存名は <see cref="InventoryConflictException"/> に翻訳する。
+    /// </summary>
+    private Task<Record> AddSubdirectoryViaLiveModelAsync(
+        RecordDirectory rootDir,
+        string parentRelative,
+        string name,
+        CancellationToken ct
+    )
+    {
+        var world = ResolveWorld();
+        var tcs = new TaskCompletionSource<Record>();
+
+        world.RunSynchronously(() =>
+        {
+            try
+            {
+                var slot = world.RootSlot.AddSlot("ResoniteIO MakeDir", persistent: false);
+                slot.StartTask(async () =>
+                {
+                    try
+                    {
+                        await default(ToWorld);
+                        var parentDir =
+                            parentRelative.Length == 0
+                                ? rootDir
+                                : await rootDir.GetSubdirectoryAtPath(
+                                    parentRelative.Replace('\\', '/')
+                                );
+                        if (parentDir is null)
+                        {
+                            throw new InventoryNotFoundException(
+                                $"Parent directory '{parentRelative}' not found in live model."
+                            );
+                        }
+                        await parentDir.EnsureFullyLoaded();
+                        var subdir = parentDir.AddSubdirectory(name);
+                        tcs.TrySetResult(subdir.DirectoryRecord);
+                    }
+                    catch (Exception ex) when (ex.Message.Contains("already exists"))
+                    {
+                        tcs.TrySetException(
+                            new InventoryConflictException($"{name} already exists.", ex)
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.TrySetException(ex);
+                    }
+                    finally
+                    {
+                        slot.Destroy();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+
+        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+        {
+            return tcs.Task;
+        }
     }
 
     /// <inheritdoc/>
@@ -206,9 +346,8 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
     public async Task<InventorySpawnSnapshot> SpawnAsync(string path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var ownerId = RequireOwnerId();
-        var enginePath = ToEnginePath(path);
-        var record = await ResolveRecordAsync(ownerId, enginePath, path, ct).ConfigureAwait(false);
+        // 途中のリンクを辿って実体 record を得る (グループ所有でも spawn 可能)。
+        var (_, _, record) = await ResolveLocationAsync(path, ct).ConfigureAwait(false);
 
         var world = ResolveWorld();
         var tcs = new TaskCompletionSource<InventorySpawnSnapshot>();
@@ -231,7 +370,10 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
                 {
                     try
                     {
-                        await slot.LoadObjectAsync(record).ConfigureAwait(false);
+                        // LoadObjectAsync 後の graph mutation を engine update thread に
+                        // 載せ替える (InventoryBrowser.SpawnItem と同じ await default(ToWorld))。
+                        await default(ToWorld);
+                        await slot.LoadObjectAsync(record);
                         slot.PositionInFrontOfUser(null, float3.Down * 0.2f, 0.5f);
                         var spawned = slot.GetComponent<InventoryItem>()?.Unpack(false) ?? slot;
                         tcs.TrySetResult(
@@ -303,6 +445,56 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
         return record;
     }
 
+    /// <summary>
+    /// クライアントパスをセグメント単位で歩き、途中の <c>link</c> record を辿って
+    /// 最終的な (ownerId, enginePath, record) を返す。List / Spawn でのみ使う
+    /// (mutation はリンクを辿らない)。
+    /// </summary>
+    private async Task<(string ownerId, string enginePath, Record record)> ResolveLocationAsync(
+        string clientPath,
+        CancellationToken ct
+    )
+    {
+        var segments = clientPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (
+            segments.Length == 0
+            || !string.Equals(segments[0], InventoryRoot, StringComparison.Ordinal)
+        )
+        {
+            throw new ArgumentException(
+                $"Inventory path must be under /{InventoryRoot}: {clientPath}",
+                nameof(clientPath)
+            );
+        }
+
+        var ownerId = RequireOwnerId();
+        var enginePath = InventoryRoot;
+        Record? record = null;
+
+        for (var i = 1; i < segments.Length; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            enginePath = enginePath + "\\" + segments[i];
+            record = await TryResolveAsync(ownerId, enginePath, ct).ConfigureAwait(false);
+            if (record is null)
+            {
+                var prefix = "/" + string.Join("/", segments.Take(i + 1));
+                throw new InventoryNotFoundException($"No inventory entry at {prefix}.");
+            }
+
+            if (string.Equals(record.RecordType, "link", StringComparison.Ordinal))
+            {
+                (ownerId, enginePath) = ParseResRec(record.AssetURI);
+            }
+        }
+
+        if (record is null)
+        {
+            throw new InventoryNotFoundException($"No inventory entry at {clientPath}.");
+        }
+        return (ownerId, enginePath, record);
+    }
+
     private async Task<Record?> TryResolveAsync(
         string ownerId,
         string enginePath,
@@ -313,8 +505,10 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
         CloudResult<Record> result;
         try
         {
+            // GetRecordAtPath は path を URL に raw 補間する (URL エンコードしない) ため、
+            // 空白などの特殊文字を含むパスでハングする。各セグメントを個別にエンコードして渡す。
             result = await _engine
-                .Cloud.Records.GetRecordAtPath<Record>(ownerId, enginePath)
+                .Cloud.Records.GetRecordAtPath<Record>(ownerId, ToCloudPath(enginePath))
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -457,14 +651,17 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
 
     // ---- mapping & path helpers -------------------------------------------
 
-    private static InventoryEntrySnapshot MapEntry(Record record)
+    /// <summary>
+    /// child record を listing entry に変換する。クライアントから見える <c>path</c> は
+    /// 要求された親パス (<paramref name="clientPathPrefix"/>) + <c>/</c> + child 名で組む
+    /// (child.Path はグループ owner の engine パスになり得るため使わない)。
+    /// </summary>
+    private static InventoryEntrySnapshot MapEntry(Record record, string clientPathPrefix)
     {
-        var full = string.IsNullOrEmpty(record.Path)
-            ? record.Name
-            : record.Path + "\\" + record.Name;
+        var name = record.Name ?? string.Empty;
         return new InventoryEntrySnapshot(
-            record.Name ?? string.Empty,
-            ToClientPath(full),
+            name,
+            clientPathPrefix + "/" + name,
             MapKind(record.RecordType),
             record.RecordId ?? string.Empty,
             record.AssetURI ?? string.Empty,
@@ -522,6 +719,46 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
     }
 
     private static string ToClientPath(string enginePath) => "/" + enginePath.Replace('\\', '/');
+
+    /// <summary>
+    /// engine 表現 (<c>Inventory\Resonite Essentials</c>) を <c>GetRecordAtPath</c> に渡せる
+    /// URL セーフなパスに変換する。各セグメントを <see cref="Uri.EscapeDataString"/> し <c>/</c> で繋ぐ。
+    /// (<c>GetRecordAtPath</c> は path を URL に raw 補間するため、自前エンコードが必要。
+    /// 一方 <c>GetRecords</c> は内部で <c>Uri.EscapeDataString</c> するので raw な <c>\</c> パスを渡す。)
+    /// </summary>
+    private static string ToCloudPath(string engineRawPath) =>
+        string.Join("/", engineRawPath.Split('\\').Select(Uri.EscapeDataString));
+
+    /// <summary>
+    /// <c>resrec:///{ownerId}/{path}</c> 形式のリンク URI を (ownerId, enginePath) に分解する。
+    /// 例: <c>resrec:///G-Resonite/Inventory/Resonite Essentials</c> →
+    /// (<c>G-Resonite</c>, <c>Inventory\Resonite Essentials</c>)。
+    /// </summary>
+    private static (string ownerId, string enginePath) ParseResRec(string? assetUri)
+    {
+        const string prefix = "resrec:///";
+        if (
+            string.IsNullOrEmpty(assetUri) || !assetUri.StartsWith(prefix, StringComparison.Ordinal)
+        )
+        {
+            throw new InventoryNotFoundException(
+                $"Cannot follow link: unsupported asset URI '{assetUri}'."
+            );
+        }
+
+        var rest = assetUri.Substring(prefix.Length);
+        var slash = rest.IndexOf('/');
+        if (slash < 0)
+        {
+            throw new InventoryNotFoundException(
+                $"Cannot follow link: malformed asset URI '{assetUri}'."
+            );
+        }
+
+        var owner = rest.Substring(0, slash);
+        var pathPart = rest.Substring(slash + 1);
+        return (owner, pathPart.Replace('/', '\\'));
+    }
 
     private static (string parent, string name) SplitEnginePath(string enginePath)
     {
