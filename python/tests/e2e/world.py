@@ -217,6 +217,12 @@ class TestWorld:
                 assert joined.session_id, (
                     "the joined/started world must carry a session_id"
                 )
+                # join/start default focus=True must report the world as
+                # actually focused (the bridge waits for the engine to apply
+                # the focus, not just queue it).
+                assert joined.focused, (
+                    "a focus-on-join world must be reported as focused"
+                )
 
                 # get_current must reflect the world we just joined.
                 current = await world.get_current()
@@ -256,6 +262,12 @@ class TestWorld:
                     record("07_focused_other", _format_world(focused))
                     await settle_shot("07_after_focus", _WORLD_TRANSITION_SETTLE_S)
                     assert focused.handle == other.handle
+                    # focus() must wait for the engine to apply the focus, so
+                    # the returned snapshot must already report focused=True
+                    # (previously it raced and returned focused=False).
+                    assert focused.focused, (
+                        "focus() must report the target world as focused"
+                    )
                     now_current = await world.get_current()
                     record("08_current_after_focus", _format_world(now_current))
                     assert now_current is not None

@@ -180,6 +180,10 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
         var world = await OpenWorldOnEngineAsync(settings, ct).ConfigureAwait(false);
         await WaitUntilWorldReadyAsync(world, ct).ConfigureAwait(false);
+        if (target.Focus)
+        {
+            await WaitUntilFocusedAsync(world, ct).ConfigureAwait(false);
+        }
         return await RunOnEngineAsync(() => ToOpenWorldSnapshot(world), ct).ConfigureAwait(false);
     }
 
@@ -220,6 +224,10 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
         var world = await OpenWorldOnEngineAsync(settings, ct).ConfigureAwait(false);
         await WaitUntilWorldReadyAsync(world, ct).ConfigureAwait(false);
+        if (target.Focus)
+        {
+            await WaitUntilFocusedAsync(world, ct).ConfigureAwait(false);
+        }
         return await RunOnEngineAsync(() => ToOpenWorldSnapshot(world), ct).ConfigureAwait(false);
     }
 
@@ -247,19 +255,27 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     }
 
     /// <inheritdoc/>
-    public Task<OpenWorldSnapshot> FocusAsync(int handle, CancellationToken ct)
+    public async Task<OpenWorldSnapshot> FocusAsync(int handle, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
-        return RunOnEngineAsync(
-            () =>
-            {
-                var world = ResolveWorld(handle);
-                _worldManager.FocusWorld(world);
-                return ToOpenWorldSnapshot(world);
-            },
-            ct
-        );
+        var world = await RunOnEngineAsync(() => ResolveWorld(handle), ct).ConfigureAwait(false);
+
+        await RunOnEngineAsync(
+                () =>
+                {
+                    _worldManager.FocusWorld(world);
+                    return true;
+                },
+                ct
+            )
+            .ConfigureAwait(false);
+
+        // FocusWorld は _setWorldFocus に積むだけで、FocusedWorld の更新は後続 tick。
+        // 実際に focus が適用されてから snapshot しないと focused=false を返してしまう。
+        await WaitUntilFocusedAsync(world, ct).ConfigureAwait(false);
+
+        return await RunOnEngineAsync(() => ToOpenWorldSnapshot(world), ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -272,6 +288,15 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         // LeaveSession は engine 側の Coroutines.StartTask で world 操作を行うため、
         // engine thread に marshal してから await する。
         await RunOnEngineTaskAsync(() => Userspace.LeaveSession(world), ct).ConfigureAwait(false);
+
+        // LeaveSession / DestroyWorld は world 破棄を deferred で行う。実際に open world
+        // から外れる (dispose 済み) まで待ってから返す。
+        await WaitOnEngineUntilAsync(
+                () => world.IsDisposed || !_worldManager.Worlds.Contains(world),
+                $"world handle {handle} to leave",
+                ct
+            )
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -458,6 +483,50 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
             await Task.Delay(pollInterval, ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// engine が状態変更を適用し終えるまで待つ汎用 polling。<c>FocusWorld</c> /
+    /// <c>DestroyWorld</c> / <c>LeaveSession</c> は要求を pending に積んで後続 tick で
+    /// 適用する deferred 操作のため、呼び出し直後に snapshot すると変更前の状態を返して
+    /// しまう。<paramref name="condition"/> が engine thread 上で true になるまで待ち、
+    /// timeout したら <see cref="WorldNotReadyException"/> を投げる。
+    /// </summary>
+    private async Task WaitOnEngineUntilAsync(
+        Func<bool> condition,
+        string description,
+        CancellationToken ct
+    )
+    {
+        var timeout = TimeSpan.FromSeconds(30);
+        var pollInterval = TimeSpan.FromMilliseconds(100);
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (await RunOnEngineAsync(condition, ct).ConfigureAwait(false))
+            {
+                return;
+            }
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new WorldNotReadyException(
+                    $"Timed out waiting for {description} within {timeout.TotalSeconds:0}s."
+                );
+            }
+            await Task.Delay(pollInterval, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// focus 要求が engine に適用され <c>FocusedWorld</c> が <paramref name="world"/> に
+    /// なるまで待つ (<c>FocusWorld</c> は deferred なので即 snapshot すると focused=false)。
+    /// </summary>
+    private Task WaitUntilFocusedAsync(FrooxWorld world, CancellationToken ct) =>
+        WaitOnEngineUntilAsync(
+            () => ReferenceEquals(_worldManager.FocusedWorld, world),
+            "the world to become focused",
+            ct
+        );
 
     /// <summary>
     /// engine update tick 上で <paramref name="fn"/> を one-shot 実行し結果を await する。
