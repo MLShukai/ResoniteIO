@@ -3,6 +3,7 @@ using Grpc.Net.Client;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
@@ -46,7 +47,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ILocomotionBridge? locomotionBridge = null,
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
-        IContextMenuBridge? contextMenuBridge = null
+        IContextMenuBridge? contextMenuBridge = null,
+        IInventoryBridge? inventoryBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
@@ -56,7 +58,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
             locomotionBridge,
             speakerBridge,
             microphoneBridge,
-            contextMenuBridge
+            contextMenuBridge,
+            inventoryBridge
         );
 
     public static async Task<SessionHostHarness> StartAsync(
@@ -67,7 +70,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ILocomotionBridge? locomotionBridge = null,
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
-        IContextMenuBridge? contextMenuBridge = null
+        IContextMenuBridge? contextMenuBridge = null,
+        IInventoryBridge? inventoryBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -86,7 +90,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
                 locomotionBridge,
                 speakerBridge,
                 microphoneBridge,
-                contextMenuBridge
+                contextMenuBridge,
+                inventoryBridge
             );
         }
         catch
