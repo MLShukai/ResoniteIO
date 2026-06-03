@@ -11,6 +11,7 @@ using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
+using ResoniteIO.Core.World;
 
 namespace ResoniteIO.Core.Session;
 
@@ -78,7 +79,8 @@ public sealed class SessionHost : IAsyncDisposable
         ILocomotionBridge? locomotionBridge = null,
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
-        IContextMenuBridge? contextMenuBridge = null
+        IContextMenuBridge? contextMenuBridge = null,
+        IWorldBridge? worldBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -131,6 +133,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(contextMenuBridge);
         }
+        if (worldBridge is not null)
+        {
+            builder.Services.AddSingleton(worldBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -147,6 +153,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<SpeakerService>();
         app.MapGrpcService<MicrophoneService>();
         app.MapGrpcService<ContextMenuService>();
+        app.MapGrpcService<WorldService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -192,6 +199,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (contextMenuBridge is null)
         {
             log.LogWarning("ContextMenu modality is not configured.");
+        }
+        if (worldBridge is null)
+        {
+            log.LogWarning("World modality is not configured.");
         }
 
         var runTask = Task.Run(
