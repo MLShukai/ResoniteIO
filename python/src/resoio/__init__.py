@@ -32,6 +32,18 @@ from resoio.speaker import (
     AudioChunk,
     SpeakerClient,
 )
+from resoio.world import (
+    OpenWorld,
+    RecordPage,
+    RecordSort,
+    RecordSortDirection,
+    RecordSource,
+    SessionFilter,
+    SessionPage,
+    WorldClient,
+    WorldRecord,
+    WorldSession,
+)
 
 __version__: str = _version("resoio")
 
@@ -54,9 +66,19 @@ __all__ = [
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OpenWorld",
+    "RecordPage",
+    "RecordSort",
+    "RecordSortDirection",
+    "RecordSource",
     "ResetSummary",
     "SessionClient",
+    "SessionFilter",
+    "SessionPage",
     "SocketNotFoundError",
     "SpeakerClient",
+    "WorldClient",
+    "WorldRecord",
+    "WorldSession",
     "__version__",
 ]
