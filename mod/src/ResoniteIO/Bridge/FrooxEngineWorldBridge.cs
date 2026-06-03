@@ -179,6 +179,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         };
 
         var world = await OpenWorldOnEngineAsync(settings, ct).ConfigureAwait(false);
+        await WaitUntilWorldReadyAsync(world, ct).ConfigureAwait(false);
         return await RunOnEngineAsync(() => ToOpenWorldSnapshot(world), ct).ConfigureAwait(false);
     }
 
@@ -218,6 +219,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         };
 
         var world = await OpenWorldOnEngineAsync(settings, ct).ConfigureAwait(false);
+        await WaitUntilWorldReadyAsync(world, ct).ConfigureAwait(false);
         return await RunOnEngineAsync(() => ToOpenWorldSnapshot(world), ct).ConfigureAwait(false);
     }
 
@@ -412,6 +414,41 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
             );
         }
         return world;
+    }
+
+    /// <summary>
+    /// join/start 直後の world は <see cref="FrooxWorld.WorldState.Initializing"/> 段階で、
+    /// SessionId / 名前 / focus がまだ確定していない。<see cref="FrooxWorld.WorldState.Running"/>
+    /// に達するまで engine thread 上で state を polling して待つ。<c>Failed</c> は join 拒否 /
+    /// エラーとして例外、timeout も例外にする (呼び出し側で FailedPrecondition にマップ)。
+    /// </summary>
+    private async Task WaitUntilWorldReadyAsync(FrooxWorld world, CancellationToken ct)
+    {
+        var timeout = TimeSpan.FromSeconds(60);
+        var pollInterval = TimeSpan.FromMilliseconds(250);
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var state = await RunOnEngineAsync(() => world.State, ct).ConfigureAwait(false);
+            if (state == FrooxWorld.WorldState.Running)
+            {
+                return;
+            }
+            if (state == FrooxWorld.WorldState.Failed)
+            {
+                throw new WorldNotReadyException(
+                    "The world failed to load (the join was rejected or errored)."
+                );
+            }
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new WorldNotReadyException(
+                    $"The world did not reach a running state within {timeout.TotalSeconds:0}s."
+                );
+            }
+            await Task.Delay(pollInterval, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
