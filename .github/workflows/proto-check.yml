@@ -1,0 +1,59 @@
+# Verify the committed Python generated proto code is up-to-date with the
+# .proto sources. Regenerates via scripts/gen_proto.sh (same as
+# `just gen-proto`) and fails if the working tree differs.
+name: Proto Up-to-date
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "proto/**"
+      - "scripts/gen_proto.sh"
+      - "python/src/resoio/_generated/**"
+      - ".github/workflows/proto-check.yml"
+  pull_request:
+    branches: [main, "release/*"]
+    paths:
+      - "proto/**"
+      - "scripts/gen_proto.sh"
+      - "python/src/resoio/_generated/**"
+      - ".github/workflows/proto-check.yml"
+
+env:
+  UV_VERSION: "0.7.20"
+
+jobs:
+  proto-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "${{ env.UV_VERSION }}"
+          python-version: "3.12"
+          enable-cache: true
+
+      # gen_proto.sh shells out to a system `protoc` (the betterproto2 dev dep
+      # only ships the plugin). Pin to the dev container's protoc version
+      # (.devcontainer/Dockerfile PROTOC_VERSION) so regenerated output matches.
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Sync Python dependencies
+        working-directory: python
+        run: uv sync
+
+      - name: Regenerate proto code
+        run: bash scripts/gen_proto.sh
+
+      - name: Verify generated code is up-to-date
+        run: |
+          if ! git diff --exit-code python/src/resoio/_generated/; then
+            echo "::error::Generated proto code is out of date. Run 'just gen-proto' and commit the result."
+            exit 1
+          fi

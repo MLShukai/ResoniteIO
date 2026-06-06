@@ -1,0 +1,174 @@
+name: publish
+
+# Tag-driven release pipeline. Pushing a `v*` tag publishes a DUAL artifact:
+#   - C# Thunderstore mod (installable via the Gale mod manager) to the
+#     `mlshukai` Thunderstore team, and
+#   - the Python `resoio` package to PyPI via Trusted Publishing.
+# Full auto-publish on tag push (no manual approval gate).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  UV_VERSION: "0.7.20"
+  PYTHON_VERSION: "3.12"
+  DOTNET_VERSION: "10.0.x"
+
+# Releases must not race each other, but we never cancel an in-flight publish.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Restore dotnet tools
+        run: dotnet tool restore
+
+      - name: Version guard (tag must match csproj <Version> and pyproject version)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          CSPROJ_VERSION="$(grep -oPm1 '(?<=<Version>)[^<]+' mod/src/ResoniteIO/ResoniteIO.csproj)"
+          PYPROJECT_VERSION="$(cd python && uv run python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          echo "tag=${TAG} csproj=${CSPROJ_VERSION} pyproject=${PYPROJECT_VERSION}"
+          if [ "${TAG}" != "${CSPROJ_VERSION}" ]; then
+            echo "::error::Tag version '${TAG}' does not match csproj <Version> '${CSPROJ_VERSION}' (mod/src/ResoniteIO/ResoniteIO.csproj)"
+            exit 1
+          fi
+          if [ "${TAG}" != "${PYPROJECT_VERSION}" ]; then
+            echo "::error::Tag version '${TAG}' does not match pyproject version '${PYPROJECT_VERSION}' (python/pyproject.toml)"
+            exit 1
+          fi
+
+      - name: Build Thunderstore mod package
+        run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS
+
+      - name: Build Python sdist + wheel
+        run: cd python && uv build
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/mod artifacts/python
+          cp mod/build/*.zip artifacts/mod/
+          cp python/dist/* artifacts/python/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: artifacts/
+
+  publish-thunderstore:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dotnet tools
+        run: dotnet tool restore
+
+      - name: Publish to Thunderstore
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+        run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS -p:PublishTS=true -p:TcliToken=$TCLI_AUTH_TOKEN
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/p/resoio
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: artifacts/
+
+      - name: Stage Python distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mv artifacts/python/* dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  github-release:
+    needs: [publish-thunderstore, publish-pypi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: artifacts/
+
+      - name: Extract changelog section
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const tag = context.ref.replace(/^refs\/tags\//, "").replace(/^v/, "");
+            const changelog = fs.readFileSync("mod/CHANGELOG.md", "utf8");
+            // Escape regex metacharacters in the version so e.g. "1.0.0" does not
+            // match "1x0y0". Capture from the `## [<version>]` header up to the
+            // next `## [` section header or EOF. The `m` flag is intentionally
+            // omitted: `[\s\S]*?` already spans newlines and the trailing
+            // lookahead anchors on a line-leading `## [`.
+            const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp(
+              "## \\[" + escaped + "\\][^\\n]*\\n([\\s\\S]*?)(?=\\n## \\[|$)"
+            );
+            const match = changelog.match(re);
+            const notes = match ? match[1].trim() : `Release ${tag}`;
+            fs.writeFileSync("notes.md", notes + "\n");
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PRE=""
+          if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ ]]; then
+            PRE="--prerelease"
+          fi
+          # shellcheck disable=SC2086
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            ${PRE} \
+            ./artifacts/mod/* ./artifacts/python/*

@@ -1,0 +1,46 @@
+# Python static type check (pyright strict) for resoio.
+name: Type Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "**/*.pyi"
+      - "python/pyproject.toml"
+      - "python/uv.lock"
+      - ".github/workflows/type-check.yml"
+  pull_request:
+    branches: [main, "release/*"]
+    paths:
+      - "**/*.py"
+      - "**/*.pyi"
+      - "python/pyproject.toml"
+      - "python/uv.lock"
+      - ".github/workflows/type-check.yml"
+
+env:
+  UV_VERSION: "0.7.20"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  pyright:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "${{ env.UV_VERSION }}"
+          python-version: "${{ env.PYTHON_VERSION }}"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run pyright
+        run: uv run pyright

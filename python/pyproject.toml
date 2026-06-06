@@ -3,7 +3,8 @@ name = "resoio"
 version = "0.1.0"
 description = "Python client for Resonite IO"
 readme = "README.md"
-authors = []
+authors = [{ name = "mlshukai" }]
+license = { text = "MIT" }
 requires-python = ">=3.12"
 dependencies = [
   "argcomplete>=3.5",
@@ -12,6 +13,21 @@ dependencies = [
   "numpy>=2.0",
   "prompt-toolkit>=3.0",
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/MLShukai/ResoniteIO"
+Repository = "https://github.com/MLShukai/ResoniteIO"
 
 [project.scripts]
 resoio = "resoio.cli:main"

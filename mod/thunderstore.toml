@@ -5,11 +5,11 @@
 schemaVersion = "0.0.1"
 
 [package]
-namespace = "mlshukai"  # TODO: Thunderstore で取得したチーム名に差し替える
+namespace = "mlshukai"  # MLShukai Thunderstore チーム
 name = "ResoniteIO"
 # versionNumber は ResoniteIO.csproj の <Version> から渡される (PackTS 経由)
 description = "Bidirectional IPC bridge mod that exposes Resonite as an execution environment for AI agents."
-websiteUrl = "https://github.com/Geson-anko/Resonite-IO"
+websiteUrl = "https://github.com/MLShukai/ResoniteIO"
 containsNsfwContent = false
 
 # 依存: BepisLoader 本体と Resonite モディング共通ラッパ。
