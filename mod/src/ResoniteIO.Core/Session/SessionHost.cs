@@ -10,8 +10,10 @@ using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
+using ResoniteIO.Core.World;
 
 namespace ResoniteIO.Core.Session;
 
@@ -80,7 +82,9 @@ public sealed class SessionHost : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
-        IDashBridge? dashBridge = null
+        IDashBridge? dashBridge = null,
+        IWorldBridge? worldBridge = null,
+        IManipulationBridge? manipulationBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -137,6 +141,14 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(dashBridge);
         }
+        if (worldBridge is not null)
+        {
+            builder.Services.AddSingleton(worldBridge);
+        }
+        if (manipulationBridge is not null)
+        {
+            builder.Services.AddSingleton(manipulationBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -154,6 +166,8 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<MicrophoneService>();
         app.MapGrpcService<ContextMenuService>();
         app.MapGrpcService<DashService>();
+        app.MapGrpcService<WorldService>();
+        app.MapGrpcService<ManipulationService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -203,6 +217,14 @@ public sealed class SessionHost : IAsyncDisposable
         if (dashBridge is null)
         {
             log.LogWarning("Dash modality is not configured.");
+        }
+        if (worldBridge is null)
+        {
+            log.LogWarning("World modality is not configured.");
+        }
+        if (manipulationBridge is null)
+        {
+            log.LogWarning("Manipulation modality is not configured.");
         }
 
         var runTask = Task.Run(

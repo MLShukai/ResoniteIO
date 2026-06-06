@@ -24,6 +24,7 @@ from resoio.locomotion import (
     LocomotionCmd,
     ResetSummary,
 )
+from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from resoio.microphone import (
     MicrophoneAudioChunk,
     MicrophoneClient,
@@ -40,6 +41,19 @@ from resoio.speaker import (
     SAMPLE_RATE,
     AudioChunk,
     SpeakerClient,
+)
+from resoio.world import (
+    OpenWorld,
+    RecordPage,
+    RecordSort,
+    RecordSortDirection,
+    RecordSource,
+    SessionFilter,
+    SessionPage,
+    Thumbnail,
+    WorldClient,
+    WorldRecord,
+    WorldSession,
 )
 
 __version__: str = _version("resoio")
@@ -65,14 +79,28 @@ __all__ = [
     "DisplayInfo",
     "DriveSummary",
     "Frame",
+    "GrabResult",
+    "GrabState",
     "LocomotionClient",
     "LocomotionCmd",
+    "ManipulationClient",
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OpenWorld",
+    "RecordPage",
+    "RecordSort",
+    "RecordSortDirection",
+    "RecordSource",
     "ResetSummary",
     "SessionClient",
+    "SessionFilter",
+    "SessionPage",
     "SocketNotFoundError",
     "SpeakerClient",
+    "Thumbnail",
+    "WorldClient",
+    "WorldRecord",
+    "WorldSession",
     "__version__",
 ]

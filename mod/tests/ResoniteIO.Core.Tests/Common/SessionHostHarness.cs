@@ -5,6 +5,7 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
+using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
@@ -48,7 +49,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
-        IDashBridge? dashBridge = null
+        IDashBridge? dashBridge = null,
+        IManipulationBridge? manipulationBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
@@ -59,7 +61,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
             speakerBridge,
             microphoneBridge,
             contextMenuBridge,
-            dashBridge
+            dashBridge,
+            manipulationBridge
         );
 
     public static async Task<SessionHostHarness> StartAsync(
@@ -71,7 +74,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
-        IDashBridge? dashBridge = null
+        IDashBridge? dashBridge = null,
+        IManipulationBridge? manipulationBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -91,7 +95,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
                 speakerBridge,
                 microphoneBridge,
                 contextMenuBridge,
-                dashBridge
+                dashBridge,
+                manipulationBridge: manipulationBridge
             );
         }
         catch

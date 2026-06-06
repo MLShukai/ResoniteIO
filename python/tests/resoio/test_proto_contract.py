@@ -60,15 +60,47 @@ from resoio._generated.resonite_io.v1 import (
     DisplayConfig,
     DisplayGetRequest,
     DisplayState,
+    FetchThumbnailRequest,
+    FetchThumbnailResponse,
+    FocusRequest,
+    FocusResponse,
+    GetCurrentRequest,
+    GetCurrentResponse,
+    JoinRequest,
+    JoinResponse,
+    LeaveRequest,
+    LeaveResponse,
+    ListOpenWorldsRequest,
+    ListOpenWorldsResponse,
+    ListRecordsRequest,
+    ListRecordsResponse,
+    ListSessionsRequest,
+    ListSessionsResponse,
     LocomotionCommand,
     LocomotionDriveSummary,
     LocomotionResetRequest,
     LocomotionResetSummary,
+    ManipulationGetStateRequest,
+    ManipulationGrabRequest,
+    ManipulationGrabResult,
+    ManipulationGrabState,
+    ManipulationHand,
+    ManipulationReleaseRequest,
     MicrophoneAudioFrame,
     MicrophoneStreamSummary,
+    OpenWorld,
     PingRequest,
     PingResponse,
+    RecordSort,
+    RecordSortDirection,
+    RecordSource,
+    SessionFilter,
     SpeakerStreamRequest,
+    StartWorldRequest,
+    StartWorldResponse,
+    WorldPoint,
+    WorldRecord,
+    WorldSession,
 )
 
 pytestmark = pytest.mark.api_contract
@@ -275,6 +307,33 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "ref_id": 1,
         "key": 2,
     },
+    # Manipulation
+    WorldPoint: {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+    },
+    ManipulationGrabRequest: {
+        "hand": 1,
+        "point": 2,
+        "radius": 3,
+    },
+    ManipulationReleaseRequest: {
+        "hand": 1,
+    },
+    ManipulationGetStateRequest: {
+        "hand": 1,
+    },
+    ManipulationGrabState: {
+        "hand": 1,
+        "is_holding": 2,
+        "object_names": 3,
+        "unix_nanos": 4,
+    },
+    ManipulationGrabResult: {
+        "grabbed": 1,
+        "state": 2,
+    },
     # Session
     PingRequest: {
         "message": 1,
@@ -282,6 +341,115 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     PingResponse: {
         "message": 1,
         "server_unix_nanos": 2,
+    },
+    # World
+    WorldSession: {
+        "session_id": 1,
+        "name": 2,
+        "description": 3,
+        "host_user_id": 4,
+        "host_username": 5,
+        "session_urls": 6,
+        "thumbnail_url": 7,
+        "joined_users": 8,
+        "active_users": 9,
+        "maximum_users": 10,
+        "tags": 11,
+        "access_level": 12,
+        "headless_host": 13,
+        "mobile_friendly": 14,
+        "corresponding_world_id": 15,
+        "universe_id": 16,
+        "session_begin_unix_nanos": 17,
+        "last_update_unix_nanos": 18,
+    },
+    WorldRecord: {
+        "record_id": 1,
+        "owner_id": 2,
+        "name": 3,
+        "description": 4,
+        "thumbnail_url": 5,
+        "tags": 6,
+        "record_url": 7,
+        "last_modification_unix_nanos": 8,
+    },
+    OpenWorld: {
+        "handle": 1,
+        "session_id": 2,
+        "name": 3,
+        "focused": 4,
+        "user_count": 5,
+        "access_level": 6,
+    },
+    ListSessionsRequest: {
+        "search": 1,
+        "filter": 2,
+        "min_active_users": 3,
+        "page": 4,
+        "page_size": 5,
+    },
+    ListSessionsResponse: {
+        "sessions": 1,
+        "total_count": 2,
+        "page": 3,
+        "page_size": 4,
+    },
+    ListRecordsRequest: {
+        "source": 1,
+        "required_tags": 2,
+        "owner_id": 3,
+        "offset": 4,
+        "count": 5,
+        "sort": 6,
+        "sort_direction": 7,
+        "search": 8,
+    },
+    ListRecordsResponse: {
+        "records": 1,
+        "has_more": 2,
+        "offset": 3,
+    },
+    JoinRequest: {
+        "session_id": 1,
+        "session_url": 2,
+        "focus": 3,
+    },
+    JoinResponse: {
+        "world": 1,
+    },
+    StartWorldRequest: {
+        "record_id": 1,
+        "owner_id": 2,
+        "focus": 3,
+    },
+    StartWorldResponse: {
+        "world": 1,
+    },
+    ListOpenWorldsRequest: {},
+    ListOpenWorldsResponse: {
+        "worlds": 1,
+    },
+    FocusRequest: {
+        "handle": 1,
+    },
+    FocusResponse: {
+        "world": 1,
+    },
+    LeaveRequest: {
+        "handle": 1,
+    },
+    LeaveResponse: {},
+    GetCurrentRequest: {},
+    GetCurrentResponse: {
+        "world": 1,
+        "has_world": 2,
+    },
+    FetchThumbnailRequest: {
+        "uri": 1,
+    },
+    FetchThumbnailResponse: {
+        "data": 1,
+        "content_type": 2,
     },
 }
 
@@ -313,6 +481,42 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "PRIMARY": 1,
         "LEFT": 2,
         "RIGHT": 3,
+    },
+    ManipulationHand: {
+        "UNSPECIFIED": 0,
+        "PRIMARY": 1,
+        "LEFT": 2,
+        "RIGHT": 3,
+    },
+    # World wire enums. NOTE: these carry an extra UNSPECIFIED=0 slot that
+    # the public resoio enums fold into a default head (see the offset
+    # mapping pinned in test_api_contract.py). Renumbering here silently
+    # reinterprets historical wire data on the C# peer.
+    SessionFilter: {
+        "UNSPECIFIED": 0,
+        "FRIENDS": 1,
+        "HEADLESS": 2,
+    },
+    RecordSource: {
+        "UNSPECIFIED": 0,
+        "PUBLIC": 1,
+        "FEATURED": 2,
+        "OWN": 3,
+        "GROUP": 4,
+    },
+    RecordSort: {
+        "UNSPECIFIED": 0,
+        "CREATION_DATE": 1,
+        "LAST_UPDATE": 2,
+        "FIRST_PUBLISH": 3,
+        "TOTAL_VISITS": 4,
+        "NAME": 5,
+        "RANDOM": 6,
+    },
+    RecordSortDirection: {
+        "UNSPECIFIED": 0,
+        "DESCENDING": 1,
+        "ASCENDING": 2,
     },
 }
 

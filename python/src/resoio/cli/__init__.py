@@ -20,7 +20,17 @@ from types import ModuleType
 
 import argcomplete
 
-from resoio.cli import context_menu, dash, display, locomotion, mic, ping, record
+from resoio.cli import (
+    context_menu,
+    dash,
+    display,
+    locomotion,
+    manipulate,
+    mic,
+    ping,
+    record,
+    world,
+)
 
 __all__ = ["main"]
 
@@ -30,8 +40,10 @@ _COMMAND_MODULES: list[ModuleType] = [
     context_menu,
     dash,
     locomotion,
+    manipulate,
     mic,
     record,
+    world,
 ]
 
 

@@ -104,6 +104,13 @@
       <HintPath>$(GamePath)FrooxEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- FrooxEngine.Store.Record: World Bridge が RecordManager.FetchRecord の戻り値と
+         WorldStartSettings.Record に使う engine 側 record 型。Resonite engine が
+         同梱しているため Private=False で出力に含めない。 -->
+    <Reference Include="FrooxEngine.Store">
+      <HintPath>$(GamePath)FrooxEngine.Store.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Elements.Core">
       <HintPath>$(GamePath)Elements.Core.dll</HintPath>
       <Private>False</Private>
@@ -116,6 +123,18 @@
     </Reference>
     <Reference Include="Renderite.Shared">
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <!-- SkyFrost.Base / SkyFrost.Base.Models: World Bridge が cloud session/record/contact
+         (SessionsManager / RecordsManager / ContactManager / SessionInfo / SearchParameters /
+         Record / SessionAccessLevel 等) を読むために必要。両 DLL は namespace SkyFrost.Base を
+         共有する。Resonite engine が同梱しているため Private=False で出力に含めない。 -->
+    <Reference Include="SkyFrost.Base">
+      <HintPath>$(GamePath)SkyFrost.Base.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SkyFrost.Base.Models">
+      <HintPath>$(GamePath)SkyFrost.Base.Models.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <!-- Awwdio: Resonite が同梱する WASAPI 抽象 (AudioOutputDriver の基底

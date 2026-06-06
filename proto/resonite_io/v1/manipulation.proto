@@ -1,0 +1,86 @@
+// Manipulation service: Resonite 内のオブジェクトを engine 経由で **掴む / 離す**
+// (Grab / Release) modality。AI エージェントから「指定した手で近接 grab する」
+// 「離す」「現在の保持状態を取得する」を行う。
+//
+// scope: Step 6 は **Grab / Release のみ**。Hand pose (手の姿勢) 制御は engine 的に
+// クリーンな注入経路が無いため (TrackedDevicePositioner が毎 input update で hand
+// slot を上書きし、Locomotion のような ExternalInput フックを持たない) スコープ外。
+//
+// 操作モデル: 各手 (`InteractionHandler`) は `Grabber` を 1 つ持ち、`Grab(point,
+// radius)` で近接した grabbable を掴む。掴んだオブジェクトは Grabber の HolderSlot
+// に reparent され **以後は手に自動追従** する。よって Grab / Release は離散の
+// **edge-triggered な one-shot 操作**であり、ContextMenu と同じく unary RPC で表現する
+// (Locomotion のような client-streaming repeater は不要)。
+//
+// engine への dispatch は同期マーシャル (`RunSynchronously` + `TaskCompletionSource`)
+// で行い、各 RPC は操作適用後の `ManipulationGrabState` を engine thread 上で読み取って返す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// 操作対象の手 (InteractionHandler) を指定する。ContextMenuHand と同じ規約。
+enum ManipulationHand {
+  // 未指定。サーバは desktop の primary hand (`InputInterface.PrimaryHand`) として扱う。
+  MANIPULATION_HAND_UNSPECIFIED = 0;
+  // primary hand 明示 (UNSPECIFIED と同じ)。
+  MANIPULATION_HAND_PRIMARY = 1;
+  MANIPULATION_HAND_LEFT = 2;
+  MANIPULATION_HAND_RIGHT = 3;
+}
+
+// grab を行うワールド座標点。message 不在 (= 未設定) のときはサーバが手の現在
+// ワールド位置を使う。
+message WorldPoint {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message ManipulationGrabRequest {
+  ManipulationHand hand = 1;
+  // grab 中心点。未設定なら手の現在位置。
+  WorldPoint point = 2;
+  // grab 判定球の半径 (メートル)。<=0 はサーバ default (0.1m)。
+  float radius = 3;
+}
+
+message ManipulationReleaseRequest {
+  ManipulationHand hand = 1;
+}
+
+message ManipulationGetStateRequest {
+  ManipulationHand hand = 1;
+}
+
+// 操作後の保持状態スナップショット。
+message ManipulationGrabState {
+  // 解決後の手 (UNSPECIFIED にはならない)。UNSPECIFIED/PRIMARY を渡したとき
+  // サーバがどちらの手に解決したかを client に返すためのエコー。
+  ManipulationHand hand = 1;
+  // 何かを保持しているか (`Grabber.IsHoldingObjects`)。
+  bool is_holding = 2;
+  // 保持中 grabbable の slot 名 (best-effort、空のことがある)。
+  repeated string object_names = 3;
+  // サーバ完了時刻 (UTC ナノ秒)。
+  int64 unix_nanos = 4;
+}
+
+message ManipulationGrabResult {
+  // この呼び出しで新たに掴めたか (`Grabber.Grab` の戻り値)。範囲に grabbable が
+  // 無い / 掴めない場合は false。エラーではなく結果として表現する。
+  bool grabbed = 1;
+  // 実行後の保持状態。
+  ManipulationGrabState state = 2;
+}
+
+service Manipulation {
+  // 指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
+  // 掴む。掴めたかと実行後の状態を返す。
+  rpc Grab(ManipulationGrabRequest) returns (ManipulationGrabResult);
+  // 指定した手が保持している全オブジェクトを離す。
+  rpc Release(ManipulationReleaseRequest) returns (ManipulationGrabState);
+  // 指定した手の現在の保持状態を取得する。
+  rpc GetState(ManipulationGetStateRequest) returns (ManipulationGrabState);
+}
