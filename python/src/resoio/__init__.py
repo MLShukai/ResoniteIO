@@ -8,6 +8,7 @@ from resoio.context_menu import (
     ContextMenuItem,
     ContextMenuState,
 )
+from resoio.cursor import CursorClient, CursorState
 from resoio.dash import (
     DashActionResult,
     DashClient,
@@ -76,6 +77,8 @@ __all__ = [
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
+    "CursorClient",
+    "CursorState",
     "DashActionResult",
     "DashClient",
     "DashElement",

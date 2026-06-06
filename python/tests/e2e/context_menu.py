@@ -24,6 +24,7 @@ import grpclib
 from grpclib.const import Status
 
 from resoio.context_menu import ContextMenuClient, ContextMenuState
+from resoio.cursor import CursorClient
 from tests.helpers import mark_e2e
 
 # parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
@@ -119,6 +120,14 @@ class TestContextMenu:
             record("00_initial", initial)
             await settle_shot("00_initial")
             assert not initial.is_open, "menu should start closed"
+
+            # Center the cursor so the menu opens at screen center. The engine
+            # positions the radial menu at the cursor's laser hit point, so
+            # without this it would open wherever the cursor sits (bottom-left
+            # right after startup). The cursor lock holds it at center for the
+            # rest of the scenario.
+            async with CursorClient() as cur:
+                await cur.set_position(0.5, 0.5)
 
             async with ContextMenuClient() as cm:
                 # 1. open the T-key radial menu (populated with standard items).

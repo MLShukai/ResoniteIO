@@ -1,6 +1,7 @@
 using System.Reflection;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Inventory;
@@ -73,6 +74,10 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.ContextMenu.ContextMenuService",
             "ResoniteIO.Core.ContextMenu.ContextMenuStateSnapshot",
             "ResoniteIO.Core.ContextMenu.IContextMenuBridge",
+            "ResoniteIO.Core.Cursor.CursorNotReadyException",
+            "ResoniteIO.Core.Cursor.CursorService",
+            "ResoniteIO.Core.Cursor.CursorStateSnapshot",
+            "ResoniteIO.Core.Cursor.ICursorBridge",
             "ResoniteIO.Core.Dash.DashActionResultSnapshot",
             "ResoniteIO.Core.Dash.DashElementSnapshot",
             "ResoniteIO.Core.Dash.DashNotReadyException",
@@ -189,6 +194,12 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.ContextMenuOpenRequest",
             "ResoniteIO.V1.ContextMenuReflection",
             "ResoniteIO.V1.ContextMenuState",
+            "ResoniteIO.V1.Cursor",
+            "ResoniteIO.V1.Cursor+CursorBase",
+            "ResoniteIO.V1.CursorGetPositionRequest",
+            "ResoniteIO.V1.CursorReflection",
+            "ResoniteIO.V1.CursorSetPositionRequest",
+            "ResoniteIO.V1.CursorState",
             "ResoniteIO.V1.Dash",
             "ResoniteIO.V1.Dash+DashBase",
             "ResoniteIO.V1.DashActionResult",
@@ -372,6 +383,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(MicrophoneNotReadyException))]
     [InlineData(typeof(DisplayNotReadyException))]
     [InlineData(typeof(ContextMenuNotReadyException))]
+    [InlineData(typeof(CursorNotReadyException))]
     [InlineData(typeof(DashNotReadyException))]
     [InlineData(typeof(InventoryNotReadyException))]
     [InlineData(typeof(ManipulationNotReadyException))]
@@ -511,6 +523,20 @@ public sealed class ApiContractTests
                 "InvokeAsync",
                 new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
             )
+        );
+    }
+
+    /// <summary>
+    /// <see cref="ICursorBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void ICursorBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(ICursorBridge),
+            ("SetPositionAsync", new[] { typeof(float), typeof(float), typeof(CancellationToken) }),
+            ("GetPositionAsync", new[] { typeof(CancellationToken) })
         );
     }
 
