@@ -1,10 +1,9 @@
 import time
-from collections.abc import AsyncIterator
-from pathlib import Path
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     CameraBase,
@@ -13,6 +12,11 @@ from resoio._generated.resonite_io.v1 import (
     CameraStreamRequest,
 )
 from resoio.camera import CameraClient, Frame
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 # Sentinel default the fake substitutes when the client asks for 0; lets the
 # default-resolution test assert the resolved value explicitly.
@@ -45,54 +49,36 @@ class _EchoCamera(CameraBase):
 
 
 class TestCameraClient:
-    async def test_round_trip_over_uds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-camera.sock"
-        server = Server([_EchoCamera()])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            width, height = 16, 8
-            frames: list[Frame] = []
-            async with CameraClient() as client:
-                assert client.socket_path == str(socket_path)
-                async for frame in client.stream(width=width, height=height):
-                    frames.append(frame)
-            assert len(frames) == _FRAME_COUNT
-            for i, frame in enumerate(frames):
-                assert frame.width == width
-                assert frame.height == height
-                assert frame.frame_id == i
-                assert frame.unix_nanos > 0
-                assert isinstance(frame.pixels, np.ndarray)
-                assert frame.pixels.dtype == np.uint8
-                assert frame.pixels.shape == (height, width, 4)
-                # First byte = frame index (see _EchoCamera): proves the
-                # bytes flow through unchanged, not just zero-allocated.
-                assert int(frame.pixels[0, 0, 0]) == i
-        finally:
-            server.close()
-            await server.wait_closed()
+    async def test_round_trip_over_uds(self, uds_server: UdsServer):
+        socket_path = await uds_server(_EchoCamera())
+        width, height = 16, 8
+        frames: list[Frame] = []
+        async with CameraClient() as client:
+            assert client.socket_path == socket_path
+            async for frame in client.stream(width=width, height=height):
+                frames.append(frame)
+        assert len(frames) == _FRAME_COUNT
+        for i, frame in enumerate(frames):
+            assert frame.width == width
+            assert frame.height == height
+            assert frame.frame_id == i
+            assert frame.unix_nanos > 0
+            assert isinstance(frame.pixels, np.ndarray)
+            assert frame.pixels.dtype == np.uint8
+            assert frame.pixels.shape == (height, width, 4)
+            # First byte = frame index (see _EchoCamera): proves the
+            # bytes flow through unchanged, not just zero-allocated.
+            assert int(frame.pixels[0, 0, 0]) == i
 
-    async def test_default_resolution_when_zero(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-camera.sock"
-        server = Server([_EchoCamera()])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with CameraClient() as client:
-                async for frame in client.stream(width=0, height=0):
-                    # Server filled in the default; reshape must agree.
-                    assert frame.width == _DEFAULT_W
-                    assert frame.height == _DEFAULT_H
-                    assert frame.pixels.shape == (_DEFAULT_H, _DEFAULT_W, 4)
-                    break
-        finally:
-            server.close()
-            await server.wait_closed()
+    async def test_default_resolution_when_zero(self, uds_server: UdsServer):
+        await uds_server(_EchoCamera())
+        async with CameraClient() as client:
+            async for frame in client.stream(width=0, height=0):
+                # Server filled in the default; reshape must agree.
+                assert frame.width == _DEFAULT_W
+                assert frame.height == _DEFAULT_H
+                assert frame.pixels.shape == (_DEFAULT_H, _DEFAULT_W, 4)
+                break
 
     async def test_raises_when_not_connected(self):
         client = CameraClient()

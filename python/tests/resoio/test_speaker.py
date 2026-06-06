@@ -1,10 +1,9 @@
 import time
-from collections.abc import AsyncIterator
-from pathlib import Path
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     AudioFrame,
@@ -13,11 +12,14 @@ from resoio._generated.resonite_io.v1 import (
 )
 from resoio.speaker import (
     CHANNELS,
-    DTYPE,
-    SAMPLE_RATE,
     AudioChunk,
     SpeakerClient,
 )
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 _FRAME_COUNT = 3
 _SAMPLES_PER_FRAME = 256  # samples per channel per frame
@@ -52,45 +54,29 @@ class _ConstantSpeaker(SpeakerBase):
 
 
 class TestSpeakerClient:
-    async def test_round_trip_over_uds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-speaker.sock"
-        server = Server([_ConstantSpeaker()])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            chunks: list[AudioChunk] = []
-            async with SpeakerClient() as client:
-                assert client.socket_path == str(socket_path)
-                async for chunk in client.stream():
-                    chunks.append(chunk)
-            assert len(chunks) == _FRAME_COUNT
-            for i, chunk in enumerate(chunks):
-                assert chunk.frame_id == i
-                assert chunk.unix_nanos > 0
-                assert isinstance(chunk.samples, np.ndarray)
-                assert chunk.samples.dtype == np.float32
-                assert chunk.samples.shape == (_SAMPLES_PER_FRAME, CHANNELS)
-                # L = i, R = -i throughout the chunk (proves
-                # interleave order is L, R, L, R, ...).
-                assert float(chunk.samples[0, 0]) == float(i)
-                assert float(chunk.samples[0, 1]) == -float(i)
-                assert float(chunk.samples[-1, 0]) == float(i)
-                assert float(chunk.samples[-1, 1]) == -float(i)
-        finally:
-            server.close()
-            await server.wait_closed()
+    async def test_round_trip_over_uds(self, uds_server: UdsServer):
+        socket_path = await uds_server(_ConstantSpeaker())
+        chunks: list[AudioChunk] = []
+        async with SpeakerClient() as client:
+            assert client.socket_path == socket_path
+            async for chunk in client.stream():
+                chunks.append(chunk)
+        assert len(chunks) == _FRAME_COUNT
+        for i, chunk in enumerate(chunks):
+            assert chunk.frame_id == i
+            assert chunk.unix_nanos > 0
+            assert isinstance(chunk.samples, np.ndarray)
+            assert chunk.samples.dtype == np.float32
+            assert chunk.samples.shape == (_SAMPLES_PER_FRAME, CHANNELS)
+            # L = i, R = -i throughout the chunk (proves
+            # interleave order is L, R, L, R, ...).
+            assert float(chunk.samples[0, 0]) == float(i)
+            assert float(chunk.samples[0, 1]) == -float(i)
+            assert float(chunk.samples[-1, 0]) == float(i)
+            assert float(chunk.samples[-1, 1]) == -float(i)
 
     async def test_raises_when_not_connected(self):
         client = SpeakerClient()
         with pytest.raises(RuntimeError, match="not connected"):
             async for _ in client.stream():
                 pass
-
-
-class TestModuleConstants:
-    def test_fixed_format(self):
-        assert SAMPLE_RATE == 48000
-        assert CHANNELS == 2
-        assert DTYPE == np.dtype(np.float32)

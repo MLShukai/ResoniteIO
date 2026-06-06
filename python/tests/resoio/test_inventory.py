@@ -1,7 +1,7 @@
-from pathlib import Path
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     InventoryBase,
@@ -22,6 +22,11 @@ from resoio.inventory import (
     InventoryEntry,
     InventoryEntryKind,
 )
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 
 class _FakeInventory(InventoryBase):
@@ -92,147 +97,85 @@ class _FakeInventory(InventoryBase):
         )
 
 
-async def _serve(fake: _FakeInventory, socket_path: Path):
-    server = Server([fake])
-    await server.start(path=str(socket_path))
-    return server
-
-
 class TestInventoryClient:
-    async def test_list_decodes_entries_kinds_and_fields(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_list_decodes_entries_kinds_and_fields(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                listing = await client.list("/Inventory")
-            assert listing.path == "/Inventory"
-            by_name = {e.name: e for e in listing.entries}
-            assert by_name["Avatars"] == InventoryEntry(
-                name="Avatars",
-                path="/Inventory/Avatars",
-                kind=InventoryEntryKind.DIRECTORY,
-                record_id="",
-                asset_uri="",
-                is_public=False,
-                last_modified_unix_nanos=0,
-            )
-            my = by_name["MyAvatar"]
-            assert my.kind is InventoryEntryKind.OBJECT
-            assert my.record_id == "R-myavatar"
-            assert my.asset_uri == "resrec:///U-test/R-myavatar"
-            assert my.is_public is True
-            assert my.last_modified_unix_nanos == 1_700_000_000_000_000_000
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            listing = await client.list("/Inventory")
+        assert listing.path == "/Inventory"
+        by_name = {e.name: e for e in listing.entries}
+        assert by_name["Avatars"] == InventoryEntry(
+            name="Avatars",
+            path="/Inventory/Avatars",
+            kind=InventoryEntryKind.DIRECTORY,
+            record_id="",
+            asset_uri="",
+            is_public=False,
+            last_modified_unix_nanos=0,
+        )
+        my = by_name["MyAvatar"]
+        assert my.kind is InventoryEntryKind.OBJECT
+        assert my.record_id == "R-myavatar"
+        assert my.asset_uri == "resrec:///U-test/R-myavatar"
+        assert my.is_public is True
+        assert my.last_modified_unix_nanos == 1_700_000_000_000_000_000
 
-    async def test_mkdir_returns_mutation_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_mkdir_returns_mutation_result(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                result = await client.mkdir("/Inventory/NewFolder")
-            assert result.path == "/Inventory/NewFolder"
-            assert result.record_id == "R-new"
-            assert fake.last_make_dir is not None
-            assert fake.last_make_dir.path == "/Inventory/NewFolder"
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            result = await client.mkdir("/Inventory/NewFolder")
+        assert result.path == "/Inventory/NewFolder"
+        assert result.record_id == "R-new"
+        assert fake.last_make_dir is not None
+        assert fake.last_make_dir.path == "/Inventory/NewFolder"
 
-    async def test_copy_forwards_recursive_flag(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_copy_forwards_recursive_flag(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                await client.copy("/Inventory/A", "/Inventory/B", recursive=True)
-            assert fake.last_copy is not None
-            assert fake.last_copy.source_path == "/Inventory/A"
-            assert fake.last_copy.destination_path == "/Inventory/B"
-            assert fake.last_copy.recursive is True
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            await client.copy("/Inventory/A", "/Inventory/B", recursive=True)
+        assert fake.last_copy is not None
+        assert fake.last_copy.source_path == "/Inventory/A"
+        assert fake.last_copy.destination_path == "/Inventory/B"
+        assert fake.last_copy.recursive is True
 
-    async def test_copy_defaults_recursive_false(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_copy_defaults_recursive_false(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                await client.copy("/Inventory/A", "/Inventory/B")
-            assert fake.last_copy is not None
-            assert fake.last_copy.recursive is False
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            await client.copy("/Inventory/A", "/Inventory/B")
+        assert fake.last_copy is not None
+        assert fake.last_copy.recursive is False
 
-    async def test_move_forwards_paths(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_move_forwards_paths(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                result = await client.move("/Inventory/A", "/Inventory/C")
-            assert result.path == "/Inventory/C"
-            assert fake.last_move is not None
-            assert fake.last_move.source_path == "/Inventory/A"
-            assert fake.last_move.destination_path == "/Inventory/C"
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            result = await client.move("/Inventory/A", "/Inventory/C")
+        assert result.path == "/Inventory/C"
+        assert fake.last_move is not None
+        assert fake.last_move.source_path == "/Inventory/A"
+        assert fake.last_move.destination_path == "/Inventory/C"
 
-    async def test_remove_forwards_recursive_flag(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_remove_forwards_recursive_flag(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                await client.remove("/Inventory/Folder", recursive=True)
-            assert fake.last_remove is not None
-            assert fake.last_remove.path == "/Inventory/Folder"
-            assert fake.last_remove.recursive is True
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            await client.remove("/Inventory/Folder", recursive=True)
+        assert fake.last_remove is not None
+        assert fake.last_remove.path == "/Inventory/Folder"
+        assert fake.last_remove.recursive is True
 
-    async def test_spawn_returns_slot_info(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-inv.sock"
+    async def test_spawn_returns_slot_info(self, uds_server: UdsServer):
         fake = _FakeInventory()
-        server = await _serve(fake, socket_path)
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with InventoryClient() as client:
-                result = await client.spawn("/Inventory/MyAvatar")
-            assert result.source_path == "/Inventory/MyAvatar"
-            assert result.spawned_slot_id == "ID-123"
-            assert result.spawned_slot_name == "MyAvatar"
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            result = await client.spawn("/Inventory/MyAvatar")
+        assert result.source_path == "/Inventory/MyAvatar"
+        assert result.spawned_slot_id == "ID-123"
+        assert result.spawned_slot_name == "MyAvatar"
 
     async def test_raises_when_used_outside_context(self):
         client = InventoryClient()

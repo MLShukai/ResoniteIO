@@ -1,8 +1,9 @@
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     PingRequest,
@@ -15,6 +16,11 @@ from resoio.session import (
     SocketNotFoundError,
 )
 
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
+
 
 class _EchoSession(SessionBase):
     async def ping(self, message: PingRequest) -> PingResponse:
@@ -25,22 +31,13 @@ class _EchoSession(SessionBase):
 
 
 class TestSessionClient:
-    async def test_round_trip_over_uds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio.sock"
-        server = Server([_EchoSession()])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with SessionClient() as client:
-                assert client.socket_path == str(socket_path)
-                resp = await client.ping("hi")
-            assert resp.message == "hi"
-            assert resp.server_unix_nanos > 0
-        finally:
-            server.close()
-            await server.wait_closed()
+    async def test_round_trip_over_uds(self, uds_server: UdsServer):
+        socket_path = await uds_server(_EchoSession())
+        async with SessionClient() as client:
+            assert client.socket_path == socket_path
+            resp = await client.ping("hi")
+        assert resp.message == "hi"
+        assert resp.server_unix_nanos > 0
 
     async def test_raises_when_socket_not_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
