@@ -10,6 +10,7 @@ dependencies = [
   "av>=14",
   "betterproto2[grpclib]",
   "numpy>=2.0",
+  "prompt-toolkit>=3.0",
 ]
 
 [project.scripts]

@@ -64,6 +64,12 @@ _EXPECTED_PUBLIC_NAMES = (
     "Frame",
     "GrabResult",
     "GrabState",
+    "InventoryClient",
+    "InventoryEntry",
+    "InventoryEntryKind",
+    "InventoryListing",
+    "InventoryMutationResult",
+    "InventorySpawnResult",
     "LocomotionClient",
     "LocomotionCmd",
     "ManipulationClient",
@@ -146,6 +152,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "DashClient",
         "ManipulationClient",
         "WorldClient",
+        "InventoryClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):

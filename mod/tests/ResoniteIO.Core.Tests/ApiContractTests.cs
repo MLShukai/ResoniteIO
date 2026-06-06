@@ -3,6 +3,7 @@ using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Manipulation;
@@ -86,6 +87,18 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Display.DisplayNotReadyException",
             "ResoniteIO.Core.Display.DisplayService",
             "ResoniteIO.Core.Display.IDisplayBridge",
+            "ResoniteIO.Core.Inventory.IInventoryBridge",
+            "ResoniteIO.Core.Inventory.InventoryCloudException",
+            "ResoniteIO.Core.Inventory.InventoryConflictException",
+            "ResoniteIO.Core.Inventory.InventoryEntryKind",
+            "ResoniteIO.Core.Inventory.InventoryEntrySnapshot",
+            "ResoniteIO.Core.Inventory.InventoryListingSnapshot",
+            "ResoniteIO.Core.Inventory.InventoryMutationSnapshot",
+            "ResoniteIO.Core.Inventory.InventoryNotFoundException",
+            "ResoniteIO.Core.Inventory.InventoryNotReadyException",
+            "ResoniteIO.Core.Inventory.InventoryRecursionRequiredException",
+            "ResoniteIO.Core.Inventory.InventoryService",
+            "ResoniteIO.Core.Inventory.InventorySpawnSnapshot",
             "ResoniteIO.Core.Locomotion.ILocomotionBridge",
             "ResoniteIO.Core.Locomotion.LocomotionDisconnectReason",
             "ResoniteIO.Core.Locomotion.LocomotionInput",
@@ -208,6 +221,20 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.FocusResponse",
             "ResoniteIO.V1.GetCurrentRequest",
             "ResoniteIO.V1.GetCurrentResponse",
+            "ResoniteIO.V1.Inventory",
+            "ResoniteIO.V1.Inventory+InventoryBase",
+            "ResoniteIO.V1.InventoryCopyRequest",
+            "ResoniteIO.V1.InventoryEntry",
+            "ResoniteIO.V1.InventoryEntryKind",
+            "ResoniteIO.V1.InventoryListRequest",
+            "ResoniteIO.V1.InventoryListing",
+            "ResoniteIO.V1.InventoryMakeDirRequest",
+            "ResoniteIO.V1.InventoryMoveRequest",
+            "ResoniteIO.V1.InventoryMutationResult",
+            "ResoniteIO.V1.InventoryReflection",
+            "ResoniteIO.V1.InventoryRemoveRequest",
+            "ResoniteIO.V1.InventorySpawnRequest",
+            "ResoniteIO.V1.InventorySpawnResult",
             "ResoniteIO.V1.JoinRequest",
             "ResoniteIO.V1.JoinResponse",
             "ResoniteIO.V1.LeaveRequest",
@@ -346,6 +373,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(DisplayNotReadyException))]
     [InlineData(typeof(ContextMenuNotReadyException))]
     [InlineData(typeof(DashNotReadyException))]
+    [InlineData(typeof(InventoryNotReadyException))]
     [InlineData(typeof(ManipulationNotReadyException))]
     [InlineData(typeof(WorldNotReadyException))]
     [InlineData(typeof(WorldNotFoundException))]

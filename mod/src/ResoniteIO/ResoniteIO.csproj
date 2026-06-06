@@ -125,10 +125,12 @@
       <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <!-- SkyFrost.Base / SkyFrost.Base.Models: World Bridge が cloud session/record/contact
-         (SessionsManager / RecordsManager / ContactManager / SessionInfo / SearchParameters /
-         Record / SessionAccessLevel 等) を読むために必要。両 DLL は namespace SkyFrost.Base を
+    <!-- SkyFrost.Base / SkyFrost.Base.Models: World Bridge と Inventory Bridge が cloud
+         session/record/contact (SessionsManager / RecordsManager / ContactManager /
+         RecordHelper / CloudResult / SessionInfo / SearchParameters / Record /
+         SessionAccessLevel 等) を読むために必要。両 DLL は namespace SkyFrost.Base を
          共有する。Resonite engine が同梱しているため Private=False で出力に含めない。 -->
+    <!-- (Record 型は上の FrooxEngine.Store 参照が提供する。) -->
     <Reference Include="SkyFrost.Base">
       <HintPath>$(GamePath)SkyFrost.Base.dll</HintPath>
       <Private>False</Private>

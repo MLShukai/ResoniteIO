@@ -18,6 +18,14 @@ from resoio.dash import (
     DashTree,
 )
 from resoio.display import DisplayClient, DisplayInfo
+from resoio.inventory import (
+    InventoryClient,
+    InventoryEntry,
+    InventoryEntryKind,
+    InventoryListing,
+    InventoryMutationResult,
+    InventorySpawnResult,
+)
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
@@ -81,6 +89,12 @@ __all__ = [
     "Frame",
     "GrabResult",
     "GrabState",
+    "InventoryClient",
+    "InventoryEntry",
+    "InventoryEntryKind",
+    "InventoryListing",
+    "InventoryMutationResult",
+    "InventorySpawnResult",
     "LocomotionClient",
     "LocomotionCmd",
     "ManipulationClient",
