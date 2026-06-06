@@ -22,9 +22,13 @@ from resoio._generated.resonite_io.v1 import (
     DashGetTreeRequest,
     DashHighlightRequest,
     DashInvokeRequest,
+    DashListScreensRequest,
     DashOpenRequest,
     DashRect as PbDashRect,
+    DashScreen as PbDashScreen,
+    DashScreenList as PbDashScreenList,
     DashScrollRequest,
+    DashSetScreenRequest,
     DashState as PbDashState,
     DashTree as PbDashTree,
 )
@@ -43,6 +47,25 @@ _ELEMENT = PbDashElement(
     depth=0,
 )
 
+_SCREENS = [
+    PbDashScreen(
+        ref_id="sc-1",
+        key="Dash.Screens.Worlds",
+        name="Worlds",
+        label="Worlds",
+        is_current=True,
+        enabled=True,
+    ),
+    PbDashScreen(
+        ref_id="sc-2",
+        key="Dash.Screens.Contacts",
+        name="Contacts",
+        label="Contacts",
+        is_current=False,
+        enabled=False,
+    ),
+]
+
 
 class _FakeDash(DashBase):
     """In-process fake recording each request and returning fixed values."""
@@ -55,6 +78,8 @@ class _FakeDash(DashBase):
         self.invoke_requests: list[DashInvokeRequest] = []
         self.highlight_requests: list[DashHighlightRequest] = []
         self.scroll_requests: list[DashScrollRequest] = []
+        self.list_screens_requests: list[DashListScreensRequest] = []
+        self.set_screen_requests: list[DashSetScreenRequest] = []
 
     async def open(self, message: DashOpenRequest) -> PbDashState:
         self.open_requests.append(message)
@@ -83,6 +108,17 @@ class _FakeDash(DashBase):
     async def scroll(self, message: DashScrollRequest) -> PbDashActionResult:
         self.scroll_requests.append(message)
         return PbDashActionResult(ok=True, found=True, ref_id=message.ref_id)
+
+    async def list_screens(self, message: DashListScreensRequest) -> PbDashScreenList:
+        self.list_screens_requests.append(message)
+        return PbDashScreenList(screens=_SCREENS)
+
+    async def set_screen(self, message: DashSetScreenRequest) -> PbDashActionResult:
+        self.set_screen_requests.append(message)
+        resolved = message.ref_id or message.key
+        return PbDashActionResult(
+            ok=True, found=True, ref_id=resolved, detail="navigated"
+        )
 
 
 async def test_open_invokes_open_rpc_and_prints_state(
@@ -269,3 +305,105 @@ async def test_invoke_without_ref_id_errors(
     rc = await _amain(args)
     assert rc == 2
     assert "ref_id" in capsys.readouterr().err
+
+
+async def test_screens_invokes_list_screens_rpc_and_prints_one_line_per_screen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["dash", "screens"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.list_screens_requests) == 1
+        # `screens` is browse-only: it must not navigate.
+        assert fake.set_screen_requests == []
+
+        out = capsys.readouterr().out.strip().splitlines()
+        # One line per screen, no header, in the documented field order.
+        assert out == [
+            "[sc-1] Dash.Screens.Worlds Worlds is_current=True enabled=True "
+            "label='Worlds'",
+            "[sc-2] Dash.Screens.Contacts Contacts is_current=False "
+            "enabled=False label='Contacts'",
+        ]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_screen_with_positional_key_forwards_key_and_prints_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["dash", "set-screen", "Dash.Screens.Worlds"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.set_screen_requests) == 1
+        wire = fake.set_screen_requests[0]
+        # The positional target is the screen key; ref_id stays empty.
+        assert wire.key == "Dash.Screens.Worlds"
+        assert wire.ref_id == ""
+
+        out = capsys.readouterr().out.strip()
+        assert out == (
+            "ok=True found=True ref_id=Dash.Screens.Worlds detail='navigated'"
+        )
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_screen_with_ref_id_option_forwards_ref_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["dash", "set-screen", "--ref-id", "sc-7"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.set_screen_requests) == 1
+        wire = fake.set_screen_requests[0]
+        # --ref-id supplies the exact selector; the positional key is empty.
+        assert wire.ref_id == "sc-7"
+        assert wire.key == ""
+
+        out = capsys.readouterr().out.strip()
+        assert out == "ok=True found=True ref_id=sc-7 detail='navigated'"
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_screen_without_key_or_ref_id_errors(
+    capsys: pytest.CaptureFixture[str],
+):
+    """``set-screen`` requires a key or --ref-id; missing both is a usage error
+    (exit code 2), mirroring the ``invoke`` missing-ref_id path."""
+    args = _build_parser().parse_args(["dash", "set-screen"])
+    rc = await _amain(args)
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "key" in err or "ref-id" in err

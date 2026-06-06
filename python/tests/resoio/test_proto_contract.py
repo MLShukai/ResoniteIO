@@ -48,8 +48,12 @@ from resoio._generated.resonite_io.v1 import (
     DashGetTreeRequest,
     DashHighlightRequest,
     DashInvokeRequest,
+    DashListScreensRequest,
     DashRect,
+    DashScreen,
+    DashScreenList,
     DashScrollRequest,
+    DashSetScreenRequest,
     DashState,
     DashTree,
     DisplayApplyResponse,
@@ -254,6 +258,22 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "ref_id": 1,
         "delta_x": 2,
         "delta_y": 3,
+    },
+    DashScreen: {
+        "ref_id": 1,
+        "key": 2,
+        "name": 3,
+        "label": 4,
+        "is_current": 5,
+        "enabled": 6,
+    },
+    DashScreenList: {
+        "screens": 1,
+    },
+    DashListScreensRequest: {},
+    DashSetScreenRequest: {
+        "ref_id": 1,
+        "key": 2,
     },
     # Session
     PingRequest: {

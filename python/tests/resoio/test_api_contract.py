@@ -52,6 +52,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "DashClient",
     "DashElement",
     "DashRect",
+    "DashScreen",
     "DashState",
     "DashTree",
     "DisplayClient",

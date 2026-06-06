@@ -31,9 +31,13 @@ from resoio._generated.resonite_io.v1 import (
     DashGetTreeRequest,
     DashHighlightRequest,
     DashInvokeRequest,
+    DashListScreensRequest,
     DashOpenRequest,
     DashRect as PbDashRect,
+    DashScreen as PbDashScreen,
+    DashScreenList as PbDashScreenList,
     DashScrollRequest,
+    DashSetScreenRequest,
     DashState as PbDashState,
     DashTree as PbDashTree,
 )
@@ -42,6 +46,7 @@ from resoio.dash import (
     DashClient,
     DashElement,
     DashRect,
+    DashScreen,
     DashState,
     DashTree,
 )
@@ -139,6 +144,52 @@ _EXPECTED_TREE_ELEMENTS = (
 )
 
 
+# A two-screen list used by the list_screens round-trip test. Every scalar
+# field on both screens holds a different value, and the two screens use
+# opposite ``is_current`` / ``enabled`` flags, so any field swap/drop or a
+# reordered list would surface as a mismatch.
+_FIRST_SCREEN = PbDashScreen(
+    ref_id="screen-ref-1",
+    key="Dash.Screens.Worlds",
+    name="Worlds",
+    label="Worlds",
+    is_current=True,
+    enabled=True,
+)
+_SECOND_SCREEN = PbDashScreen(
+    ref_id="screen-ref-2",
+    key="Dash.Screens.Contacts",
+    name="Contacts",
+    label="Contacts (logged out)",
+    is_current=False,
+    enabled=False,
+)
+
+
+def _two_screen_list() -> PbDashScreenList:
+    return PbDashScreenList(screens=[_FIRST_SCREEN, _SECOND_SCREEN])
+
+
+_EXPECTED_SCREENS = [
+    DashScreen(
+        ref_id="screen-ref-1",
+        key="Dash.Screens.Worlds",
+        name="Worlds",
+        label="Worlds",
+        is_current=True,
+        enabled=True,
+    ),
+    DashScreen(
+        ref_id="screen-ref-2",
+        key="Dash.Screens.Contacts",
+        name="Contacts",
+        label="Contacts (logged out)",
+        is_current=False,
+        enabled=False,
+    ),
+]
+
+
 class _FakeDash(DashBase):
     """In-process fake that records each request and returns fixed protos.
 
@@ -155,6 +206,8 @@ class _FakeDash(DashBase):
         self.invoke_requests: list[DashInvokeRequest] = []
         self.highlight_requests: list[DashHighlightRequest] = []
         self.scroll_requests: list[DashScrollRequest] = []
+        self.list_screens_requests: list[DashListScreensRequest] = []
+        self.set_screen_requests: list[DashSetScreenRequest] = []
 
     async def open(self, message: DashOpenRequest) -> PbDashState:
         self.open_requests.append(message)
@@ -197,6 +250,23 @@ class _FakeDash(DashBase):
             found=True,
             ref_id=message.ref_id,
             detail="scrolled",
+        )
+
+    async def list_screens(self, message: DashListScreensRequest) -> PbDashScreenList:
+        self.list_screens_requests.append(message)
+        return _two_screen_list()
+
+    async def set_screen(self, message: DashSetScreenRequest) -> PbDashActionResult:
+        self.set_screen_requests.append(message)
+        # Echo whichever selector arrived (ref_id takes precedence) so a test
+        # can prove the chosen field crossed the wire; mirrors the bridge
+        # returning the post-navigation current screen's ref_id.
+        resolved = message.ref_id or message.key
+        return PbDashActionResult(
+            ok=True,
+            found=True,
+            ref_id=resolved,
+            detail="navigated",
         )
 
 
@@ -430,6 +500,155 @@ class TestDashClient:
             server.close()
             await server.wait_closed()
 
+    async def test_list_screens_round_trips_all_screen_fields_in_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        socket_path = tmp_path / "rio-dash.sock"
+        fake = _FakeDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                screens = await client.list_screens()
+
+            assert len(fake.list_screens_requests) == 1
+            # list_screens is read-only: no mutating/other RPC fired.
+            assert fake.set_screen_requests == []
+            assert fake.open_requests == []
+            assert fake.close_requests == []
+
+            # The result is a list (not a tuple), preserves element order, and
+            # every screen field survives the round-trip.
+            assert isinstance(screens, list)
+            assert screens == _EXPECTED_SCREENS
+            assert all(isinstance(s, DashScreen) for s in screens)
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_list_screens_returns_empty_list_when_no_screens(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        socket_path = tmp_path / "rio-dash.sock"
+
+        class _EmptyScreensDash(_FakeDash):
+            async def list_screens(
+                self, message: DashListScreensRequest
+            ) -> PbDashScreenList:
+                self.list_screens_requests.append(message)
+                return PbDashScreenList(screens=[])
+
+        fake = _EmptyScreensDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                screens = await client.list_screens()
+
+            assert screens == []
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_set_screen_by_key_forwards_key_and_decodes_result(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        socket_path = tmp_path / "rio-dash.sock"
+        fake = _FakeDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                result = await client.set_screen(key="Dash.Screens.Worlds")
+
+            assert len(fake.set_screen_requests) == 1
+            wire = fake.set_screen_requests[0]
+            # Only the key was supplied; ref_id stays empty on the wire.
+            assert wire.key == "Dash.Screens.Worlds"
+            assert wire.ref_id == ""
+
+            assert isinstance(result, DashActionResult)
+            assert result.ok is True
+            assert result.found is True
+            # The fake echoes the key as the post-navigation ref_id, proving the
+            # selector crossed the wire.
+            assert result.ref_id == "Dash.Screens.Worlds"
+            assert result.detail == "navigated"
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_set_screen_by_ref_id_forwards_ref_id_and_decodes_result(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        socket_path = tmp_path / "rio-dash.sock"
+        fake = _FakeDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                result = await client.set_screen(ref_id="screen-ref-7")
+
+            assert len(fake.set_screen_requests) == 1
+            wire = fake.set_screen_requests[0]
+            assert wire.ref_id == "screen-ref-7"
+            assert wire.key == ""
+
+            assert isinstance(result, DashActionResult)
+            assert result.ok is True
+            assert result.found is True
+            assert result.ref_id == "screen-ref-7"
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_set_screen_sends_both_selectors_when_both_given(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # The client does not resolve precedence locally; it forwards both
+        # selectors and lets the server apply ref_id-first precedence.
+        socket_path = tmp_path / "rio-dash.sock"
+        fake = _FakeDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                await client.set_screen(
+                    ref_id="screen-ref-9", key="Dash.Screens.Settings"
+                )
+
+            wire = fake.set_screen_requests[0]
+            assert wire.ref_id == "screen-ref-9"
+            assert wire.key == "Dash.Screens.Settings"
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_set_screen_with_both_empty_raises_value_error_before_any_rpc(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # The both-empty guard is a local contract check: it must raise before
+        # any network round trip, so a connected client never reaches the server.
+        socket_path = tmp_path / "rio-dash.sock"
+        fake = _FakeDash()
+        server = Server([fake])
+        await server.start(path=str(socket_path))
+        try:
+            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+            async with DashClient() as client:
+                with pytest.raises(ValueError, match="ref_id or key"):
+                    await client.set_screen()
+
+            assert fake.set_screen_requests == []
+        finally:
+            server.close()
+            await server.wait_closed()
+
     async def test_open_raises_when_not_connected(self):
         client = DashClient()
         with pytest.raises(RuntimeError, match="not connected"):
@@ -464,3 +683,15 @@ class TestDashClient:
         client = DashClient()
         with pytest.raises(RuntimeError, match="not connected"):
             await client.scroll("ref-1")
+
+    async def test_list_screens_raises_when_not_connected(self):
+        client = DashClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.list_screens()
+
+    async def test_set_screen_raises_when_not_connected(self):
+        # A valid selector is supplied so the not-connected guard (not the
+        # both-empty ValueError) is what surfaces.
+        client = DashClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.set_screen(key="Dash.Screens.Worlds")
