@@ -107,6 +107,12 @@ nav:
       - Cursor: api/cursor.md
 
 extra:
+  # Versioned docs via mike (deployed by .github/workflows/docs.yml). Renders a
+  # version dropdown; `latest` tracks the newest stable release, `dev` tracks
+  # main. `default` is the alias used for "you're viewing an old version" hints.
+  version:
+    provider: mike
+    default: latest
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/MLShukai/ResoniteIO

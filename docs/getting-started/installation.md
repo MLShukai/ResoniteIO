@@ -5,9 +5,11 @@ client) and the **`resoio` Python client** (runs wherever your agent code runs).
 connect over a Unix Domain Socket, so both halves must run on the same host (or share the
 socket directory).
 
-!!! note "Documentation hosting is not yet automated"
-    This site is currently built locally with `just docs-build` / `just docs-serve`.
-    There is no published hosting or CI deploy yet.
+!!! note "Documentation versions"
+    These docs are versioned with [mike](https://github.com/jimporter/mike) and deployed to
+    GitHub Pages by CI: pushing to `main` updates the **`dev`** version, and a stable release
+    tag publishes a numbered version and moves the **`latest`** alias. Use the version selector
+    (top of the page) to switch. To build locally, run `just docs-serve` / `just docs-build`.
 
 ## C# mod — Thunderstore
 
