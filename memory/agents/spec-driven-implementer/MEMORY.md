@@ -4,6 +4,7 @@
 - [FrooxEngine ContextMenu reflection](froox_contextmenu_reflection.md) — private OpenContextMenu/MenuOptions signatures + ContextMenuItem API gotchas
 - [SessionHost modality wiring](feedback_sessionhost_modality_wiring.md) — the 4-5 edit points to register a new modality in SessionHost.cs
 - [API contract test pins __all__](feedback_api_contract_test.md) — new Python export breaks test_api_contract.py until spec-test-author updates expected tuple
+- [Core API contract pin](project_core_api_contract_pin.md) — new public type in ResoniteIO.Core.\* breaks ApiContractTests exported-types snapshot; make shared helpers internal
 - [Dash + UIX engine API shapes](reference_dash_uix_engine_api.md) — verified FrooxEngine call shapes for the Dash Mod bridge (UserspaceRadiantDash, RectTransform, Button/ScrollRect, RefID resolution, LocaleStringDriver.Key)
 - [check HEAD before implementing](feedback_check_head_before_implementing.md) — On a feature branch matching the task name, verify prior commits haven't already landed the work before re-implementing
 - [pre-commit stash で staged 内容が消える](feedback_precommit_stash_silent_unstage.md) — 並列 worktree で pre-commit が "Skipped" 連発 + exit 1 を返したら `git status` で再 stage して再 commit する

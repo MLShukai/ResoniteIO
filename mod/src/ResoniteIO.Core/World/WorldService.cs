@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Rpc;
 
 #pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
 
@@ -277,19 +278,11 @@ public sealed class WorldService : V1.World.WorldBase
         Func<IWorldBridge, CancellationToken, Task<T>> call
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                $"World.{rpc} called but no IWorldBridge is registered; returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "World bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "World", "IWorldBridge", rpc);
 
         try
         {
-            return await call(_bridge, context.CancellationToken).ConfigureAwait(false);
+            return await call(bridge, context.CancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
             when (ex is not (OperationCanceledException or IOException)

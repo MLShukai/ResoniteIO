@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Rpc;
 
 #pragma warning disable CA1031 // catch (Exception) は Bridge 例外を NotifyDisconnect / RpcException に翻訳するため必要
 
@@ -41,18 +42,13 @@ public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Microphone.StreamAudio called but no IMicrophoneBridge is registered; "
-                    + "returning Unavailable."
-            );
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う
-            // (transient ではないが client retry policy に friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Microphone bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(
+            _bridge,
+            _log,
+            "Microphone",
+            "IMicrophoneBridge",
+            "StreamAudio"
+        );
 
         var ct = context.CancellationToken;
         long receivedFrames = 0;
@@ -67,7 +63,7 @@ public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
             while (await requestStream.MoveNext(ct).ConfigureAwait(false))
             {
                 var frame = MapFromProto(requestStream.Current);
-                _bridge.SubmitFrame(frame);
+                bridge.SubmitFrame(frame);
                 receivedFrames++;
                 receivedSamples += frame.SampleCount;
             }
@@ -82,26 +78,26 @@ public sealed class MicrophoneService : V1.Microphone.MicrophoneBase
                 $"Microphone.StreamAudio cancelled after {receivedFrames} frame(s) "
                     + $"({ex.GetType().Name}): {ex.Message}"
             );
-            _bridge.NotifyDisconnect(MicrophoneDisconnectReason.Cancelled);
+            bridge.NotifyDisconnect(MicrophoneDisconnectReason.Cancelled);
             throw;
         }
         catch (MicrophoneNotReadyException ex)
         {
             _log.LogInfo($"Microphone.StreamAudio: bridge not ready: {ex.Message}");
-            _bridge.NotifyDisconnect(MicrophoneDisconnectReason.Errored);
+            bridge.NotifyDisconnect(MicrophoneDisconnectReason.Errored);
             throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
         }
         catch (Exception ex)
         {
             _log.LogError($"Microphone.StreamAudio faulted after {receivedFrames} frame(s): {ex}");
-            _bridge.NotifyDisconnect(MicrophoneDisconnectReason.Errored);
+            bridge.NotifyDisconnect(MicrophoneDisconnectReason.Errored);
             throw new RpcException(
                 new Status(StatusCode.Internal, $"Microphone stream faulted: {ex.Message}")
             );
         }
 
         // MoveNext returned false = client が CompleteAsync で graceful close。
-        _bridge.NotifyDisconnect(MicrophoneDisconnectReason.Graceful);
+        bridge.NotifyDisconnect(MicrophoneDisconnectReason.Graceful);
 
         var unixNanos = UnixNanosClock.Now();
         _log.LogDebug(
