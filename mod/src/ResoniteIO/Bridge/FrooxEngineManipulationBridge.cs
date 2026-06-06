@@ -26,8 +26,9 @@ namespace ResoniteIO.Bridge;
 /// <para>
 /// engine 状態を per-instance には保持せず (manager 参照を読むだけ、event 購読無し、
 /// dispatch は <c>world.RunSynchronously</c> の one-shot)、IDisposable でもない。
-/// 掴みは <see cref="Grabber.Grab(float3, float)"/> でオブジェクトを手の下に reparent し、
-/// 以降は engine が自動追従するため per-frame な処理は不要。
+/// 掴みは <see cref="Grabber.Grab(float3, float)"/> でオブジェクトを手の HolderSlot 下に
+/// reparent し、以降は engine が手に自動追従させるため、Locomotion のような per-frame
+/// repeater は不要 (Grab/Release は edge-triggered な one-shot で完結する)。
 /// </para>
 /// </remarks>
 internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
@@ -60,8 +61,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
                 var resolved = ResolveSelector(world, hand);
                 var grabber = ResolveGrabber(world, resolved);
 
-                // point 指定があればその座標を、無ければ手 (holder slot) の現在 world 位置を
-                // proximity grab の中心に使う。
+                // proximity grab の中心。point 未指定なら手 (holder slot) の現在 world 位置。
                 var center = point is { } p
                     ? new float3(p.X, p.Y, p.Z)
                     : ResolveHandPosition(grabber);

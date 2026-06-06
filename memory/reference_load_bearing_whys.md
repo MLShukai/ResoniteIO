@@ -1,6 +1,6 @@
 ---
 name: load-bearing-whys
-description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 7 Microphone surface)
+description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 6 Manipulation + Step 7 Microphone surface)
 metadata:
   type: reference
 ---
@@ -31,23 +31,30 @@ are load-bearing and must NOT be cut.
 - Items 30–32 originate from Step 7 polish wave 2 (`paced()` helper,
   CLI WAV warmup constant, 5 s sine fixture sized to exceed bridge
   ring buffer).
+- Items 33–36 originate from Step 6 (Manipulation: grab auto-follow =
+  no per-frame repeater, no-IDisposable bridge rationale, hand-pose
+  scope exclusion, default grab radius location).
 
 01. **Google.Protobuf early-resolution hazard**
+
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
       before `PluginAssemblyResolver` is attached, or Resonite's bundled
       old Google.Protobuf wins resolution and SessionHost fails with
       `TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'`.
     - `PluginAssemblyResolver`: takes `ManualLogSource` directly instead
       of `ILogSink` for the same reason (Core dll must not preload).
+
 02. **Sync<string> tearing tolerance** in `FrooxEngineSessionBridge`:
     getters can be read from any thread because the underlying values are
     reference-typed publishes via `Sync<string>` — tearing yields a stale
     ref, never a crash.
+
 03. **`[Collection("SessionHostEnv")]`** on RoundTrip / Lifecycle /
     BridgeWiring **and CameraRoundTrip** tests: `SessionHostHarness`
     mutates the `RESONITE_IO_SOCKET` env var, so any test using the
     harness must serialize via this collection (extended in Step 3 to
     cover Camera tests too).
+
 04. **`csproj` `CopyLocalLockFileAssemblies` + explicit `Microsoft.AspNetCore.*`
     copy + `CopyAspNetCoreSharedFrameworkRuntime` Target** in
     `ResoniteIO.csproj`: required to ship the adjacent DLLs that
@@ -56,21 +63,26 @@ are load-bearing and must NOT be cut.
     references and must stay paired with the PluginFiles glob — see
     \[\[bepinex-mod-transitive-dlls\]\]. Comments there are out of scope
     for the docstring agent — leave them entirely.
+
 05. **`betterproto2_compiler` separate distribution** in Python deps:
     not a `[compiler]` extra — keep any comment explaining that.
+
 06. **`ICameraBridge` optional DI** in `CameraService`: a `null` bridge
     returns `Status.Unavailable` so Core can be tested without a Bridge
     and camera-less engine configs still load. Keep the remark.
+
 07. **Engine-thread dispatch in `FrooxEngineCameraBridge`**: component
     graph mutations (`AttachComponent`, `Slot.AddSlot` etc.) MUST go
     through `World.RunSynchronously` + `TaskCompletionSource`; pure reads
     (volatile snapshots) do not. Don't strip the comment explaining this
     asymmetry — see \[\[bridge-engine-thread-dispatch\]\].
+
 08. **ProcessExit swallowing in Camera bridge** (`FrooxEngineCameraBridge.cs`
     `OnProcessExit`): `RunSynchronously` becomes a no-op after engine
     shutdown, so exceptions are intentionally drunk. Keep that note —
     it documents an intentional best-effort path tied to
     \[\[engine-onshutdown-deferred\]\].
+
 09. **BGRA8 → RGBA8 conversion rationale** in the Camera bridge: the
     swap was made because raw BGRA8 readback caused a blue tint
     (commit `5129bb6`). Any comment near the conversion site that
@@ -78,23 +90,27 @@ are load-bearing and must NOT be cut.
     `ff44bf8`; this item now applies to v2 `FrameCapture` which
     already uses `TextureFormat.RGBA32` directly, so no conversion
     site remains — keep the item here for archival reference.)
+
 10. **`FrameHeader` magic / layout byte-for-byte** (`mod/src/ResoniteIO.RendererShared/FrameHeader.cs`):
     the `byte layout` table in the class XML doc is the canonical
     binary contract between renderer (Wine Mono, net472) and engine
     (.NET 10). Any change to the offset/size table here is a
     breaking IPC schema change — keep the layout block intact and
     update offsets atomically with `Read`/`Write` if ever modified.
+
 11. **`IpcSocketPaths.QueueCapacityBytes = 32 MiB`** rationale: the
     default InterprocessLib capacity is 1 MiB, which cannot hold a
     single 1118×651 RGBA8 frame (~2.9 MiB). The const comment in
     `IpcSocketPaths.cs` and the `FrameSender` constructor comment
     are tied — preserve both. See \[\[camera-v2-constraints\]\] §6.
+
 12. **`PushedFrameCameraBridge` cap=1 + DropOldest** (`mod/src/ResoniteIO.Core/Camera/PushedFrameCameraBridge.cs`):
     "silent drop is intentional, do not log per frame" + "the
     width/height args are ignored, renderer dictates resolution"
     are both load-bearing. Stripping either invites future callers
     to add logging that floods at 60 fps or to mistake the args for
     a request that actually constrains output.
+
 13. **Static event leak hazard** (`RendererFrameInterprocessReceiver` +
     `FrameSender`): `Messenger.OnFailure` / `OnWarning` are static
     events; the `-=` in Dispose is the only way to let the
@@ -102,6 +118,7 @@ are load-bearing and must NOT be cut.
     "knowledge §7 / camera-v2-constraints §6" — keep them. Removing
     the comment will let a future refactor merge the subscribe and
     `new Messenger` lines and lose the unsubscribe entirely.
+
 14. **`FrooxEngineDisplayBridge` MaximumBackgroundFramerate caveat**
     (`mod/src/ResoniteIO/Bridge/FrooxEngineDisplayBridge.cs`):
     the long XML remarks explain that engine public API does NOT
@@ -109,6 +126,7 @@ are load-bearing and must NOT be cut.
     *background* cap. This is a footgun for callers who expect
     `DisplayClient.apply(max_fps=120)` to raise foreground fps —
     keep the entire remarks block; see \[\[camera-v2-constraints\]\] §9.
+
 15. **Locomotion velocity semantics canon = proto field comment**
     (`proto/resonite_io/v1/locomotion.proto`, `LocomotionCommand.velocity`):
     the field doc states "単位元は 1.0、Python `LocomotionCmd` で
@@ -125,6 +143,7 @@ are load-bearing and must NOT be cut.
     Do NOT reintroduce a wire-side 0→1.0 fallback in the Bridge —
     it was removed at `d195212` precisely to keep proto value and
     applied multiplier in 1:1 correspondence.
+
 16. **Pitch sign on Locomotion Bridge: NO flip (2026-05-19)**. Earlier
     decompile reading of `_verticalAngle -= y` led to a Bridge-side
     `-PitchRate`, but live test showed the inverted behaviour and the
@@ -135,6 +154,7 @@ are load-bearing and must NOT be cut.
     re-introduces `-PitchRate` "to match decompile", that is a
     regression of this fix. Proto contract (positive = look up) is
     unchanged.
+
 17. **`Drive` test proto3-default round-trip assertion**
     (`mod/tests/ResoniteIO.Core.Tests/Locomotion/LocomotionRoundTripTests.cs`,
     "Service は proto.Velocity を素のまま POCO に詰めるだけ" comment):
@@ -143,6 +163,7 @@ are load-bearing and must NOT be cut.
     default lives in Python `LocomotionCmd`. Without this comment
     the assertion looks contradictory to the proto field doc which
     states the unit value is 1.0.
+
 18. **Move body-local rotation via `HeadFacingRotation`** in
     `FrooxEngineLocomotionBridge.ApplyToEngine`: `Move.ExternalInput`
     is interpreted in `UserRoot.Slot` coordinates, not world. A naive
@@ -158,6 +179,7 @@ are load-bearing and must NOT be cut.
     accounting for pitch sink, regresses the fix. Proto contract is
     unchanged (MoveRight = Strafe / Right axis, MoveForward = Forward
     axis, MoveUp = world-absolute vertical axis).
+
 19. **`PushedAudioFrameSpeakerBridge` cap=32 + `DropWrite`**
     (`mod/src/ResoniteIO.Core/Speaker/PushedAudioFrameSpeakerBridge.cs`):
     cap=32 ≈ 680 ms buffer at typical 1024-sample/21 ms @ 48 kHz
@@ -169,6 +191,7 @@ are load-bearing and must NOT be cut.
     will assume `TryWrite == false` indicates overflow (it only ever
     means Writer.Complete) and add log spam, or flip to DropOldest and
     silently change the audible behaviour on overload.
+
 20. **`AudioOutputDriver.RenderAudio` direct-assign hazard /
     HarmonyLib Postfix tap** in `FrooxEngineSpeakerBridge`: the engine
     `RenderAudio` Action is `direct assign`-ed by `AudioSystem`, not an
@@ -181,6 +204,7 @@ are load-bearing and must NOT be cut.
     are all load-bearing. Removing any of them invites a future PR to
     "simplify" by adopting the `RenderAudio` direct assign or by
     patching a derived driver class.
+
 21. **Postfix runs on WASAPI audio thread — no log, swallow exceptions**
     (`FrooxEngineSpeakerBridge.OnAudioFrameRenderedPostfix`):
     the postfix is called every ~21 ms on the WASAPI callback thread.
@@ -191,6 +215,7 @@ are load-bearing and must NOT be cut.
     `buffer.Length` odd-check never fires in practice (PrimaryOutput is
     stereo-fixed) is load-bearing. Stripping these lets a future
     refactor add a `LogDebug` per frame and reintroduce audio glitches.
+
 22. **SpeakerBridge dispose order: singleton clear before inner dispose**
     (`FrooxEngineSpeakerBridge.Dispose`): `_singleton` must be CAS-cleared
     *before* `_inner.Dispose()` so the Postfix (which reads `_singleton`)
@@ -201,6 +226,7 @@ are load-bearing and must NOT be cut.
     is completed (silent no-op, but the code intent looks wrong on
     review). Keep paired with the SafeShutdown chain comment in
     `ResoniteIOPlugin` that mentions Speaker ordering.
+
 23. **`SafeShutdown` chain documents Speaker placement**
     (`ResoniteIOPlugin.SafeShutdown` ordering block, the bullet
     "SpeakerBridge.Dispose は Harmony unpatch + Channel complete を行い、
@@ -211,6 +237,7 @@ are load-bearing and must NOT be cut.
     the channel complete and exit cleanly (avoiding RpcException from
     abrupt service teardown). Keep the chain comment intact — it's the
     only place documenting the WASAPI-stop contract.
+
 24. **WAV writer rejects stdlib `wave` module**
     (`python/src/resoio/cli/record.py` `_WavFloat32Writer` docstring):
     the class docstring explicitly states "the stdlib `wave` module
@@ -221,6 +248,7 @@ are load-bearing and must NOT be cut.
     silently regressing float32 support. The seek-and-patch design
     (placeholder size fields at offsets 4 / 40, patched on close) is
     the reason `-o -` for `.wav` is disallowed (stdout is non-seekable).
+
 25. **Fixed mono wire format on Microphone** in
     `python/src/resoio/microphone.py` constants comment: voice
     broadcast on the Resonite side flows through
@@ -231,6 +259,7 @@ are load-bearing and must NOT be cut.
     Speaker" PR to widen the wire to stereo, which would either fail
     in the Bridge or silently down-mix without anyone noticing the
     pointless conversion.
+
 26. **`AudioSystem.UnregisterAudioInput` does not exist (decompile
     confirmed)** in `FrooxEngineMicrophoneBridge.Dispose` and the
     class XML `<para>` covering Dispose: only `AudioInputs.Add` exists;
@@ -243,6 +272,7 @@ are load-bearing and must NOT be cut.
     invites a future PR to either remove the manual Remove ("looks
     like it should be unnecessary") or fail to add a real Unregister
     when (if) the engine ships one.
+
 27. **`IMicrophoneBridge.NotifyDisconnect` must not throw**
     (interface XML on the method + matching comment in
     `FrooxEngineMicrophoneBridge.NotifyDisconnect`'s try/catch):
@@ -254,6 +284,7 @@ are load-bearing and must NOT be cut.
     can lock or throw during shutdown. Removing either lets a future
     refactor either propagate Reset() exceptions to the gRPC layer or
     log per-disconnect on ProcessExit and trigger a self-deadlock.
+
 28. **Microphone Cancelled/Errored → ring buffer clear (RL safety)**
     in `FrooxEngineMicrophoneBridge.NotifyDisconnect`'s switch on
     `MicrophoneDisconnectReason`: client crash must not leave the
@@ -263,6 +294,7 @@ are load-bearing and must NOT be cut.
     Bridge that documents the policy choice (vs the Speaker side which
     keeps the buffer). A future refactor to a single "always preserve"
     path would silently regress RL safety.
+
 29. **`wave` sampwidth=4 → float32 commitment** in
     `python/src/resoio/cli/mic.py` `_load_wav`: stdlib `wave` only
     reports byte width per sample; it cannot distinguish int32 from
@@ -273,6 +305,7 @@ are load-bearing and must NOT be cut.
     also relies on it). Without the comment a future PR will add an
     int32 branch that silently treats float32 bytes as integers and
     produces inaudible noise.
+
 30. **`paced()` helper contract**
     (`python/src/resoio/microphone.py` `paced` docstring): three
     WHYs are load-bearing. (a) opt-in for pre-loaded buffers; the
@@ -286,6 +319,7 @@ are load-bearing and must NOT be cut.
     invites a regression where TTS over a slow producer + paced()
     accumulates delay; stripping (c) silently corrupts replay
     timestamps without any error path.
+
 31. **`_WARMUP_CHUNKS = 5` head start**
     (`python/src/resoio/cli/mic.py`): ~107 ms (5 × 1024 / 48 kHz)
     absorbs the engine tick latency between `StreamAudio`
@@ -296,6 +330,7 @@ are load-bearing and must NOT be cut.
     refactor that drops it to `1` or `0` for "simplicity" reopens
     the gap and there is no automated test that fails (audible
     only).
+
 32. **5 s sine fixture deliberately > 2 s ring buffer**
     (`python/tests/e2e/fixtures/generate_sine.py` `_DURATION_S`
     and filename comments): 1 s used to fit entirely in the bridge's
@@ -308,6 +343,43 @@ are load-bearing and must NOT be cut.
     1 s for "obvious naming consistency", silently disabling the
     pacing regression detector, or (b) rename the file and churn
     every reference for cosmetic reasons.
+
+33. **Grab auto-follow ⇒ no per-frame repeater** (Manipulation proto
+    header `manipulation.proto` + `FrooxEngineManipulationBridge` class
+    XML remarks): `Grabber.Grab` reparents the grabbed object under the
+    hand's `HolderSlot`, after which the engine moves it automatically.
+    This is why Grab/Release are **edge-triggered unary RPCs** (like
+    ContextMenu) and NOT a client-streaming repeater like Locomotion.
+    The proto-header paragraph and the Bridge remarks block contrasting
+    against Locomotion are load-bearing — a future PR that "adds a
+    streaming hold-pose channel for consistency with Locomotion" would
+    be reintroducing per-frame work the engine already does for free.
+
+34. **Manipulation Bridge is NOT IDisposable** (`FrooxEngineManipulationBridge`
+    class XML remarks): it holds no per-instance engine state (reads
+    manager refs only, no event subscriptions, dispatch is one-shot
+    `world.RunSynchronously`), mirroring the ContextMenu bridge. The
+    remarks paragraph stating this is load-bearing — without it a future
+    refactor copying the Speaker/Microphone bridges may add a spurious
+    `IDisposable` + SafeShutdown entry for a bridge that owns nothing.
+
+35. **Hand-pose is out of Step 6 scope** (Manipulation proto header
+    `manipulation.proto`, "scope:" paragraph): hand-pose/articulation
+    control has no clean engine injection path —
+    `TrackedDevicePositioner` overwrites the hand slot every input
+    update and there is no `ExternalInput` hook like Locomotion. The
+    scope paragraph is the canonical record of why grab/release is the
+    only manipulation surface; keep it so a future PR doesn't try to
+    write the hand slot directly and get silently overwritten.
+
+36. **Default grab radius = 0.1 m resolved in the Service**
+    (`ManipulationService.DefaultGrabRadius` const + its XML doc, and
+    the proto `radius` field comment "\<=0 はサーバ default (0.1m)"):
+    the `<= 0 → 0.1m` resolution lives in the **Core Service**, not the
+    Bridge — the Bridge always receives a resolved positive radius. The
+    const doc-comment and the proto field comment are the paired
+    canonical surfaces; keep both so the default doesn't drift or get
+    duplicated into the Bridge.
 
 **Why:** these WHYs explain non-local behaviour: changing one site
 (removing the resolver, dropping the collection, swapping the channel

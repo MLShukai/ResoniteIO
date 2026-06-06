@@ -80,3 +80,4 @@ project-wide 共有価値のあるものは上記 Feedback / Reference に昇格
 当該 agent 固有の作業ノウハウのみ。
 
 - [spec-driven-implementer/MEMORY.md](agent/spec-driven-implementer/MEMORY.md) — implementer 固有の作業ノウハウ (作業手順、recovery 手順、TODO、CLI install 時の skew、test pacing)
+- [code-quality-reviewer: Manipulation を HandleAsync に統合しない理由](agent/code-quality-reviewer/feedback_manipulation_service_no_handleasync.md) — RPC 形が違い Release/GetState は 2 回のみで閾値内

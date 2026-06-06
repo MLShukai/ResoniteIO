@@ -1131,7 +1131,8 @@ class ManipulationGrabState(betterproto2.Message):
         1, betterproto2.TYPE_ENUM, default_factory=lambda: ManipulationHand(0)
     )
     """
-    解決後の手 (UNSPECIFIED にはならない)。
+    解決後の手 (UNSPECIFIED にはならない)。UNSPECIFIED/PRIMARY を渡したとき
+    サーバがどちらの手に解決したかを client に返すためのエコー。
     """
 
     is_holding: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)

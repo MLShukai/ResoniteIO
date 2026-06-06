@@ -56,7 +56,8 @@ message ManipulationGetStateRequest {
 
 // 操作後の保持状態スナップショット。
 message ManipulationGrabState {
-  // 解決後の手 (UNSPECIFIED にはならない)。
+  // 解決後の手 (UNSPECIFIED にはならない)。UNSPECIFIED/PRIMARY を渡したとき
+  // サーバがどちらの手に解決したかを client に返すためのエコー。
   ManipulationHand hand = 1;
   // 何かを保持しているか (`Grabber.IsHoldingObjects`)。
   bool is_holding = 2;

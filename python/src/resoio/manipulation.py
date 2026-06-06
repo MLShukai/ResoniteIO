@@ -53,10 +53,12 @@ _R = TypeVar("_R")
 class GrabState:
     """Snapshot of what a hand is currently holding.
 
-    ``hand`` is the resolved target hand (never ``"unspecified"`` —
-    ``UNSPECIFIED`` is decoded as ``"primary"``). ``object_names`` is a
-    best-effort list of held grabbable slot names and may be empty even
-    when ``is_holding`` is ``True``.
+    ``hand`` echoes back which hand the server actually acted on, so a
+    caller that passed ``"primary"`` learns whether it resolved to left
+    or right (it is never ``"unspecified"`` — ``UNSPECIFIED`` decodes as
+    ``"primary"``). ``object_names`` is a best-effort list of held
+    grabbable slot names and may be empty even when ``is_holding`` is
+    ``True``.
     """
 
     hand: ManipulationHandArg

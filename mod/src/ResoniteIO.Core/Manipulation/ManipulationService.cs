@@ -142,16 +142,8 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             _ => ManipulationHandSelector.Primary,
         };
 
-    private static ManipulationPoint? ToPoint(V1.ManipulationGrabRequest request)
-    {
-        if (request.Point is null)
-        {
-            return null;
-        }
-
-        var p = request.Point;
-        return new ManipulationPoint(p.X, p.Y, p.Z);
-    }
+    private static ManipulationPoint? ToPoint(V1.ManipulationGrabRequest request) =>
+        request.Point is { } p ? new ManipulationPoint(p.X, p.Y, p.Z) : null;
 
     private static V1.ManipulationHand ToProtoHand(ManipulationHandSelector hand) =>
         hand switch

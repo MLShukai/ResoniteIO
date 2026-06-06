@@ -17,7 +17,9 @@ public readonly record struct ManipulationPoint(float X, float Y, float Z);
 
 /// <summary>操作後の保持状態 snapshot (proto <c>ManipulationGrabState</c> から独立した Core 層 POCO)。</summary>
 /// <remarks>
-/// <paramref name="Hand"/> は解決後の手 (Primary に解決済みで <c>Unspecified</c> にはならない)。
+/// <paramref name="Hand"/> は解決後の手 (Primary は実際の Left/Right に解決済みで
+/// <c>Unspecified</c> にはならない)。Primary を渡した呼び出し元がどちらの手に解決したか
+/// 知れるよう echo back する。
 /// <paramref name="ObjectNames"/> は保持中 grabbable の slot 名 (best-effort、空のことがある)。
 /// </remarks>
 public sealed record GrabSnapshot(
