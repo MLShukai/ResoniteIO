@@ -241,7 +241,9 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                     return NotFoundScreen();
                 }
 
-                // engine 自身の RadiantDashButton.Pressed と同一経路。代入は同期反映される。
+                // engine 自身の RadiantDashButton.Pressed と同一経路で CurrentScreen.Target に直接代入する。
+                // タブ Button を SimulatePress で叩く経路は採らない: 言語非依存 key で解決した screen を
+                // 確実かつ同期的に切り替えられ、Button の hit-test / interactable gating に左右されないため。
                 radiant.CurrentScreen.Target = screen;
 
                 var afterRefId =
@@ -348,7 +350,10 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         return radiant;
     }
 
-    /// <summary>1 screen の snapshot を構築する。engine thread 前提。</summary>
+    /// <summary>
+    /// 1 screen の snapshot を構築する。<c>Key</c> は <see cref="ResolveLocaleKey"/> 経由で
+    /// screen ラベルを駆動する <c>LocaleStringDriver</c> から取る (言語非依存の主キー)。engine thread 前提。
+    /// </summary>
     private static DashScreenSnapshot BuildScreenSnapshot(
         RadiantDashScreen screen,
         RadiantDashScreen? current
@@ -356,7 +361,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     {
         return new DashScreenSnapshot(
             RefId: screen.ReferenceID.ToString(),
-            Key: ResolveScreenLocaleKey(screen),
+            Key: ResolveLocaleKey(screen.Label),
             Name: screen.Slot?.Name ?? string.Empty,
             Label: screen.Label?.Value ?? string.Empty,
             IsCurrent: current is not null && screen == current,
@@ -366,10 +371,13 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
 
     /// <summary>
     /// <paramref name="refId"/> 優先、空なら <paramref name="key"/> で <paramref name="radiant"/> の
-    /// <see cref="RadiantDash.Screens"/> から screen を解決する。所属を保証するため
-    /// <c>ReferenceController</c> は使わず Screens を直接列挙する。未解決なら null。
+    /// <see cref="RadiantDash.Screens"/> から screen を解決する。未解決なら null。
     /// </summary>
-    /// <remarks>engine thread 前提。</remarks>
+    /// <remarks>
+    /// engine thread 前提。<c>World.ReferenceController</c> ではなく <c>Screens</c> を直接列挙するのは、
+    /// ref_id が「この dash に所属する screen」であることを保証するため (任意 RefID の Slot を
+    /// screen と取り違えて代入する事故を防ぐ)。
+    /// </remarks>
     private static RadiantDashScreen? ResolveScreen(RadiantDash radiant, string refId, string key)
     {
         if (!string.IsNullOrEmpty(refId))
@@ -394,7 +402,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         {
             foreach (var screen in radiant.Screens)
             {
-                if (ResolveScreenLocaleKey(screen) == key)
+                if (ResolveLocaleKey(screen.Label) == key)
                 {
                     return screen;
                 }
@@ -402,20 +410,6 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// <c>screen.Label</c> (<c>Sync&lt;string&gt;</c>) を駆動する <see cref="LocaleStringDriver"/> から
-    /// 言語非依存の key を読む。driver が無い screen では空文字。
-    /// </summary>
-    private static string ResolveScreenLocaleKey(RadiantDashScreen screen)
-    {
-        if (screen.Label is null)
-        {
-            return string.Empty;
-        }
-        var driver = FrooxEngine.LocaleHelper.GetLocalizedDriver(screen.Label);
-        return driver?.Key?.Value ?? string.Empty;
     }
 
     /// <summary>
@@ -491,7 +485,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
 
         var text = button is not null ? button.Label : slot.GetComponentInChildren<Text>();
         var label = text?.Content?.Value ?? string.Empty;
-        var localeKey = ResolveLocaleKey(text);
+        var localeKey = ResolveLocaleKey(text?.Content);
 
         var globalRect = rect.ComputeGlobalComputeRect();
         var rectSnapshot = new DashRectSnapshot(
@@ -539,16 +533,17 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <summary>
-    /// <see cref="Text.Content"/> を駆動している <see cref="LocaleStringDriver"/> から言語非依存の key を読む。
-    /// 生文字列ラベルしか無い要素では空文字。
+    /// <paramref name="field"/> (<see cref="Text.Content"/> や <see cref="RadiantDashScreen.Label"/> 等の
+    /// <c>Sync&lt;string&gt;</c>) を駆動している <see cref="LocaleStringDriver"/> から言語非依存の key を読む。
+    /// driver が無い (生文字列ラベルしか無い) 要素では空文字。
     /// </summary>
-    private static string ResolveLocaleKey(Text? text)
+    private static string ResolveLocaleKey(IField<string>? field)
     {
-        if (text is null)
+        if (field is null)
         {
             return string.Empty;
         }
-        var driver = FrooxEngine.LocaleHelper.GetLocalizedDriver(text.Content);
+        var driver = FrooxEngine.LocaleHelper.GetLocalizedDriver(field);
         return driver?.Key?.Value ?? string.Empty;
     }
 

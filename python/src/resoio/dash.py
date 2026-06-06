@@ -31,7 +31,6 @@ from resoio._generated.resonite_io.v1 import (
     DashOpenRequest,
     DashRect as _PbDashRect,
     DashScreen as _PbDashScreen,
-    DashScreenList as _PbDashScreenList,
     DashScrollRequest,
     DashSetScreenRequest,
     DashState as _PbDashState,
@@ -378,20 +377,26 @@ class DashClient:
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
         request = DashListScreensRequest()
-        screen_list: _PbDashScreenList = await self._dispatch(
-            lambda stub: stub.list_screens(request)
-        )
+        screen_list = await self._dispatch(lambda stub: stub.list_screens(request))
         return [_screen_from_proto(screen) for screen in screen_list.screens]
 
     async def set_screen(self, ref_id: str = "", key: str = "") -> DashActionResult:
         """Navigate to a dash screen identified by ``ref_id`` or ``key``.
 
+        Navigation does not open or close the dash; it only switches the
+        active screen, so the new screen renders on the next ``get_tree``.
+
         ``ref_id`` takes precedence: when non-empty it selects the screen by
         its exact engine ``ReferenceID``; otherwise the screen is matched by
-        its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``). The
-        resulting ``ref_id`` echoes the current screen after navigating.
+        its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``).
         Passing neither raises :class:`ValueError` before any network round
         trip.
+
+        An unresolved ``ref_id`` / ``key`` is a soft failure
+        (``found == ok == False``), not an exception. On success the result's
+        ``ref_id`` echoes the current screen after navigating; a disabled
+        screen still navigates with ``ok == True`` and ``detail`` set to
+        ``"screen disabled"``.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
