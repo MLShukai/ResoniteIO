@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -78,7 +79,8 @@ public sealed class SessionHost : IAsyncDisposable
         ILocomotionBridge? locomotionBridge = null,
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
-        IContextMenuBridge? contextMenuBridge = null
+        IContextMenuBridge? contextMenuBridge = null,
+        IDashBridge? dashBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -131,6 +133,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(contextMenuBridge);
         }
+        if (dashBridge is not null)
+        {
+            builder.Services.AddSingleton(dashBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -147,6 +153,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<SpeakerService>();
         app.MapGrpcService<MicrophoneService>();
         app.MapGrpcService<ContextMenuService>();
+        app.MapGrpcService<DashService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -192,6 +199,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (contextMenuBridge is null)
         {
             log.LogWarning("ContextMenu modality is not configured.");
+        }
+        if (dashBridge is null)
+        {
+            log.LogWarning("Dash modality is not configured.");
         }
 
         var runTask = Task.Run(
