@@ -4,3 +4,4 @@
 - [ContextMenu modality](project_context_menu_modality.md) — radial T-key menu unary RPC modality, mirrored on Display; Service exception→status map and SessionHostHarness usage
 - [Dash screens modality](project_dash_screens_modality.md) — ListScreens/SetScreen screen enumerate+navigate; both-empty→InvalidArgument, disabled-screen detail, ApiContract Ordinal placement
 - [Kestrel ServiceHost base](feedback_kestrel_servicehost_base.md) — 単機能 gRPC round-trip host は Common/KestrelServiceHost<TService> を継承し固有部分(label+bridge DI)だけ書く
+- [uds_server fixture](feedback_uds_server_fixture.md) — grpclib end-to-end client test の共有 conftest factory; IServable typing gotcha; migrate 可否
