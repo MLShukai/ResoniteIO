@@ -82,6 +82,38 @@ public sealed class DashService : V1.Dash.DashBase
             context
         );
 
+    public override Task<V1.DashScreenList> ListScreens(
+        V1.DashListScreensRequest request,
+        ServerCallContext context
+    ) =>
+        HandleAsync(
+            "ListScreens",
+            (bridge, ct) => bridge.ListScreensAsync(ct),
+            MapToProto,
+            context
+        );
+
+    public override Task<V1.DashActionResult> SetScreen(
+        V1.DashSetScreenRequest request,
+        ServerCallContext context
+    ) =>
+        HandleAsync(
+            "SetScreen",
+            (bridge, ct) =>
+            {
+                // ref_id / key 両空はクライアントの引数ミス。bridge を起動せず InvalidArgument に翻訳する
+                // (既存の ArgumentException → InvalidArgument 経路に乗せる)。
+                if (string.IsNullOrEmpty(request.RefId) && string.IsNullOrEmpty(request.Key))
+                {
+                    throw new ArgumentException("ref_id or key must be provided.");
+                }
+
+                return bridge.SetScreenAsync(request.RefId, request.Key, ct);
+            },
+            MapToProto,
+            context
+        );
+
     /// <summary>
     /// 全 RPC 共通の orchestration: bridge 解決 → 例外翻訳付き呼び出し → proto 変換。
     /// 戻り型が 3 種 (<c>DashState</c> / <c>DashTree</c> / <c>DashActionResult</c>) あるので
@@ -202,4 +234,27 @@ public sealed class DashService : V1.Dash.DashBase
             ParentRefId = element.ParentRefId,
             Depth = element.Depth,
         };
+
+    private static V1.DashScreen MapToProto(DashScreenSnapshot screen) =>
+        new()
+        {
+            RefId = screen.RefId,
+            Key = screen.Key,
+            Name = screen.Name,
+            Label = screen.Label,
+            IsCurrent = screen.IsCurrent,
+            Enabled = screen.Enabled,
+        };
+
+    private static V1.DashScreenList MapToProto(DashScreenListSnapshot snapshot)
+    {
+        var list = new V1.DashScreenList();
+
+        foreach (var screen in snapshot.Screens)
+        {
+            list.Screens.Add(MapToProto(screen));
+        }
+
+        return list;
+    }
 }

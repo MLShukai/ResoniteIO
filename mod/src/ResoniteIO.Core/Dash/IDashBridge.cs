@@ -53,6 +53,31 @@ public sealed record DashTreeSnapshot(
     int ScreenHeight
 );
 
+/// <summary>dash 下部タブが切り替える 1 screen (<c>RadiantDashScreen</c>) の snapshot (proto <c>DashScreen</c> から独立した Core 層 POCO)。</summary>
+/// <remarks>
+/// <paramref name="Key"/> は <c>LocaleStringDriver</c> の key (例 "Dash.Screens.Worlds") で言語非依存の主キー。
+/// 取得できない screen では空文字。<paramref name="RefId"/> は screen slot の <c>ReferenceID.ToString()</c> で
+/// セッション内 exact 指定キー。<paramref name="Name"/> は <c>screen.Slot.Name</c> (第 2 の言語非依存 ID)。
+/// <paramref name="Label"/> は localize 済み表示テキスト (debug / 人間向け)。
+/// <paramref name="IsCurrent"/> は current screen か、<paramref name="Enabled"/> は遷移可能か
+/// (例: ログアウト中の Contacts は false)。
+/// </remarks>
+public sealed record DashScreenSnapshot(
+    string RefId,
+    string Key,
+    string Name,
+    string Label,
+    bool IsCurrent,
+    bool Enabled
+);
+
+/// <summary>dash の全 screen 一覧の snapshot (proto <c>DashScreenList</c> から独立した Core 層 POCO)。</summary>
+/// <remarks>
+/// <paramref name="Screens"/> は <c>dash.Dash.Screens</c> の列挙順。<c>IsCurrent==true</c> は高々 1 件
+/// (current が transient null なら 0 件あり得る)。
+/// </remarks>
+public sealed record DashScreenListSnapshot(IReadOnlyList<DashScreenSnapshot> Screens);
+
 /// <summary>状態変化系操作 (Invoke / Highlight / Scroll) の結果 snapshot (proto <c>DashActionResult</c> から独立した Core 層 POCO)。</summary>
 /// <remarks>
 /// <paramref name="Found"/> は指定 ref_id の要素が解決できたか (false なら <paramref name="Ok"/> も false)。
@@ -115,6 +140,25 @@ public interface IDashBridge
         float deltaY,
         CancellationToken ct
     );
+
+    /// <summary>dash の全 screen snapshot を列挙する。dash が閉じていても screen 構成は存在するため列挙できる。</summary>
+    /// <remarks>
+    /// 各 <see cref="DashScreenSnapshot"/> は dash の現状を反映する。<c>IsCurrent==true</c> は高々 1 件
+    /// (current が transient null なら 0 件あり得る)。
+    /// </remarks>
+    /// <exception cref="DashNotReadyException">dash / userspace world がまだ準備できていない。</exception>
+    Task<DashScreenListSnapshot> ListScreensAsync(CancellationToken ct);
+
+    /// <summary>指定 screen へ遷移する (<c>CurrentScreen.Target</c> 代入)。open 状態は変更しない。</summary>
+    /// <remarks>
+    /// <paramref name="refId"/> が非空ならそれで exact 解決し、空なら <paramref name="key"/> で解決する。
+    /// 一致 screen があれば <c>Ok</c> / <c>Found</c> = true、<c>RefId</c> = 遷移後 current の ref_id。
+    /// 未解決なら <c>Ok</c> / <c>Found</c> = false で返す (例外でなく soft-fail)。
+    /// disabled screen も代入自体はブロックされないため遷移を実行し、<c>Ok=true</c> のまま
+    /// <c>Detail="screen disabled"</c> を載せて返す。
+    /// </remarks>
+    /// <exception cref="DashNotReadyException">dash / userspace world がまだ準備できていない。</exception>
+    Task<DashActionResultSnapshot> SetScreenAsync(string refId, string key, CancellationToken ct);
 }
 
 /// <summary>

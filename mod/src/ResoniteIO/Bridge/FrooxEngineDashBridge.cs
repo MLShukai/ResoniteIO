@@ -202,6 +202,68 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         );
     }
 
+    /// <inheritdoc/>
+    public Task<DashScreenListSnapshot> ListScreensAsync(CancellationToken ct)
+    {
+        return RunOnEngineAsync(
+            () =>
+            {
+                var radiant = ResolveRadiantDash();
+                var current = radiant.CurrentScreen?.Target;
+
+                var screens = new List<DashScreenSnapshot>();
+                foreach (var screen in radiant.Screens)
+                {
+                    screens.Add(BuildScreenSnapshot(screen, current));
+                }
+
+                return new DashScreenListSnapshot(screens);
+            },
+            ct
+        );
+    }
+
+    /// <inheritdoc/>
+    public Task<DashActionResultSnapshot> SetScreenAsync(
+        string refId,
+        string key,
+        CancellationToken ct
+    )
+    {
+        return RunOnEngineAsync(
+            () =>
+            {
+                var radiant = ResolveRadiantDash();
+
+                var screen = ResolveScreen(radiant, refId, key);
+                if (screen is null)
+                {
+                    return NotFoundScreen();
+                }
+
+                // engine 自身の RadiantDashButton.Pressed と同一経路。代入は同期反映される。
+                radiant.CurrentScreen.Target = screen;
+
+                var afterRefId =
+                    radiant.CurrentScreen?.Target?.ReferenceID.ToString()
+                    ?? screen.ReferenceID.ToString();
+
+                // disabled screen でも代入自体はブロックされない (button 側の gating)。
+                // 遷移は成立扱い (ok=true) とし、無効状態は detail で通知する。
+                var detail =
+                    screen.ScreenEnabled?.Value == false ? "screen disabled" : string.Empty;
+
+                return new DashActionResultSnapshot(
+                    Ok: true,
+                    Found: true,
+                    RefId: afterRefId,
+                    Detail: detail
+                );
+            },
+            ct
+        );
+    }
+
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
     private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct)
     {
@@ -269,6 +331,91 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     private static DashStateSnapshot ReadState(UserspaceRadiantDash dash)
     {
         return new DashStateSnapshot(dash.Open, dash.OpenLerp);
+    }
+
+    /// <summary>
+    /// 現在の dash から <see cref="RadiantDash"/> (screen 列挙・遷移の本体) を解決する。
+    /// <c>dash.Dash</c> が transient に null のことがあるため、null なら <see cref="DashNotReadyException"/>。
+    /// </summary>
+    /// <remarks>engine thread 前提。</remarks>
+    private static RadiantDash ResolveRadiantDash()
+    {
+        var radiant = ResolveDash().Dash;
+        if (radiant is null)
+        {
+            throw new DashNotReadyException("RadiantDash is not available yet.");
+        }
+        return radiant;
+    }
+
+    /// <summary>1 screen の snapshot を構築する。engine thread 前提。</summary>
+    private static DashScreenSnapshot BuildScreenSnapshot(
+        RadiantDashScreen screen,
+        RadiantDashScreen? current
+    )
+    {
+        return new DashScreenSnapshot(
+            RefId: screen.ReferenceID.ToString(),
+            Key: ResolveScreenLocaleKey(screen),
+            Name: screen.Slot?.Name ?? string.Empty,
+            Label: screen.Label?.Value ?? string.Empty,
+            IsCurrent: current is not null && screen == current,
+            Enabled: screen.ScreenEnabled?.Value ?? false
+        );
+    }
+
+    /// <summary>
+    /// <paramref name="refId"/> 優先、空なら <paramref name="key"/> で <paramref name="radiant"/> の
+    /// <see cref="RadiantDash.Screens"/> から screen を解決する。所属を保証するため
+    /// <c>ReferenceController</c> は使わず Screens を直接列挙する。未解決なら null。
+    /// </summary>
+    /// <remarks>engine thread 前提。</remarks>
+    private static RadiantDashScreen? ResolveScreen(RadiantDash radiant, string refId, string key)
+    {
+        if (!string.IsNullOrEmpty(refId))
+        {
+            if (!RefID.TryParse(refId, out var parsed))
+            {
+                return null;
+            }
+
+            foreach (var screen in radiant.Screens)
+            {
+                if (screen.ReferenceID == parsed)
+                {
+                    return screen;
+                }
+            }
+
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(key))
+        {
+            foreach (var screen in radiant.Screens)
+            {
+                if (ResolveScreenLocaleKey(screen) == key)
+                {
+                    return screen;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// <c>screen.Label</c> (<c>Sync&lt;string&gt;</c>) を駆動する <see cref="LocaleStringDriver"/> から
+    /// 言語非依存の key を読む。driver が無い screen では空文字。
+    /// </summary>
+    private static string ResolveScreenLocaleKey(RadiantDashScreen screen)
+    {
+        if (screen.Label is null)
+        {
+            return string.Empty;
+        }
+        var driver = FrooxEngine.LocaleHelper.GetLocalizedDriver(screen.Label);
+        return driver?.Key?.Value ?? string.Empty;
     }
 
     /// <summary>
@@ -450,6 +597,17 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             Found: false,
             RefId: refId,
             Detail: "element not found"
+        );
+    }
+
+    /// <summary>指定 (ref_id / key) に一致する screen が解決できなかったときの結果 (<c>Found=false</c>)。</summary>
+    private static DashActionResultSnapshot NotFoundScreen()
+    {
+        return new DashActionResultSnapshot(
+            Ok: false,
+            Found: false,
+            RefId: string.Empty,
+            Detail: "screen not found"
         );
     }
 
