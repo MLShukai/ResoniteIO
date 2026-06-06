@@ -247,6 +247,22 @@ log:
 # format → gen-proto → build → test → type を直列実行。コミット前のゲート。
 run: format gen-proto build test type
 
+# ===== Docs (mkdocs) ====================================================
+#
+# ドキュメントサイトは repo root の mkdocs.yml + docs/ で構成し、Python API は
+# mkdocstrings で python/src/resoio/ から自動生成する。docs deps は uv の
+# `docs` dependency-group に分離しており、`just run` のゲートには含めない。
+
+# ドキュメントサイトをローカルで preview する (live-reload)。
+# http://localhost:8000 で開く。
+docs-serve:
+    cd python && uv run --group docs mkdocs serve -f ../mkdocs.yml -a 0.0.0.0:8000
+
+# ドキュメントサイトを build する。--strict で nav 欠落 / 参照破綻 /
+# mkdocstrings 未解決をビルド失敗にする (GH Action 無しのローカル CI 代替)。
+docs-build:
+    cd python && uv run --group docs mkdocs build -f ../mkdocs.yml --strict
+
 # ===== Clean =============================================================
 
 clean: clean-py mod-clean

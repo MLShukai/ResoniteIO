@@ -1,0 +1,118 @@
+site_name: ResoniteIO
+site_description: >-
+  Bidirectional IPC bridge that turns Resonite into a runtime environment for
+  AI agents — a C# mod and the resoio Python client connected over gRPC/UDS.
+site_url: https://mlshukai.github.io/ResoniteIO/
+repo_url: https://github.com/MLShukai/ResoniteIO
+repo_name: MLShukai/ResoniteIO
+
+# In-repo maintainer docs that are not part of the published site. RELEASE.md
+# is a release runbook with links to ../.claude and ../mod (outside docs_dir),
+# read on GitHub rather than on the site.
+exclude_docs: |
+  RELEASE.md
+
+theme:
+  name: material
+
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.top
+    - navigation.sections
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.tabs.link
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          # Relative to this config file (repo root). The resoio package
+          # lives under python/src/resoio/.
+          paths: [python/src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_submodules: true
+            separate_signature: true
+            line_length: 88
+            show_signature_annotations: true
+            show_root_heading: true
+            merge_init_into_class: true
+            docstring_section_style: spacy
+            members_order: source
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Modalities: architecture/modalities.md
+      - C# Mod: architecture/csharp-mod.md
+  - CLI: cli.md
+  - API Reference:
+      - Session: api/session.md
+      - Camera: api/camera.md
+      - Speaker: api/speaker.md
+      - Microphone: api/microphone.md
+      - Locomotion: api/locomotion.md
+      - Manipulation: api/manipulation.md
+      - Display: api/display.md
+      - World: api/world.md
+      - Context Menu: api/context_menu.md
+      - Dash: api/dash.md
+      - Inventory: api/inventory.md
+      - Cursor: api/cursor.md
+
+extra:
+  # Versioned docs via mike (deployed by .github/workflows/docs.yml). Renders a
+  # version dropdown; `latest` tracks the newest stable release, `dev` tracks
+  # main. `default` is the alias used for "you're viewing an old version" hints.
+  version:
+    provider: mike
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/MLShukai/ResoniteIO

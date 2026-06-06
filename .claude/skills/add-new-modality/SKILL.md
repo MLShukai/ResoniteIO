@@ -201,6 +201,7 @@ ______________________________________________________________________
 6. Mod 側 smoke test を足し、`SafeShutdown` chain に登録
 7. CLI を追加
 8. `just run` (format → gen-proto → build → test → type) が green になることを確認してコミット
+9. docs を更新: `docs/api/<modality>.md` を作成 + `mkdocs.yml` の nav に追記 + `docs/architecture/modalities.md` のモダリティ表に行追加 → [`write-docs`](../write-docs/SKILL.md) skill 参照
 
 ______________________________________________________________________
 

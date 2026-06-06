@@ -1,0 +1,76 @@
+name: docs
+
+# Versioned documentation deploy via mike → gh-pages.
+#   - push to `main`            → deploy the `dev` version (development docs)
+#   - push a stable `v*` tag    → deploy `<X.Y.Z>` + move the `latest` alias and
+#                                 set it as the default (site root redirects here)
+#   - push a prerelease `v*` tag → deploy `<X.Y.Z>` only (does NOT touch `latest`)
+#
+# Material renders a version dropdown (extra.version.provider: mike in
+# mkdocs.yml) so visitors can switch between versions, like Sphinx/ReadTheDocs.
+#
+# One-time setup (repo admin): enable GitHub Pages with source = `gh-pages`
+# branch. The first run creates the branch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "python/src/**"
+      - ".github/workflows/docs.yml"
+    tags:
+      - "v*"
+
+env:
+  UV_VERSION: "0.7.20"
+  PYTHON_VERSION: "3.12"
+
+# Serialize deploys: mike commits to gh-pages, concurrent pushes would race.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Configure git identity for mike's gh-pages commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy docs (mike)
+        shell: bash
+        working-directory: python
+        run: |
+          set -euo pipefail
+          mike() { uv run --group docs mike "$@" -F ../mkdocs.yml; }
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ ]]; then
+              echo "Prerelease ${VERSION}: deploy without moving 'latest'."
+              mike deploy --push "${VERSION}"
+            else
+              echo "Stable ${VERSION}: deploy + update 'latest' + set default."
+              mike deploy --push --update-aliases "${VERSION}" latest
+              mike set-default --push latest
+            fi
+          else
+            echo "main push: deploy 'dev'."
+            mike deploy --push dev
+          fi

@@ -51,6 +51,20 @@ dev = [
   "pytest-cov>=6.1.1",
   "pytest-mock>=3.14.0",
 ]
+# Documentation site (MkDocs Material + mkdocstrings). Kept separate from
+# `dev` so the `just run` type/test gate is unaffected; build via `just
+# docs-build` / preview via `just docs-serve`.
+# mkdocs は `<2` で上限固定: MkDocs 2.0 は plugin システムを廃止する破壊的
+# rewrite で、mkdocstrings を含む全 plugin が動かなくなる (Material チームも
+# 移行を非推奨とし 1.x 据え置きを推奨)。誤って 2.0 を引かないよう明示的に弾く。
+docs = [
+  "mkdocs>=1.6,<2",
+  "mkdocs-material>=9.6,<10",
+  "mkdocstrings[python]>=0.27",
+  # mike: バージョン別 docs を gh-pages に配置し、Material の version selector で
+  # 切り替える (Sphinx/ReadTheDocs 相当)。CI (.github/workflows/docs.yml) が使う。
+  "mike>=2.1",
+]
 
 
 [tool.pytest.ini_options]
