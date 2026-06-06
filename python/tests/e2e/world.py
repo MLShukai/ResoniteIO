@@ -308,32 +308,28 @@ class TestWorld:
                     f"has_more={random_page.has_more}",
                 )
 
-                # 7. fetch a real thumbnail image: pick the first session OR
-                #    record carrying a non-empty thumbnail_url, resolve it to
-                #    bytes via FetchThumbnail, and write the image out as the
-                #    visual artifact for this step. Content varies per account,
-                #    so a missing thumbnail_url is a clear skip of *this step*
-                #    only — not a scenario failure.
-                thumb_uri = next(
-                    (
-                        url
-                        for url in (
-                            [s.thumbnail_url for s in page.sessions]
-                            + [r.thumbnail_url for r in own.records]
-                            + [r.thumbnail_url for r in random_page.records]
-                        )
-                        if url
-                    ),
-                    "",
-                )
-                if not thumb_uri:
-                    record(
-                        "12_thumbnail",
-                        "no session/record exposed a non-empty thumbnail_url; "
-                        "skipping the thumbnail fetch step",
-                    )
-                else:
-                    thumb = await world.fetch_thumbnail(thumb_uri)
+                # 7. fetch a real thumbnail image and write it out as this
+                #    step's visual artifact. Prefer resdb:/// record thumbnails
+                #    (content-addressed, stable on assets.resonite.com) over
+                #    https:// session thumbnails (which legitimately 404 on the
+                #    CDN). Try candidates in that order until one yields bytes.
+                record_uris = [r.thumbnail_url for r in own.records] + [
+                    r.thumbnail_url for r in random_page.records
+                ]
+                session_uris = [s.thumbnail_url for s in page.sessions]
+                all_uris = record_uris + session_uris
+                resdb_uris = [u for u in all_uris if u.startswith("resdb:///")]
+                http_uris = [u for u in all_uris if u.startswith("http")]
+                candidates = resdb_uris + http_uris
+
+                fetched = False
+                failures: list[str] = []
+                for uri in candidates[:8]:
+                    try:
+                        thumb = await world.fetch_thumbnail(uri)
+                    except grpclib.exceptions.GRPCError as exc:
+                        failures.append(f"{uri!r}: {exc.status.name} {exc.message!r}")
+                        continue
                     assert len(thumb.data) > 0, (
                         "FetchThumbnail must return non-empty image bytes"
                     )
@@ -341,8 +337,28 @@ class TestWorld:
                     thumb_path.write_bytes(thumb.data)
                     record(
                         "12_thumbnail",
-                        f"uri={thumb_uri!r} content_type={thumb.content_type!r} "
-                        f"bytes={len(thumb.data)} -> {thumb_path.name}",
+                        f"uri={uri!r} content_type={thumb.content_type!r} "
+                        f"bytes={len(thumb.data)} -> {thumb_path.name} "
+                        f"(after {len(failures)} failed candidate(s))",
+                    )
+                    fetched = True
+                    break
+
+                if not fetched:
+                    detail = (
+                        "\n".join(failures) if failures else "no thumbnail_url exposed"
+                    )
+                    # resdb thumbnails are content-addressed and must be
+                    # fetchable; only a pure-https set that all 404 is an
+                    # environment quirk we tolerate as a skip.
+                    assert not resdb_uris, (
+                        "every resdb:/// thumbnail failed to fetch; FetchThumbnail "
+                        "is broken for the primary (content-addressed) case:\n" + detail
+                    )
+                    record(
+                        "12_thumbnail",
+                        "no fetchable thumbnail (https candidates all failed):\n"
+                        + detail,
                     )
 
         try:
