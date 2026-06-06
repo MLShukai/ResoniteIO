@@ -308,6 +308,43 @@ class TestWorld:
                     f"has_more={random_page.has_more}",
                 )
 
+                # 7. fetch a real thumbnail image: pick the first session OR
+                #    record carrying a non-empty thumbnail_url, resolve it to
+                #    bytes via FetchThumbnail, and write the image out as the
+                #    visual artifact for this step. Content varies per account,
+                #    so a missing thumbnail_url is a clear skip of *this step*
+                #    only — not a scenario failure.
+                thumb_uri = next(
+                    (
+                        url
+                        for url in (
+                            [s.thumbnail_url for s in page.sessions]
+                            + [r.thumbnail_url for r in own.records]
+                            + [r.thumbnail_url for r in random_page.records]
+                        )
+                        if url
+                    ),
+                    "",
+                )
+                if not thumb_uri:
+                    record(
+                        "12_thumbnail",
+                        "no session/record exposed a non-empty thumbnail_url; "
+                        "skipping the thumbnail fetch step",
+                    )
+                else:
+                    thumb = await world.fetch_thumbnail(thumb_uri)
+                    assert len(thumb.data) > 0, (
+                        "FetchThumbnail must return non-empty image bytes"
+                    )
+                    thumb_path = out_dir / "thumbnail.webp"
+                    thumb_path.write_bytes(thumb.data)
+                    record(
+                        "12_thumbnail",
+                        f"uri={thumb_uri!r} content_type={thumb.content_type!r} "
+                        f"bytes={len(thumb.data)} -> {thumb_path.name}",
+                    )
+
         try:
             asyncio.run(scenario())
         finally:

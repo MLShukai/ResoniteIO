@@ -28,6 +28,8 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
+    FetchThumbnailRequest,
+    FetchThumbnailResponse,
     FocusRequest,
     FocusResponse,
     GetCurrentRequest,
@@ -151,13 +153,101 @@ def test_records_asc_defaults_to_descending():
     assert args.asc is False
 
 
-def test_random_collects_source_and_count_flags():
+def test_random_subcommand_is_removed():
+    """The ``world random`` leaf was removed; random worlds are now obtained
+    via ``records --sort random``.
+
+    ``world random`` must no longer parse.
+    """
+    parser = _build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["world", "random"])
+    assert excinfo.value.code == 2
+
+
+def test_records_sort_choices_still_include_random():
+    """``random`` remains a valid ``--sort`` choice on the records leaf — it is
+    the replacement for the removed ``random`` subcommand."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records", "--sort", "random"])
+    assert args.sort == "random"
+
+
+def test_sessions_paging_display_flags_default():
+    """The display flags default to: bounded output (limit 20), compact (no
+    thumbnail column), cap enabled (``--all`` off)."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "sessions"])
+    assert args.limit == 20
+    assert args.wide is False
+    assert args.show_all is False
+
+
+def test_sessions_paging_display_flags_collected():
+    parser = _build_parser()
+    args = parser.parse_args(["world", "sessions", "--wide", "--limit", "5", "--all"])
+    assert args.wide is True
+    assert args.limit == 5
+    assert args.show_all is True
+
+
+def test_sessions_wide_short_flag_is_dash_w():
+    parser = _build_parser()
+    args = parser.parse_args(["world", "sessions", "-w"])
+    assert args.wide is True
+
+
+def test_records_paging_display_flags_default():
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records"])
+    assert args.limit == 20
+    assert args.wide is False
+    assert args.show_all is False
+
+
+def test_records_paging_display_flags_collected():
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records", "--wide", "--limit", "5", "--all"])
+    assert args.wide is True
+    assert args.limit == 5
+    assert args.show_all is True
+
+
+def test_records_wide_short_flag_is_dash_w():
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records", "-w"])
+    assert args.wide is True
+
+
+def test_thumbnail_requires_uri():
+    parser = _build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["world", "thumbnail"])
+    assert excinfo.value.code == 2
+
+
+def test_thumbnail_collects_uri_and_output():
     parser = _build_parser()
     args = parser.parse_args(
-        ["world", "random", "--source", "featured", "--count", "5"]
+        ["world", "thumbnail", "resdb:///abc", "--output", "/tmp/x.webp"]
     )
-    assert args.source == "featured"
-    assert args.count == 5
+    assert args.uri == "resdb:///abc"
+    assert args.output == "/tmp/x.webp"
+
+
+def test_thumbnail_output_short_flag_is_dash_o():
+    parser = _build_parser()
+    args = parser.parse_args(
+        ["world", "thumbnail", "resdb:///abc", "-o", "/tmp/y.webp"]
+    )
+    assert args.output == "/tmp/y.webp"
+
+
+def test_thumbnail_output_defaults_to_none():
+    """Without ``-o`` the bytes go to stdout, so the parsed output is None."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "thumbnail", "resdb:///abc"])
+    assert args.output is None
 
 
 def test_join_accepts_session_id():
@@ -277,6 +367,26 @@ def test_socket_flag_accepted_on_each_leaf(leaf: str, tmp_path: Path):
 # ===========================================================================
 
 
+# Known thumbnail payload returned by the recording fake's FetchThumbnail.
+# A non-trivial byte sequence (incl. a NUL) so a "bytes go to stdout verbatim"
+# assertion proves the raw bytes — not a text re-encoding — reached the buffer.
+_THUMB_BYTES = b"\x89PNG\r\n\x00fake-webp-bytes"
+_THUMB_CONTENT_TYPE = "image/webp"
+
+# Per-row thumbnail_url values the listing fakes return. The compact view must
+# hide these; --wide must surface them.
+_SESSION_THUMB_URLS = (
+    "resdb:///session-thumb-0",
+    "resdb:///session-thumb-1",
+    "resdb:///session-thumb-2",
+)
+_RECORD_THUMB_URLS = (
+    "resdb:///record-thumb-0",
+    "resdb:///record-thumb-1",
+    "resdb:///record-thumb-2",
+)
+
+
 def _open_world(handle: int = 1, name: str = "Demo") -> OpenWorld:
     return OpenWorld(
         handle=handle,
@@ -300,35 +410,45 @@ class _RecordingWorld(WorldBase):
         self.focus_requests: list[FocusRequest] = []
         self.leave_requests: list[LeaveRequest] = []
         self.get_current_requests: list[GetCurrentRequest] = []
+        self.fetch_thumbnail_requests: list[FetchThumbnailRequest] = []
 
     async def list_sessions(self, message: ListSessionsRequest) -> ListSessionsResponse:
         self.list_sessions_requests.append(message)
+        # Return 3 rows (each with a thumbnail_url) so the output tests can
+        # exercise compact vs --wide columns and the --limit truncation footer.
+        sessions = [
+            WorldSession(
+                session_id=f"S-{i + 1}",
+                name=f"Hub{i + 1}",
+                host_username="alice",
+                active_users=4,
+                access_level="Anyone",
+                thumbnail_url=_SESSION_THUMB_URLS[i],
+            )
+            for i in range(3)
+        ]
         return ListSessionsResponse(
-            sessions=[
-                WorldSession(
-                    session_id="S-1",
-                    name="Hub",
-                    host_username="alice",
-                    active_users=4,
-                    access_level="Anyone",
-                )
-            ],
-            total_count=1,
+            sessions=sessions,
+            total_count=len(sessions),
             page=message.page,
             page_size=message.page_size,
         )
 
     async def list_records(self, message: ListRecordsRequest) -> ListRecordsResponse:
         self.list_records_requests.append(message)
+        # Return 3 rows (each with a thumbnail_url) — see list_sessions.
+        records = [
+            WorldRecord(
+                record_id=f"R-{i + 1}",
+                owner_id="U-me",
+                name=f"MyWorld{i + 1}",
+                record_url=f"resrec:///U-me/R-{i + 1}",
+                thumbnail_url=_RECORD_THUMB_URLS[i],
+            )
+            for i in range(3)
+        ]
         return ListRecordsResponse(
-            records=[
-                WorldRecord(
-                    record_id="R-1",
-                    owner_id="U-me",
-                    name="MyWorld",
-                    record_url="resrec:///U-me/R-1",
-                )
-            ],
+            records=records,
             has_more=False,
             offset=message.offset,
         )
@@ -358,6 +478,14 @@ class _RecordingWorld(WorldBase):
     async def get_current(self, message: GetCurrentRequest) -> GetCurrentResponse:
         self.get_current_requests.append(message)
         return GetCurrentResponse(world=_open_world(name="Current"), has_world=True)
+
+    async def fetch_thumbnail(
+        self, message: FetchThumbnailRequest
+    ) -> FetchThumbnailResponse:
+        self.fetch_thumbnail_requests.append(message)
+        return FetchThumbnailResponse(
+            data=_THUMB_BYTES, content_type=_THUMB_CONTENT_TYPE
+        )
 
 
 async def _run_world(
@@ -461,17 +589,27 @@ async def test_records_dispatch_maps_source_tags_and_sort(
     assert req.sort_direction == RecordSortDirection.ASCENDING
 
 
-async def test_random_dispatch_uses_random_sort(
+async def test_records_sort_random_dispatch_uses_random_sort(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """``world random`` is sugar over list_records with sort=RANDOM."""
+    """``records --sort random`` carries the RANDOM sort enum — the replacement
+    for the removed ``world random`` subcommand."""
     socket_path = tmp_path / "rio-world.sock"
     fake = _RecordingWorld()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
         rc = await _run_world(
-            ["world", "random", "--source", "public", "--count", "5"],
+            [
+                "world",
+                "records",
+                "--source",
+                "public",
+                "--sort",
+                "random",
+                "--count",
+                "5",
+            ],
             socket_path,
             monkeypatch,
         )
@@ -485,6 +623,229 @@ async def test_random_dispatch_uses_random_sort(
     assert req.sort == RecordSort.RANDOM
     assert req.source == RecordSource.PUBLIC
     assert req.count == 5
+
+
+# ---------------------------------------------------------------------------
+# Output shaping: compact vs --wide columns, --limit truncation footer.
+# ---------------------------------------------------------------------------
+
+
+async def test_sessions_compact_output_omits_thumbnail_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """Default (compact) sessions output shows session_id but never the
+    thumbnail_url column."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(["world", "sessions"], socket_path, monkeypatch)
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    out = capsys.readouterr().out
+    assert "session_id" in out
+    for url in _SESSION_THUMB_URLS:
+        assert url not in out
+
+
+async def test_sessions_wide_output_includes_thumbnail_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(["world", "sessions", "--wide"], socket_path, monkeypatch)
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    out = capsys.readouterr().out
+    for url in _SESSION_THUMB_URLS:
+        assert url in out
+
+
+async def test_records_compact_output_omits_thumbnail_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(["world", "records"], socket_path, monkeypatch)
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    out = capsys.readouterr().out
+    assert "record_id" in out
+    for url in _RECORD_THUMB_URLS:
+        assert url not in out
+
+
+async def test_records_wide_output_includes_thumbnail_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(["world", "records", "--wide"], socket_path, monkeypatch)
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    out = capsys.readouterr().out
+    for url in _RECORD_THUMB_URLS:
+        assert url in out
+
+
+async def test_sessions_limit_truncates_rows_and_prints_footer_to_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """With 3 rows and ``--limit 2`` only 2 data rows print; a ``showing 2 of
+    3`` footer goes to STDERR (not STDOUT)."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "sessions", "--limit", "2"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    # Only the first two session ids appear as data rows; the third is dropped.
+    assert "S-1" in captured.out
+    assert "S-2" in captured.out
+    assert "S-3" not in captured.out
+    # Truncation footer goes to STDERR and names the shown/total counts.
+    assert "showing 2 of 3" in captured.err
+    assert "showing" not in captured.out
+
+
+async def test_sessions_all_prints_every_row_without_footer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``--all`` disables the cap: all 3 rows print and no truncation footer is
+    emitted, even though the row count exceeds the default limit logic."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "sessions", "--limit", "2", "--all"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    assert "S-1" in captured.out
+    assert "S-2" in captured.out
+    assert "S-3" in captured.out
+    assert "showing" not in captured.err
+
+
+async def test_records_limit_truncates_rows_and_prints_footer_to_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "records", "--limit", "2"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    assert "R-1" in captured.out
+    assert "R-2" in captured.out
+    assert "R-3" not in captured.out
+    assert "showing 2 of 3" in captured.err
+    assert "showing" not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# world thumbnail: fetch_thumbnail dispatch + byte sink (file vs stdout).
+# ---------------------------------------------------------------------------
+
+
+async def test_thumbnail_with_output_writes_file_and_reports_to_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``thumbnail <uri> -o <path>`` fetches the bytes, writes them verbatim to
+    the file, and reports the byte count + content_type on STDERR."""
+    socket_path = tmp_path / "rio-world.sock"
+    out_file = tmp_path / "thumb.webp"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "thumbnail", "resdb:///abc", "-o", str(out_file)],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    # The exact uri reached the wire and the exact bytes hit the file.
+    assert len(fake.fetch_thumbnail_requests) == 1
+    assert fake.fetch_thumbnail_requests[0].uri == "resdb:///abc"
+    assert out_file.read_bytes() == _THUMB_BYTES
+
+    err = capsys.readouterr().err
+    assert "saved" in err
+    assert _THUMB_CONTENT_TYPE in err
+
+
+async def test_thumbnail_without_output_writes_raw_bytes_to_stdout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsysbinary: pytest.CaptureFixture[bytes],
+):
+    """Without ``-o`` the raw image bytes are written to the stdout buffer
+    verbatim (binary-safe), so the output can be piped to a file."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "thumbnail", "resdb:///abc"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert len(fake.fetch_thumbnail_requests) == 1
+    out = capsysbinary.readouterr().out
+    assert out == _THUMB_BYTES
 
 
 async def test_join_dispatch_sends_session_id_and_focus(

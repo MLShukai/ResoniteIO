@@ -1,12 +1,12 @@
 """``resoio world <subcommand>``: browse / join / start / manage worlds.
 
 Nested subcommands mirror ``resoio locomotion``: a ``world`` parent
-parser holds the leaves (``sessions`` / ``records`` / ``random`` / ``join``
-/ ``start`` / ``list`` / ``focus`` / ``leave`` / ``current``), each with the
-shared ``-s/--socket`` parent re-attached (argparse does not inherit it)
-and its own ``_run_*`` handler set via ``set_defaults(func=...)``. The heavy
-``from resoio.world import ...`` is deferred into each handler so
-``resoio --help`` stays fast.
+parser holds the leaves (``sessions`` / ``records`` / ``thumbnail`` /
+``join`` / ``start`` / ``list`` / ``focus`` / ``leave`` / ``current``),
+each with the shared ``-s/--socket`` parent re-attached (argparse does
+not inherit it) and its own ``_run_*`` handler set via
+``set_defaults(func=...)``. The heavy ``from resoio.world import ...`` is
+deferred into each handler so ``resoio --help`` stays fast.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 _SESSION_FILTER_CHOICES = ("all", "friends", "headless")
 _RECORD_SOURCE_CHOICES = ("public", "featured", "own", "group")
-_RANDOM_SOURCE_CHOICES = ("public", "featured")
 _RECORD_SORT_CHOICES = (
     "creation",
     "updated",
@@ -30,6 +29,30 @@ _RECORD_SORT_CHOICES = (
     "name",
     "random",
 )
+
+_DEFAULT_ROW_LIMIT = 20
+
+
+def _add_table_args(parser: argparse.ArgumentParser) -> None:
+    """Attach the shared ``--wide`` / ``--limit`` / ``--all`` table flags."""
+    parser.add_argument(
+        "-w",
+        "--wide",
+        action="store_true",
+        help="Show all columns, including thumbnail_url.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=_DEFAULT_ROW_LIMIT,
+        help=f"Max rows to print (default: {_DEFAULT_ROW_LIMIT}).",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="show_all",
+        help="Print every row (overrides --limit).",
+    )
 
 
 def register(
@@ -42,16 +65,18 @@ def register(
         parents=[common],
         help="Browse, join, start, and manage Resonite worlds.",
         description=(
-            "Drive the Resonite IO World service: list live sessions and "
-            "world records, join or start worlds, and manage locally-open "
-            "worlds (list / focus / leave / current)."
+            "Drive the Resonite IO World service. Three browse/manage "
+            "categories: 'sessions' lists 起動中ライブセッション (join で "
+            "参加); 'records' lists 保存済みワールド (start で起動); 'list' "
+            "lists ローカルに開いているワールド (focus / leave で管理). "
+            "'thumbnail' downloads a session/record thumbnail image."
         ),
     )
     world_subs = parser.add_subparsers(dest="world_command", required=True)
 
     _register_sessions(world_subs, common)
     _register_records(world_subs, common)
-    _register_random(world_subs, common)
+    _register_thumbnail(world_subs, common)
     _register_join(world_subs, common)
     _register_start(world_subs, common)
     _register_list(world_subs, common)
@@ -93,6 +118,7 @@ def _register_sessions(
         dest="page_size",
         help="Items per page (default: 0 = unlimited).",
     )
+    _add_table_args(parser)
     parser.set_defaults(func=_run_sessions)
 
 
@@ -136,28 +162,30 @@ def _register_records(
         action="store_true",
         help="Ascending order (default: descending).",
     )
+    _add_table_args(parser)
     parser.set_defaults(func=_run_records)
 
 
-def _register_random(
+def _register_thumbnail(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
-        "random",
+        "thumbnail",
         parents=[common],
-        help="List random world records (sort=random).",
+        help="Download a session / record thumbnail image.",
     )
     parser.add_argument(
-        "--source",
-        choices=_RANDOM_SOURCE_CHOICES,
-        default="public",
-        help="Record source (default: public).",
+        "uri",
+        help="Thumbnail URI (resdb:/// or https://) from 'records --wide'.",
     )
     parser.add_argument(
-        "--count", type=int, default=0, help="Item count (default: 0 = server default)."
+        "-o",
+        "--output",
+        default=None,
+        help="Write image to this path; default writes raw bytes to stdout.",
     )
-    parser.set_defaults(func=_run_random)
+    parser.set_defaults(func=_run_thumbnail)
 
 
 def _register_join(
@@ -265,15 +293,14 @@ _SESSION_HEADERS = (
     "users",
     "access",
     "session_id",
-    "thumbnail_url",
 )
 _RECORD_HEADERS = (
     "name",
     "owner",
     "tags",
     "record_id",
-    "thumbnail_url",
 )
+_THUMBNAIL_HEADER = "thumbnail_url"
 _OPEN_HEADERS = (
     "name",
     "focused",
@@ -296,7 +323,21 @@ def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
         print(line.rstrip())
 
 
-def _print_sessions(sessions: tuple[WorldSession, ...]) -> None:
+def _cap_rows(
+    rows: list[tuple[str, ...]], limit: int, show_all: bool
+) -> list[tuple[str, ...]]:
+    """Return the rows to print, emitting a STDERR footer when truncated."""
+    total = len(rows)
+    if show_all or total <= limit:
+        return rows
+    print(f"... showing {limit} of {total} (use --all)", file=sys.stderr)
+    return rows[:limit]
+
+
+def _print_sessions(
+    sessions: tuple[WorldSession, ...], *, wide: bool, limit: int, show_all: bool
+) -> None:
+    headers = _SESSION_HEADERS + ((_THUMBNAIL_HEADER,) if wide else ())
     rows = [
         (
             s.name,
@@ -304,25 +345,28 @@ def _print_sessions(sessions: tuple[WorldSession, ...]) -> None:
             f"{s.active_users}/{s.maximum_users}",
             s.access_level,
             s.session_id,
-            s.thumbnail_url,
+            *((s.thumbnail_url,) if wide else ()),
         )
         for s in sessions
     ]
-    _print_table(_SESSION_HEADERS, rows)
+    _print_table(headers, _cap_rows(rows, limit, show_all))
 
 
-def _print_records(records: tuple[WorldRecord, ...]) -> None:
+def _print_records(
+    records: tuple[WorldRecord, ...], *, wide: bool, limit: int, show_all: bool
+) -> None:
+    headers = _RECORD_HEADERS + ((_THUMBNAIL_HEADER,) if wide else ())
     rows = [
         (
             r.name,
             r.owner_id,
             ",".join(r.tags),
             r.record_id,
-            r.thumbnail_url,
+            *((r.thumbnail_url,) if wide else ()),
         )
         for r in records
     ]
-    _print_table(_RECORD_HEADERS, rows)
+    _print_table(headers, _cap_rows(rows, limit, show_all))
 
 
 def _print_open_worlds(worlds: list[OpenWorld]) -> None:
@@ -376,7 +420,9 @@ async def _run_sessions(args: argparse.Namespace) -> int:
             page=args.page,
             page_size=args.page_size,
         )
-    _print_sessions(page.sessions)
+    _print_sessions(
+        page.sessions, wide=args.wide, limit=args.limit, show_all=args.show_all
+    )
     return 0
 
 
@@ -403,21 +449,27 @@ async def _run_records(args: argparse.Namespace) -> int:
             sort=sort,
             sort_direction=direction,
         )
-    _print_records(page.records)
+    _print_records(
+        page.records, wide=args.wide, limit=args.limit, show_all=args.show_all
+    )
     return 0
 
 
-async def _run_random(args: argparse.Namespace) -> int:
-    from resoio.world import RecordSort, RecordSource, WorldClient
+async def _run_thumbnail(args: argparse.Namespace) -> int:
+    from resoio.world import WorldClient
 
-    source = RecordSource[_RECORD_SOURCE_BY_NAME[args.source]]
     async with WorldClient(args.socket) as client:
-        page = await client.list_records(
-            source=source,
-            count=args.count,
-            sort=RecordSort.RANDOM,
-        )
-    _print_records(page.records)
+        thumb = await client.fetch_thumbnail(args.uri)
+    if args.output is None:
+        sys.stdout.buffer.write(thumb.data)
+        sys.stdout.buffer.flush()
+        return 0
+    with open(args.output, "wb") as fp:
+        fp.write(thumb.data)
+    print(
+        f"saved {len(thumb.data)} bytes ({thumb.content_type}) -> {args.output}",
+        file=sys.stderr,
+    )
     return 0
 
 
