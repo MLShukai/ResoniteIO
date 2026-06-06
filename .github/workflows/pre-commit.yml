@@ -1,0 +1,47 @@
+# Format & Lint gate: runs the full pre-commit suite (ruff, csharpier, buf,
+# shellcheck, shfmt, plus pre-commit's own python hooks) over all files.
+# No path filter — formatting/linting concerns every file in the repo.
+name: Format & Lint (pre-commit)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, "release/*"]
+
+env:
+  UV_VERSION: "0.7.20"
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "${{ env.UV_VERSION }}"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore .NET tools (csharpier, tcli)
+        run: dotnet tool restore
+
+      - name: Install shfmt
+        run: sudo apt-get update && sudo apt-get install -y shfmt
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit
+        run: uvx pre-commit run --all-files --show-diff-on-failure --color=always

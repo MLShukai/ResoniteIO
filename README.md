@@ -70,7 +70,9 @@ RenderiteHook が deploy した hook 版 `winhttp.dll` が読まれない。
 `just init` を通したら、リポジトリを devcontainer として開く。エディタ別に:
 
 - **VS Code**: コマンドパレットから「Dev Containers: Reopen in Container」(要 Dev Containers 拡張)
+
 - **Zed**: dev container として開く (Zed の devcontainer サポート)
+
 - **CLI (任意・headless / CI 用)**: `@devcontainers/cli` を入れて以下 (既定では未インストール):
 
   ```sh

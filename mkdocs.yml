@@ -6,9 +6,11 @@ site_url: https://mlshukai.github.io/ResoniteIO/
 repo_url: https://github.com/MLShukai/ResoniteIO
 repo_name: MLShukai/ResoniteIO
 
-# The existing internal design doc is not part of the published site.
+# In-repo maintainer docs that are not part of the published site. RELEASE.md
+# is a release runbook with links to ../.claude and ../mod (outside docs_dir),
+# read on GitHub rather than on the site.
 exclude_docs: |
-  dash_modality_plan.md
+  RELEASE.md
 
 theme:
   name: material

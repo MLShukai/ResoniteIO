@@ -43,7 +43,7 @@
     <Authors>mlshukai</Authors>
     <PackageId>net.mlshukai.resonite-io</PackageId>
     <Product>ResoniteIO</Product>
-    <RepositoryUrl>https://github.com/Geson-anko/Resonite-IO</RepositoryUrl>
+    <RepositoryUrl>https://github.com/MLShukai/ResoniteIO</RepositoryUrl>
 
     <!-- ビルド挙動 -->
     <ImplicitUsings>enable</ImplicitUsings>

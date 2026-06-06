@@ -1,0 +1,53 @@
+# C# build & test for the ResoniteIO mod.
+#
+# Scope: ONLY the Resonite-independent Core layer is built/tested on clean CI.
+#
+# We do NOT build the whole ResoniteIO.sln, and we do NOT build the Mod
+# (ResoniteIO / ResoniteIO.Tests), because the Mod links against proprietary
+# DLLs that are not restorable on a public runner:
+#   - net472 ResoniteIO.Renderer -> Unity/Renderite DLLs.
+#   - ResoniteIO (engine bridge)  -> InterprocessLib.FrooxEngine.dll (the
+#     Nytra-InterprocessLib Gale mod, used by the Camera v2 receiver). The
+#     Resonite.GameLibs NuGet fallback supplies FrooxEngine/Elements/SkyFrost
+#     engine types, but NOT InterprocessLib, so the Mod fails to compile here.
+#
+# Therefore the Mod + its tests (incl. the engine-side InterprocessLib
+# receiver) are verified locally via `just run` (Gale profile present) and in
+# the manual/e2e tier. ResoniteIO.Core.Tests (240 tests, incl. the FrameHeader
+# IPC contract) is the CI-covered layer.
+name: C# Build & Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mod/**"
+      - "proto/**"
+      - ".github/workflows/dotnet.yml"
+  pull_request:
+    branches: [main, "release/*"]
+    paths:
+      - "mod/**"
+      - "proto/**"
+      - ".github/workflows/dotnet.yml"
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "${{ env.DOTNET_VERSION }}"
+
+      - name: Restore .NET tools (csharpier, tcli)
+        run: dotnet tool restore
+
+      - name: Test Core (Resonite-independent; Mod + Renderer excluded)
+        run: dotnet test mod/tests/ResoniteIO.Core.Tests/ResoniteIO.Core.Tests.csproj -c Release

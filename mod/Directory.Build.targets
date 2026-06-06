@@ -21,6 +21,10 @@
     <PropertyGroup>
       <BuildArgument Condition="'$(PublishTS)' != 'true'">build</BuildArgument>
       <BuildArgument Condition="'$(PublishTS)' == 'true'">publish</BuildArgument>
+      <!-- CI 認証用の opt-in。$(TcliToken) を渡すと tcli に token 引数を付与し、
+           publish 時の Thunderstore 認証に使う。未指定 (ローカルビルド) なら空文字で
+           展開され、tcli の挙動は従来どおり変わらない。 -->
+      <TcliTokenArg Condition="'$(TcliToken)' != ''">--token $(TcliToken)</TcliTokenArg>
     </PropertyGroup>
 
     <!-- $(MSBuildThisFileDirectory) は本ファイル (= mod/) を含むディレクトリ。
@@ -30,7 +34,7 @@
          探すため $(MSBuildThisFileDirectory)/../ を WorkingDir にする。 -->
     <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory)../" />
     <Exec
-      Command="dotnet tcli $(BuildArgument) --package-version $(Version)"
+      Command="dotnet tcli $(BuildArgument) --package-version $(Version) $(TcliTokenArg)"
       WorkingDirectory="$(MSBuildThisFileDirectory)"
     />
   </Target>
