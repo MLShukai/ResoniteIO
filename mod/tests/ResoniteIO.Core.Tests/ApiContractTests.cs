@@ -7,6 +7,7 @@ using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
+using ResoniteIO.Core.World;
 using Xunit;
 
 namespace ResoniteIO.Core.Tests;
@@ -93,6 +94,23 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Speaker.SpeakerNotReadyException",
             "ResoniteIO.Core.Speaker.SpeakerService",
             "ResoniteIO.Core.UnixNanosClock",
+            "ResoniteIO.Core.World.IWorldBridge",
+            "ResoniteIO.Core.World.JoinTarget",
+            "ResoniteIO.Core.World.OpenWorldSnapshot",
+            "ResoniteIO.Core.World.RecordListQuery",
+            "ResoniteIO.Core.World.RecordPage",
+            "ResoniteIO.Core.World.RecordSort",
+            "ResoniteIO.Core.World.RecordSortDirection",
+            "ResoniteIO.Core.World.RecordSource",
+            "ResoniteIO.Core.World.SessionFilter",
+            "ResoniteIO.Core.World.SessionListQuery",
+            "ResoniteIO.Core.World.StartWorldTarget",
+            "ResoniteIO.Core.World.ThumbnailBytesSnapshot",
+            "ResoniteIO.Core.World.WorldNotFoundException",
+            "ResoniteIO.Core.World.WorldNotReadyException",
+            "ResoniteIO.Core.World.WorldRecordSnapshot",
+            "ResoniteIO.Core.World.WorldService",
+            "ResoniteIO.Core.World.WorldSessionSnapshot",
         };
 
         Assert.Equal(expected, actual);
@@ -146,6 +164,22 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.DisplayGetRequest",
             "ResoniteIO.V1.DisplayReflection",
             "ResoniteIO.V1.DisplayState",
+            "ResoniteIO.V1.FetchThumbnailRequest",
+            "ResoniteIO.V1.FetchThumbnailResponse",
+            "ResoniteIO.V1.FocusRequest",
+            "ResoniteIO.V1.FocusResponse",
+            "ResoniteIO.V1.GetCurrentRequest",
+            "ResoniteIO.V1.GetCurrentResponse",
+            "ResoniteIO.V1.JoinRequest",
+            "ResoniteIO.V1.JoinResponse",
+            "ResoniteIO.V1.LeaveRequest",
+            "ResoniteIO.V1.LeaveResponse",
+            "ResoniteIO.V1.ListOpenWorldsRequest",
+            "ResoniteIO.V1.ListOpenWorldsResponse",
+            "ResoniteIO.V1.ListRecordsRequest",
+            "ResoniteIO.V1.ListRecordsResponse",
+            "ResoniteIO.V1.ListSessionsRequest",
+            "ResoniteIO.V1.ListSessionsResponse",
             "ResoniteIO.V1.Locomotion",
             "ResoniteIO.V1.Locomotion+LocomotionBase",
             "ResoniteIO.V1.LocomotionCommand",
@@ -158,18 +192,98 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.MicrophoneAudioFrame",
             "ResoniteIO.V1.MicrophoneReflection",
             "ResoniteIO.V1.MicrophoneStreamSummary",
+            "ResoniteIO.V1.OpenWorld",
             "ResoniteIO.V1.PingRequest",
             "ResoniteIO.V1.PingResponse",
+            "ResoniteIO.V1.RecordSort",
+            "ResoniteIO.V1.RecordSortDirection",
+            "ResoniteIO.V1.RecordSource",
             "ResoniteIO.V1.Session",
             "ResoniteIO.V1.Session+SessionBase",
+            "ResoniteIO.V1.SessionFilter",
             "ResoniteIO.V1.SessionReflection",
             "ResoniteIO.V1.Speaker",
             "ResoniteIO.V1.Speaker+SpeakerBase",
             "ResoniteIO.V1.SpeakerReflection",
             "ResoniteIO.V1.SpeakerStreamRequest",
+            "ResoniteIO.V1.StartWorldRequest",
+            "ResoniteIO.V1.StartWorldResponse",
+            "ResoniteIO.V1.World",
+            "ResoniteIO.V1.World+WorldBase",
+            "ResoniteIO.V1.WorldRecord",
+            "ResoniteIO.V1.WorldReflection",
+            "ResoniteIO.V1.WorldSession",
         };
 
         Assert.Equal(expected, actual);
+    }
+
+    /// <summary>
+    /// <c>FetchThumbnail</c> RPC が <c>World</c> service descriptor に存在することを固定する。
+    /// RPC のリネーム / 削除を wire 契約破壊として検出する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void World_Service_DeclaresFetchThumbnailRpc()
+    {
+        var methodNames = ResoniteIO
+            .V1.WorldReflection.Descriptor.Services.Single(s => s.Name == "World")
+            .Methods.Select(m => m.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Contains("FetchThumbnail", methodNames);
+    }
+
+    /// <summary>
+    /// <c>FetchThumbnailRequest</c> / <c>FetchThumbnailResponse</c> の proto field 番号を
+    /// 固定する。wire 互換を Hyrum's law mitigation の観点で明示 pin する
+    /// (番号変更は Python 側 betterproto2 デコードを静かに壊す)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void FetchThumbnailMessages_FieldNumbers_MatchSnapshot()
+    {
+        var requestFields = ResoniteIO
+            .V1.FetchThumbnailRequest.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(new[] { "1:uri" }, requestFields);
+
+        var responseFields = ResoniteIO
+            .V1.FetchThumbnailResponse.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(new[] { "1:data", "2:content_type" }, responseFields);
+    }
+
+    /// <summary>
+    /// <c>ListRecordsRequest</c> の proto field 番号を固定する。とくに
+    /// <c>search = 8</c> (フリーテキスト検索) の wire 番号を Hyrum's law mitigation の
+    /// 観点で明示 pin する (番号変更は Python 側 betterproto2 デコードを静かに壊す)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void ListRecordsRequest_FieldNumbers_MatchSnapshot()
+    {
+        var requestFields = ResoniteIO
+            .V1.ListRecordsRequest.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(
+            new[]
+            {
+                "1:source",
+                "2:required_tags",
+                "3:owner_id",
+                "4:offset",
+                "5:count",
+                "6:sort",
+                "7:sort_direction",
+                "8:search",
+            },
+            requestFields
+        );
     }
 
     /// <summary>
@@ -183,6 +297,8 @@ public sealed class ApiContractTests
     [InlineData(typeof(MicrophoneNotReadyException))]
     [InlineData(typeof(DisplayNotReadyException))]
     [InlineData(typeof(ContextMenuNotReadyException))]
+    [InlineData(typeof(WorldNotReadyException))]
+    [InlineData(typeof(WorldNotFoundException))]
     [Trait("Category", "ApiContract")]
     public void PublicNotReadyException_DerivesDirectlyFromException(Type exceptionType)
     {
@@ -317,6 +433,27 @@ public sealed class ApiContractTests
                 "InvokeAsync",
                 new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
             )
+        );
+    }
+
+    /// <summary>
+    /// <see cref="IWorldBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IWorldBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IWorldBridge),
+            ("ListSessionsAsync", new[] { typeof(SessionListQuery), typeof(CancellationToken) }),
+            ("ListRecordsAsync", new[] { typeof(RecordListQuery), typeof(CancellationToken) }),
+            ("JoinAsync", new[] { typeof(JoinTarget), typeof(CancellationToken) }),
+            ("StartWorldAsync", new[] { typeof(StartWorldTarget), typeof(CancellationToken) }),
+            ("ListOpenWorldsAsync", new[] { typeof(CancellationToken) }),
+            ("FocusAsync", new[] { typeof(int), typeof(CancellationToken) }),
+            ("LeaveAsync", new[] { typeof(int), typeof(CancellationToken) }),
+            ("GetCurrentAsync", new[] { typeof(CancellationToken) }),
+            ("FetchThumbnailAsync", new[] { typeof(string), typeof(CancellationToken) })
         );
     }
 
