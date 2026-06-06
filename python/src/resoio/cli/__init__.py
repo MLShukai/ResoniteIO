@@ -24,6 +24,7 @@ from resoio.cli import (
     context_menu,
     dash,
     display,
+    inventory,
     locomotion,
     manipulate,
     mic,
@@ -44,6 +45,7 @@ _COMMAND_MODULES: list[ModuleType] = [
     mic,
     record,
     world,
+    inventory,
 ]
 
 

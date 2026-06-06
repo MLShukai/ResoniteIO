@@ -8,6 +8,7 @@ using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Manipulation;
@@ -84,7 +85,8 @@ public sealed class SessionHost : IAsyncDisposable
         IContextMenuBridge? contextMenuBridge = null,
         IDashBridge? dashBridge = null,
         IWorldBridge? worldBridge = null,
-        IManipulationBridge? manipulationBridge = null
+        IManipulationBridge? manipulationBridge = null,
+        IInventoryBridge? inventoryBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -149,6 +151,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(manipulationBridge);
         }
+        if (inventoryBridge is not null)
+        {
+            builder.Services.AddSingleton(inventoryBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -168,6 +174,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<DashService>();
         app.MapGrpcService<WorldService>();
         app.MapGrpcService<ManipulationService>();
+        app.MapGrpcService<InventoryService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -225,6 +232,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (manipulationBridge is null)
         {
             log.LogWarning("Manipulation modality is not configured.");
+        }
+        if (inventoryBridge is null)
+        {
+            log.LogWarning("Inventory modality is not configured.");
         }
 
         var runTask = Task.Run(
