@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Dash;
 
@@ -127,61 +126,38 @@ public sealed class DashService : V1.Dash.DashBase
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge(rpc);
+        var bridge = BridgeGuard.Require(_bridge, _log, "Dash", "IDashBridge", rpc);
 
-        var snapshot = await InvokeBridge(rpc, ct => call(bridge, ct), context.CancellationToken)
+        var snapshot = await BridgeFault
+            .InvokeAsync(
+                _log,
+                "Dash",
+                rpc,
+                ct => call(bridge, ct),
+                context.CancellationToken,
+                Translate
+            )
             .ConfigureAwait(false);
 
         return map(snapshot);
-    }
 
-    private IDashBridge RequireBridge(string rpc)
-    {
-        if (_bridge is null)
+        RpcException? Translate(Exception ex)
         {
-            _log.LogWarning(
-                $"Dash.{rpc} called but no IDashBridge is registered; returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Dash bridge is not configured.")
-            );
-        }
-
-        return _bridge;
-    }
-
-    private async Task<TSnap> InvokeBridge<TSnap>(
-        string rpc,
-        Func<CancellationToken, Task<TSnap>> call,
-        CancellationToken ct
-    )
-    {
-        try
-        {
-            return await call(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (DashNotReadyException ex)
-        {
-            _log.LogInfo($"Dash.{rpc}: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (ArgumentException ex)
-        {
-            _log.LogInfo($"Dash.{rpc}: invalid argument: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Dash.{rpc}: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Dash bridge faulted: {ex.Message}")
-            );
+            switch (ex)
+            {
+                case DashNotReadyException notReady:
+                    _log.LogInfo($"Dash.{rpc}: bridge not ready: {notReady.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    );
+                case ArgumentException invalid:
+                    _log.LogInfo($"Dash.{rpc}: invalid argument: {invalid.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    );
+                default:
+                    return null;
+            }
         }
     }
 

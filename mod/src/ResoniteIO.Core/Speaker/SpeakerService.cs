@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Rpc;
 
 #pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
 
@@ -37,16 +38,7 @@ public sealed class SpeakerService : V1.Speaker.SpeakerBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Speaker.StreamAudio called but no ISpeakerBridge is registered; "
-                    + "returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Speaker bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Speaker", "ISpeakerBridge", "StreamAudio");
 
         _log.LogDebug("Speaker.StreamAudio start");
 
@@ -55,7 +47,7 @@ public sealed class SpeakerService : V1.Speaker.SpeakerBase
 
         try
         {
-            await foreach (var frame in _bridge.StreamFramesAsync(ct).ConfigureAwait(false))
+            await foreach (var frame in bridge.StreamFramesAsync(ct).ConfigureAwait(false))
             {
                 var proto = MapToProto(frame);
                 try

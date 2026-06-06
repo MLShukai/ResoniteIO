@@ -1,5 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Locomotion;
 
@@ -27,18 +28,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Locomotion.Drive called but no ILocomotionBridge is registered; "
-                    + "returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Locomotion bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Locomotion", "ILocomotionBridge", "Drive");
 
         var ct = context.CancellationToken;
         long received = 0;
@@ -53,7 +43,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
             while (await requestStream.MoveNext(ct).ConfigureAwait(false))
             {
                 var cmd = MapFromProto(requestStream.Current);
-                _bridge.SetState(cmd);
+                bridge.SetState(cmd);
                 received++;
             }
         }
@@ -67,13 +57,13 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
                 $"Locomotion.Drive cancelled after {received} command(s) "
                     + $"({ex.GetType().Name}): {ex.Message}"
             );
-            _bridge.NotifyDisconnect(LocomotionDisconnectReason.Cancelled);
+            bridge.NotifyDisconnect(LocomotionDisconnectReason.Cancelled);
             throw;
         }
         catch (Exception ex)
         {
             _log.LogError($"Locomotion.Drive faulted after {received} command(s): {ex}");
-            _bridge.NotifyDisconnect(LocomotionDisconnectReason.Errored);
+            bridge.NotifyDisconnect(LocomotionDisconnectReason.Errored);
             throw new RpcException(
                 new Status(StatusCode.Internal, $"Locomotion stream faulted: {ex.Message}")
             );
@@ -81,7 +71,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
 #pragma warning restore CA1031
 
         // MoveNext returned false = client が CompleteAsync で graceful close。
-        _bridge.NotifyDisconnect(LocomotionDisconnectReason.Graceful);
+        bridge.NotifyDisconnect(LocomotionDisconnectReason.Graceful);
 
         var unixNanos = UnixNanosClock.Now();
         _log.LogDebug($"Locomotion.Drive end: applied {received} command(s)");
@@ -99,16 +89,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Locomotion.Reset called but no ILocomotionBridge is registered; "
-                    + "returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Locomotion bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Locomotion", "ILocomotionBridge", "Reset");
 
         // 全 false → 全 reset の展開規約は LocomotionResetRequest proto docstring 参照。
         var flags = ToFlags(request);
@@ -120,7 +101,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
 #pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
         try
         {
-            _bridge.Reset(flags);
+            bridge.Reset(flags);
         }
         catch (Exception ex)
         {

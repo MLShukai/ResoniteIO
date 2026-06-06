@@ -17,10 +17,10 @@ swapped, dropped, or mis-mapped field would change an assertion result.
 serialization round-trip.
 """
 
-from pathlib import Path
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     DashActionResult as PbDashActionResult,
@@ -50,6 +50,11 @@ from resoio.dash import (
     DashState,
     DashTree,
 )
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 # A two-element tree used by the get_tree round-trip test. Every scalar
 # field across both elements (and their nested rects) holds a different
@@ -271,267 +276,187 @@ class _FakeDash(DashBase):
 
 
 class TestDashClient:
-    async def test_open_calls_open_rpc_and_decodes_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-dash.sock"
+    async def test_open_calls_open_rpc_and_decodes_state(self, uds_server: UdsServer):
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                assert client.socket_path == str(socket_path)
-                state = await client.open()
+        socket_path = await uds_server(fake)
+        async with DashClient() as client:
+            assert client.socket_path == socket_path
+            state = await client.open()
 
-            assert len(fake.open_requests) == 1
-            # open is a mutating RPC: no other RPC should have fired.
-            assert fake.close_requests == []
-            assert fake.get_state_requests == []
+        assert len(fake.open_requests) == 1
+        # open is a mutating RPC: no other RPC should have fired.
+        assert fake.close_requests == []
+        assert fake.get_state_requests == []
 
-            assert isinstance(state, DashState)
-            assert state.is_open is True
-            assert state.open_lerp == pytest.approx(1.0)
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(state, DashState)
+        assert state.is_open is True
+        assert state.open_lerp == pytest.approx(1.0)
 
-    async def test_close_calls_close_rpc_and_decodes_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-dash.sock"
+    async def test_close_calls_close_rpc_and_decodes_state(self, uds_server: UdsServer):
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                state = await client.close()
+        await uds_server(fake)
+        async with DashClient() as client:
+            state = await client.close()
 
-            assert len(fake.close_requests) == 1
-            assert fake.open_requests == []
-            assert fake.get_state_requests == []
+        assert len(fake.close_requests) == 1
+        assert fake.open_requests == []
+        assert fake.get_state_requests == []
 
-            assert isinstance(state, DashState)
-            assert state.is_open is False
-            assert state.open_lerp == pytest.approx(0.0)
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(state, DashState)
+        assert state.is_open is False
+        assert state.open_lerp == pytest.approx(0.0)
 
     async def test_get_state_calls_get_state_rpc_and_is_read_only(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                state = await client.get_state()
+        await uds_server(fake)
+        async with DashClient() as client:
+            state = await client.get_state()
 
-            assert len(fake.get_state_requests) == 1
-            assert isinstance(state, DashState)
-            assert state.is_open is True
-            assert state.open_lerp == pytest.approx(0.5)
+        assert len(fake.get_state_requests) == 1
+        assert isinstance(state, DashState)
+        assert state.is_open is True
+        assert state.open_lerp == pytest.approx(0.5)
 
-            # get_state must be read-only: no mutating/other RPC fired.
-            assert fake.open_requests == []
-            assert fake.close_requests == []
-            assert fake.get_tree_requests == []
-            assert fake.invoke_requests == []
-            assert fake.highlight_requests == []
-            assert fake.scroll_requests == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        # get_state must be read-only: no mutating/other RPC fired.
+        assert fake.open_requests == []
+        assert fake.close_requests == []
+        assert fake.get_tree_requests == []
+        assert fake.invoke_requests == []
+        assert fake.highlight_requests == []
+        assert fake.scroll_requests == []
 
     async def test_get_tree_forwards_filters_and_round_trips_every_field(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                tree = await client.get_tree(
-                    interactable_only=True, root_ref_id="slot-1"
-                )
+        await uds_server(fake)
+        async with DashClient() as client:
+            tree = await client.get_tree(interactable_only=True, root_ref_id="slot-1")
 
-            # The filter arguments must reach the server on the wire.
-            assert len(fake.get_tree_requests) == 1
-            wire = fake.get_tree_requests[0]
-            assert wire.interactable_only is True
-            assert wire.root_ref_id == "slot-1"
+        # The filter arguments must reach the server on the wire.
+        assert len(fake.get_tree_requests) == 1
+        wire = fake.get_tree_requests[0]
+        assert wire.interactable_only is True
+        assert wire.root_ref_id == "slot-1"
 
-            assert isinstance(tree, DashTree)
-            assert tree.screen_width == _SCREEN_WIDTH
-            assert tree.screen_height == _SCREEN_HEIGHT
-            # Element order plus every element field and every nested rect
-            # field survive the round-trip.
-            assert tree.elements == _EXPECTED_TREE_ELEMENTS
-            assert all(isinstance(el, DashElement) for el in tree.elements)
-            assert all(isinstance(el.rect, DashRect) for el in tree.elements)
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(tree, DashTree)
+        assert tree.screen_width == _SCREEN_WIDTH
+        assert tree.screen_height == _SCREEN_HEIGHT
+        # Element order plus every element field and every nested rect
+        # field survive the round-trip.
+        assert tree.elements == _EXPECTED_TREE_ELEMENTS
+        assert all(isinstance(el, DashElement) for el in tree.elements)
+        assert all(isinstance(el.rect, DashRect) for el in tree.elements)
 
     async def test_get_tree_defaults_send_unfiltered_request(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                await client.get_tree()
+        await uds_server(fake)
+        async with DashClient() as client:
+            await client.get_tree()
 
-            assert len(fake.get_tree_requests) == 1
-            wire = fake.get_tree_requests[0]
-            # Defaults: full tree, interactable filter off.
-            assert wire.interactable_only is False
-            assert wire.root_ref_id == ""
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert len(fake.get_tree_requests) == 1
+        wire = fake.get_tree_requests[0]
+        # Defaults: full tree, interactable filter off.
+        assert wire.interactable_only is False
+        assert wire.root_ref_id == ""
 
     async def test_invoke_forwards_ref_id_and_decodes_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                result = await client.invoke("ref-42")
+        await uds_server(fake)
+        async with DashClient() as client:
+            result = await client.invoke("ref-42")
 
-            assert len(fake.invoke_requests) == 1
-            # ref_id must reach the server; the fake echoes it back so a
-            # mismatch would prove the id never crossed the wire.
-            assert fake.invoke_requests[0].ref_id == "ref-42"
+        assert len(fake.invoke_requests) == 1
+        # ref_id must reach the server; the fake echoes it back so a
+        # mismatch would prove the id never crossed the wire.
+        assert fake.invoke_requests[0].ref_id == "ref-42"
 
-            assert isinstance(result, DashActionResult)
-            assert result.ok is True
-            assert result.found is True
-            assert result.ref_id == "ref-42"
-            assert result.detail == "invoked"
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(result, DashActionResult)
+        assert result.ok is True
+        assert result.found is True
+        assert result.ref_id == "ref-42"
+        assert result.detail == "invoked"
 
     async def test_highlight_forwards_ref_id_and_decodes_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                result = await client.highlight("ref-7")
+        await uds_server(fake)
+        async with DashClient() as client:
+            result = await client.highlight("ref-7")
 
-            assert len(fake.highlight_requests) == 1
-            assert fake.highlight_requests[0].ref_id == "ref-7"
-            # highlight only previews: it must not fire invoke.
-            assert fake.invoke_requests == []
+        assert len(fake.highlight_requests) == 1
+        assert fake.highlight_requests[0].ref_id == "ref-7"
+        # highlight only previews: it must not fire invoke.
+        assert fake.invoke_requests == []
 
-            assert isinstance(result, DashActionResult)
-            assert result.ok is True
-            assert result.found is True
-            assert result.ref_id == "ref-7"
-            assert result.detail == "highlighted"
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(result, DashActionResult)
+        assert result.ok is True
+        assert result.found is True
+        assert result.ref_id == "ref-7"
+        assert result.detail == "highlighted"
 
     async def test_scroll_forwards_ref_id_and_deltas_and_decodes_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                result = await client.scroll("ref-9", delta_x=12.5, delta_y=-34.25)
+        await uds_server(fake)
+        async with DashClient() as client:
+            result = await client.scroll("ref-9", delta_x=12.5, delta_y=-34.25)
 
-            assert len(fake.scroll_requests) == 1
-            wire = fake.scroll_requests[0]
-            assert wire.ref_id == "ref-9"
-            assert wire.delta_x == pytest.approx(12.5)
-            assert wire.delta_y == pytest.approx(-34.25)
+        assert len(fake.scroll_requests) == 1
+        wire = fake.scroll_requests[0]
+        assert wire.ref_id == "ref-9"
+        assert wire.delta_x == pytest.approx(12.5)
+        assert wire.delta_y == pytest.approx(-34.25)
 
-            assert isinstance(result, DashActionResult)
-            assert result.ok is True
-            assert result.found is True
-            assert result.ref_id == "ref-9"
-            assert result.detail == "scrolled"
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(result, DashActionResult)
+        assert result.ok is True
+        assert result.found is True
+        assert result.ref_id == "ref-9"
+        assert result.detail == "scrolled"
 
-    async def test_scroll_defaults_send_zero_deltas(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-dash.sock"
+    async def test_scroll_defaults_send_zero_deltas(self, uds_server: UdsServer):
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                await client.scroll("ref-9")
+        await uds_server(fake)
+        async with DashClient() as client:
+            await client.scroll("ref-9")
 
-            assert len(fake.scroll_requests) == 1
-            wire = fake.scroll_requests[0]
-            assert wire.ref_id == "ref-9"
-            assert wire.delta_x == pytest.approx(0.0)
-            assert wire.delta_y == pytest.approx(0.0)
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert len(fake.scroll_requests) == 1
+        wire = fake.scroll_requests[0]
+        assert wire.ref_id == "ref-9"
+        assert wire.delta_x == pytest.approx(0.0)
+        assert wire.delta_y == pytest.approx(0.0)
 
     async def test_list_screens_round_trips_all_screen_fields_in_order(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                screens = await client.list_screens()
+        await uds_server(fake)
+        async with DashClient() as client:
+            screens = await client.list_screens()
 
-            assert len(fake.list_screens_requests) == 1
-            # list_screens is read-only: no mutating/other RPC fired.
-            assert fake.set_screen_requests == []
-            assert fake.open_requests == []
-            assert fake.close_requests == []
+        assert len(fake.list_screens_requests) == 1
+        # list_screens is read-only: no mutating/other RPC fired.
+        assert fake.set_screen_requests == []
+        assert fake.open_requests == []
+        assert fake.close_requests == []
 
-            # The result is a list (not a tuple), preserves element order, and
-            # every screen field survives the round-trip.
-            assert isinstance(screens, list)
-            assert screens == _EXPECTED_SCREENS
-            assert all(isinstance(s, DashScreen) for s in screens)
-        finally:
-            server.close()
-            await server.wait_closed()
+        # The result is a list (not a tuple), preserves element order, and
+        # every screen field survives the round-trip.
+        assert isinstance(screens, list)
+        assert screens == _EXPECTED_SCREENS
+        assert all(isinstance(s, DashScreen) for s in screens)
 
     async def test_list_screens_returns_empty_list_when_no_screens(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
-
         class _EmptyScreensDash(_FakeDash):
             async def list_screens(
                 self, message: DashListScreensRequest
@@ -539,115 +464,78 @@ class TestDashClient:
                 self.list_screens_requests.append(message)
                 return PbDashScreenList(screens=[])
 
-        fake = _EmptyScreensDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                screens = await client.list_screens()
+        await uds_server(_EmptyScreensDash())
+        async with DashClient() as client:
+            screens = await client.list_screens()
 
-            assert screens == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert screens == []
 
     async def test_set_screen_by_key_forwards_key_and_decodes_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                result = await client.set_screen(key="Dash.Screens.Worlds")
+        await uds_server(fake)
+        async with DashClient() as client:
+            result = await client.set_screen(key="Dash.Screens.Worlds")
 
-            assert len(fake.set_screen_requests) == 1
-            wire = fake.set_screen_requests[0]
-            # Only the key was supplied; ref_id stays empty on the wire.
-            assert wire.key == "Dash.Screens.Worlds"
-            assert wire.ref_id == ""
+        assert len(fake.set_screen_requests) == 1
+        wire = fake.set_screen_requests[0]
+        # Only the key was supplied; ref_id stays empty on the wire.
+        assert wire.key == "Dash.Screens.Worlds"
+        assert wire.ref_id == ""
 
-            assert isinstance(result, DashActionResult)
-            assert result.ok is True
-            assert result.found is True
-            # The fake echoes the key as the post-navigation ref_id, proving the
-            # selector crossed the wire.
-            assert result.ref_id == "Dash.Screens.Worlds"
-            assert result.detail == "navigated"
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(result, DashActionResult)
+        assert result.ok is True
+        assert result.found is True
+        # The fake echoes the key as the post-navigation ref_id, proving the
+        # selector crossed the wire.
+        assert result.ref_id == "Dash.Screens.Worlds"
+        assert result.detail == "navigated"
 
     async def test_set_screen_by_ref_id_forwards_ref_id_and_decodes_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                result = await client.set_screen(ref_id="screen-ref-7")
+        await uds_server(fake)
+        async with DashClient() as client:
+            result = await client.set_screen(ref_id="screen-ref-7")
 
-            assert len(fake.set_screen_requests) == 1
-            wire = fake.set_screen_requests[0]
-            assert wire.ref_id == "screen-ref-7"
-            assert wire.key == ""
+        assert len(fake.set_screen_requests) == 1
+        wire = fake.set_screen_requests[0]
+        assert wire.ref_id == "screen-ref-7"
+        assert wire.key == ""
 
-            assert isinstance(result, DashActionResult)
-            assert result.ok is True
-            assert result.found is True
-            assert result.ref_id == "screen-ref-7"
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(result, DashActionResult)
+        assert result.ok is True
+        assert result.found is True
+        assert result.ref_id == "screen-ref-7"
 
     async def test_set_screen_sends_both_selectors_when_both_given(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         # The client does not resolve precedence locally; it forwards both
         # selectors and lets the server apply ref_id-first precedence.
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                await client.set_screen(
-                    ref_id="screen-ref-9", key="Dash.Screens.Settings"
-                )
+        await uds_server(fake)
+        async with DashClient() as client:
+            await client.set_screen(ref_id="screen-ref-9", key="Dash.Screens.Settings")
 
-            wire = fake.set_screen_requests[0]
-            assert wire.ref_id == "screen-ref-9"
-            assert wire.key == "Dash.Screens.Settings"
-        finally:
-            server.close()
-            await server.wait_closed()
+        wire = fake.set_screen_requests[0]
+        assert wire.ref_id == "screen-ref-9"
+        assert wire.key == "Dash.Screens.Settings"
 
     async def test_set_screen_with_both_empty_raises_value_error_before_any_rpc(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         # The both-empty guard is a local contract check: it must raise before
         # any network round trip, so a connected client never reaches the server.
-        socket_path = tmp_path / "rio-dash.sock"
         fake = _FakeDash()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with DashClient() as client:
-                with pytest.raises(ValueError, match="ref_id or key"):
-                    await client.set_screen()
+        await uds_server(fake)
+        async with DashClient() as client:
+            with pytest.raises(ValueError, match="ref_id or key"):
+                await client.set_screen()
 
-            assert fake.set_screen_requests == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert fake.set_screen_requests == []
 
     async def test_open_raises_when_not_connected(self):
         client = DashClient()

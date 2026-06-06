@@ -5,18 +5,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Self
+from typing import override
 
 from grpclib.client import Channel
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     DisplayConfig,
     DisplayGetRequest,
     DisplayState,
     DisplayStub,
 )
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "DisplayClient",
@@ -47,45 +46,19 @@ def _info_from_state(state: DisplayState) -> DisplayInfo:
     )
 
 
-class DisplayClient:
+class DisplayClient(_BaseClient[DisplayStub]):
     """Async client for the Resonite IO ``Display`` service over a UDS.
 
     Use as an async context manager so the gRPC channel closes
     deterministically.
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: DisplayStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "Display"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening Display channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = DisplayStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
+    @override
+    def _make_stub(self, channel: Channel) -> DisplayStub:
+        return DisplayStub(channel)
 
     async def apply(
         self,
@@ -102,20 +75,12 @@ class DisplayClient:
         same RPC. Call :meth:`get` afterwards if you need the new state
         (see ``display.proto`` for the full rationale).
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "DisplayClient is not connected. Use `async with DisplayClient(): ...`."
-            )
+        stub = self._require_stub()
         request = DisplayConfig(width=width, height=height, max_fps=max_fps)
         await stub.apply(request)
 
     async def get(self) -> DisplayInfo:
         """Return the engine-side display state without modifying it."""
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "DisplayClient is not connected. Use `async with DisplayClient(): ...`."
-            )
+        stub = self._require_stub()
         state = await stub.get(DisplayGetRequest())
         return _info_from_state(state)

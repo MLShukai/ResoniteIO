@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.ContextMenu;
 
@@ -94,66 +93,39 @@ public sealed class ContextMenuService : V1.ContextMenu.ContextMenuBase
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge(rpc);
+        var bridge = BridgeGuard.Require(_bridge, _log, "ContextMenu", "IContextMenuBridge", rpc);
         var selector = ToSelector(hand);
 
-        var snapshot = await InvokeBridge(
+        var snapshot = await BridgeFault
+            .InvokeAsync(
+                _log,
+                "ContextMenu",
                 rpc,
                 ct => call(bridge, selector, ct),
-                context.CancellationToken
+                context.CancellationToken,
+                Translate
             )
             .ConfigureAwait(false);
 
         return ToProto(snapshot);
-    }
 
-    private IContextMenuBridge RequireBridge(string rpc)
-    {
-        if (_bridge is null)
+        RpcException? Translate(Exception ex)
         {
-            _log.LogWarning(
-                $"ContextMenu.{rpc} called but no IContextMenuBridge is registered; returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "ContextMenu bridge is not configured.")
-            );
-        }
-
-        return _bridge;
-    }
-
-    private async Task<ContextMenuStateSnapshot> InvokeBridge(
-        string rpc,
-        Func<CancellationToken, Task<ContextMenuStateSnapshot>> call,
-        CancellationToken ct
-    )
-    {
-        try
-        {
-            return await call(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (ContextMenuNotReadyException ex)
-        {
-            _log.LogInfo($"ContextMenu.{rpc}: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            _log.LogInfo($"ContextMenu.{rpc}: invalid index: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"ContextMenu.{rpc}: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"ContextMenu bridge faulted: {ex.Message}")
-            );
+            switch (ex)
+            {
+                case ContextMenuNotReadyException notReady:
+                    _log.LogInfo($"ContextMenu.{rpc}: bridge not ready: {notReady.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    );
+                case ArgumentOutOfRangeException invalid:
+                    _log.LogInfo($"ContextMenu.{rpc}: invalid index: {invalid.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    );
+                default:
+                    return null;
+            }
         }
     }
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Google.Protobuf;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Rpc;
 
 #pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
 
@@ -44,18 +45,7 @@ public sealed class CameraService : V1.Camera.CameraBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Camera.StreamFrames called but no ICameraBridge is registered; "
-                    + "returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Camera bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Camera", "ICameraBridge", "StreamFrames");
 
         var width = request.Width > 0 ? request.Width : DefaultWidth;
         var height = request.Height > 0 ? request.Height : DefaultHeight;
@@ -78,7 +68,7 @@ public sealed class CameraService : V1.Camera.CameraBase
             CameraFrame coreFrame;
             try
             {
-                coreFrame = await _bridge.CaptureAsync(width, height, ct).ConfigureAwait(false);
+                coreFrame = await bridge.CaptureAsync(width, height, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

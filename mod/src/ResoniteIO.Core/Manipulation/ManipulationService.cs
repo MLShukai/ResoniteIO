@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Manipulation;
 
@@ -87,51 +86,33 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
         return MapToProtoState(snapshot);
     }
 
-    private IManipulationBridge RequireBridge(string rpc)
-    {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                $"Manipulation.{rpc} called but no IManipulationBridge is registered; "
-                    + "returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Manipulation bridge is not configured.")
-            );
-        }
+    private IManipulationBridge RequireBridge(string rpc) =>
+        BridgeGuard.Require(_bridge, _log, "Manipulation", "IManipulationBridge", rpc);
 
-        return _bridge;
-    }
-
-    private async Task<T> InvokeBridge<T>(
+    private Task<T> InvokeBridge<T>(
         string rpc,
         Func<CancellationToken, Task<T>> call,
         CancellationToken ct
-    )
-    {
-        try
-        {
-            return await call(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (ManipulationNotReadyException ex)
-        {
-            _log.LogInfo($"Manipulation.{rpc}: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Manipulation.{rpc}: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Manipulation bridge faulted: {ex.Message}")
-            );
-        }
-    }
+    ) =>
+        BridgeFault.InvokeAsync(
+            _log,
+            "Manipulation",
+            rpc,
+            call,
+            ct,
+            ex =>
+            {
+                if (ex is ManipulationNotReadyException notReady)
+                {
+                    _log.LogInfo($"Manipulation.{rpc}: bridge not ready: {notReady.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    );
+                }
+
+                return null;
+            }
+        );
 
     private static ManipulationHandSelector ToSelector(V1.ManipulationHand hand) =>
         hand switch

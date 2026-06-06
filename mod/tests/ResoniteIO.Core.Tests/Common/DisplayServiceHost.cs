@@ -1,11 +1,6 @@
-using System.Net.Sockets;
-using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using ResoniteIO.Core.Display;
-using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Tests.Common;
 
@@ -22,103 +17,25 @@ namespace ResoniteIO.Core.Tests.Common;
 /// ので残しておく価値はある (Wave 4+ の整理判断)。
 /// </para>
 /// <para>
-/// 命名は <c>SessionHostHarness</c> と並列。ただし Display の単機能版なので
-/// dispose もシンプル (env var lookup や 並列実行の collection 制約は不要)。
+/// Kestrel 起動 / channel / dispose の共通部分は <see cref="KestrelServiceHost{TService}"/>
+/// に集約済み。本クラスは <see cref="DisplayService"/> 固有の bridge DI だけを担う。
 /// </para>
 /// </remarks>
-internal sealed class DisplayServiceHost : IAsyncDisposable
+internal sealed class DisplayServiceHost : KestrelServiceHost<DisplayService>
 {
-    private readonly WebApplication _app;
-    private bool _disposed;
-
-    public string SocketPath { get; }
-
     private DisplayServiceHost(WebApplication app, string socketPath)
-    {
-        _app = app;
-        SocketPath = socketPath;
-    }
+        : base(app, socketPath) { }
 
     public static async Task<DisplayServiceHost> StartAsync(IDisplayBridge bridge)
     {
         ArgumentNullException.ThrowIfNull(bridge);
 
-        var socketPath = Path.Combine(
-            Path.GetTempPath(),
-            $"rio-display-test-{Guid.NewGuid():N}.sock"
-        );
-
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.Services.AddGrpc();
-        builder.Services.AddSingleton<ILogSink>(new NullLogSink());
-        builder.Services.AddSingleton(bridge);
-        builder.Services.AddSingleton<DisplayService>();
-        builder.WebHost.ConfigureKestrel(opts =>
-        {
-            opts.ListenUnixSocket(
-                socketPath,
-                listenOpts => listenOpts.Protocols = HttpProtocols.Http2
-            );
-        });
-
-        var app = builder.Build();
-        app.MapGrpcService<DisplayService>();
-
-        await app.StartAsync().ConfigureAwait(false);
-
-        await TestPolling.WaitUntilAsync(
-            () => File.Exists(socketPath),
-            TimeSpan.FromSeconds(5),
-            $"display socket file did not appear at {socketPath}"
-        );
+        var (app, socketPath) = await StartCoreAsync(
+                "display",
+                services => services.AddSingleton(bridge)
+            )
+            .ConfigureAwait(false);
 
         return new DisplayServiceHost(app, socketPath);
-    }
-
-    public GrpcChannel CreateChannel()
-    {
-        return GrpcChannel.ForAddress(
-            "http://localhost",
-            new GrpcChannelOptions
-            {
-                HttpHandler = new SocketsHttpHandler
-                {
-                    ConnectCallback = async (_, ct) =>
-                    {
-                        var sock = new Socket(
-                            AddressFamily.Unix,
-                            SocketType.Stream,
-                            ProtocolType.Unspecified
-                        );
-                        await sock.ConnectAsync(new UnixDomainSocketEndPoint(SocketPath), ct)
-                            .ConfigureAwait(false);
-                        return new NetworkStream(sock, ownsSocket: true);
-                    },
-                },
-            }
-        );
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        _disposed = true;
-
-        try
-        {
-            await _app.StopAsync().ConfigureAwait(false);
-        }
-        catch { }
-
-        await _app.DisposeAsync().ConfigureAwait(false);
-
-        try
-        {
-            File.Delete(SocketPath);
-        }
-        catch { }
     }
 }

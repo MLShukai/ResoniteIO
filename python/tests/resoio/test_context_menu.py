@@ -10,10 +10,10 @@ dataclasses round-trip every field — including color-tuple ordering, item
 order, and ``highlighted_index``.
 """
 
-from pathlib import Path
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     ContextMenuBase,
@@ -31,6 +31,11 @@ from resoio.context_menu import (
     ContextMenuItem,
     ContextMenuState,
 )
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 # A two-item menu used by the round-trip tests. The two items differ in
 # every field (enabled / has_icon / color components) so a swapped or
@@ -136,129 +141,88 @@ _EXPECTED_OPEN_ITEMS = (
 
 class TestContextMenuClient:
     async def test_open_sends_primary_hand_and_decodes_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-context-menu.sock"
         fake = _FakeContextMenu()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with ContextMenuClient() as client:
-                assert client.socket_path == str(socket_path)
-                state = await client.open()
+        socket_path = await uds_server(fake)
+        async with ContextMenuClient() as client:
+            assert client.socket_path == socket_path
+            state = await client.open()
 
-            # Default hand is "primary" -> PRIMARY enum on the wire.
-            assert len(fake.open_requests) == 1
-            assert fake.open_requests[0].hand == ContextMenuHand.PRIMARY
+        # Default hand is "primary" -> PRIMARY enum on the wire.
+        assert len(fake.open_requests) == 1
+        assert fake.open_requests[0].hand == ContextMenuHand.PRIMARY
 
-            assert isinstance(state, ContextMenuState)
-            assert state.is_open is True
-            assert state.highlighted_index == -1
-            # Item order and every field (incl. color tuple ordering) survive
-            # the round-trip.
-            assert state.items == _EXPECTED_OPEN_ITEMS
-            assert all(isinstance(item, ContextMenuItem) for item in state.items)
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert isinstance(state, ContextMenuState)
+        assert state.is_open is True
+        assert state.highlighted_index == -1
+        # Item order and every field (incl. color tuple ordering) survive
+        # the round-trip.
+        assert state.items == _EXPECTED_OPEN_ITEMS
+        assert all(isinstance(item, ContextMenuItem) for item in state.items)
 
     async def test_close_sends_hand_and_returns_closed_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-context-menu.sock"
         fake = _FakeContextMenu()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with ContextMenuClient() as client:
-                state = await client.close(hand="left")
+        await uds_server(fake)
+        async with ContextMenuClient() as client:
+            state = await client.close(hand="left")
 
-            assert len(fake.close_requests) == 1
-            assert fake.close_requests[0].hand == ContextMenuHand.LEFT
+        assert len(fake.close_requests) == 1
+        assert fake.close_requests[0].hand == ContextMenuHand.LEFT
 
-            assert state == ContextMenuState(
-                is_open=False, items=(), highlighted_index=-1
-            )
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert state == ContextMenuState(is_open=False, items=(), highlighted_index=-1)
 
     async def test_get_state_sends_hand_and_decodes_highlighted_index(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
-        socket_path = tmp_path / "rio-context-menu.sock"
         fake = _FakeContextMenu()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with ContextMenuClient() as client:
-                state = await client.get_state(hand="right")
+        await uds_server(fake)
+        async with ContextMenuClient() as client:
+            state = await client.get_state(hand="right")
 
-            assert len(fake.get_state_requests) == 1
-            assert fake.get_state_requests[0].hand == ContextMenuHand.RIGHT
+        assert len(fake.get_state_requests) == 1
+        assert fake.get_state_requests[0].hand == ContextMenuHand.RIGHT
 
-            assert state.is_open is True
-            assert state.highlighted_index == 1
-            assert state.items == _EXPECTED_OPEN_ITEMS
-            # `get_state` must be read-only: no mutating RPC was issued.
-            assert fake.open_requests == []
-            assert fake.highlight_requests == []
-            assert fake.invoke_requests == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert state.is_open is True
+        assert state.highlighted_index == 1
+        assert state.items == _EXPECTED_OPEN_ITEMS
+        # `get_state` must be read-only: no mutating RPC was issued.
+        assert fake.open_requests == []
+        assert fake.highlight_requests == []
+        assert fake.invoke_requests == []
 
-    async def test_highlight_forwards_index_and_hand(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-context-menu.sock"
+    async def test_highlight_forwards_index_and_hand(self, uds_server: UdsServer):
         fake = _FakeContextMenu()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with ContextMenuClient() as client:
-                state = await client.highlight(1, hand="left")
+        await uds_server(fake)
+        async with ContextMenuClient() as client:
+            state = await client.highlight(1, hand="left")
 
-            assert len(fake.highlight_requests) == 1
-            wire = fake.highlight_requests[0]
-            assert wire.index == 1
-            assert wire.hand == ContextMenuHand.LEFT
+        assert len(fake.highlight_requests) == 1
+        wire = fake.highlight_requests[0]
+        assert wire.index == 1
+        assert wire.hand == ContextMenuHand.LEFT
 
-            # Fake echoes the requested index into highlighted_index, so a
-            # mismatch would prove the index never reached the server.
-            assert state.highlighted_index == 1
-            assert state.items == _EXPECTED_OPEN_ITEMS
-        finally:
-            server.close()
-            await server.wait_closed()
+        # Fake echoes the requested index into highlighted_index, so a
+        # mismatch would prove the index never reached the server.
+        assert state.highlighted_index == 1
+        assert state.items == _EXPECTED_OPEN_ITEMS
 
-    async def test_invoke_forwards_index_and_default_hand(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        socket_path = tmp_path / "rio-context-menu.sock"
+    async def test_invoke_forwards_index_and_default_hand(self, uds_server: UdsServer):
         fake = _FakeContextMenu()
-        server = Server([fake])
-        await server.start(path=str(socket_path))
-        try:
-            monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-            async with ContextMenuClient() as client:
-                state = await client.invoke(0)
+        await uds_server(fake)
+        async with ContextMenuClient() as client:
+            state = await client.invoke(0)
 
-            assert len(fake.invoke_requests) == 1
-            wire = fake.invoke_requests[0]
-            assert wire.index == 0
-            # No explicit hand -> default "primary" -> PRIMARY on the wire.
-            assert wire.hand == ContextMenuHand.PRIMARY
+        assert len(fake.invoke_requests) == 1
+        wire = fake.invoke_requests[0]
+        assert wire.index == 0
+        # No explicit hand -> default "primary" -> PRIMARY on the wire.
+        assert wire.hand == ContextMenuHand.PRIMARY
 
-            assert state.highlighted_index == 0
-            assert state.items == _EXPECTED_OPEN_ITEMS
-        finally:
-            server.close()
-            await server.wait_closed()
+        assert state.highlighted_index == 0
+        assert state.items == _EXPECTED_OPEN_ITEMS
 
     async def test_open_raises_when_not_connected(self):
         client = ContextMenuClient()

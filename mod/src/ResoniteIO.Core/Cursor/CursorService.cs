@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Cursor;
 
@@ -67,59 +66,38 @@ public sealed class CursorService : V1.Cursor.CursorBase
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge(rpc);
+        var bridge = BridgeGuard.Require(_bridge, _log, "Cursor", "ICursorBridge", rpc);
 
-        var snapshot = await InvokeBridge(rpc, ct => call(bridge, ct), context.CancellationToken)
+        var snapshot = await BridgeFault
+            .InvokeAsync(
+                _log,
+                "Cursor",
+                rpc,
+                ct => call(bridge, ct),
+                context.CancellationToken,
+                Translate
+            )
             .ConfigureAwait(false);
 
         return ToProto(snapshot);
-    }
 
-    private ICursorBridge RequireBridge(string rpc)
-    {
-        if (_bridge is null)
+        RpcException? Translate(Exception ex)
         {
-            _log.LogWarning(
-                $"Cursor.{rpc} called but no ICursorBridge is registered; returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Cursor bridge is not configured.")
-            );
-        }
-
-        return _bridge;
-    }
-
-    private async Task<CursorStateSnapshot> InvokeBridge(
-        string rpc,
-        Func<CancellationToken, Task<CursorStateSnapshot>> call,
-        CancellationToken ct
-    )
-    {
-        try
-        {
-            return await call(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (CursorNotReadyException ex)
-        {
-            _log.LogInfo($"Cursor.{rpc}: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            _log.LogInfo($"Cursor.{rpc}: invalid argument: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Cursor.{rpc}: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Cursor bridge faulted: {ex.Message}")
-            );
+            switch (ex)
+            {
+                case CursorNotReadyException notReady:
+                    _log.LogInfo($"Cursor.{rpc}: bridge not ready: {notReady.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    );
+                case ArgumentOutOfRangeException invalid:
+                    _log.LogInfo($"Cursor.{rpc}: invalid argument: {invalid.Message}");
+                    return new RpcException(
+                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    );
+                default:
+                    return null;
+            }
         }
     }
 

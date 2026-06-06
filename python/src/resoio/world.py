@@ -7,11 +7,11 @@ import enum
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Self
+from typing import override
 
 from grpclib.client import Channel
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     FetchThumbnailRequest,
     FocusRequest,
@@ -31,7 +31,6 @@ from resoio._generated.resonite_io.v1 import (
     WorldSession as _WireWorldSession,
     WorldStub,
 )
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "OpenWorld",
@@ -257,53 +256,19 @@ def _open_world_from_response(wire: _WireOpenWorld | None) -> OpenWorld:
     return _open_world_from_wire(wire)
 
 
-class WorldClient:
+class WorldClient(_BaseClient[WorldStub]):
     """Async client for the Resonite IO ``World`` service over a UDS.
 
     Use as an async context manager so the gRPC channel closes
     deterministically.
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: WorldStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "World"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening World channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = WorldStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
-
-    def _require_stub(self) -> WorldStub:
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "WorldClient is not connected. Use `async with WorldClient(): ...`."
-            )
-        return stub
+    @override
+    def _make_stub(self, channel: Channel) -> WorldStub:
+        return WorldStub(channel)
 
     async def list_sessions(
         self,

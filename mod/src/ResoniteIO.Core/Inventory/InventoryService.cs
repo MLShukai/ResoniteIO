@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Inventory;
 
@@ -123,74 +122,46 @@ public sealed class InventoryService : V1.Inventory.InventoryBase
         return ToProto(snapshot);
     }
 
-    private IInventoryBridge RequireBridge(string rpc)
-    {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                $"Inventory.{rpc} called but no IInventoryBridge is registered; returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Inventory bridge is not configured.")
-            );
-        }
-
-        return _bridge;
-    }
+    private IInventoryBridge RequireBridge(string rpc) =>
+        BridgeGuard.Require(_bridge, _log, "Inventory", "IInventoryBridge", rpc);
 
     /// <summary>
     /// 全 RPC 共通の例外翻訳。Inventory は 3 種の戻り型 (listing/mutation/spawn) を返すため generic 化。
     /// </summary>
-    private async Task<T> InvokeBridge<T>(
+    private Task<T> InvokeBridge<T>(
         string rpc,
         Func<CancellationToken, Task<T>> call,
         CancellationToken ct
-    )
+    ) => BridgeFault.InvokeAsync(_log, "Inventory", rpc, call, ct, ex => Translate(rpc, ex));
+
+    private RpcException? Translate(string rpc, Exception ex)
     {
-        try
+        switch (ex)
         {
-            return await call(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (InventoryNotReadyException ex)
-        {
-            _log.LogInfo($"Inventory.{rpc}: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (InventoryRecursionRequiredException ex)
-        {
-            _log.LogInfo($"Inventory.{rpc}: recursion required: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (InventoryNotFoundException ex)
-        {
-            _log.LogInfo($"Inventory.{rpc}: not found: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.NotFound, ex.Message));
-        }
-        catch (InventoryConflictException ex)
-        {
-            _log.LogInfo($"Inventory.{rpc}: conflict: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.AlreadyExists, ex.Message));
-        }
-        catch (ArgumentException ex)
-        {
-            _log.LogInfo($"Inventory.{rpc}: invalid argument: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-        }
-        catch (InventoryCloudException ex)
-        {
-            _log.LogError($"Inventory.{rpc}: cloud failure: {ex}");
-            throw new RpcException(new Status(StatusCode.Unavailable, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Inventory.{rpc}: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Inventory bridge faulted: {ex.Message}")
-            );
+            case InventoryNotReadyException notReady:
+                _log.LogInfo($"Inventory.{rpc}: bridge not ready: {notReady.Message}");
+                return new RpcException(
+                    new Status(StatusCode.FailedPrecondition, notReady.Message)
+                );
+            case InventoryRecursionRequiredException recursion:
+                _log.LogInfo($"Inventory.{rpc}: recursion required: {recursion.Message}");
+                return new RpcException(
+                    new Status(StatusCode.FailedPrecondition, recursion.Message)
+                );
+            case InventoryNotFoundException notFound:
+                _log.LogInfo($"Inventory.{rpc}: not found: {notFound.Message}");
+                return new RpcException(new Status(StatusCode.NotFound, notFound.Message));
+            case InventoryConflictException conflict:
+                _log.LogInfo($"Inventory.{rpc}: conflict: {conflict.Message}");
+                return new RpcException(new Status(StatusCode.AlreadyExists, conflict.Message));
+            case ArgumentException invalid:
+                _log.LogInfo($"Inventory.{rpc}: invalid argument: {invalid.Message}");
+                return new RpcException(new Status(StatusCode.InvalidArgument, invalid.Message));
+            case InventoryCloudException cloud:
+                _log.LogError($"Inventory.{rpc}: cloud failure: {cloud}");
+                return new RpcException(new Status(StatusCode.Unavailable, cloud.Message));
+            default:
+                return null;
         }
     }
 

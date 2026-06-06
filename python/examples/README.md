@@ -20,6 +20,19 @@
   Home Cloud は OK。Teleport / NoClip / NoLocomotion world は不可)
 - `display_config.py` — Resonite が desktop mode で起動していること (VR mode
   では `ResolutionSettings` が異なる経路を通る)
+- `world_browse.py` — cloud に login 済みで join 可能な公開セッションが見える
+  こと (session list が空 = signed out / 空 cloud の場合は notice を print して
+  安全に終了する)
+- `context_menu_interact.py` — desktop の T-key radial menu が出せる状態
+  (LocalUser / InteractionHandler が attach 済みの world にいること)
+- `dash_navigate.py` — userspace の Esc dash が開ける状態 (engine boot 済み)。
+  screen が少ない logged-out 状態でも開閉は可能だが navigation 先が減る
+- `inventory_manage.py` — cloud に login 済み (inventory ops は実 cloud
+  inventory を叩く)。書込先は自分で mkdir する `/Inventory/__resoio_example__`
+  配下のみで、最後に rm -r で後片付けする
+- `cursor_move.py` — Resonite が desktop mode で起動していること (cursor は
+  desktop window 座標を操作する。カーソル自体は screenshot に写りにくいので、
+  動いたことの可視確認は context menu を開く `tests/e2e/cursor.py` を参照)
 
 ## 実行
 
@@ -32,18 +45,30 @@ uv run python python/examples/speaker_record.py
 uv run python python/examples/microphone_send.py
 uv run python python/examples/locomotion_drive.py
 uv run python python/examples/display_config.py
+uv run python python/examples/manipulation_grab.py
+uv run python python/examples/world_browse.py
+uv run python python/examples/context_menu_interact.py
+uv run python python/examples/dash_navigate.py
+uv run python python/examples/inventory_manage.py
+uv run python python/examples/cursor_move.py
 ```
 
 各 example の内容:
 
-| File                  | やること                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| `session_ping.py`     | `Session.Ping` を 1 回呼んで RTT と server timestamp を print                               |
-| `camera_view.py`      | 5 秒 streaming して fps と最終フレームの輝度統計を print                                    |
-| `speaker_record.py`   | 5 秒 streaming して peak amplitude を print + `speaker_output.raw` に raw float32 LE で保存 |
-| `microphone_send.py`  | 440 Hz / 3 秒 mono sine wave を生成し virtual mic に送信                                    |
-| `locomotion_drive.py` | 6 秒 scripted シナリオで forward → strafe → yaw → jump → neutral を流し、reset() で締める   |
-| `display_config.py`   | 現在解像度 → 1024x768 apply → 元解像度に restore                                            |
+| File                       | やること                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `session_ping.py`          | `Session.Ping` を 1 回呼んで RTT と server timestamp を print                               |
+| `camera_view.py`           | 5 秒 streaming して fps と最終フレームの輝度統計を print                                    |
+| `speaker_record.py`        | 5 秒 streaming して peak amplitude を print + `speaker_output.raw` に raw float32 LE で保存 |
+| `microphone_send.py`       | 440 Hz / 3 秒 mono sine wave を生成し virtual mic に送信                                    |
+| `locomotion_drive.py`      | 6 秒 scripted シナリオで forward → strafe → yaw → jump → neutral を流し、reset() で締める   |
+| `display_config.py`        | 現在解像度 → 1024x768 apply → 元解像度に restore                                            |
+| `manipulation_grab.py`     | primary hand で get_state → grab → release の最小サイクル (空き home では grabbed=False)    |
+| `world_browse.py`          | session list → join → list_open_worlds → focus → leave (空 cloud は notice して終了)        |
+| `context_menu_interact.py` | T-key radial を open → get_state → highlight(0) → invoke(first enabled) → close             |
+| `dash_navigate.py`         | Esc dash を open → list_screens → set_screen(key) → get_tree → invoke(first) → close        |
+| `inventory_manage.py`      | 一時 dir を mkdir → cp -r → mv → list で確認 → finally で rm -r 後片付け                    |
+| `cursor_move.py`           | get_position → center(0.5,0.5) → move(0.25,0.25) → 元位置に restore                         |
 
 ## FAILED_PRECONDITION について
 
@@ -78,11 +103,17 @@ examples では「最短コード」を優先しているため、以下は意�
 
 完全形が必要な場合は対応する CLI / e2e を参照:
 
-| Example               | CLI                                                         | E2E                                                                     |
-| --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `session_ping.py`     | [`cli/ping.py`](../src/resoio/cli/ping.py)                  | [`tests/e2e/session_ping.py`](../tests/e2e/session_ping.py)             |
-| `camera_view.py`      | [`cli/record.py`](../src/resoio/cli/record.py) (video 経路) | [`tests/e2e/camera_stream.py`](../tests/e2e/camera_stream.py)           |
-| `speaker_record.py`   | [`cli/record.py`](../src/resoio/cli/record.py) (audio 経路) | [`tests/e2e/speaker_record.py`](../tests/e2e/speaker_record.py)         |
-| `microphone_send.py`  | [`cli/mic.py`](../src/resoio/cli/mic.py)                    | [`tests/e2e/mic_send.py`](../tests/e2e/mic_send.py)                     |
-| `locomotion_drive.py` | [`cli/locomotion.py`](../src/resoio/cli/locomotion.py)      | [`tests/e2e/locomotion.py`](../tests/e2e/locomotion.py)                 |
-| `display_config.py`   | [`cli/display.py`](../src/resoio/cli/display.py)            | [`tests/e2e/display_resolution.py`](../tests/e2e/display_resolution.py) |
+| Example                    | CLI                                                         | E2E                                                                     |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `session_ping.py`          | [`cli/ping.py`](../src/resoio/cli/ping.py)                  | [`tests/e2e/session_ping.py`](../tests/e2e/session_ping.py)             |
+| `camera_view.py`           | [`cli/record.py`](../src/resoio/cli/record.py) (video 経路) | [`tests/e2e/camera_stream.py`](../tests/e2e/camera_stream.py)           |
+| `speaker_record.py`        | [`cli/record.py`](../src/resoio/cli/record.py) (audio 経路) | [`tests/e2e/speaker_record.py`](../tests/e2e/speaker_record.py)         |
+| `microphone_send.py`       | [`cli/mic.py`](../src/resoio/cli/mic.py)                    | [`tests/e2e/mic_send.py`](../tests/e2e/mic_send.py)                     |
+| `locomotion_drive.py`      | [`cli/locomotion.py`](../src/resoio/cli/locomotion.py)      | [`tests/e2e/locomotion.py`](../tests/e2e/locomotion.py)                 |
+| `display_config.py`        | [`cli/display.py`](../src/resoio/cli/display.py)            | [`tests/e2e/display_resolution.py`](../tests/e2e/display_resolution.py) |
+| `manipulation_grab.py`     | [`cli/manipulate.py`](../src/resoio/cli/manipulate.py)      | [`tests/e2e/manipulation.py`](../tests/e2e/manipulation.py)             |
+| `world_browse.py`          | [`cli/world.py`](../src/resoio/cli/world.py)                | [`tests/e2e/world.py`](../tests/e2e/world.py)                           |
+| `context_menu_interact.py` | [`cli/context_menu.py`](../src/resoio/cli/context_menu.py)  | [`tests/e2e/context_menu.py`](../tests/e2e/context_menu.py)             |
+| `dash_navigate.py`         | [`cli/dash.py`](../src/resoio/cli/dash.py)                  | [`tests/e2e/dash.py`](../tests/e2e/dash.py)                             |
+| `inventory_manage.py`      | [`cli/inventory.py`](../src/resoio/cli/inventory.py)        | [`tests/e2e/inventory.py`](../tests/e2e/inventory.py)                   |
+| `cursor_move.py`           | [`cli/cursor.py`](../src/resoio/cli/cursor.py)              | [`tests/e2e/cursor.py`](../tests/e2e/cursor.py)                         |

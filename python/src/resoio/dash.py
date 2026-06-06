@@ -14,11 +14,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Self
+from typing import override
 
 from grpclib.client import Channel
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     DashActionResult as _PbDashActionResult,
     DashCloseRequest,
@@ -37,7 +37,6 @@ from resoio._generated.resonite_io.v1 import (
     DashStub,
     DashTree as _PbDashTree,
 )
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "DashActionResult",
@@ -224,7 +223,7 @@ def _screen_from_proto(pb: _PbDashScreen) -> DashScreen:
     )
 
 
-class DashClient:
+class DashClient(_BaseClient[DashStub]):
     """Async client for the Resonite IO ``Dash`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
@@ -232,38 +231,12 @@ class DashClient:
     :class:`resoio.SessionClient`.
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: DashStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "Dash"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening Dash channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = DashStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
+    @override
+    def _make_stub(self, channel: Channel) -> DashStub:
+        return DashStub(channel)
 
     async def _dispatch[T](
         self,
@@ -276,12 +249,7 @@ class DashClient:
         decodes the returned proto into its dataclass. gRPC failures surface
         as :class:`grpclib.exceptions.GRPCError`.
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "DashClient is not connected. Use `async with DashClient(): ...`."
-            )
-        return await rpc(stub)
+        return await rpc(self._require_stub())
 
     async def open(self) -> DashState:
         """Open the dash overlay and return the resulting state.

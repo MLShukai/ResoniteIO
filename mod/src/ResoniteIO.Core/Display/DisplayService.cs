@@ -1,7 +1,6 @@
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
-
-#pragma warning disable CA1031 // catch (Exception) は Bridge 側の任意例外を gRPC Status に翻訳するために必要
+using ResoniteIO.Core.Rpc;
 
 namespace ResoniteIO.Core.Display;
 
@@ -27,17 +26,7 @@ public sealed class DisplayService : V1.Display.DisplayBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Display.Apply called but no IDisplayBridge is registered; returning Unavailable."
-            );
-            // "bridge not configured" は server-side configuration issue で transient ではないが、
-            // gRPC 慣習として "server-side not ready" に Unavailable を使う (client retry policy にも friendly)。
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Display bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Display", "IDisplayBridge", "Apply");
 
         var snapshot = new DisplayConfigSnapshot
         {
@@ -46,26 +35,20 @@ public sealed class DisplayService : V1.Display.DisplayBase
             MaxFps = request.MaxFps,
         };
 
-        try
-        {
-            await _bridge.ApplyAsync(snapshot, context.CancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (DisplayNotReadyException ex)
-        {
-            _log.LogInfo($"Display.Apply: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Display.Apply: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Display bridge faulted: {ex.Message}")
-            );
-        }
+        await BridgeFault
+            .InvokeAsync(
+                _log,
+                "Display",
+                "Apply",
+                async ct =>
+                {
+                    await bridge.ApplyAsync(snapshot, ct).ConfigureAwait(false);
+                    return true;
+                },
+                context.CancellationToken,
+                ex => TranslateNotReady("Apply", ex)
+            )
+            .ConfigureAwait(false);
 
         // Apply の Empty 応答契約は proto / IDisplayBridge.ApplyAsync XML 参照。
         return new V1.DisplayApplyResponse();
@@ -76,39 +59,31 @@ public sealed class DisplayService : V1.Display.DisplayBase
         ServerCallContext context
     )
     {
-        if (_bridge is null)
-        {
-            _log.LogWarning(
-                "Display.Get called but no IDisplayBridge is registered; returning Unavailable."
-            );
-            throw new RpcException(
-                new Status(StatusCode.Unavailable, "Display bridge is not configured.")
-            );
-        }
+        var bridge = BridgeGuard.Require(_bridge, _log, "Display", "IDisplayBridge", "Get");
 
-        DisplayConfigSnapshot snapshot;
-        try
-        {
-            snapshot = await _bridge.GetAsync(context.CancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (DisplayNotReadyException ex)
-        {
-            _log.LogInfo($"Display.Get: bridge not ready: {ex.Message}");
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _log.LogError($"Display.Get: bridge faulted: {ex}");
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Display bridge faulted: {ex.Message}")
-            );
-        }
+        var snapshot = await BridgeFault
+            .InvokeAsync(
+                _log,
+                "Display",
+                "Get",
+                ct => bridge.GetAsync(ct),
+                context.CancellationToken,
+                ex => TranslateNotReady("Get", ex)
+            )
+            .ConfigureAwait(false);
 
         return ToProto(snapshot);
+    }
+
+    private RpcException? TranslateNotReady(string rpc, Exception ex)
+    {
+        if (ex is DisplayNotReadyException notReady)
+        {
+            _log.LogInfo($"Display.{rpc}: bridge not ready: {notReady.Message}");
+            return new RpcException(new Status(StatusCode.FailedPrecondition, notReady.Message));
+        }
+
+        return null;
     }
 
     private static V1.DisplayState ToProto(DisplayConfigSnapshot snapshot) =>

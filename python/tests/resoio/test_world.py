@@ -14,10 +14,10 @@ Per testing-strategy: no mocking of grpclib / asyncio / betterproto internals â€
 the only fake is the self-owned ``WorldBase`` servicer surface.
 """
 
-from pathlib import Path
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import pytest
-from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     FetchThumbnailRequest,
@@ -60,6 +60,11 @@ from resoio.world import (
     WorldRecord,
     WorldSession,
 )
+
+if TYPE_CHECKING:
+    from grpclib._typing import IServable
+
+UdsServer = Callable[["IServable"], Awaitable[str]]
 
 
 class _FakeWorld(WorldBase):
@@ -142,19 +147,9 @@ class _FakeWorld(WorldBase):
         return self._thumbnail_response
 
 
-async def _serve(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake: _FakeWorld
-) -> tuple[Server, str]:
-    socket_path = tmp_path / "rio-world.sock"
-    server = Server([fake])
-    await server.start(path=str(socket_path))
-    monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-    return server, str(socket_path)
-
-
 class TestListSessions:
     async def test_maps_response_into_session_page_with_tuple_fields(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         wire_session = WireWorldSession(
             session_id="S-MyriaPolyworld",
@@ -184,13 +179,9 @@ class TestListSessions:
                 page_size=10,
             )
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                page = await client.list_sessions()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            page = await client.list_sessions()
 
         assert isinstance(page, SessionPage)
         assert page.total_count == 42
@@ -225,22 +216,18 @@ class TestListSessions:
         assert isinstance(got.tags, tuple)
 
     async def test_request_carries_search_and_paging_with_all_filter_as_unspecified(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_sessions(
-                    search="hub",
-                    filter=SessionFilter.ALL,
-                    min_active_users=3,
-                    page=4,
-                    page_size=20,
-                )
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_sessions(
+                search="hub",
+                filter=SessionFilter.ALL,
+                min_active_users=3,
+                page=4,
+                page_size=20,
+            )
 
         assert len(fake.sessions_requests) == 1
         wire = fake.sessions_requests[0]
@@ -252,31 +239,19 @@ class TestListSessions:
         # NOT collide with FRIENDS/HEADLESS (which share numeric 1/2 publicly).
         assert wire.filter == WireSessionFilter.UNSPECIFIED
 
-    async def test_request_maps_friends_filter(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_maps_friends_filter(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_sessions(filter=SessionFilter.FRIENDS)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_sessions(filter=SessionFilter.FRIENDS)
 
         assert fake.sessions_requests[0].filter == WireSessionFilter.FRIENDS
 
-    async def test_request_maps_headless_filter(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_maps_headless_filter(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_sessions(filter=SessionFilter.HEADLESS)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_sessions(filter=SessionFilter.HEADLESS)
 
         assert fake.sessions_requests[0].filter == WireSessionFilter.HEADLESS
 
@@ -288,7 +263,7 @@ class TestListSessions:
 
 class TestListRecords:
     async def test_maps_response_into_record_page_with_tuple_fields(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         wire_record = WireWorldRecord(
             record_id="R-template",
@@ -307,13 +282,9 @@ class TestListRecords:
                 offset=60,
             )
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                page = await client.list_records()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            page = await client.list_records()
 
         assert isinstance(page, RecordPage)
         assert page.has_more is True
@@ -334,22 +305,18 @@ class TestListRecords:
         assert isinstance(page.records[0].tags, tuple)
 
     async def test_request_carries_source_tags_owner_offset_and_count(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_records(
-                    source=RecordSource.PUBLIC,
-                    required_tags=["game", "avatar"],
-                    owner_id="U-owner",
-                    offset=120,
-                    count=30,
-                )
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_records(
+                source=RecordSource.PUBLIC,
+                required_tags=["game", "avatar"],
+                owner_id="U-owner",
+                offset=120,
+                count=30,
+            )
 
         assert len(fake.records_requests) == 1
         wire = fake.records_requests[0]
@@ -361,86 +328,58 @@ class TestListRecords:
         assert wire.offset == 120
         assert wire.count == 30
 
-    async def test_request_maps_default_sort_and_direction(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_maps_default_sort_and_direction(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                # Defaults: CREATION_DATE / DESCENDING.
-                await client.list_records()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            # Defaults: CREATION_DATE / DESCENDING.
+            await client.list_records()
 
         wire = fake.records_requests[0]
         assert wire.sort == WireRecordSort.CREATION_DATE
         assert wire.sort_direction == WireRecordSortDirection.DESCENDING
 
     async def test_request_maps_random_sort_and_ascending_direction(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_records(
-                    sort=RecordSort.RANDOM,
-                    sort_direction=RecordSortDirection.ASCENDING,
-                )
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_records(
+                sort=RecordSort.RANDOM,
+                sort_direction=RecordSortDirection.ASCENDING,
+            )
 
         wire = fake.records_requests[0]
         # The "random" tab is sort=RANDOM on the wire.
         assert wire.sort == WireRecordSort.RANDOM
         assert wire.sort_direction == WireRecordSortDirection.ASCENDING
 
-    async def test_request_maps_featured_source(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_maps_featured_source(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_records(source=RecordSource.FEATURED)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_records(source=RecordSource.FEATURED)
 
         assert fake.records_requests[0].source == WireRecordSource.FEATURED
 
-    async def test_request_carries_search_query_verbatim(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_carries_search_query_verbatim(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.list_records(search="puzzle +red")
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.list_records(search="puzzle +red")
 
         assert len(fake.records_requests) == 1
         # The free-text World-tab query must travel to the proto ``search``
         # field unchanged (including the ``+term`` operator syntax).
         assert fake.records_requests[0].search == "puzzle +red"
 
-    async def test_request_defaults_search_to_empty_string(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_request_defaults_search_to_empty_string(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                # No search arg: an empty query means "no search" on the wire.
-                await client.list_records()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            # No search arg: an empty query means "no search" on the wire.
+            await client.list_records()
 
         assert fake.records_requests[0].search == ""
 
@@ -462,17 +401,11 @@ def _open_world() -> WireOpenWorld:
 
 
 class TestJoin:
-    async def test_join_by_session_id_returns_open_world(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_join_by_session_id_returns_open_world(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                world = await client.join(session_id="S-target")
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            world = await client.join(session_id="S-target")
 
         assert world == OpenWorld(
             handle=3,
@@ -489,17 +422,11 @@ class TestJoin:
         # Default focus is True.
         assert wire.focus is True
 
-    async def test_join_by_url_lands_in_session_url_field(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_join_by_url_lands_in_session_url_field(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.join(url="lnl-nat://abc/42", focus=False)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.join(url="lnl-nat://abc/42", focus=False)
 
         wire = fake.join_requests[0]
         # The user-facing ``url`` arg must populate the proto ``session_url``
@@ -508,34 +435,22 @@ class TestJoin:
         assert wire.session_id == ""
         assert wire.focus is False
 
-    async def test_join_with_neither_raises_value_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_join_with_neither_raises_value_error(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                with pytest.raises(ValueError):
-                    await client.join()
-            # The invalid call must never reach the wire.
-            assert fake.join_requests == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            with pytest.raises(ValueError):
+                await client.join()
+        # The invalid call must never reach the wire.
+        assert fake.join_requests == []
 
-    async def test_join_with_both_raises_value_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_join_with_both_raises_value_error(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                with pytest.raises(ValueError):
-                    await client.join(session_id="S-x", url="lnl-nat://abc/1")
-            assert fake.join_requests == []
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            with pytest.raises(ValueError):
+                await client.join(session_id="S-x", url="lnl-nat://abc/1")
+        assert fake.join_requests == []
 
     async def test_raises_when_not_connected(self):
         client = WorldClient()
@@ -545,7 +460,7 @@ class TestJoin:
 
 class TestStartWorld:
     async def test_start_world_returns_open_world_and_carries_request(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         started = WireOpenWorld(
             handle=9,
@@ -556,15 +471,11 @@ class TestStartWorld:
             access_level="ContactsPlus",
         )
         fake = _FakeWorld(start_world_world=started)
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                world = await client.start_world(
-                    record_id="R-template", owner_id="U-owner", focus=False
-                )
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            world = await client.start_world(
+                record_id="R-template", owner_id="U-owner", focus=False
+            )
 
         assert world == OpenWorld(
             handle=9,
@@ -580,17 +491,11 @@ class TestStartWorld:
         assert wire.owner_id == "U-owner"
         assert wire.focus is False
 
-    async def test_start_world_defaults_focus_true(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_start_world_defaults_focus_true(self, uds_server: UdsServer):
         fake = _FakeWorld(start_world_world=_open_world())
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                await client.start_world(record_id="R-template")
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            await client.start_world(record_id="R-template")
 
         wire = fake.start_world_requests[0]
         assert wire.owner_id == ""
@@ -603,9 +508,7 @@ class TestStartWorld:
 
 
 class TestListOpenWorlds:
-    async def test_returns_list_of_open_worlds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_returns_list_of_open_worlds(self, uds_server: UdsServer):
         worlds = [
             WireOpenWorld(
                 handle=1,
@@ -625,13 +528,9 @@ class TestListOpenWorlds:
             ),
         ]
         fake = _FakeWorld(open_worlds=worlds)
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                result = await client.list_open_worlds()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            result = await client.list_open_worlds()
 
         assert result == [
             OpenWorld(
@@ -653,17 +552,11 @@ class TestListOpenWorlds:
         ]
         assert len(fake.list_open_worlds_requests) == 1
 
-    async def test_returns_empty_list_when_no_worlds_open(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_returns_empty_list_when_no_worlds_open(self, uds_server: UdsServer):
         fake = _FakeWorld(open_worlds=[])
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                result = await client.list_open_worlds()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            result = await client.list_open_worlds()
 
         assert result == []
 
@@ -675,7 +568,7 @@ class TestListOpenWorlds:
 
 class TestFocus:
     async def test_focus_sends_handle_and_returns_open_world(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         focused = WireOpenWorld(
             handle=5,
@@ -686,13 +579,9 @@ class TestFocus:
             access_level="Anyone",
         )
         fake = _FakeWorld(focus_world=focused)
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                world = await client.focus(5)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            world = await client.focus(5)
 
         assert world == OpenWorld(
             handle=5,
@@ -712,17 +601,11 @@ class TestFocus:
 
 
 class TestLeave:
-    async def test_leave_sends_handle_and_returns_none(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_leave_sends_handle_and_returns_none(self, uds_server: UdsServer):
         fake = _FakeWorld()
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                result = await client.leave(7)
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            result = await client.leave(7)
 
         assert result is None
         assert len(fake.leave_requests) == 1
@@ -735,9 +618,7 @@ class TestLeave:
 
 
 class TestGetCurrent:
-    async def test_returns_open_world_when_has_world_true(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_returns_open_world_when_has_world_true(self, uds_server: UdsServer):
         current = WireOpenWorld(
             handle=2,
             session_id="S-current",
@@ -749,13 +630,9 @@ class TestGetCurrent:
         fake = _FakeWorld(
             current_response=GetCurrentResponse(world=current, has_world=True)
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                world = await client.get_current()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            world = await client.get_current()
 
         assert world == OpenWorld(
             handle=2,
@@ -766,22 +643,16 @@ class TestGetCurrent:
             access_level="Anyone",
         )
 
-    async def test_returns_none_when_has_world_false(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_returns_none_when_has_world_false(self, uds_server: UdsServer):
         # Userspace-only: no joinable world is focused, so has_world is False
         # even though the response message technically carries a (default)
         # world. The client must return None, not an empty OpenWorld.
         fake = _FakeWorld(
             current_response=GetCurrentResponse(world=None, has_world=False)
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                world = await client.get_current()
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            world = await client.get_current()
 
         assert world is None
 
@@ -793,7 +664,7 @@ class TestGetCurrent:
 
 class TestFetchThumbnail:
     async def test_sends_uri_and_returns_thumbnail_with_bytes_and_content_type(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         webp_bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 "
         fake = _FakeWorld(
@@ -802,13 +673,9 @@ class TestFetchThumbnail:
                 content_type="image/webp",
             )
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                thumbnail = await client.fetch_thumbnail("resdb:///abc.webp")
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            thumbnail = await client.fetch_thumbnail("resdb:///abc.webp")
 
         # The user-facing ``uri`` arg must travel verbatim on the wire.
         assert len(fake.fetch_thumbnail_requests) == 1
@@ -820,7 +687,7 @@ class TestFetchThumbnail:
         )
 
     async def test_allows_empty_content_type_with_returned_bytes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, uds_server: UdsServer
     ):
         # The server may not know the MIME type; an empty content_type is a
         # valid response and must surface verbatim (not coerced to a default).
@@ -831,13 +698,9 @@ class TestFetchThumbnail:
                 content_type="",
             )
         )
-        server, _ = await _serve(tmp_path, monkeypatch, fake)
-        try:
-            async with WorldClient() as client:
-                thumbnail = await client.fetch_thumbnail("resdb:///no-type")
-        finally:
-            server.close()
-            await server.wait_closed()
+        await uds_server(fake)
+        async with WorldClient() as client:
+            thumbnail = await client.fetch_thumbnail("resdb:///no-type")
 
         assert fake.fetch_thumbnail_requests[0].uri == "resdb:///no-type"
         assert thumbnail == Thumbnail(data=raw_bytes, content_type="")

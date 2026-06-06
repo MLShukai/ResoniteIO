@@ -22,17 +22,16 @@ import logging
 import time
 from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Self
+from typing import override
 
 from grpclib.client import Channel
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     LocomotionCommand,
     LocomotionResetRequest,
     LocomotionStub,
 )
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "DriveSummary",
@@ -95,7 +94,7 @@ class ResetSummary:
     unix_nanos: int
 
 
-class LocomotionClient:
+class LocomotionClient(_BaseClient[LocomotionStub]):
     """Async client for the Resonite IO ``Locomotion`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
@@ -103,38 +102,12 @@ class LocomotionClient:
     :class:`resoio.SessionClient`.
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: LocomotionStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "Locomotion"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening Locomotion channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = LocomotionStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
+    @override
+    def _make_stub(self, channel: Channel) -> LocomotionStub:
+        return LocomotionStub(channel)
 
     async def drive(self, commands: AsyncIterable[LocomotionCmd]) -> DriveSummary:
         """Stream locomotion commands to the server and await the summary.
@@ -146,12 +119,7 @@ class LocomotionClient:
         callers should not set it. gRPC failures surface as
         :class:`grpclib.exceptions.GRPCError`.
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "LocomotionClient is not connected. "
-                "Use `async with LocomotionClient(): ...`."
-            )
+        stub = self._require_stub()
 
         async def _wire() -> AsyncIterator[LocomotionCommand]:
             async for cmd in commands:
@@ -197,13 +165,7 @@ class LocomotionClient:
         ``unix_nanos`` is stamped here at send time. gRPC failures
         surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "LocomotionClient is not connected. "
-                "Use `async with LocomotionClient(): ...`."
-            )
-
+        stub = self._require_stub()
         request = LocomotionResetRequest(
             move=move,
             look=look,
