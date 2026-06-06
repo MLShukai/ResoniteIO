@@ -22,12 +22,15 @@ import argcomplete
 
 from resoio.cli import (
     context_menu,
+    dash,
     display,
     inventory,
     locomotion,
+    manipulate,
     mic,
     ping,
     record,
+    world,
 )
 
 __all__ = ["main"]
@@ -36,10 +39,13 @@ _COMMAND_MODULES: list[ModuleType] = [
     ping,
     display,
     context_menu,
-    inventory,
+    dash,
     locomotion,
+    manipulate,
     mic,
     record,
+    world,
+    inventory,
 ]
 
 

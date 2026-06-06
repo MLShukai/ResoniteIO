@@ -8,6 +8,15 @@ from resoio.context_menu import (
     ContextMenuItem,
     ContextMenuState,
 )
+from resoio.dash import (
+    DashActionResult,
+    DashClient,
+    DashElement,
+    DashRect,
+    DashScreen,
+    DashState,
+    DashTree,
+)
 from resoio.display import DisplayClient, DisplayInfo
 from resoio.inventory import (
     InventoryClient,
@@ -23,6 +32,7 @@ from resoio.locomotion import (
     LocomotionCmd,
     ResetSummary,
 )
+from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from resoio.microphone import (
     MicrophoneAudioChunk,
     MicrophoneClient,
@@ -40,6 +50,19 @@ from resoio.speaker import (
     AudioChunk,
     SpeakerClient,
 )
+from resoio.world import (
+    OpenWorld,
+    RecordPage,
+    RecordSort,
+    RecordSortDirection,
+    RecordSource,
+    SessionFilter,
+    SessionPage,
+    Thumbnail,
+    WorldClient,
+    WorldRecord,
+    WorldSession,
+)
 
 __version__: str = _version("resoio")
 
@@ -53,10 +76,19 @@ __all__ = [
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
+    "DashActionResult",
+    "DashClient",
+    "DashElement",
+    "DashRect",
+    "DashScreen",
+    "DashState",
+    "DashTree",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
     "Frame",
+    "GrabResult",
+    "GrabState",
     "InventoryClient",
     "InventoryEntry",
     "InventoryEntryKind",
@@ -65,12 +97,24 @@ __all__ = [
     "InventorySpawnResult",
     "LocomotionClient",
     "LocomotionCmd",
+    "ManipulationClient",
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OpenWorld",
+    "RecordPage",
+    "RecordSort",
+    "RecordSortDirection",
+    "RecordSource",
     "ResetSummary",
     "SessionClient",
+    "SessionFilter",
+    "SessionPage",
     "SocketNotFoundError",
     "SpeakerClient",
+    "Thumbnail",
+    "WorldClient",
+    "WorldRecord",
+    "WorldSession",
     "__version__",
 ]

@@ -11,9 +11,11 @@ using ResoniteIO.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
+using ResoniteIO.Core.World;
 using ResoniteIO.Loading;
 using ResoniteIO.Logging;
 
@@ -52,6 +54,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineMicrophoneBridge? _microphoneBridge;
     private FrooxEngineSpeakerBridge? _speakerBridge;
     private FrooxEngineContextMenuBridge? _contextMenuBridge;
+    private FrooxEngineDashBridge? _dashBridge;
+    private FrooxEngineManipulationBridge? _manipulationBridge;
+    private FrooxEngineWorldBridge? _worldBridge;
     private FrooxEngineInventoryBridge? _inventoryBridge;
 
     /// <remarks>
@@ -113,6 +118,12 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _contextMenuBridge = new FrooxEngineContextMenuBridge(Engine.Current, _logSink);
 
+            _dashBridge = new FrooxEngineDashBridge(Engine.Current, _logSink);
+
+            _manipulationBridge = new FrooxEngineManipulationBridge(Engine.Current, _logSink);
+
+            _worldBridge = new FrooxEngineWorldBridge(Engine.Current, _logSink);
+
             _inventoryBridge = new FrooxEngineInventoryBridge(Engine.Current, _logSink);
 
             _sessionHost = SessionHost.Start(
@@ -125,6 +136,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _speakerBridge,
                 _microphoneBridge,
                 contextMenuBridge: _contextMenuBridge,
+                dashBridge: _dashBridge,
+                worldBridge: _worldBridge,
+                manipulationBridge: _manipulationBridge,
                 inventoryBridge: _inventoryBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
@@ -181,6 +195,17 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // ContextMenuBridge は engine 状態を保持せず IDisposable でもないため
         // (reflection MethodInfo は static cache)、参照 null 化のみで足りる。
         _contextMenuBridge = null;
+
+        // DashBridge も engine 状態を保持せず IDisposable でもないため、参照 null 化のみで足りる。
+        _dashBridge = null;
+
+        // ManipulationBridge も engine 状態を保持せず IDisposable でもないため参照 null 化のみ。
+        _manipulationBridge = null;
+
+        // WorldBridge も engine 状態を保持せず (manager 参照を読むだけ、event 購読
+        // 無し、dispatch は world.RunSynchronously の one-shot) IDisposable でもないため
+        // 参照 null 化のみで足りる。
+        _worldBridge = null;
 
         // InventoryBridge も streaming 状態 (Channel / Harmony / ExternalInput) を持たず
         // 各 RPC が one-shot で cloud REST / engine marshal するだけなので参照 null 化で足りる。
