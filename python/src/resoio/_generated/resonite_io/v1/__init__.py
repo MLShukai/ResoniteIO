@@ -28,9 +28,13 @@ __all__ = (
     "DashGetTreeRequest",
     "DashHighlightRequest",
     "DashInvokeRequest",
+    "DashListScreensRequest",
     "DashOpenRequest",
     "DashRect",
+    "DashScreen",
+    "DashScreenList",
     "DashScrollRequest",
+    "DashSetScreenRequest",
     "DashState",
     "DashStub",
     "DashTree",
@@ -508,6 +512,16 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class DashListScreensRequest(betterproto2.Message):
+    pass
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "DashListScreensRequest", DashListScreensRequest
+)
+
+
+@dataclass(eq=False, repr=False)
 class DashOpenRequest(betterproto2.Message):
     pass
 
@@ -540,6 +554,64 @@ default_message_pool.register_message("resonite_io.v1", "DashRect", DashRect)
 
 
 @dataclass(eq=False, repr=False)
+class DashScreen(betterproto2.Message):
+    """
+    dash 下部タブが切り替える 1 screen (`RadiantDashScreen`) のスナップショット。
+    `key` (LocaleStringDriver key、例 "Dash.Screens.Worlds") と `ref_id` が言語非依存キー。
+    """
+
+    ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+    """
+    screen slot の `ReferenceID.ToString()`。SetScreen の exact 指定キー。
+    """
+
+    key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    """
+    言語非依存の主キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
+    取得できない screen では空文字。
+    """
+
+    name: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
+    """
+    `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
+    """
+
+    label: "str" = betterproto2.field(4, betterproto2.TYPE_STRING)
+    """
+    `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
+    """
+
+    is_current: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    この screen が current screen か (`screen == dash.Dash.CurrentScreen.Target`)。
+    """
+
+    enabled: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
+    """
+    遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
+    """
+
+
+default_message_pool.register_message("resonite_io.v1", "DashScreen", DashScreen)
+
+
+@dataclass(eq=False, repr=False)
+class DashScreenList(betterproto2.Message):
+    """
+    `ListScreens` の戻り。dash の全 screen 一覧。
+    """
+
+    screens: "list[DashScreen]" = betterproto2.field(
+        1, betterproto2.TYPE_MESSAGE, repeated=True
+    )
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "DashScreenList", DashScreenList
+)
+
+
+@dataclass(eq=False, repr=False)
 class DashScrollRequest(betterproto2.Message):
     ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
 
@@ -550,6 +622,24 @@ class DashScrollRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "resonite_io.v1", "DashScrollRequest", DashScrollRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class DashSetScreenRequest(betterproto2.Message):
+    ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+    """
+    exact 指定キー (screen slot の ReferenceID)。非空なら優先。
+    """
+
+    key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    """
+    言語非依存キー (例 "Dash.Screens.Worlds")。ref_id が空なら使う。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "DashSetScreenRequest", DashSetScreenRequest
 )
 
 
@@ -1238,6 +1328,51 @@ class DashStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
+    async def list_screens(
+        self,
+        message: "DashListScreensRequest | None" = None,
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "DashScreenList":
+        """
+        dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+        """
+
+        if message is None:
+            message = DashListScreensRequest()
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Dash/ListScreens",
+            message,
+            DashScreenList,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def set_screen(
+        self,
+        message: "DashSetScreenRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "DashActionResult":
+        """
+        指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Dash/SetScreen",
+            message,
+            DashActionResult,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
 
 class DisplayStub(betterproto2_grpclib.ServiceStub):
     async def apply(
@@ -1608,6 +1743,20 @@ class DashBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def list_screens(self, message: "DashListScreensRequest") -> "DashScreenList":
+        """
+        dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def set_screen(self, message: "DashSetScreenRequest") -> "DashActionResult":
+        """
+        指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def __rpc_open(
         self, stream: "grpclib.server.Stream[DashOpenRequest, DashState]"
     ) -> None:
@@ -1664,6 +1813,22 @@ class DashBase(betterproto2_grpclib.ServiceBase):
         response = await self.scroll(request)
         await stream.send_message(response)
 
+    async def __rpc_list_screens(
+        self, stream: "grpclib.server.Stream[DashListScreensRequest, DashScreenList]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.list_screens(request)
+        await stream.send_message(response)
+
+    async def __rpc_set_screen(
+        self, stream: "grpclib.server.Stream[DashSetScreenRequest, DashActionResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.set_screen(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Dash/Open": grpclib.const.Handler(
@@ -1706,6 +1871,18 @@ class DashBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_scroll,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 DashScrollRequest,
+                DashActionResult,
+            ),
+            "/resonite_io.v1.Dash/ListScreens": grpclib.const.Handler(
+                self.__rpc_list_screens,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DashListScreensRequest,
+                DashScreenList,
+            ),
+            "/resonite_io.v1.Dash/SetScreen": grpclib.const.Handler(
+                self.__rpc_set_screen,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DashSetScreenRequest,
                 DashActionResult,
             ),
         }

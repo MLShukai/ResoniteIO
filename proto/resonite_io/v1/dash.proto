@@ -115,6 +115,38 @@ message DashScrollRequest {
   float delta_y = 3;
 }
 
+// dash 下部タブが切り替える 1 screen (`RadiantDashScreen`) のスナップショット。
+// `key` (LocaleStringDriver key、例 "Dash.Screens.Worlds") と `ref_id` が言語非依存キー。
+message DashScreen {
+  // screen slot の `ReferenceID.ToString()`。SetScreen の exact 指定キー。
+  string ref_id = 1;
+  // 言語非依存の主キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
+  // 取得できない screen では空文字。
+  string key = 2;
+  // `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
+  string name = 3;
+  // `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
+  string label = 4;
+  // この screen が current screen か (`screen == dash.Dash.CurrentScreen.Target`)。
+  bool is_current = 5;
+  // 遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
+  bool enabled = 6;
+}
+
+// `ListScreens` の戻り。dash の全 screen 一覧。
+message DashScreenList {
+  repeated DashScreen screens = 1;
+}
+
+message DashListScreensRequest {}
+
+message DashSetScreenRequest {
+  // exact 指定キー (screen slot の ReferenceID)。非空なら優先。
+  string ref_id = 1;
+  // 言語非依存キー (例 "Dash.Screens.Worlds")。ref_id が空なら使う。
+  string key = 2;
+}
+
 service Dash {
   // dash (userspace overlay) を開く。既に開いていれば no-op で現状態を返す。
   rpc Open(DashOpenRequest) returns (DashState);
@@ -130,4 +162,8 @@ service Dash {
   rpc Highlight(DashHighlightRequest) returns (DashActionResult);
   // 指定 ref_id の要素にスクロールを当てる。
   rpc Scroll(DashScrollRequest) returns (DashActionResult);
+  // dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+  rpc ListScreens(DashListScreensRequest) returns (DashScreenList);
+  // 指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
+  rpc SetScreen(DashSetScreenRequest) returns (DashActionResult);
 }
