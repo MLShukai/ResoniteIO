@@ -94,14 +94,20 @@ public interface IDashBridge
     );
 
     /// <summary><paramref name="refId"/> の要素のアクションを実行 (Button.SimulatePress 等) し、結果を返す。</summary>
+    /// <remarks>
+    /// <paramref name="refId"/> の解決失敗・型不一致は例外でなく <c>Found</c> / <c>Ok</c> = false で返す
+    /// (ContextMenu の index 版と違い、無効な ref_id は throw しない)。
+    /// </remarks>
     /// <exception cref="DashNotReadyException">dash / userspace world がまだ準備できていない。</exception>
     Task<DashActionResultSnapshot> InvokeAsync(string refId, CancellationToken ct);
 
     /// <summary><paramref name="refId"/> の要素をハイライト (hover) する。実行はしない。</summary>
+    /// <remarks><paramref name="refId"/> 未解決・hover 非対応は例外でなく <c>Found</c> / <c>Ok</c> = false で返す。</remarks>
     /// <exception cref="DashNotReadyException">dash / userspace world がまだ準備できていない。</exception>
     Task<DashActionResultSnapshot> HighlightAsync(string refId, CancellationToken ct);
 
     /// <summary><paramref name="refId"/> の要素に <paramref name="deltaX"/> / <paramref name="deltaY"/> のスクロールを当て、結果を返す。</summary>
+    /// <remarks><paramref name="refId"/> 未解決・scroll 非対応は例外でなく <c>Found</c> / <c>Ok</c> = false で返す。</remarks>
     /// <exception cref="DashNotReadyException">dash / userspace world がまだ準備できていない。</exception>
     Task<DashActionResultSnapshot> ScrollAsync(
         string refId,
