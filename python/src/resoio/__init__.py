@@ -13,6 +13,7 @@ from resoio.dash import (
     DashClient,
     DashElement,
     DashRect,
+    DashScreen,
     DashState,
     DashTree,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "DashClient",
     "DashElement",
     "DashRect",
+    "DashScreen",
     "DashState",
     "DashTree",
     "DisplayClient",

@@ -27,9 +27,13 @@ from resoio._generated.resonite_io.v1 import (
     DashGetTreeRequest,
     DashHighlightRequest,
     DashInvokeRequest,
+    DashListScreensRequest,
     DashOpenRequest,
     DashRect as _PbDashRect,
+    DashScreen as _PbDashScreen,
+    DashScreenList as _PbDashScreenList,
     DashScrollRequest,
+    DashSetScreenRequest,
     DashState as _PbDashState,
     DashStub,
     DashTree as _PbDashTree,
@@ -41,6 +45,7 @@ __all__ = [
     "DashClient",
     "DashElement",
     "DashRect",
+    "DashScreen",
     "DashState",
     "DashTree",
 ]
@@ -131,6 +136,27 @@ class DashActionResult:
     detail: str
 
 
+@dataclass(frozen=True, slots=True)
+class DashScreen:
+    """A single screen (tab) of the dash.
+
+    ``key`` (the ``LocaleStringDriver`` key driving the screen label, e.g.
+    ``Dash.Screens.Worlds``) and ``ref_id`` (the screen slot's engine
+    ``ReferenceID``) are the language-independent keys that
+    :meth:`DashClient.set_screen` addresses. ``name`` is the slot name and
+    ``label`` is the localised display text. ``is_current`` is ``True`` for
+    the screen currently shown; ``enabled`` reports whether the screen is
+    navigable (e.g. ``Contacts`` is ``False`` while logged out).
+    """
+
+    ref_id: str
+    key: str
+    name: str
+    label: str
+    is_current: bool
+    enabled: bool
+
+
 def _rect_from_proto(pb: _PbDashRect | None) -> DashRect:
     if pb is None:
         return DashRect(
@@ -185,6 +211,17 @@ def _result_from_proto(pb: _PbDashActionResult) -> DashActionResult:
         found=pb.found,
         ref_id=pb.ref_id,
         detail=pb.detail,
+    )
+
+
+def _screen_from_proto(pb: _PbDashScreen) -> DashScreen:
+    return DashScreen(
+        ref_id=pb.ref_id,
+        key=pb.key,
+        name=pb.name,
+        label=pb.label,
+        is_current=pb.is_current,
+        enabled=pb.enabled,
     )
 
 
@@ -329,4 +366,38 @@ class DashClient:
         request = DashScrollRequest(ref_id=ref_id, delta_x=delta_x, delta_y=delta_y)
         return _result_from_proto(
             await self._dispatch(lambda stub: stub.scroll(request))
+        )
+
+    async def list_screens(self) -> list[DashScreen]:
+        """Enumerate the dash screens (tabs) as a list of :class:`DashScreen`.
+
+        Each screen carries the language-independent ``key`` and ``ref_id``
+        that :meth:`set_screen` addresses. Screens can be enumerated even
+        while the dash is closed.
+
+        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
+        """
+        request = DashListScreensRequest()
+        screen_list: _PbDashScreenList = await self._dispatch(
+            lambda stub: stub.list_screens(request)
+        )
+        return [_screen_from_proto(screen) for screen in screen_list.screens]
+
+    async def set_screen(self, ref_id: str = "", key: str = "") -> DashActionResult:
+        """Navigate to a dash screen identified by ``ref_id`` or ``key``.
+
+        ``ref_id`` takes precedence: when non-empty it selects the screen by
+        its exact engine ``ReferenceID``; otherwise the screen is matched by
+        its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``). The
+        resulting ``ref_id`` echoes the current screen after navigating.
+        Passing neither raises :class:`ValueError` before any network round
+        trip.
+
+        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
+        """
+        if not ref_id and not key:
+            raise ValueError("set_screen requires ref_id or key")
+        request = DashSetScreenRequest(ref_id=ref_id, key=key)
+        return _result_from_proto(
+            await self._dispatch(lambda stub: stub.set_screen(request))
         )

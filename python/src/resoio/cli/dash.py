@@ -7,6 +7,10 @@ project convention):
 * ``tree`` — list the current dash UI tree; each element carries a
   language-independent ``ref_id`` (engine RefID) and ``locale_key``
 * ``invoke <ref_id>`` — press the element identified by ``ref_id``
+* ``screens`` — list the dash screens (tabs); each carries a
+  language-independent ``key`` and ``ref_id`` (browse)
+* ``set-screen <key>`` / ``set-screen --ref-id <ref_id>`` — navigate to a
+  screen by its language-independent ``key`` or exact ``ref_id`` (select)
 
 ``--interactable-only`` filters ``tree`` to interactable elements and
 ``--root-ref-id`` scopes it to a subtree. The shared ``-s/--socket`` flag
@@ -22,7 +26,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from resoio.dash import DashActionResult, DashState, DashTree
+    from resoio.dash import DashActionResult, DashScreen, DashState, DashTree
 
 
 def register(
@@ -36,24 +40,34 @@ def register(
     parser = subparsers.add_parser(
         "dash",
         parents=[common],
-        help="Drive the Esc dash menu (open/close/state/tree/invoke).",
+        help="Drive the Esc dash menu (open/close/state/tree/invoke/screens).",
         description=(
             "Drive the Resonite IO Dash service from the shell. Pick an "
-            "action (open / close / state / tree / invoke); invoke requires "
-            "a language-independent ref_id obtained from 'tree'. The "
-            "resulting state / tree / action result is printed."
+            "action (open / close / state / tree / invoke / screens / "
+            "set-screen); invoke requires a language-independent ref_id from "
+            "'tree', and set-screen requires a screen key from 'screens' (or "
+            "--ref-id). The resulting state / tree / screen list / action "
+            "result is printed."
         ),
     )
     parser.add_argument(
         "action",
-        choices=["open", "close", "state", "tree", "invoke"],
+        choices=["open", "close", "state", "tree", "invoke", "screens", "set-screen"],
         help="The dash action to perform.",
     )
     parser.add_argument(
-        "ref_id",
+        "target",
         nargs="?",
         default=None,
-        help="Target element ref_id for 'invoke' (from 'tree').",
+        help=(
+            "For 'invoke': target ref_id (from 'tree'). For 'set-screen': "
+            "screen key (from 'screens')."
+        ),
+    )
+    parser.add_argument(
+        "--ref-id",
+        default="",
+        help="For 'set-screen': select the screen by its exact ref_id.",
     )
     parser.add_argument(
         "--interactable-only",
@@ -91,6 +105,14 @@ def _format_result(result: DashActionResult) -> str:
     )
 
 
+def _format_screens(screens: list[DashScreen]) -> str:
+    return "\n".join(
+        f"[{s.ref_id}] {s.key} {s.name} is_current={s.is_current} "
+        f"enabled={s.enabled} label={s.label!r}"
+        for s in screens
+    )
+
+
 async def _run(args: argparse.Namespace) -> int:
     """Dispatch on ``args.action`` and print the resulting
     state/tree/result."""
@@ -98,8 +120,14 @@ async def _run(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     action: str = args.action
-    if action == "invoke" and args.ref_id is None:
+    if action == "invoke" and args.target is None:
         print("error: 'invoke' requires a ref_id", file=sys.stderr)
+        return 2
+
+    set_screen_ref_id: str = args.ref_id
+    set_screen_key: str = args.target or ""
+    if action == "set-screen" and not set_screen_ref_id and not set_screen_key:
+        print("error: 'set-screen' requires a key or --ref-id", file=sys.stderr)
         return 2
 
     async with DashClient(args.socket) as client:
@@ -115,6 +143,13 @@ async def _run(args: argparse.Namespace) -> int:
                 root_ref_id=args.root_ref_id,
             )
             print(_format_tree(tree))
+        elif action == "screens":
+            print(_format_screens(await client.list_screens()))
+        elif action == "set-screen":
+            result = await client.set_screen(
+                ref_id=set_screen_ref_id, key=set_screen_key
+            )
+            print(_format_result(result))
         else:
-            print(_format_result(await client.invoke(args.ref_id)))
+            print(_format_result(await client.invoke(args.target)))
     return 0
