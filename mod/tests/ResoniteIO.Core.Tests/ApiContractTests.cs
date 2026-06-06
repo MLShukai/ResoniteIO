@@ -74,6 +74,8 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Dash.DashElementSnapshot",
             "ResoniteIO.Core.Dash.DashNotReadyException",
             "ResoniteIO.Core.Dash.DashRectSnapshot",
+            "ResoniteIO.Core.Dash.DashScreenListSnapshot",
+            "ResoniteIO.Core.Dash.DashScreenSnapshot",
             "ResoniteIO.Core.Dash.DashService",
             "ResoniteIO.Core.Dash.DashStateSnapshot",
             "ResoniteIO.Core.Dash.DashTreeSnapshot",
@@ -157,10 +159,14 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.DashGetTreeRequest",
             "ResoniteIO.V1.DashHighlightRequest",
             "ResoniteIO.V1.DashInvokeRequest",
+            "ResoniteIO.V1.DashListScreensRequest",
             "ResoniteIO.V1.DashOpenRequest",
             "ResoniteIO.V1.DashRect",
             "ResoniteIO.V1.DashReflection",
+            "ResoniteIO.V1.DashScreen",
+            "ResoniteIO.V1.DashScreenList",
             "ResoniteIO.V1.DashScrollRequest",
+            "ResoniteIO.V1.DashSetScreenRequest",
             "ResoniteIO.V1.DashState",
             "ResoniteIO.V1.DashTree",
             "ResoniteIO.V1.Display",
@@ -363,7 +369,9 @@ public sealed class ApiContractTests
             (
                 "ScrollAsync",
                 new[] { typeof(string), typeof(float), typeof(float), typeof(CancellationToken) }
-            )
+            ),
+            ("ListScreensAsync", new[] { typeof(CancellationToken) }),
+            ("SetScreenAsync", new[] { typeof(string), typeof(string), typeof(CancellationToken) })
         );
     }
 

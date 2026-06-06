@@ -372,4 +372,241 @@ public sealed class DashServiceTests
         );
         Assert.Equal(StatusCode.Internal, ex.StatusCode);
     }
+
+    // ----- ListScreens: snapshot の full round-trip -----
+
+    [Fact]
+    public async Task ListScreens_round_trips_all_screen_fields_and_preserves_order()
+    {
+        // 2 screen (全 6 フィールドが互いに異なる値、bool は両極) を入れ、全フィールドの
+        // round-trip と列挙順序の保存を検証する (GetTree の element round-trip と同形)。
+        var screen0 = new DashScreenSnapshot(
+            RefId: "screen-ref-0",
+            Key: "Dash.Screens.Worlds",
+            Name: "Worlds",
+            Label: "Worlds",
+            IsCurrent: true,
+            Enabled: true
+        );
+        var screen1 = new DashScreenSnapshot(
+            RefId: "screen-ref-1",
+            Key: "Dash.Screens.Contacts",
+            Name: "Contacts",
+            Label: "Contacts",
+            IsCurrent: false,
+            Enabled: false
+        );
+        var bridge = new DashBridgeFake
+        {
+            NextScreenList = new DashScreenListSnapshot(new[] { screen0, screen1 }),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var list = await client.ListScreensAsync(new DashListScreensRequest());
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("ListScreens", call.Method);
+        Assert.Equal(2, list.Screens.Count);
+        AssertScreenRoundTrips(screen0, list.Screens[0]);
+        AssertScreenRoundTrips(screen1, list.Screens[1]);
+    }
+
+    [Fact]
+    public async Task ListScreens_with_empty_list_round_trips_to_no_screens()
+    {
+        // 空 screen リスト (理論上のエッジ) はエラーにせず空 repeated として round-trip する。
+        var bridge = new DashBridgeFake
+        {
+            NextScreenList = new DashScreenListSnapshot(Array.Empty<DashScreenSnapshot>()),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var list = await client.ListScreensAsync(new DashListScreensRequest());
+
+        Assert.Equal("ListScreens", Assert.Single(bridge.Calls).Method);
+        Assert.Empty(list.Screens);
+    }
+
+    private static void AssertScreenRoundTrips(DashScreenSnapshot expected, DashScreen actual)
+    {
+        Assert.Equal(expected.RefId, actual.RefId);
+        Assert.Equal(expected.Key, actual.Key);
+        Assert.Equal(expected.Name, actual.Name);
+        Assert.Equal(expected.Label, actual.Label);
+        Assert.Equal(expected.IsCurrent, actual.IsCurrent);
+        Assert.Equal(expected.Enabled, actual.Enabled);
+    }
+
+    // ----- SetScreen: request 引数の forward -----
+
+    [Fact]
+    public async Task SetScreen_forwards_ref_id_to_bridge_and_round_trips_action_result()
+    {
+        // ref_id 非空のとき bridge に ref_id (と key) がそのまま届く。
+        var bridge = new DashBridgeFake
+        {
+            NextResult = new DashActionResultSnapshot(
+                Ok: true,
+                Found: true,
+                RefId: "screen-ref-5",
+                Detail: ""
+            ),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var result = await client.SetScreenAsync(
+            new DashSetScreenRequest { RefId = "screen-ref-5", Key = "" }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("SetScreen", call.Method);
+        Assert.Equal("screen-ref-5", call.RefId);
+        Assert.Equal("", call.Key);
+        AssertActionResultRoundTrips(bridge.NextResult, result);
+    }
+
+    [Fact]
+    public async Task SetScreen_forwards_key_to_bridge_and_round_trips_action_result()
+    {
+        // key だけ指定 (ref_id 空) のとき bridge に key がそのまま届く。
+        var bridge = new DashBridgeFake
+        {
+            NextResult = new DashActionResultSnapshot(
+                Ok: true,
+                Found: true,
+                RefId: "screen-ref-after",
+                Detail: ""
+            ),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var result = await client.SetScreenAsync(
+            new DashSetScreenRequest { RefId = "", Key = "Dash.Screens.Settings" }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("SetScreen", call.Method);
+        Assert.Equal("", call.RefId);
+        Assert.Equal("Dash.Screens.Settings", call.Key);
+        AssertActionResultRoundTrips(bridge.NextResult, result);
+    }
+
+    [Fact]
+    public async Task SetScreen_round_trips_disabled_screen_detail()
+    {
+        // disabled screen への遷移は ok=true + detail="screen disabled" で返る (§5.2.4 / D2)。
+        // Service は bridge の戻りをそのまま round-trip する (disabled 判定は bridge の責務)。
+        var bridge = new DashBridgeFake
+        {
+            NextResult = new DashActionResultSnapshot(
+                Ok: true,
+                Found: true,
+                RefId: "screen-ref-disabled",
+                Detail: "screen disabled"
+            ),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var result = await client.SetScreenAsync(
+            new DashSetScreenRequest { Key = "Dash.Screens.Contacts" }
+        );
+
+        Assert.True(result.Ok);
+        Assert.True(result.Found);
+        Assert.Equal("screen-ref-disabled", result.RefId);
+        Assert.Equal("screen disabled", result.Detail);
+    }
+
+    // ----- SetScreen: 両空検査 (§4.4 / D1) -----
+
+    [Fact]
+    public async Task SetScreen_with_both_ref_id_and_key_empty_returns_InvalidArgument()
+    {
+        // ref_id / key 両空は Service 層で弾かれ、bridge を呼ばずに InvalidArgument を返す
+        // (§4.4: 未指定はクライアントの引数ミス。`ArgumentException → InvalidArgument`)。
+        var bridge = new DashBridgeFake();
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.SetScreenAsync(new DashSetScreenRequest { RefId = "", Key = "" })
+        );
+
+        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        // 両空は bridge へ到達しない (Service 層で短絡される)。
+        Assert.Empty(bridge.Calls);
+    }
+
+    // ----- ListScreens / SetScreen: 例外翻訳が新 RPC でも成立すること -----
+
+    [Fact]
+    public async Task ListScreens_without_bridge_returns_Unavailable()
+    {
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: null);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.ListScreensAsync(new DashListScreensRequest())
+        );
+        Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetScreen_without_bridge_returns_Unavailable()
+    {
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: null);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.SetScreenAsync(new DashSetScreenRequest { Key = "Dash.Screens.Home" })
+        );
+        Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListScreens_translates_DashNotReadyException_to_FailedPrecondition()
+    {
+        var bridge = new DashBridgeFake
+        {
+            ThrowOnNextCall = new DashNotReadyException("dash not ready"),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.ListScreensAsync(new DashListScreensRequest())
+        );
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetScreen_translates_DashNotReadyException_to_FailedPrecondition()
+    {
+        var bridge = new DashBridgeFake
+        {
+            ThrowOnNextCall = new DashNotReadyException("dash not ready"),
+        };
+        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Dash.DashClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.SetScreenAsync(new DashSetScreenRequest { Key = "Dash.Screens.Home" })
+        );
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
 }

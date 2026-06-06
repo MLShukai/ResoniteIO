@@ -19,16 +19,17 @@ internal sealed class DashBridgeFake : IDashBridge
 {
     /// <summary>fake が記録した 1 回の RPC 呼び出し。引数は呼び出した RPC によって
     /// 意味を持つものだけ非 <c>null</c> になる (例: <paramref name="RefId"/> は
-    /// Invoke / Highlight / Scroll、<paramref name="InteractableOnly"/> /
+    /// Invoke / Highlight / Scroll / SetScreen、<paramref name="InteractableOnly"/> /
     /// <paramref name="RootRefId"/> は GetTree、<paramref name="DeltaX"/> /
-    /// <paramref name="DeltaY"/> は Scroll のみ)。</summary>
+    /// <paramref name="DeltaY"/> は Scroll、<paramref name="Key"/> は SetScreen のみ)。</summary>
     public sealed record Call(
         string Method,
         string? RefId,
         bool? InteractableOnly,
         string? RootRefId,
         float? DeltaX,
-        float? DeltaY
+        float? DeltaY,
+        string? Key = null
     );
 
     private readonly List<Call> _calls = new();
@@ -41,9 +42,13 @@ internal sealed class DashBridgeFake : IDashBridge
     public DashTreeSnapshot NextTree { get; set; } =
         new(Elements: Array.Empty<DashElementSnapshot>(), ScreenWidth: 0, ScreenHeight: 0);
 
-    /// <summary>Invoke / Highlight / Scroll が返す snapshot。</summary>
+    /// <summary>Invoke / Highlight / Scroll / SetScreen が返す snapshot。</summary>
     public DashActionResultSnapshot NextResult { get; set; } =
         new(Ok: false, Found: false, RefId: "", Detail: "");
+
+    /// <summary>ListScreens が返す snapshot。</summary>
+    public DashScreenListSnapshot NextScreenList { get; set; } =
+        new(Screens: Array.Empty<DashScreenSnapshot>());
 
     /// <summary>非 null のとき全 RPC でこの例外を投げる (例外翻訳テスト用)。</summary>
     public Exception? ThrowOnNextCall { get; set; }
@@ -98,6 +103,43 @@ internal sealed class DashBridgeFake : IDashBridge
         float deltaY,
         CancellationToken ct
     ) => RecordResult("Scroll", refId, deltaX, deltaY, ct);
+
+    public Task<DashScreenListSnapshot> ListScreensAsync(CancellationToken ct)
+    {
+        Record(
+            new Call(
+                Method: "ListScreens",
+                RefId: null,
+                InteractableOnly: null,
+                RootRefId: null,
+                DeltaX: null,
+                DeltaY: null
+            ),
+            ct
+        );
+        return Task.FromResult(NextScreenList);
+    }
+
+    public Task<DashActionResultSnapshot> SetScreenAsync(
+        string refId,
+        string key,
+        CancellationToken ct
+    )
+    {
+        Record(
+            new Call(
+                Method: "SetScreen",
+                RefId: refId,
+                InteractableOnly: null,
+                RootRefId: null,
+                DeltaX: null,
+                DeltaY: null,
+                Key: key
+            ),
+            ct
+        );
+        return Task.FromResult(NextResult);
+    }
 
     private Task<DashStateSnapshot> RecordState(string method, CancellationToken ct)
     {
