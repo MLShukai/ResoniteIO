@@ -35,6 +35,15 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
+      # gen_proto.sh shells out to a system `protoc` (the betterproto2 dev dep
+      # only ships the plugin). Pin to the dev container's protoc version
+      # (.devcontainer/Dockerfile PROTOC_VERSION) so regenerated output matches.
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
       - name: Sync Python dependencies
         working-directory: python
         run: uv sync
