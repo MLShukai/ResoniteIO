@@ -5,15 +5,14 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Final, Self
+from typing import Final, override
 
 import numpy as np
 from grpclib.client import Channel
 from numpy.typing import NDArray
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import SpeakerStreamRequest, SpeakerStub
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "CHANNELS",
@@ -50,7 +49,7 @@ class AudioChunk:
     frame_id: int
 
 
-class SpeakerClient:
+class SpeakerClient(_BaseClient[SpeakerStub]):
     """Async client for the Resonite IO ``Speaker`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
@@ -60,38 +59,12 @@ class SpeakerClient:
     (:data:`SAMPLE_RATE`, :data:`CHANNELS`, :data:`DTYPE`).
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: SpeakerStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "Speaker"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening Speaker channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = SpeakerStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
+    @override
+    def _make_stub(self, channel: Channel) -> SpeakerStub:
+        return SpeakerStub(channel)
 
     async def stream(self) -> AsyncIterator[AudioChunk]:
         """Stream the Resonite final audio mix from the server.
@@ -99,11 +72,7 @@ class SpeakerClient:
         Yields one :class:`AudioChunk` per server-emitted ``AudioFrame``.
         Raises :class:`RuntimeError` if called outside ``async with``.
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "SpeakerClient is not connected. Use `async with SpeakerClient(): ...`."
-            )
+        stub = self._require_stub()
         request = SpeakerStreamRequest()
         async for raw in stub.stream_audio(request):
             samples = np.frombuffer(raw.samples, dtype=np.float32).reshape(-1, CHANNELS)

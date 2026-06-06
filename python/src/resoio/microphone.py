@@ -14,19 +14,18 @@ import logging
 import time
 from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
-from types import TracebackType
-from typing import Final, Self
+from typing import Final, override
 
 import numpy as np
 from grpclib.client import Channel
 from numpy.typing import NDArray
 
+from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     MicrophoneAudioFrame,
     MicrophoneStreamSummary as _WireSummary,
     MicrophoneStub,
 )
-from resoio._socket import resolve_socket_path
 
 __all__ = [
     "CHANNELS",
@@ -80,7 +79,7 @@ class MicrophoneStreamSummary:
     unix_nanos: int
 
 
-class MicrophoneClient:
+class MicrophoneClient(_BaseClient[MicrophoneStub]):
     """Async client for the Resonite IO ``Microphone`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
@@ -88,38 +87,12 @@ class MicrophoneClient:
     float32 LE (:data:`SAMPLE_RATE`, :data:`CHANNELS`, :data:`DTYPE`).
     """
 
-    def __init__(self, socket_path: str | None = None) -> None:
-        self._explicit_path: str | None = socket_path
-        self._channel: Channel | None = None
-        self._stub: MicrophoneStub | None = None
-        self._resolved_path: str | None = None
+    _logger = _logger
+    _log_label = "Microphone"
 
-    @property
-    def socket_path(self) -> str | None:
-        """Resolved UDS path, or ``None`` before ``__aenter__``."""
-        return self._resolved_path
-
-    async def __aenter__(self) -> Self:
-        path = self._explicit_path or resolve_socket_path()
-        _logger.debug("Opening Microphone channel on UDS path: %s", path)
-        channel = Channel(path=path)
-        self._channel = channel
-        self._stub = MicrophoneStub(channel)
-        self._resolved_path = path
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        channel = self._channel
-        self._channel = None
-        self._stub = None
-        self._resolved_path = None
-        if channel is not None:
-            channel.close()
+    @override
+    def _make_stub(self, channel: Channel) -> MicrophoneStub:
+        return MicrophoneStub(channel)
 
     async def stream(
         self, chunks: AsyncIterable[MicrophoneAudioChunk]
@@ -131,12 +104,7 @@ class MicrophoneClient:
         serialises whatever buffer it gets). Raises :class:`RuntimeError`
         if called outside ``async with``.
         """
-        stub = self._stub
-        if stub is None:
-            raise RuntimeError(
-                "MicrophoneClient is not connected. "
-                "Use `async with MicrophoneClient(): ...`."
-            )
+        stub = self._require_stub()
 
         async def _wire() -> AsyncIterator[MicrophoneAudioFrame]:
             async for chunk in chunks:
