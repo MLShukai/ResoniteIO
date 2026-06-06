@@ -146,6 +146,12 @@ def _register_records(
     )
     parser.add_argument("--owner", default="", help="Owner id for group / own.")
     parser.add_argument(
+        "--search",
+        default="",
+        help='Free-text query (+term required, -term excluded, "phrase"; '
+        "matches name/description/tags).",
+    )
+    parser.add_argument(
         "--offset", type=int, default=0, help="Server-side paging offset."
     )
     parser.add_argument(
@@ -467,6 +473,7 @@ async def _run_records(args: argparse.Namespace) -> int:
             source=source,
             required_tags=tuple(args.tags) if args.tags else (),
             owner_id=args.owner,
+            search=args.search,
             offset=args.offset,
             count=args.count,
             sort=sort,

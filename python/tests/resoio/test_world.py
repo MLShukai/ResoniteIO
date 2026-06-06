@@ -412,6 +412,38 @@ class TestListRecords:
 
         assert fake.records_requests[0].source == WireRecordSource.FEATURED
 
+    async def test_request_carries_search_query_verbatim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        fake = _FakeWorld()
+        server, _ = await _serve(tmp_path, monkeypatch, fake)
+        try:
+            async with WorldClient() as client:
+                await client.list_records(search="puzzle +red")
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert len(fake.records_requests) == 1
+        # The free-text World-tab query must travel to the proto ``search``
+        # field unchanged (including the ``+term`` operator syntax).
+        assert fake.records_requests[0].search == "puzzle +red"
+
+    async def test_request_defaults_search_to_empty_string(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        fake = _FakeWorld()
+        server, _ = await _serve(tmp_path, monkeypatch, fake)
+        try:
+            async with WorldClient() as client:
+                # No search arg: an empty query means "no search" on the wire.
+                await client.list_records()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert fake.records_requests[0].search == ""
+
     async def test_raises_when_not_connected(self):
         client = WorldClient()
         with pytest.raises(RuntimeError, match="not connected"):

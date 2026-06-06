@@ -145,6 +145,23 @@ def test_records_collects_source_tags_and_sort_flags():
     assert args.asc is True
 
 
+def test_records_search_collects_free_text_query():
+    """``records --search`` carries the free-text World-tab query verbatim,
+    including the ``+required`` / ``-excluded`` operators (no client-side re-
+    parsing)."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records", "--search", "hub +game -nsfw"])
+    assert args.search == "hub +game -nsfw"
+
+
+def test_records_search_defaults_to_empty_string():
+    """Without ``--search`` the records query is the empty string (= no free-
+    text filter), mirroring ``WorldClient.list_records(search="")``."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "records"])
+    assert args.search == ""
+
+
 def test_records_asc_defaults_to_descending():
     """Without ``--asc`` the sort direction is descending (the documented
     default); the flag is a plain store_true switch."""
@@ -587,6 +604,30 @@ async def test_records_dispatch_maps_source_tags_and_sort(
     assert req.sort == RecordSort.NAME
     # --asc flips direction to ascending; default would be descending.
     assert req.sort_direction == RecordSortDirection.ASCENDING
+
+
+async def test_records_dispatch_maps_search_into_list_records_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``records --search avatar`` forwards the free-text query onto the wire
+    as ``ListRecordsRequest.search`` (the mod-side refine applies it)."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "records", "--search", "avatar"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert len(fake.list_records_requests) == 1
+    assert fake.list_records_requests[0].search == "avatar"
 
 
 async def test_records_sort_random_dispatch_uses_random_sort(

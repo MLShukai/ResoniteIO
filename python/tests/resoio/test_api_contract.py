@@ -256,3 +256,56 @@ def test_fetch_thumbnail_returns_thumbnail():
     object."""
     sig = inspect.signature(resoio.WorldClient.fetch_thumbnail)
     assert sig.return_annotation == "Thumbnail"
+
+
+# ---------------------------------------------------------------------------
+# WorldClient.list_records signature
+#
+# Pins the keyword-only public surface a downstream caller writes against
+# (``client.list_records(search=..., source=..., ...)``). Contract pin, not a
+# behaviour test — the request->wire round-trip lives in test_world.py. An
+# intentional signature change updates this snapshot in the same commit.
+# ---------------------------------------------------------------------------
+
+
+# {param_name: (annotation, default)} for every keyword-only param, in
+# declaration order. ``self`` is excluded; all params are keyword-only.
+_EXPECTED_LIST_RECORDS_PARAMS: dict[str, tuple[str, object]] = {
+    "source": ("RecordSource", resoio.RecordSource.PUBLIC),
+    "required_tags": ("Sequence[str]", ()),
+    "owner_id": ("str", ""),
+    "search": ("str", ""),
+    "offset": ("int", 0),
+    "count": ("int", 0),
+    "sort": ("RecordSort", resoio.RecordSort.CREATION_DATE),
+    "sort_direction": ("RecordSortDirection", resoio.RecordSortDirection.DESCENDING),
+}
+
+
+def test_list_records_is_a_coroutine_returning_record_page():
+    """Pin ``WorldClient.list_records`` as an async method returning the public
+    ``RecordPage`` value object."""
+    assert inspect.iscoroutinefunction(resoio.WorldClient.list_records)
+    sig = inspect.signature(resoio.WorldClient.list_records)
+    assert sig.return_annotation == "RecordPage"
+
+
+def test_list_records_params_are_all_keyword_only_in_declared_order():
+    """Pin that every public param (besides ``self``) is keyword-only, in the
+    documented declaration order — positional calls are not promised."""
+    sig = inspect.signature(resoio.WorldClient.list_records)
+    params = [p for name, p in sig.parameters.items() if name != "self"]
+    assert [p.name for p in params] == list(_EXPECTED_LIST_RECORDS_PARAMS)
+    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params)
+
+
+def test_list_records_param_annotations_and_defaults_match_snapshot():
+    """Pin each public param's annotation and default value, including the
+    ``search: str = ""`` free-text query keyword."""
+    sig = inspect.signature(resoio.WorldClient.list_records)
+    actual = {
+        name: (param.annotation, param.default)
+        for name, param in sig.parameters.items()
+        if name != "self"
+    }
+    assert actual == _EXPECTED_LIST_RECORDS_PARAMS

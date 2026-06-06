@@ -289,6 +289,7 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "count": 5,
         "sort": 6,
         "sort_direction": 7,
+        "search": 8,
     },
     ListRecordsResponse: {
         "records": 1,

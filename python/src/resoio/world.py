@@ -337,17 +337,23 @@ class WorldClient:
         source: RecordSource = RecordSource.PUBLIC,
         required_tags: Sequence[str] = (),
         owner_id: str = "",
+        search: str = "",
         offset: int = 0,
         count: int = 0,
         sort: RecordSort = RecordSort.CREATION_DATE,
         sort_direction: RecordSortDirection = RecordSortDirection.DESCENDING,
     ) -> RecordPage:
-        """List world records (use ``sort=RANDOM`` for the random tab)."""
+        """List world records (use ``sort=RANDOM`` for the random tab).
+
+        ``search`` is a free-text query mirroring the World tab (``+term``
+        required / ``-term`` excluded / ``"phrase"``; empty = no search).
+        """
         stub = self._require_stub()
         request = ListRecordsRequest(
             source=_RECORD_SOURCE_TO_WIRE[source],
             required_tags=list(required_tags),
             owner_id=owner_id,
+            search=search,
             offset=offset,
             count=count,
             sort=_RECORD_SORT_TO_WIRE[sort],

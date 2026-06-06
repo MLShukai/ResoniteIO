@@ -308,6 +308,44 @@ class TestWorld:
                     f"has_more={random_page.has_more}",
                 )
 
+                # 6b. free-text search must refine the public record set: every
+                #     returned record must mention the search term (case
+                #     insensitive) in its name OR description OR one of its
+                #     tags. Content varies per account/cloud, so an empty result
+                #     is a tolerated no-match (recorded, not failed) — but any
+                #     row that comes back must genuinely match the query.
+                _SEARCH_TERM = "hub"
+                search_page = await world.list_records(
+                    source=RecordSource.PUBLIC, search=_SEARCH_TERM, count=10
+                )
+                names_preview = ", ".join(repr(r.name) for r in search_page.records[:5])
+                record(
+                    "12b_records_search",
+                    f"query={_SEARCH_TERM!r} returned={len(search_page.records)} "
+                    f"has_more={search_page.has_more}\n"
+                    f"  first names: {names_preview or '<none>'}",
+                )
+                if not search_page.records:
+                    record(
+                        "12b_records_search",
+                        f"no public record matched {_SEARCH_TERM!r} for this "
+                        "account/cloud; refine assertion skipped (no rows to "
+                        "check).",
+                    )
+                else:
+                    needle = _SEARCH_TERM.lower()
+                    for rec in search_page.records:
+                        haystack = " ".join(
+                            [rec.name, rec.description, *rec.tags]
+                        ).lower()
+                        assert needle in haystack, (
+                            f"search {_SEARCH_TERM!r} returned record "
+                            f"{rec.record_id!r} ({rec.name!r}) whose "
+                            "name/description/tags do not contain the term: "
+                            f"name={rec.name!r} description={rec.description!r} "
+                            f"tags={list(rec.tags)!r}"
+                        )
+
                 # 7. fetch a real thumbnail image and write it out as this
                 #    step's visual artifact. Prefer resdb:/// record thumbnails
                 #    (content-addressed, stable on assets.resonite.com) over
