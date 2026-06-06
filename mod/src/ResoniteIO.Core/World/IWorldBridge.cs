@@ -182,7 +182,10 @@ public interface IWorldBridge
     /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
     Task<OpenWorldSnapshot?> GetCurrentAsync(CancellationToken ct);
 
-    /// <summary>指定 URI のサムネイル画像を取得し、バイト列と content-type を返す。</summary>
+    /// <summary>
+    /// <c>resdb:///</c> または <c>https://</c> のサムネイル URI を fetch 可能な URL に解決し、
+    /// 画像のバイト列と content-type を返す (resdb 解決と HTTP 取得は Mod 実装が行う)。
+    /// </summary>
     /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
     /// <exception cref="WorldNotFoundException">URI が解決できない / 画像が存在しない。</exception>
     Task<ThumbnailBytesSnapshot> FetchThumbnailAsync(string uri, CancellationToken ct);

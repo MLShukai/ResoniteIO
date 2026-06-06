@@ -259,8 +259,8 @@ public sealed class WorldService : V1.World.WorldBase
 
         return new V1.FetchThumbnailResponse
         {
-            Data = ByteString.CopyFrom(snapshot.Data ?? Array.Empty<byte>()),
-            ContentType = snapshot.ContentType ?? "",
+            Data = ByteString.CopyFrom(snapshot.Data),
+            ContentType = snapshot.ContentType,
         };
     }
 

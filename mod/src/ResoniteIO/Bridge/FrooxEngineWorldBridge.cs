@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -415,26 +416,14 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     /// Content-Type ヘッダが無い場合に uri 拡張子から MIME を推測する。未知の拡張子は
     /// 空文字を返す (Client 側で扱う)。
     /// </summary>
-    private static string InferContentType(Uri uri)
-    {
-        var path = uri.AbsolutePath;
-        if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+    private static string InferContentType(Uri uri) =>
+        Path.GetExtension(uri.AbsolutePath).ToLowerInvariant() switch
         {
-            return "image/webp";
-        }
-        if (path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-        {
-            return "image/png";
-        }
-        if (
-            path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return "image/jpeg";
-        }
-        return "";
-    }
+            ".webp" => "image/webp",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            _ => "",
+        };
 
     /// <summary>
     /// session を filter 条件に照合する。Friends は host が相互フォロー contact、または

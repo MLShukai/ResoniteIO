@@ -334,10 +334,30 @@ def _cap_rows(
     return rows[:limit]
 
 
+def _print_listing(
+    headers: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    wide_cells: list[str],
+    *,
+    wide: bool,
+    limit: int,
+    show_all: bool,
+) -> None:
+    """Render a session / record listing, optionally appending the
+    ``thumbnail_url`` column, and capping rows with a truncation footer.
+
+    ``rows`` are the compact cells per row; ``wide_cells`` are the matching
+    ``thumbnail_url`` values appended only when ``wide`` is set.
+    """
+    if wide:
+        headers += (_THUMBNAIL_HEADER,)
+        rows = [row + (cell,) for row, cell in zip(rows, wide_cells)]
+    _print_table(headers, _cap_rows(rows, limit, show_all))
+
+
 def _print_sessions(
     sessions: tuple[WorldSession, ...], *, wide: bool, limit: int, show_all: bool
 ) -> None:
-    headers = _SESSION_HEADERS + ((_THUMBNAIL_HEADER,) if wide else ())
     rows = [
         (
             s.name,
@@ -345,28 +365,31 @@ def _print_sessions(
             f"{s.active_users}/{s.maximum_users}",
             s.access_level,
             s.session_id,
-            *((s.thumbnail_url,) if wide else ()),
         )
         for s in sessions
     ]
-    _print_table(headers, _cap_rows(rows, limit, show_all))
+    wide_cells = [s.thumbnail_url for s in sessions]
+    _print_listing(
+        _SESSION_HEADERS, rows, wide_cells, wide=wide, limit=limit, show_all=show_all
+    )
 
 
 def _print_records(
     records: tuple[WorldRecord, ...], *, wide: bool, limit: int, show_all: bool
 ) -> None:
-    headers = _RECORD_HEADERS + ((_THUMBNAIL_HEADER,) if wide else ())
     rows = [
         (
             r.name,
             r.owner_id,
             ",".join(r.tags),
             r.record_id,
-            *((r.thumbnail_url,) if wide else ()),
         )
         for r in records
     ]
-    _print_table(headers, _cap_rows(rows, limit, show_all))
+    wide_cells = [r.thumbnail_url for r in records]
+    _print_listing(
+        _RECORD_HEADERS, rows, wide_cells, wide=wide, limit=limit, show_all=show_all
+    )
 
 
 def _print_open_worlds(worlds: list[OpenWorld]) -> None:
