@@ -1,5 +1,5 @@
 ---
-name: feedback-docstring-author-includes-cleanup
+name: docstring-author-includes-cleanup
 description: docstring-author を呼ぶときは新規 docstring 追加だけでなく既存の冗長コメント cleanup も依頼するのが既定。
 metadata:
   type: feedback

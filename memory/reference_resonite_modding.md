@@ -1,7 +1,8 @@
 ---
-name: Resonite modding wiki 抜粋
+name: resonite-modding-wiki
 description: modding.resonite.net (公式 wiki) から抽出した Resonite mod 開発の前提知識・URL・コード雛形のリファレンス。
-type: reference
+metadata:
+  type: reference
 ---
 
 公式 wiki [modding.resonite.net](https://modding.resonite.net/) を 2026-05-13 時点で巡回して抽出。

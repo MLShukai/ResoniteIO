@@ -1,8 +1,8 @@
 ---
-name: feedback_manipulation_grabber
+name: manipulation-grabber
 description: Manipulation modality の engine 経路 — Grabber API での Grab/Release、hand-pose 注入が不可な理由、unary RPC 採用、home に grabbable が無い e2e 制約。
 metadata:
-  type: project
+  type: feedback
 ---
 
 # Manipulation modality (Grabber) の engine 経路と設計判断

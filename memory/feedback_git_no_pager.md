@@ -1,5 +1,5 @@
 ---
-name: feedback-git-no-pager
+name: git-no-pager
 description: git コマンド呼び出し時に --no-pager フラグを付けない。非インタラクティブ Bash では既定で pager を使わないため冗長。
 metadata:
   type: feedback

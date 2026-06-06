@@ -2,7 +2,7 @@
 name: resonite-bundled-dlls
 description: Resonite (Renderite.Host) が同梱する Microsoft.AspNetCore.* / Microsoft.Extensions.* / SignalR の DLL 一覧と version。mod 側で新規 transitive 依存を追加した際の同梱 / 除外判断基準。
 metadata:
-  type: reference
+  type: feedback
 ---
 
 Resonite は .NET 10 ランタイムで動作するが、`Resonite_Data/Managed/` (実体は

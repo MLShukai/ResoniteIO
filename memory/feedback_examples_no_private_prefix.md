@@ -1,5 +1,5 @@
 ---
-name: feedback-examples-no-private-prefix
+name: examples-no-private-prefix
 description: python/examples/ 配下のサンプルコードでは module-level の定数や helper 関数に `_` private prefix を付けない (library ではないため)
 metadata:
   type: feedback
