@@ -12,3 +12,5 @@
 - [uv tool install resoio version skew](feedback_uv_tool_install_resoio.md) — `uv tool install --editable` は uv.lock を無視し、betterproto2 0.10 を compiler 0.9 stub に当てて ImportError
 - [asyncio add_reader テストの key pacing](feedback_asyncio_add_reader_test_pacing.md) — os.pipe stdin + add_reader 駆動 CLI の round-trip テストは keystroke を `asyncio.sleep` で pace する
 - [PyAV mp4 video dims before audio mux](feedback_pyav_mp4_video_dims_before_audio_mux.md) — muxed mp4 (H.264+AAC) では audio pump が video pump の width/height 設定を待つ必要がある
+- [World modality (Python)](project_world_modality_python.md) — world.py/cli shape + wire/public enum offset-mapping gotcha
+- [SkyFrost cloud bridge refs](project_skyfrost_cloud_bridge_refs.md) — cloud/record を触る Mod Bridge は SkyFrost.Base / SkyFrost.Base.Models / FrooxEngine.Store を csproj に明示参照
