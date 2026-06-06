@@ -4,6 +4,7 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
+using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
@@ -80,6 +81,13 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Locomotion.LocomotionResetFlags",
             "ResoniteIO.Core.Locomotion.LocomotionService",
             "ResoniteIO.Core.Logging.ILogSink",
+            "ResoniteIO.Core.Manipulation.GrabOutcome",
+            "ResoniteIO.Core.Manipulation.GrabSnapshot",
+            "ResoniteIO.Core.Manipulation.IManipulationBridge",
+            "ResoniteIO.Core.Manipulation.ManipulationHandSelector",
+            "ResoniteIO.Core.Manipulation.ManipulationNotReadyException",
+            "ResoniteIO.Core.Manipulation.ManipulationPoint",
+            "ResoniteIO.Core.Manipulation.ManipulationService",
             "ResoniteIO.Core.Microphone.IMicrophoneBridge",
             "ResoniteIO.Core.Microphone.MicrophoneDisconnectReason",
             "ResoniteIO.Core.Microphone.MicrophoneFrame",
@@ -187,6 +195,15 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.LocomotionReflection",
             "ResoniteIO.V1.LocomotionResetRequest",
             "ResoniteIO.V1.LocomotionResetSummary",
+            "ResoniteIO.V1.Manipulation",
+            "ResoniteIO.V1.Manipulation+ManipulationBase",
+            "ResoniteIO.V1.ManipulationGetStateRequest",
+            "ResoniteIO.V1.ManipulationGrabRequest",
+            "ResoniteIO.V1.ManipulationGrabResult",
+            "ResoniteIO.V1.ManipulationGrabState",
+            "ResoniteIO.V1.ManipulationHand",
+            "ResoniteIO.V1.ManipulationReflection",
+            "ResoniteIO.V1.ManipulationReleaseRequest",
             "ResoniteIO.V1.Microphone",
             "ResoniteIO.V1.Microphone+MicrophoneBase",
             "ResoniteIO.V1.MicrophoneAudioFrame",
@@ -210,6 +227,7 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.StartWorldResponse",
             "ResoniteIO.V1.World",
             "ResoniteIO.V1.World+WorldBase",
+            "ResoniteIO.V1.WorldPoint",
             "ResoniteIO.V1.WorldRecord",
             "ResoniteIO.V1.WorldReflection",
             "ResoniteIO.V1.WorldSession",
@@ -297,6 +315,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(MicrophoneNotReadyException))]
     [InlineData(typeof(DisplayNotReadyException))]
     [InlineData(typeof(ContextMenuNotReadyException))]
+    [InlineData(typeof(ManipulationNotReadyException))]
     [InlineData(typeof(WorldNotReadyException))]
     [InlineData(typeof(WorldNotFoundException))]
     [Trait("Category", "ApiContract")]
@@ -433,6 +452,30 @@ public sealed class ApiContractTests
                 "InvokeAsync",
                 new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
             )
+        );
+    }
+
+    /// <summary>
+    /// <see cref="IManipulationBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IManipulationBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IManipulationBridge),
+            (
+                "GrabAsync",
+                new[]
+                {
+                    typeof(ManipulationHandSelector),
+                    typeof(ManipulationPoint?),
+                    typeof(float),
+                    typeof(CancellationToken),
+                }
+            ),
+            ("ReleaseAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) }),
+            ("GetStateAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) })
         );
     }
 
