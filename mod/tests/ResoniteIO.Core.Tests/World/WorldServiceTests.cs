@@ -526,6 +526,83 @@ public sealed class WorldServiceTests
     }
 
     // ===================================================================
+    //  FetchThumbnail — uri → bytes + content_type / validation
+    // ===================================================================
+
+    [Fact]
+    public async Task FetchThumbnail_forwards_uri_to_bridge_and_round_trips_bytes_and_content_type()
+    {
+        var bridge = new FakeWorldBridge
+        {
+            NextThumbnail = new ThumbnailBytesSnapshot(new byte[] { 1, 2, 3, 4 }, "image/webp"),
+        };
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        var response = await client.FetchThumbnailAsync(
+            new FetchThumbnailRequest { Uri = "resdb:///abc.webp" }
+        );
+
+        Assert.Equal("resdb:///abc.webp", bridge.LastFetchUri);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, response.Data.ToByteArray());
+        Assert.Equal("image/webp", response.ContentType);
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_empty_uri_returns_InvalidArgument_without_invoking_bridge()
+    {
+        // Service は dispatch 前に uri を validate する契約。bridge は呼ばれない。
+        var bridge = new FakeWorldBridge();
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(new FetchThumbnailRequest { Uri = "" })
+        );
+
+        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        Assert.Null(bridge.LastFetchUri);
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_whitespace_uri_returns_InvalidArgument_without_invoking_bridge()
+    {
+        var bridge = new FakeWorldBridge();
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(new FetchThumbnailRequest { Uri = "   " })
+        );
+
+        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        Assert.Null(bridge.LastFetchUri);
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_translates_WorldNotFoundException_to_NotFound()
+    {
+        var bridge = new FakeWorldBridge
+        {
+            ThrowOnNextCall = new WorldNotFoundException("no thumbnail for resdb:///gone.webp"),
+        };
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(
+                new FetchThumbnailRequest { Uri = "resdb:///gone.webp" }
+            )
+        );
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    // ===================================================================
     //  bridge-null → Unavailable (全 RPC)
     // ===================================================================
 
@@ -584,6 +661,17 @@ public sealed class WorldServiceTests
     {
         await AssertUnavailableAsync(client =>
             client.GetCurrentAsync(new GetCurrentRequest()).ResponseAsync
+        );
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_without_bridge_returns_Unavailable()
+    {
+        // uri は valid (非空) にしておき、bridge 未注入のみが原因で Unavailable になることを保証。
+        await AssertUnavailableAsync(client =>
+            client
+                .FetchThumbnailAsync(new FetchThumbnailRequest { Uri = "resdb:///x.webp" })
+                .ResponseAsync
         );
     }
 

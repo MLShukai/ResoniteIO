@@ -33,6 +33,7 @@ internal sealed class FakeWorldBridge : IWorldBridge
     public StartWorldTarget? LastStartWorldTarget { get; private set; }
     public int? LastFocusHandle { get; private set; }
     public int? LastLeaveHandle { get; private set; }
+    public string? LastFetchUri { get; private set; }
     public bool ListOpenWorldsCalled { get; private set; }
     public bool GetCurrentCalled { get; private set; }
 
@@ -52,6 +53,9 @@ internal sealed class FakeWorldBridge : IWorldBridge
 
     /// <summary>GetCurrent の戻り値。null なら "現在 focus 中のワールドなし" を表す。</summary>
     public OpenWorldSnapshot? NextCurrent { get; set; }
+
+    /// <summary>FetchThumbnail が返す解決済みサムネ bytes + content-type。</summary>
+    public ThumbnailBytesSnapshot NextThumbnail { get; set; } = new(Array.Empty<byte>(), "");
 
     /// <summary>非 null のとき全 RPC でこの例外を投げる (例外翻訳テスト用)。</summary>
     public Exception? ThrowOnNextCall { get; set; }
@@ -145,6 +149,17 @@ internal sealed class FakeWorldBridge : IWorldBridge
         }
         ThrowIfConfigured();
         return Task.FromResult(NextCurrent);
+    }
+
+    public Task<ThumbnailBytesSnapshot> FetchThumbnailAsync(string uri, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            LastFetchUri = uri;
+        }
+        ThrowIfConfigured();
+        return Task.FromResult(NextThumbnail);
     }
 
     private void ThrowIfConfigured()

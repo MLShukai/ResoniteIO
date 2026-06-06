@@ -105,6 +105,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.World.SessionFilter",
             "ResoniteIO.Core.World.SessionListQuery",
             "ResoniteIO.Core.World.StartWorldTarget",
+            "ResoniteIO.Core.World.ThumbnailBytesSnapshot",
             "ResoniteIO.Core.World.WorldNotFoundException",
             "ResoniteIO.Core.World.WorldNotReadyException",
             "ResoniteIO.Core.World.WorldRecordSnapshot",
@@ -163,6 +164,8 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.DisplayGetRequest",
             "ResoniteIO.V1.DisplayReflection",
             "ResoniteIO.V1.DisplayState",
+            "ResoniteIO.V1.FetchThumbnailRequest",
+            "ResoniteIO.V1.FetchThumbnailResponse",
             "ResoniteIO.V1.FocusRequest",
             "ResoniteIO.V1.FocusResponse",
             "ResoniteIO.V1.GetCurrentRequest",
@@ -213,6 +216,45 @@ public sealed class ApiContractTests
         };
 
         Assert.Equal(expected, actual);
+    }
+
+    /// <summary>
+    /// <c>FetchThumbnail</c> RPC が <c>World</c> service descriptor に存在することを固定する。
+    /// RPC のリネーム / 削除を wire 契約破壊として検出する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void World_Service_DeclaresFetchThumbnailRpc()
+    {
+        var methodNames = ResoniteIO
+            .V1.WorldReflection.Descriptor.Services.Single(s => s.Name == "World")
+            .Methods.Select(m => m.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Contains("FetchThumbnail", methodNames);
+    }
+
+    /// <summary>
+    /// <c>FetchThumbnailRequest</c> / <c>FetchThumbnailResponse</c> の proto field 番号を
+    /// 固定する。wire 互換を Hyrum's law mitigation の観点で明示 pin する
+    /// (番号変更は Python 側 betterproto2 デコードを静かに壊す)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void FetchThumbnailMessages_FieldNumbers_MatchSnapshot()
+    {
+        var requestFields = ResoniteIO
+            .V1.FetchThumbnailRequest.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(new[] { "1:uri" }, requestFields);
+
+        var responseFields = ResoniteIO
+            .V1.FetchThumbnailResponse.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(new[] { "1:data", "2:content_type" }, responseFields);
     }
 
     /// <summary>
@@ -381,7 +423,8 @@ public sealed class ApiContractTests
             ("ListOpenWorldsAsync", new[] { typeof(CancellationToken) }),
             ("FocusAsync", new[] { typeof(int), typeof(CancellationToken) }),
             ("LeaveAsync", new[] { typeof(int), typeof(CancellationToken) }),
-            ("GetCurrentAsync", new[] { typeof(CancellationToken) })
+            ("GetCurrentAsync", new[] { typeof(CancellationToken) }),
+            ("FetchThumbnailAsync", new[] { typeof(string), typeof(CancellationToken) })
         );
     }
 

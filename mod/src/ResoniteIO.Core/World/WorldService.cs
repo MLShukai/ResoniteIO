@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
 
@@ -231,6 +232,36 @@ public sealed class WorldService : V1.World.WorldBase
             response.World = ToProto(world);
         }
         return response;
+    }
+
+    /// <summary>
+    /// 指定 URI のサムネイル画像を bridge 経由で取得する。uri が空なら bridge を呼ばず
+    /// <c>InvalidArgument</c> を返す。
+    /// </summary>
+    public override async Task<V1.FetchThumbnailResponse> FetchThumbnail(
+        V1.FetchThumbnailRequest request,
+        ServerCallContext context
+    )
+    {
+        if (string.IsNullOrWhiteSpace(request.Uri))
+        {
+            throw new RpcException(
+                new Status(StatusCode.InvalidArgument, "uri must not be empty.")
+            );
+        }
+
+        var snapshot = await CallBridgeAsync(
+                "FetchThumbnail",
+                context,
+                (bridge, ct) => bridge.FetchThumbnailAsync(request.Uri, ct)
+            )
+            .ConfigureAwait(false);
+
+        return new V1.FetchThumbnailResponse
+        {
+            Data = ByteString.CopyFrom(snapshot.Data ?? Array.Empty<byte>()),
+            ContentType = snapshot.ContentType ?? "",
+        };
     }
 
     /// <summary>

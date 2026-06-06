@@ -47,6 +47,9 @@ public sealed record OpenWorldSnapshot
     public string AccessLevel { get; init; } = "";
 }
 
+/// <summary>サムネイル画像のバイト列 snapshot (proto <c>FetchThumbnailResponse</c> から独立した Core POCO)。</summary>
+public sealed record ThumbnailBytesSnapshot(byte[] Data, string ContentType);
+
 /// <summary><see cref="IWorldBridge.ListRecordsAsync"/> のサーバ側ページング結果。</summary>
 public sealed record RecordPage
 {
@@ -178,6 +181,11 @@ public interface IWorldBridge
     /// <summary>現在 focus 中のワールド snapshot。focus 中のワールドが無ければ null。</summary>
     /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
     Task<OpenWorldSnapshot?> GetCurrentAsync(CancellationToken ct);
+
+    /// <summary>指定 URI のサムネイル画像を取得し、バイト列と content-type を返す。</summary>
+    /// <exception cref="WorldNotReadyException">cloud / engine がまだ準備できていない。</exception>
+    /// <exception cref="WorldNotFoundException">URI が解決できない / 画像が存在しない。</exception>
+    Task<ThumbnailBytesSnapshot> FetchThumbnailAsync(string uri, CancellationToken ct);
 }
 
 /// <summary>
