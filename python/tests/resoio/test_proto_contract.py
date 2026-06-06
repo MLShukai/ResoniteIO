@@ -67,6 +67,12 @@ from resoio._generated.resonite_io.v1 import (
     LocomotionDriveSummary,
     LocomotionResetRequest,
     LocomotionResetSummary,
+    ManipulationGetStateRequest,
+    ManipulationGrabRequest,
+    ManipulationGrabResult,
+    ManipulationGrabState,
+    ManipulationHand,
+    ManipulationReleaseRequest,
     MicrophoneAudioFrame,
     MicrophoneStreamSummary,
     OpenWorld,
@@ -79,6 +85,7 @@ from resoio._generated.resonite_io.v1 import (
     SpeakerStreamRequest,
     StartWorldRequest,
     StartWorldResponse,
+    WorldPoint,
     WorldRecord,
     WorldSession,
 )
@@ -220,6 +227,33 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     ContextMenuInvokeRequest: {
         "hand": 1,
         "index": 2,
+    },
+    # Manipulation
+    WorldPoint: {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+    },
+    ManipulationGrabRequest: {
+        "hand": 1,
+        "point": 2,
+        "radius": 3,
+    },
+    ManipulationReleaseRequest: {
+        "hand": 1,
+    },
+    ManipulationGetStateRequest: {
+        "hand": 1,
+    },
+    ManipulationGrabState: {
+        "hand": 1,
+        "is_holding": 2,
+        "object_names": 3,
+        "unix_nanos": 4,
+    },
+    ManipulationGrabResult: {
+        "grabbed": 1,
+        "state": 2,
     },
     # Session
     PingRequest: {
@@ -364,6 +398,12 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "RGBA8": 1,
     },
     ContextMenuHand: {
+        "UNSPECIFIED": 0,
+        "PRIMARY": 1,
+        "LEFT": 2,
+        "RIGHT": 3,
+    },
+    ManipulationHand: {
         "UNSPECIFIED": 0,
         "PRIMARY": 1,
         "LEFT": 2,

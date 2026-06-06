@@ -15,6 +15,7 @@ from resoio.locomotion import (
     LocomotionCmd,
     ResetSummary,
 )
+from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from resoio.microphone import (
     MicrophoneAudioChunk,
     MicrophoneClient,
@@ -62,8 +63,11 @@ __all__ = [
     "DisplayInfo",
     "DriveSummary",
     "Frame",
+    "GrabResult",
+    "GrabState",
     "LocomotionClient",
     "LocomotionCmd",
+    "ManipulationClient",
     "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
