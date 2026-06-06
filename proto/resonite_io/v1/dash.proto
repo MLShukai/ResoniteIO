@@ -1,0 +1,133 @@
+// Dash service: Resonite の Esc キーで開く userspace overlay メニュー (dash /
+// RadiantDash) を engine 経由で取得・操作する modality。AI エージェントから
+// 「dash を開く / 閉じる」「開いている dash UI ツリーを列挙する」「要素を
+// ハイライト / 実行 / スクロールする」を行う。
+//
+// dash は ContextMenu の radial メニュー (`InteractionHandler`) とは別系統で、
+// `Userspace.UserspaceWorld` 配下に globally-registered された
+// `UserspaceRadiantDash` を `.Open` (bool) で開閉する。
+//
+// 要素の指定は **言語非依存の `ref_id`** (engine の `Slot.ReferenceID` を文字列化
+// したもの) を主キーにする。dash UI は言語ごとに localize されるため、表示
+// テキスト (`label`) ではなく `ref_id` と (取得できれば) `locale_key` で要素を
+// 一意特定し、Invoke / Highlight / Scroll はその `ref_id` で engine 側の要素を
+// `ReferenceController.GetObjectOrNull` 解決して操作する。
+//
+// 状態変化系 (Invoke / Highlight / Scroll) は軽量な `DashActionResult` を返し、
+// UI ツリー全体は `GetTree` で明示的に取り直す (Invoke 後に UI が総入れ替えに
+// なり得るため毎回 tree を返すのは過剰)。engine への dispatch は同期マーシャル
+// (`RunSynchronously` + `TaskCompletionSource`)。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// dash (userspace overlay) の開閉状態スナップショット。
+message DashState {
+  // dash が開いているか (`UserspaceRadiantDash.Open`)。
+  bool is_open = 1;
+  // 開閉アニメーションの lerp [0.0, 1.0] (`UserspaceRadiantDash.OpenLerp`)。
+  float open_lerp = 2;
+}
+
+// UI 要素の矩形。origin = 画面左上 (0,0)、x 右・y 下。
+// is_screen_space=false の場合は canvas 空間座標 (screen pixel 逆投影が未確定な
+// ときのフォールバック)。client は is_screen_space で解釈を切り替える。
+message DashRect {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
+  bool is_screen_space = 5;
+}
+
+// dash UI ツリーの 1 ノード。`ref_id` / `locale_key` が言語非依存の主キー。
+message DashElement {
+  // `Slot.ReferenceID.ToString()`。Invoke / Highlight / Scroll はこの ref_id で解決する。
+  string ref_id = 1;
+  // component 型名 ("Button" / "ScrollRect" / "Text" / "Image" 等)。
+  string type = 2;
+  // `Slot.Name` (author 設定。空のことがある)。
+  string slot_name = 3;
+  // `LocaleString.content` (isLocaleKey のときのみ。例 "Settings.Audio")。言語非依存。
+  // 生文字列ラベル (localize 済み) しか無い要素では空。
+  string locale_key = 4;
+  // 表示テキスト (`Button.LabelText` 等。localize 済み。debug / 人間向け)。
+  string label = 5;
+  // 有効か (`Slot.IsActive` かつ component active)。
+  bool enabled = 6;
+  // 操作可能か (`IUIInteractable` かつ enabled)。
+  bool interactable = 7;
+  // 要素の矩形。
+  DashRect rect = 8;
+  // 親要素の ref_id (ツリー連結用。root は空)。
+  string parent_ref_id = 9;
+  // ツリー深さ (root = 0)。
+  int32 depth = 10;
+}
+
+// dash UI ツリーのスナップショット。
+message DashTree {
+  // 列挙された要素 (深さ優先順)。dash が閉じているときは空。
+  repeated DashElement elements = 1;
+  // ポインタ座標空間 = 現在の window 解像度 (pixel)。grounding 用。
+  int32 screen_width = 2;
+  int32 screen_height = 3;
+}
+
+// 状態変化系操作の結果。
+message DashActionResult {
+  // 操作が適用できたか。
+  bool ok = 1;
+  // 指定 ref_id の要素が解決できたか (false なら ok も false)。
+  bool found = 2;
+  // 操作対象として解決した ref_id (echo back)。
+  string ref_id = 3;
+  // 補足 (lock / 非 interactable / 未解決などの理由)。
+  string detail = 4;
+}
+
+message DashOpenRequest {}
+
+message DashCloseRequest {}
+
+message DashGetStateRequest {}
+
+message DashGetTreeRequest {
+  // true なら interactable な要素のみ返す。
+  bool interactable_only = 1;
+  // 部分木の root に使う ref_id。空なら dash 全体。
+  string root_ref_id = 2;
+}
+
+message DashInvokeRequest {
+  string ref_id = 1;
+}
+
+message DashHighlightRequest {
+  string ref_id = 1;
+}
+
+message DashScrollRequest {
+  string ref_id = 1;
+  float delta_x = 2;
+  float delta_y = 3;
+}
+
+service Dash {
+  // dash (userspace overlay) を開く。既に開いていれば no-op で現状態を返す。
+  rpc Open(DashOpenRequest) returns (DashState);
+  // dash を閉じる。
+  rpc Close(DashCloseRequest) returns (DashState);
+  // 現在の dash 開閉状態を取得する。
+  rpc GetState(DashGetStateRequest) returns (DashState);
+  // 現在開いている dash UI ツリーを列挙する。
+  rpc GetTree(DashGetTreeRequest) returns (DashTree);
+  // 指定 ref_id の要素のアクションを実行する (Button.SimulatePress 等)。
+  rpc Invoke(DashInvokeRequest) returns (DashActionResult);
+  // 指定 ref_id の要素をハイライト (hover) する。実行はしない。
+  rpc Highlight(DashHighlightRequest) returns (DashActionResult);
+  // 指定 ref_id の要素にスクロールを当てる。
+  rpc Scroll(DashScrollRequest) returns (DashActionResult);
+}
