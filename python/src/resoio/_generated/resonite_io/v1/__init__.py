@@ -26,6 +26,8 @@ __all__ = (
     "DisplayGetRequest",
     "DisplayState",
     "DisplayStub",
+    "FetchThumbnailRequest",
+    "FetchThumbnailResponse",
     "FocusRequest",
     "FocusResponse",
     "GetCurrentRequest",
@@ -572,6 +574,35 @@ class DisplayState(betterproto2.Message):
 
 
 default_message_pool.register_message("resonite_io.v1", "DisplayState", DisplayState)
+
+
+@dataclass(eq=False, repr=False)
+class FetchThumbnailRequest(betterproto2.Message):
+    uri: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+    """
+    resdb:/// または https:// 形式のサムネ URI
+    (WorldSession.thumbnail_url / WorldRecord.thumbnail_url の値)。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "FetchThumbnailRequest", FetchThumbnailRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class FetchThumbnailResponse(betterproto2.Message):
+    data: "bytes" = betterproto2.field(1, betterproto2.TYPE_BYTES)
+
+    content_type: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    """
+    MIME (例 "image/webp")。判定不能なら空。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "FetchThumbnailResponse", FetchThumbnailResponse
+)
 
 
 @dataclass(eq=False, repr=False)
@@ -1704,6 +1735,27 @@ class WorldStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
+    async def fetch_thumbnail(
+        self,
+        message: "FetchThumbnailRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "FetchThumbnailResponse":
+        """
+        サムネ URI (resdb:/// / https://) を解決して画像バイトを返す。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.World/FetchThumbnail",
+            message,
+            FetchThumbnailResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
 
 class CameraBase(betterproto2_grpclib.ServiceBase):
     async def stream_frames(
@@ -2110,6 +2162,15 @@ class WorldBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def fetch_thumbnail(
+        self, message: "FetchThumbnailRequest"
+    ) -> "FetchThumbnailResponse":
+        """
+        サムネ URI (resdb:/// / https://) を解決して画像バイトを返す。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def __rpc_list_sessions(
         self, stream: "grpclib.server.Stream[ListSessionsRequest, ListSessionsResponse]"
     ) -> None:
@@ -2175,6 +2236,15 @@ class WorldBase(betterproto2_grpclib.ServiceBase):
         response = await self.get_current(request)
         await stream.send_message(response)
 
+    async def __rpc_fetch_thumbnail(
+        self,
+        stream: "grpclib.server.Stream[FetchThumbnailRequest, FetchThumbnailResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.fetch_thumbnail(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.World/ListSessions": grpclib.const.Handler(
@@ -2224,5 +2294,11 @@ class WorldBase(betterproto2_grpclib.ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 GetCurrentRequest,
                 GetCurrentResponse,
+            ),
+            "/resonite_io.v1.World/FetchThumbnail": grpclib.const.Handler(
+                self.__rpc_fetch_thumbnail,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                FetchThumbnailRequest,
+                FetchThumbnailResponse,
             ),
         }

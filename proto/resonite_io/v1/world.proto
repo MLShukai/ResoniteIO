@@ -199,6 +199,18 @@ message GetCurrentResponse {
   bool has_world = 2;
 }
 
+message FetchThumbnailRequest {
+  // resdb:/// または https:// 形式のサムネ URI
+  // (WorldSession.thumbnail_url / WorldRecord.thumbnail_url の値)。
+  string uri = 1;
+}
+
+message FetchThumbnailResponse {
+  bytes data = 1;
+  // MIME (例 "image/webp")。判定不能なら空。
+  string content_type = 2;
+}
+
 service World {
   // ライブセッション一覧。filter / 検索 / ページングは mod・Service 側で適用。
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
@@ -216,4 +228,6 @@ service World {
   rpc Leave(LeaveRequest) returns (LeaveResponse);
   // 現在 focus 中のワールド。
   rpc GetCurrent(GetCurrentRequest) returns (GetCurrentResponse);
+  // サムネ URI (resdb:/// / https://) を解決して画像バイトを返す。
+  rpc FetchThumbnail(FetchThumbnailRequest) returns (FetchThumbnailResponse);
 }
