@@ -215,3 +215,6 @@ gale/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# agent memory runtime mirror (canonical tracked copy lives under memory/agents/)
+.claude/agent-memory/
