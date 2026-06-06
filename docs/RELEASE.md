@@ -32,7 +32,7 @@ ______________________________________________________________________
 | `pre-commit.yml`  | Format & Lint (`pre-commit` を GitHub Actions 内で実行)                      | PR / push            |
 | `test.yml`        | Python テスト matrix (3.12 / 3.13 / 3.14、`ubuntu-latest`)                   | PR / push            |
 | `type-check.yml`  | `pyright` strict 型チェック                                                  | PR / push            |
-| `dotnet.yml`      | C# Core + Mod テスト (net472 Renderer は CI から除外)                        | PR / push            |
+| `dotnet.yml`      | C# `Core.Tests` のみ (Mod / net472 Renderer は CI から除外)                  | PR / push            |
 | `proto-check.yml` | `just gen-proto` を回して diff が出ないことを確認 (生成物のコミット漏れ検出) | PR / push            |
 | `publish.yml`     | リリース (4 ジョブ直列)。下記 §3 参照                                        | `push: tags: ["v*"]` |
 
@@ -41,8 +41,11 @@ ______________________________________________________________________
 - **pre-commit は pre-commit.ci ではなく GitHub Actions 内で実行する**。system hook
   (`dotnet csharpier` / `shellcheck` / `shfmt` / `uvx ruff`) に依存しており、pre-commit.ci の
   サンドボックスでは解決できないため。
-- **net472 Renderer は CI から除外**。Renderer 側は proprietary な Unity/Renderite 依存を要求し
-  ヘッドレス CI で復元できない。ただし **共有 IPC 契約 (proto / Core Service) と engine 側ロジックは CI でテストされる**。
+- **C# CI は `ResoniteIO.Core.Tests` のみ** (Resonite 非依存の Core、`FrameHeader` IPC 契約を含む)。
+  **Mod (`ResoniteIO` / `ResoniteIO.Tests`) は clean CI でビルド不可なので除外**する。proprietary DLL 依存のため:
+  net472 Renderer は Unity/Renderite、engine bridge は `InterprocessLib.FrooxEngine.dll` (Nytra-InterprocessLib
+  Gale mod、Camera v2 receiver が使う) を要求し、`Resonite.GameLibs` fallback はこれを供給しない。Mod とそのテストは
+  local `just run` (Gale profile 前提) + manual/e2e で検証する。
 
 ______________________________________________________________________
 

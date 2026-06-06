@@ -1,6 +1,6 @@
 ---
 name: release-pipeline
-description: ResoniteIO のリリースパイプライン (tag-driven dual publish) の非自明な前提。正規 version = csproj、CHANGELOG = release notes、net472 除外、Thunderstore namespace mlshukai。
+description: ResoniteIO のリリースパイプライン (tag-driven dual publish) の非自明な前提。正規 version = csproj、CHANGELOG = release notes、C# CI は Core.Tests のみ (Mod/Renderer 除外)、Thunderstore namespace mlshukai。
 metadata:
   type: feedback
 ---
@@ -18,8 +18,12 @@ metadata:
   Thunderstore zip の versionNumber は `Directory.Build.targets` の `PackTS` が `--package-version $(Version)` で渡す。
 - **リリースノートのソースは `mod/CHANGELOG.md`** (Keep a Changelog 形式)。`github-release` ジョブが
   `## [X.Y.Z]` セクションを抽出して GitHub Release 本文にする。tag が `(a|b|rc)[0-9]+$` なら `--prerelease`。
-- **net472 Renderer は CI から除外** (`dotnet.yml`)。proprietary な Unity/Renderite 依存で headless CI が復元不可。
-  ただし **共有 IPC 契約 (proto / Core Service) と engine 側ロジックは CI でテストされる** (除外は Renderer のみ)。
+- **C# CI (`dotnet.yml`) は `ResoniteIO.Core.Tests` のみ** (Resonite 非依存の Core、`FrameHeader` IPC 契約を含む)。
+  **Mod (`ResoniteIO` / `ResoniteIO.Tests`) は clean CI でビルド不可なので除外**する。proprietary DLL 依存のため:
+  (1) net472 Renderer は Unity/Renderite、(2) engine bridge は `InterprocessLib.FrooxEngine.dll` (Nytra-InterprocessLib
+  Gale mod、Camera v2 receiver が使う)。`Resonite.GameLibs` NuGet fallback は FrooxEngine/Elements/SkyFrost 等の engine 型は
+  供給するが **InterprocessLib は供給しない** ため Mod が compile に失敗する。よって Mod とそのテスト (engine 側
+  InterprocessLib receiver 含む) は **local `just run` (Gale profile 前提) + manual/e2e** で検証する。
 - **pre-commit は pre-commit.ci ではなく GitHub Actions 内で実行する** (`pre-commit.yml`)。system hook
   (`dotnet csharpier` / `shellcheck` / `shfmt` / `uvx ruff`) に依存し、pre-commit.ci のサンドボックスでは解決できないため。
 - **Thunderstore namespace = `mlshukai`** (MLShukai チーム)。`publish-thunderstore` は secret `TCLI_AUTH_TOKEN` で `tcli publish`。
