@@ -26,3 +26,12 @@ consistency — the difference is a correct adaptation, not a DRY/altitude
 defect. Also note: proto message fields declared `optional=True` (e.g.
 `DashElement.rect` is `DashRect | None`) require a real None-guard in the
 `_from_proto` helper; that branch is type-safety, not dead code.
+
+**Intermediate-var annotation is redundant.** When a public method must bind the
+`_dispatch[T]` result to a local before decoding (e.g. `list_screens` needs
+`.screens` off `DashScreenList` before the comprehension), do NOT annotate that
+local with the `_Pb*` type — `_dispatch[T]` already infers it from the lambda
+(`reveal_type` -> `DashScreenList`). Such an annotation is noise that diverges
+from every sibling method (which decode inline, unannotated) and leaves the
+`_Pb*ScreenList` import an orphan. Dropping it + the import is a safe, pinned-
+test-green cleanup.
