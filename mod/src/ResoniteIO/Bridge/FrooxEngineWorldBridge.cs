@@ -179,10 +179,14 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     }
 
     /// <summary>
-    /// 自由文検索パス。<see cref="SearchQueryParser"/> で検索フレーズを optional / required /
-    /// excluded 語に分解し、Resonite 自身のページング wrapper (<see cref="RecordSearch{R}"/>) で
-    /// 候補を fetch しつつ、engine UI と同じ substring セマンティクス
-    /// (<c>MergedWorldData.MatchesSearchParameters</c>) で再フィルタする。
+    /// 自由文検索パス (<see cref="ListRecordsAsync"/> の <c>query.Search</c> が非空のときのみ。
+    /// 空の場合の <c>FindRecords</c> パスはこれを通らず従来どおり)。
+    /// <see cref="SearchQueryParser"/> で検索フレーズを optional / required / excluded 語に分解し
+    /// (タグ語 <c>+term</c>=必須 / <c>-term</c>=除外 / <c>"phrase"</c>=フレーズ / 無印=任意)、
+    /// Resonite 自身のページング wrapper (engine UI と同じ <see cref="RecordSearch{R}"/>) で候補を
+    /// fetch しつつ、engine UI が使う <c>MergedWorldData.MatchesSearchParameters</c> と同じ
+    /// substring セマンティクスを Name / Description / Tags 上で再現して絞り込む (この判定は
+    /// public でないため <see cref="MatchesSearchTerms"/> で写経している)。
     /// <paramref name="count"/> 件の確定一致が貯まるか、サーバ側の残りが尽きるか、scan 上限
     /// (500) に達するまで <see cref="RecordSearch{R}.EnsureResults"/> を BatchSize 刻みで広げる。
     /// </summary>
@@ -199,26 +203,11 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         SearchQueryParser.Parse(query.Search, optional, required, excluded);
 
         // 明示 --tag の必須タグと、検索フレーズの "+term" 必須語をマージする。
-        if (query.RequiredTags.Count > 0)
-        {
-            foreach (var tag in query.RequiredTags)
-            {
-                required.Add(tag);
-            }
-        }
+        required.AddRange(query.RequiredTags);
 
-        if (optional.Count > 0)
-        {
-            search.OptionalTags = new List<string>(optional);
-        }
-        if (required.Count > 0)
-        {
-            search.RequiredTags = new List<string>(required);
-        }
-        if (excluded.Count > 0)
-        {
-            search.ExcludedTags = new List<string>(excluded);
-        }
+        search.OptionalTags = NonEmptyOrNull(optional);
+        search.RequiredTags = NonEmptyOrNull(required);
+        search.ExcludedTags = NonEmptyOrNull(excluded);
 
         var recordSearch = new RecordSearch<Record>(search, _cloud);
 
@@ -330,6 +319,13 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
     private static bool ContainsSubstring(string? str, string term) =>
         !string.IsNullOrEmpty(str) && str.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+
+    /// <summary>
+    /// <see cref="SearchParameters"/> の tag リストへ代入する用。空なら <c>null</c> を返し
+    /// (= 未指定扱い)、非空ならコピーを返す。元 <paramref name="terms"/> を共有しないよう複製する。
+    /// </summary>
+    private static List<string>? NonEmptyOrNull(List<string> terms) =>
+        terms.Count > 0 ? new List<string>(terms) : null;
 
     /// <inheritdoc/>
     public async Task<OpenWorldSnapshot> JoinAsync(JoinTarget target, CancellationToken ct)

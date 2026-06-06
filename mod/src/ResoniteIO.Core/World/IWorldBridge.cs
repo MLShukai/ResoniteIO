@@ -109,8 +109,9 @@ public sealed record RecordListQuery
     public IReadOnlyList<string> RequiredTags { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// 自由文の検索フレーズ。空でなければ bridge は Resonite 自身の検索パスを使う
-    /// (<c>+term</c>=必須 / <c>-term</c>=除外 / <c>"quoted"</c>=フレーズ / それ以外=任意)。
+    /// 自由文の検索フレーズ。空でなければ Mod 側 bridge がこれを Resonite 自身の検索パーサで
+    /// 解釈し、専用の検索パスを通す (<c>+term</c>=必須 / <c>-term</c>=除外 /
+    /// <c>"quoted"</c>=フレーズ / それ以外=任意)。空なら通常の record fetch にフォールバックする。
     /// </summary>
     public string Search { get; init; } = "";
     public string OwnerId { get; init; } = "";
