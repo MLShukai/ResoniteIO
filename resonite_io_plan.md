@@ -366,12 +366,18 @@ ______________________________________________________________________
 - [x] **CLI** (`resoio record`): `python/src/resoio/cli/record.py` で `resoio record -o OUTPUT [--duration SEC]` flat command を追加 (既存 `resoio capture` と並ぶ action 名 flat 哲学)。`.wav` 拡張子で WAV file 書き出し (stdlib `struct` で `WAVE_FORMAT_IEEE_FLOAT` header を手書き、close 時に size field を seek-back で更新)、`-o -` で raw float32 LE PCM stdout (ffmpeg pipe 用)。BrokenPipeError は rc=0 で正常終了 (capture と同パターン)
 - [x] **e2e** (`python/tests/e2e/speaker_record.py`): 実機 Resonite から `SpeakerClient.stream()` で audio を受信し WAV へ書き出して `ffprobe` で format 検証 (sample rate 48000 / channels 2 / float / 期待秒数)
 
-### Step 6: Manipulation モジュール — **次に着手**
+### Step 6: Manipulation モジュール — **完了**
 
-> Step 6 (Manipulation) と Step 7 (Microphone) の実装順は **ユーザー判断で Step 7 を先行** (2026-05-20)。Speaker 完了直後に音声系を完結させたいニーズが優先された。Manipulation は次フェーズ。
+> Step 6 (Manipulation) と Step 7 (Microphone) の実装順は **ユーザー判断で Step 7 を先行** (2026-05-20)。Speaker 完了直後に音声系を完結させたいニーズが優先された。Manipulation はその後に着手し完了 (2026-06-06)。
+>
+> **スコープ変更 (2026-06-06、実機調査に基づくユーザー判断)**: 当初計画の **Hand Pose 制御は除外**。`TrackedDevicePositioner.BeforeInputUpdate` が `[DefaultUpdateOrder(-1000000)]` で毎 input update に hand slot を tracked-device pose で上書きし、Locomotion のような `ExternalInput` フックも無いため engine 的にクリーンな注入経路が無い (desktop は laser/IK 駆動)。よって **Grab / Release のみ**を実装。また pose を外したことで操作は離散の edge-triggered となり、当初の client-streaming ではなく **ContextMenu と同じ unary RPC** を採用した。
 
-- **Core**: `ManipulationService` (Hand Pose / Grab / Release) と `IManipulationBridge` 定義
-- **Mod**: `FrooxEngineManipulationBridge` で Hand Slot Pose 制御 + `Grabber` の Pick/Release
+- [x] **proto** (`proto/resonite_io/v1/manipulation.proto`): unary 3 RPC `Grab(ManipulationGrabRequest) returns (ManipulationGrabResult)` / `Release(ManipulationReleaseRequest) returns (ManipulationGrabState)` / `GetState(ManipulationGetStateRequest) returns (ManipulationGrabState)`。`ManipulationHand` enum (UNSPECIFIED/PRIMARY/LEFT/RIGHT、ContextMenuHand と同規約) + `WorldPoint` (message 不在 = 手の現在位置)。grab は world point + radius (radius\<=0 は Service 側で 0.1m default)
+- [x] **Core** (`ResoniteIO.Core.Manipulation`): `ManipulationService` + `IManipulationBridge` + Core POCO (`ManipulationHandSelector` / `ManipulationPoint` / `GrabSnapshot` / `GrabOutcome`) + `ManipulationNotReadyException`。ContextMenuService と同形 (optional DI、bridge=null → `Unavailable`、NotReady → `FailedPrecondition`)。`SessionHost` に mount。Kestrel ラウンドトリップ + Fake bridge で xunit 済 (Core 185 tests green)
+- [x] **Mod** (`ResoniteIO.Bridge`): `FrooxEngineManipulationBridge` で `world.LocalUser.GetInteractionHandler(side).Grabber` に到達し `Grabber.Grab(float3 point, float radius)` / `Release()` / `IsHoldingObjects` + `GrabbedObjects` を呼ぶ。ContextMenu bridge と同じ one-shot `RunOnEngineAsync` (engine thread dispatch)。掴んだ object は `HolderSlot` に reparent され手に自動追従するため **per-frame repeater 不要** (Locomotion と対照的)。engine 状態を持たず **非 IDisposable**
+- [x] **Python** (`resoio.manipulation`): `ManipulationClient` を async ctx mgr として実装、`grab(*, hand, point, radius)` / `release(*, hand)` / `get_state(*, hand)`。dataclass `GrabResult` / `GrabState`、hand は `Literal["primary","left","right"]` (ContextMenu と同様 enum を避ける)。in-process grpclib + 実 UDS で round-trip 単体テスト済
+- [x] **CLI** (`resoio manipulate`): `python/src/resoio/cli/manipulate.py` で flat positional action `{grab,release,state,interactive}` + `--hand` / `--point X Y Z` / `--radius` (ContextMenu 流)。`interactive` は locomotion 流 raw-tty キー操作 (g=grab / r=release / s=state / q=quit)
+- [x] **e2e** (`python/tests/e2e/manipulation.py`): 実機 Resonite に対し get_state/grab/release の RPC 経路を検証 (mod ロード・Bridge が実 `Grabber` に到達・例外なし・hand 解決・release で is_holding False)。実機 green (1 passed / 55s)。default home に grabbable が無く API で決定的に spawn もできないため **positive grab (`grabbed=True` + object が手に追従する目視確認) は `mod/tests/manual/manipulation-verification.md` の人手手順**に残した
 
 ### Step 7: Microphone モジュール — **完了**
 
