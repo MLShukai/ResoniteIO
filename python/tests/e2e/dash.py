@@ -189,6 +189,39 @@ class TestDash:
                     await settle_shot("06_invoke")
                     assert invoked.found, "invoke target should resolve"
 
+                # 3b. prove a *successful* operation (ok=True), not just a
+                #     graceful soft-fail: the chrome's first interactable is a
+                #     RectTransform that cannot be hovered/pressed, so addressing
+                #     it soft-fails by design. A real, hoverable Button exercises
+                #     the success path of language-independent ref_id addressing.
+                #     Gated on a Button existing so the dash layout staying free
+                #     of buttons skips this instead of breaking it. Highlight is
+                #     used over invoke because it is visual-only (no navigation /
+                #     state mutation) per the DashClient contract, keeping the
+                #     run side-effect-free and non-flaky.
+                button = next(
+                    (
+                        e
+                        for e in tree.elements
+                        if e.type == "Button" and e.enabled and e.interactable
+                    ),
+                    None,
+                )
+                if button is not None:
+                    button_hl = await dash.highlight(button.ref_id)
+                    record(
+                        "06b_button_highlight",
+                        f"ok={button_hl.ok} found={button_hl.found} "
+                        f"ref_id={button.ref_id} locale={button.locale_key!r} "
+                        f"detail={button_hl.detail!r}",
+                    )
+                    await settle_shot("06b_button_highlight")
+                    assert button_hl.found, "button highlight target should resolve"
+                    assert button_hl.ok, (
+                        "highlighting a real Button by language-independent "
+                        f"ref_id should succeed, got detail={button_hl.detail!r}"
+                    )
+
                 # 4. close, leaving a clean state for the next run.
                 await dash.close()
                 final = await dash.get_state()
