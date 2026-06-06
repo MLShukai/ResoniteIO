@@ -752,6 +752,14 @@ class ListRecordsRequest(betterproto2.Message):
         7, betterproto2.TYPE_ENUM, default_factory=lambda: RecordSortDirection(0)
     )
 
+    search: "str" = betterproto2.field(8, betterproto2.TYPE_STRING)
+    """
+    フリーテキスト検索。Resonite 本体の World タブ検索と同じく、語を
+    optional / `+`required / `-`excluded / "phrase" に解析して
+    SearchParameters の Optional/Required/ExcludedTags に載せたサーバ検索 +
+    name/description/tags 部分一致での精錬を mod 側で行う。空なら検索なし。
+    """
+
 
 default_message_pool.register_message(
     "resonite_io.v1", "ListRecordsRequest", ListRecordsRequest
