@@ -1,11 +1,11 @@
 """E2E: drive the Inventory modality against a live Resonite.
 
-Exercises the bash-like inventory ops (mkdir / ls / cp -r / mv / rm -r) end
-to end against the user's real cloud inventory, scoped to a dedicated test
-folder ``/Inventory/__resoio_e2e__`` that is recursively removed in
-``finally`` so the real inventory is left untouched.
-
-It also pins three behaviors that were just bug-fixed in the mod bridge:
+The single scenario ``test_folder_lifecycle_and_spawn`` exercises the
+bash-like inventory ops (mkdir / ls / cp -r / mv / rm -r) end to end against
+the user's real cloud inventory, scoped to a dedicated test folder
+``/Inventory/__resoio_e2e__`` that is recursively removed in ``finally`` so
+the real inventory is left untouched. It pins three behaviors that were
+bug-fixed in the mod bridge:
 
 * **Hang protection** — every inventory client call in the scenario is
   wrapped in :func:`asyncio.wait_for`, so a regressed server-side hang
@@ -20,6 +20,18 @@ It also pins three behaviors that were just bug-fixed in the mod bridge:
 * **Link navigation** — a top-level inventory *link* (e.g.
   ``Resonite Essentials``) is listed into, validating the link-following
   fix returns a listing instead of hanging or erroring.
+
+Finally — the "visual" verification enabled by the Dash modality landing on
+``main`` — it opens the **Esc dash** (via ``DashClient``), navigates to the
+Inventory tab, and asserts the test folder actually *renders* in the live
+``InventoryBrowser`` panel: a structural assert that the folder name appears
+as an element label in the dash UI tree, plus desktop screenshots kept as
+human-viewable artifacts. This proves a cloud mutation made through
+``InventoryClient`` is reflected in the in-client UI a human would see.
+
+It all runs in one Resonite session (a single cloud sign-in): a second
+back-to-back client restart does not reliably re-authenticate, so the dash
+check is folded into this single test rather than split into its own.
 
 Spawn and link navigation are opportunistic: they use the named records if
 present and are skipped (logged) otherwise, so the test is not brittle to
@@ -44,6 +56,7 @@ from typing import TypeVar
 import grpclib
 from grpclib.const import Status
 
+from resoio.dash import DashClient, DashTree
 from resoio.inventory import InventoryClient, InventoryEntryKind, InventoryListing
 from tests.helpers import mark_e2e
 
@@ -73,6 +86,21 @@ _SETTLE_S = 0.5
 # trips this and fails the test fast instead of stalling the suite.
 _OP_TIMEOUT_S = 20.0
 
+# --- Dash-visual verification constants --------------------------------------
+
+# The Inventory tab of the Esc dash, addressed by its language-independent
+# LocaleStringDriver key (never the localised label). The test folder created
+# under _TEST_DIR renders at the InventoryBrowser's top level once the dash
+# opens this screen.
+_INVENTORY_SCREEN_KEY = "Dash.Screens.Inventory"
+# Let the screen-switch animation finish and the browser begin loading its
+# records before the first screenshot / tree read.
+_PANEL_SETTLE_S = 1.5
+# The InventoryBrowser populates its item tiles asynchronously after the
+# screen is shown; poll the rendered tree until the folder label appears.
+_PANEL_VISIBLE_TIMEOUT_S = 40.0
+_PANEL_POLL_INTERVAL_S = 2.0
+
 _T = TypeVar("_T")
 
 
@@ -96,6 +124,19 @@ def _screenshot(out_dir: Path, name: str) -> None:
         capture_output=True,
         timeout=30.0,
     )
+
+
+def _format_tree(tree: DashTree) -> str:
+    """Render a dash UI tree to a human-readable dump for ``states.txt``."""
+    lines = [
+        f"screen={tree.screen_width}x{tree.screen_height} count={len(tree.elements)}"
+    ]
+    for e in tree.elements:
+        lines.append(
+            f"  [{e.ref_id}] {e.type} locale={e.locale_key!r} label={e.label!r} "
+            f"enabled={e.enabled} interactable={e.interactable}"
+        )
+    return "\n".join(lines)
 
 
 class TestInventory:
@@ -249,6 +290,55 @@ class TestInventory:
                             f"ls into link {link.name!r} ({link.path}): "
                             f"OK, {len(linked.entries)} entries"
                         )
+
+                    # Dash-visual verification: open the Esc dash, switch to the
+                    # Inventory tab, and confirm the test folder actually renders
+                    # in the live InventoryBrowser panel. This is the visual
+                    # counterpart to the cloud-only round trips above — it proves
+                    # an InventoryClient mutation is reflected in the in-client UI
+                    # a human sees. The assert is structural (the folder name
+                    # appears as an element label in the dash tree); the
+                    # screenshots are kept as human-viewable artifacts. The dash
+                    # is opened only now, so the InventoryBrowser's first load is
+                    # a fresh cloud query that already includes __resoio_e2e__.
+                    async with DashClient() as dash:
+                        await dash.open()
+                        await asyncio.sleep(_SETTLE_S)
+                        nav = await dash.set_screen(key=_INVENTORY_SCREEN_KEY)
+                        assert nav.found, (
+                            f"dash has no {_INVENTORY_SCREEN_KEY} screen "
+                            "(unexpected logged-out / minimal screen set)"
+                        )
+                        await asyncio.sleep(_PANEL_SETTLE_S)
+                        _screenshot(out_dir, "dash_inventory_panel.png")
+
+                        # Poll the rendered tree until the folder's label shows
+                        # (tiles populate asynchronously). Substring match
+                        # tolerates <nobr> wrapping around the name.
+                        found = False
+                        tree: DashTree | None = None
+                        deadline = time.monotonic() + _PANEL_VISIBLE_TIMEOUT_S
+                        while True:
+                            tree = await dash.get_tree()
+                            if any("__resoio_e2e__" in e.label for e in tree.elements):
+                                found = True
+                                break
+                            if time.monotonic() >= deadline:
+                                break
+                            await asyncio.sleep(_PANEL_POLL_INTERVAL_S)
+
+                        assert tree is not None
+                        (out_dir / "dash_tree.txt").write_text(
+                            _format_tree(tree), encoding="utf-8"
+                        )
+                        _screenshot(out_dir, "dash_folder_visible.png")
+                        assert found, (
+                            "test folder '__resoio_e2e__' did not render in the "
+                            f"dash Inventory panel ({len(tree.elements)} elements; "
+                            "see dash_tree.txt)"
+                        )
+                        record("dash Inventory panel shows '__resoio_e2e__': OK")
+                        await dash.close()
                 finally:
                     # rm -r: tear down the whole test dir (including the
                     # spaced-name folder); root must be clean again.
