@@ -1,7 +1,8 @@
 ---
-name: Generated proto layout
+name: generated-proto-layout
 description: How python/src/resoio/_generated/ is structured and excluded from tooling
-type: reference
+metadata:
+  type: reference
 ---
 
 `python/src/resoio/_generated/` is a committed protoc output tree:

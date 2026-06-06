@@ -1,7 +1,8 @@
 ---
-name: betterproto2 packaging quirk
+name: betterproto2-packaging-quirk
 description: betterproto2 has no [compiler] extra; the compiler is a separate distribution
-type: reference
+metadata:
+  type: reference
 ---
 
 On PyPI as of 2026-05, `betterproto2` does NOT expose a `[compiler]` extra. The protoc plugin ships as a separate distribution named `betterproto2_compiler`.
