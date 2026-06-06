@@ -48,6 +48,12 @@ _EXPECTED_PUBLIC_NAMES = (
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
+    "DashActionResult",
+    "DashClient",
+    "DashElement",
+    "DashRect",
+    "DashState",
+    "DashTree",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
@@ -119,6 +125,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "LocomotionClient",
         "DisplayClient",
         "ContextMenuClient",
+        "DashClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):
