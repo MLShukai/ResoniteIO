@@ -23,6 +23,9 @@ Scope:
 
 from __future__ import annotations
 
+import dataclasses
+import inspect
+
 import pytest
 
 import resoio
@@ -68,6 +71,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "SessionPage",
     "SocketNotFoundError",
     "SpeakerClient",
+    "Thumbnail",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
@@ -200,3 +204,55 @@ def test_public_world_enum_members_match_snapshot(
     enum_cls = getattr(resoio, enum_name)
     actual = {member.name: member.value for member in enum_cls}
     assert actual == expected
+
+
+# ---------------------------------------------------------------------------
+# Public Thumbnail dataclass + WorldClient.fetch_thumbnail signature
+#
+# These pin the public shape of the World thumbnail-fetch API a downstream
+# caller writes against: the ``Thumbnail`` value object and the
+# ``fetch_thumbnail(uri)`` entry point. Contract pins, not behaviour tests —
+# the round-trip behaviour lives in test_world.py. An intentional change
+# updates these snapshots in the same commit.
+# ---------------------------------------------------------------------------
+
+
+def test_thumbnail_is_a_frozen_dataclass():
+    """Downstream code may use ``Thumbnail`` as a hashable value (dict key /
+    set member); freezing the dataclass is part of the public promise."""
+    assert dataclasses.is_dataclass(resoio.Thumbnail)
+    params = resoio.Thumbnail.__dataclass_params__
+    assert params.frozen is True
+
+
+def test_thumbnail_field_names_and_types_match_snapshot():
+    """Pin ``Thumbnail`` fields: ``data: bytes`` then ``content_type: str``."""
+    fields = dataclasses.fields(resoio.Thumbnail)
+    actual = {f.name: f.type for f in fields}
+    assert actual == {
+        "data": "bytes",
+        "content_type": "str",
+    }
+
+
+def test_fetch_thumbnail_signature_takes_one_positional_uri_str():
+    """Pin ``WorldClient.fetch_thumbnail`` as a coroutine taking a single
+    positional ``uri: str`` argument."""
+    assert inspect.iscoroutinefunction(resoio.WorldClient.fetch_thumbnail)
+    sig = inspect.signature(resoio.WorldClient.fetch_thumbnail)
+    params = list(sig.parameters.values())
+    # self + uri
+    assert [p.name for p in params] == ["self", "uri"]
+    uri_param = sig.parameters["uri"]
+    assert uri_param.annotation == "str"
+    assert uri_param.kind in (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    )
+
+
+def test_fetch_thumbnail_returns_thumbnail():
+    """Pin the documented return type as the public ``Thumbnail`` value
+    object."""
+    sig = inspect.signature(resoio.WorldClient.fetch_thumbnail)
+    assert sig.return_annotation == "Thumbnail"

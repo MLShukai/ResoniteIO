@@ -47,6 +47,8 @@ from resoio._generated.resonite_io.v1 import (
     DisplayConfig,
     DisplayGetRequest,
     DisplayState,
+    FetchThumbnailRequest,
+    FetchThumbnailResponse,
     FocusRequest,
     FocusResponse,
     GetCurrentRequest,
@@ -327,6 +329,13 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     GetCurrentResponse: {
         "world": 1,
         "has_world": 2,
+    },
+    FetchThumbnailRequest: {
+        "uri": 1,
+    },
+    FetchThumbnailResponse: {
+        "data": 1,
+        "content_type": 2,
     },
 }
 

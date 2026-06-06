@@ -20,6 +20,8 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
+    FetchThumbnailRequest,
+    FetchThumbnailResponse,
     FocusRequest,
     FocusResponse,
     GetCurrentRequest,
@@ -53,6 +55,7 @@ from resoio.world import (
     RecordSource,
     SessionFilter,
     SessionPage,
+    Thumbnail,
     WorldClient,
     WorldRecord,
     WorldSession,
@@ -77,6 +80,7 @@ class _FakeWorld(WorldBase):
         open_worlds: list[WireOpenWorld] | None = None,
         focus_world: WireOpenWorld | None = None,
         current_response: GetCurrentResponse | None = None,
+        thumbnail_response: FetchThumbnailResponse | None = None,
     ) -> None:
         self.sessions_requests: list[ListSessionsRequest] = []
         self.records_requests: list[ListRecordsRequest] = []
@@ -86,6 +90,7 @@ class _FakeWorld(WorldBase):
         self.focus_requests: list[FocusRequest] = []
         self.leave_requests: list[LeaveRequest] = []
         self.get_current_requests: list[GetCurrentRequest] = []
+        self.fetch_thumbnail_requests: list[FetchThumbnailRequest] = []
 
         self._sessions_response = sessions_response or ListSessionsResponse()
         self._records_response = records_response or ListRecordsResponse()
@@ -94,6 +99,7 @@ class _FakeWorld(WorldBase):
         self._open_worlds = open_worlds or []
         self._focus_world = focus_world
         self._current_response = current_response or GetCurrentResponse()
+        self._thumbnail_response = thumbnail_response or FetchThumbnailResponse()
 
     async def list_sessions(self, message: ListSessionsRequest) -> ListSessionsResponse:
         self.sessions_requests.append(message)
@@ -128,6 +134,12 @@ class _FakeWorld(WorldBase):
     async def get_current(self, message: GetCurrentRequest) -> GetCurrentResponse:
         self.get_current_requests.append(message)
         return self._current_response
+
+    async def fetch_thumbnail(
+        self, message: FetchThumbnailRequest
+    ) -> FetchThumbnailResponse:
+        self.fetch_thumbnail_requests.append(message)
+        return self._thumbnail_response
 
 
 async def _serve(
@@ -745,3 +757,60 @@ class TestGetCurrent:
         client = WorldClient()
         with pytest.raises(RuntimeError, match="not connected"):
             await client.get_current()
+
+
+class TestFetchThumbnail:
+    async def test_sends_uri_and_returns_thumbnail_with_bytes_and_content_type(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        webp_bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 "
+        fake = _FakeWorld(
+            thumbnail_response=FetchThumbnailResponse(
+                data=webp_bytes,
+                content_type="image/webp",
+            )
+        )
+        server, _ = await _serve(tmp_path, monkeypatch, fake)
+        try:
+            async with WorldClient() as client:
+                thumbnail = await client.fetch_thumbnail("resdb:///abc.webp")
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        # The user-facing ``uri`` arg must travel verbatim on the wire.
+        assert len(fake.fetch_thumbnail_requests) == 1
+        assert fake.fetch_thumbnail_requests[0].uri == "resdb:///abc.webp"
+
+        assert thumbnail == Thumbnail(
+            data=webp_bytes,
+            content_type="image/webp",
+        )
+
+    async def test_allows_empty_content_type_with_returned_bytes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # The server may not know the MIME type; an empty content_type is a
+        # valid response and must surface verbatim (not coerced to a default).
+        raw_bytes = b"\x89PNG\r\n\x1a\n"
+        fake = _FakeWorld(
+            thumbnail_response=FetchThumbnailResponse(
+                data=raw_bytes,
+                content_type="",
+            )
+        )
+        server, _ = await _serve(tmp_path, monkeypatch, fake)
+        try:
+            async with WorldClient() as client:
+                thumbnail = await client.fetch_thumbnail("resdb:///no-type")
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert fake.fetch_thumbnail_requests[0].uri == "resdb:///no-type"
+        assert thumbnail == Thumbnail(data=raw_bytes, content_type="")
+
+    async def test_raises_when_not_connected(self):
+        client = WorldClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.fetch_thumbnail("resdb:///abc.webp")

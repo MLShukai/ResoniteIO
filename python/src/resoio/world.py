@@ -13,6 +13,7 @@ from typing import Self
 from grpclib.client import Channel
 
 from resoio._generated.resonite_io.v1 import (
+    FetchThumbnailRequest,
     FocusRequest,
     GetCurrentRequest,
     JoinRequest,
@@ -40,6 +41,7 @@ __all__ = [
     "RecordSource",
     "SessionFilter",
     "SessionPage",
+    "Thumbnail",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
@@ -190,6 +192,14 @@ class RecordPage:
     records: tuple[WorldRecord, ...]
     has_more: bool
     offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class Thumbnail:
+    """A fetched thumbnail image and its MIME type."""
+
+    data: bytes
+    content_type: str
 
 
 def _session_from_wire(wire: _WireWorldSession) -> WorldSession:
@@ -414,3 +424,9 @@ class WorldClient:
         if not response.has_world:
             return None
         return _open_world_from_response(response.world)
+
+    async def fetch_thumbnail(self, uri: str) -> Thumbnail:
+        """Fetch a thumbnail image by its ``resdb:///`` or ``https://`` URI."""
+        stub = self._require_stub()
+        response = await stub.fetch_thumbnail(FetchThumbnailRequest(uri=uri))
+        return Thumbnail(data=response.data, content_type=response.content_type)
