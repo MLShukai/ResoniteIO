@@ -85,6 +85,11 @@ repos:
     hooks:
       - id: mdformat
         args: ["--number"]
+        # docs/ は MkDocs Material 記法 (admonition `!!!` / ネストしたコード
+        # フェンス) を使い、plain GFM 前提の mdformat が admonition 本文を
+        # de-indent して描画を壊すため除外する。MkDocs サイトの markdown は
+        # `just docs-build` (--strict) 側で検証する。
+        exclude: ^docs/
         additional_dependencies:
           - mdformat-gfm
           - mdformat-tables
