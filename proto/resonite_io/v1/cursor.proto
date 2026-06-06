@@ -1,0 +1,45 @@
+// Cursor service: Resonite の desktop カーソル (マウスポインタ) 位置を engine 経由で
+// 操作する modality。AI エージェントから「カーソルを画面上の指定位置へ動かす」
+// 「現在のカーソル位置を読む」を行う。
+//
+// 用途の例: desktop では radial コンテキストメニューが laser のヒット点 (= ライブの
+// カーソル位置) に開くため、ContextMenu を画面中央に出したいときは事前に
+// `SetPosition(0.5, 0.5)` でカーソルを中央へ寄せる。Dash / 各種 UI のクリック前にも使える。
+//
+// 座標は **正規化ウィンドウ座標** ([0,1] × [0,1]、中央 = (0.5, 0.5)) で表す。(0,0) と
+// (1,1) はウィンドウの対角コーナーで、コーナーの向き (上下) は engine ネイティブの
+// window 座標に従う。engine への dispatch は同期マーシャル (`RunSynchronously` +
+// `TaskCompletionSource`) で行い、`SetPosition` は位置が反映されるまで待ってから結果の
+// `CursorState` を返す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// カーソル位置のスナップショット。
+message CursorState {
+  // 正規化 x 座標 ([0,1]、中央 = 0.5)。
+  float x = 1;
+  // 正規化 y 座標 ([0,1]、中央 = 0.5)。
+  float y = 2;
+  // ウィンドウ解像度 (ピクセル)。正規化↔ピクセル変換の基準。
+  int32 window_width = 3;
+  int32 window_height = 4;
+}
+
+message CursorSetPositionRequest {
+  // 移動先の正規化 x 座標 ([0,1])。範囲外は InvalidArgument。
+  float x = 1;
+  // 移動先の正規化 y 座標 ([0,1])。範囲外は InvalidArgument。
+  float y = 2;
+}
+
+message CursorGetPositionRequest {}
+
+service Cursor {
+  // カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+  rpc SetPosition(CursorSetPositionRequest) returns (CursorState);
+  // 現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+  rpc GetPosition(CursorGetPositionRequest) returns (CursorState);
+}

@@ -58,6 +58,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineManipulationBridge? _manipulationBridge;
     private FrooxEngineWorldBridge? _worldBridge;
     private FrooxEngineInventoryBridge? _inventoryBridge;
+    private FrooxEngineCursorBridge? _cursorBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -126,6 +127,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _inventoryBridge = new FrooxEngineInventoryBridge(Engine.Current, _logSink);
 
+            _cursorBridge = new FrooxEngineCursorBridge(Engine.Current, _logSink);
+
             _sessionHost = SessionHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -139,7 +142,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 dashBridge: _dashBridge,
                 worldBridge: _worldBridge,
                 manipulationBridge: _manipulationBridge,
-                inventoryBridge: _inventoryBridge
+                inventoryBridge: _inventoryBridge,
+                cursorBridge: _cursorBridge
             );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -210,6 +214,11 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // InventoryBridge も streaming 状態 (Channel / Harmony / ExternalInput) を持たず
         // 各 RPC が one-shot で cloud REST / engine marshal するだけなので参照 null 化で足りる。
         _inventoryBridge = null;
+
+        // CursorBridge は engine 側に cursor lock を保持するため IDisposable。
+        // Dispose で lock を best-effort に unregister し、カーソル固定を解除する。
+        SafeDispose(_cursorBridge, nameof(_cursorBridge));
+        _cursorBridge = null;
 
         SafeDispose(_sessionBridge, nameof(_sessionBridge));
         _sessionBridge = null;

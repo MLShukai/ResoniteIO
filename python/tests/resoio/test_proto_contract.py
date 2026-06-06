@@ -43,6 +43,9 @@ from resoio._generated.resonite_io.v1 import (
     ContextMenuItem,
     ContextMenuOpenRequest,
     ContextMenuState,
+    CursorGetPositionRequest,
+    CursorSetPositionRequest,
+    CursorState,
     DashActionResult,
     DashElement,
     DashGetTreeRequest,
@@ -252,6 +255,18 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "hand": 1,
         "index": 2,
     },
+    # Cursor
+    CursorState: {
+        "x": 1,
+        "y": 2,
+        "window_width": 3,
+        "window_height": 4,
+    },
+    CursorSetPositionRequest: {
+        "x": 1,
+        "y": 2,
+    },
+    CursorGetPositionRequest: {},
     # Inventory
     InventoryEntry: {
         "name": 1,
