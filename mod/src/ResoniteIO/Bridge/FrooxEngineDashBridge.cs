@@ -126,12 +126,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                 var button = slot.GetComponent<Button>();
                 if (button is null)
                 {
-                    return new DashActionResultSnapshot(
-                        Ok: false,
-                        Found: true,
-                        RefId: refId,
-                        Detail: "element is not a button"
-                    );
+                    return Rejected(refId, "element is not a button");
                 }
 
                 // ContextMenu.PressMenuItem と同じ呼び方:
@@ -145,12 +140,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                     0.1f,
                     new ButtonEventData(button, in globalPoint, in localPress, in localPress)
                 );
-                return new DashActionResultSnapshot(
-                    Ok: true,
-                    Found: true,
-                    RefId: refId,
-                    Detail: string.Empty
-                );
+                return Succeeded(refId);
             },
             ct
         );
@@ -170,21 +160,11 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                 var element = slot.GetComponent<InteractionElement>();
                 if (element is null)
                 {
-                    return new DashActionResultSnapshot(
-                        Ok: false,
-                        Found: true,
-                        RefId: refId,
-                        Detail: "element does not support hover"
-                    );
+                    return Rejected(refId, "element does not support hover");
                 }
 
                 element.IsHovering.Value = true;
-                return new DashActionResultSnapshot(
-                    Ok: true,
-                    Found: true,
-                    RefId: refId,
-                    Detail: string.Empty
-                );
+                return Succeeded(refId);
             },
             ct
         );
@@ -210,23 +190,13 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                     slot.GetComponent<ScrollRect>() ?? slot.GetComponentInParents<ScrollRect>();
                 if (scroll is null)
                 {
-                    return new DashActionResultSnapshot(
-                        Ok: false,
-                        Found: true,
-                        RefId: refId,
-                        Detail: "element is not scrollable"
-                    );
+                    return Rejected(refId, "element is not scrollable");
                 }
 
                 scroll.NormalizedPosition.Value = MathX.Clamp01(
                     scroll.NormalizedPosition.Value + new float2(deltaX, deltaY)
                 );
-                return new DashActionResultSnapshot(
-                    Ok: true,
-                    Found: true,
-                    RefId: refId,
-                    Detail: string.Empty
-                );
+                return Succeeded(refId);
             },
             ct
         );
@@ -472,7 +442,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         return false;
     }
 
-    /// <summary>対象 ref_id が解決できなかったときの結果。</summary>
+    /// <summary>対象 ref_id が解決できなかったときの結果 (<c>Found=false</c>)。</summary>
     private static DashActionResultSnapshot NotFound(string refId)
     {
         return new DashActionResultSnapshot(
@@ -480,6 +450,23 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             Found: false,
             RefId: refId,
             Detail: "element not found"
+        );
+    }
+
+    /// <summary>要素は解決できたが操作対象として不適 (型不一致等) なときの結果 (<c>Found=true, Ok=false</c>)。</summary>
+    private static DashActionResultSnapshot Rejected(string refId, string detail)
+    {
+        return new DashActionResultSnapshot(Ok: false, Found: true, RefId: refId, Detail: detail);
+    }
+
+    /// <summary>操作が成功したときの結果 (<c>Found=true, Ok=true</c>)。</summary>
+    private static DashActionResultSnapshot Succeeded(string refId)
+    {
+        return new DashActionResultSnapshot(
+            Ok: true,
+            Found: true,
+            RefId: refId,
+            Detail: string.Empty
         );
     }
 }
