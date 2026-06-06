@@ -95,9 +95,11 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         // Opening→Opened + 項目生成は次フレーム以降に進むため、ポーリングで待つ。
         await WaitForOpenedAsync(hand, ct).ConfigureAwait(false);
 
-        // 開いたメニューを画面中央に固定して state を返す (desktop でカーソル初期位置
-        // = 左下に出てしまう問題への対処)。open() を都度呼ぶと毎回 re-center される。
-        return await CenterAndReadStateAsync(hand, ct).ConfigureAwait(false);
+        // 開いた時点の state を返す。メニューの配置 (desktop では laser のヒット点 =
+        // 現カーソル位置) と視点移動時の自動クローズ (exit-lerp) は engine に委ねる。
+        // 中央に出したい場合は Cursor モダリティで事前にカーソルを中央へ寄せる。
+        return await RunOnEngineAsync(ResolveWorld(), () => ReadState(ResolveHandler(hand)), ct)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -200,11 +202,12 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
             .ConfigureAwait(false);
 
         // press 後に submenu へ遷移する項目 (例: Locomotion) は main→Closed→submenu の順で
-        // 開き直すため、遷移開始を 1 拍待ってから Opened を待つ。submenu が開いたら
-        // それも画面中央に固定する。閉じる項目 (action 実行のみ) なら timeout 後 closed を返す。
+        // 開き直すため、遷移開始を 1 拍待ってから Opened を待つ。閉じる項目 (action 実行のみ)
+        // なら timeout 後 closed を返す。配置・自動クローズは engine に委ねる。
         await Task.Delay(_postInvokeDelay, ct).ConfigureAwait(false);
         await WaitForOpenedAsync(hand, ct).ConfigureAwait(false);
-        return await CenterAndReadStateAsync(hand, ct).ConfigureAwait(false);
+        return await RunOnEngineAsync(ResolveWorld(), () => ReadState(ResolveHandler(hand)), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -239,28 +242,6 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         }
 
         return false;
-    }
-
-    /// <summary>engine thread 上で、開いていればメニューを画面中央に固定し、現在の state を返す。</summary>
-    private Task<ContextMenuStateSnapshot> CenterAndReadStateAsync(
-        ContextMenuHandSelector hand,
-        CancellationToken ct
-    )
-    {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var world = ResolveWorld();
-                var handler = ResolveHandler(hand);
-                if (handler.IsContextMenuOpen && handler.ContextMenu.Target is { } menu)
-                {
-                    CenterMenu(world, menu);
-                }
-                return ReadState(handler);
-            },
-            ct
-        );
     }
 
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
@@ -332,41 +313,6 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
             // Primary: desktop の主手。InputInterface 未準備なら Right に fallback。
             _ => world.InputInterface?.PrimaryHand ?? Chirality.Right,
         };
-    }
-
-    /// <summary>
-    /// 開いたメニューを画面中央 (view-forward) に再配置し、<see cref="FrooxContextMenu.Pointer"/>
-    /// を外してカーソル距離による自動クローズを無効化する。
-    /// </summary>
-    /// <remarks>
-    /// desktop では <c>PositionContextMenu</c> がメニューをカーソルのレイ交点
-    /// (起動直後は左下) に配置し、さらに <c>ContextMenu.OnCommonUpdate</c> の exit-lerp が
-    /// カーソルと menu 中心の距離でメニューを閉じる。中央固定 + Pointer 不在にすることで、
-    /// 常に画面中央に出し、エージェントが列挙/選択する間も閉じないようにする。
-    /// 配置計算は <c>InteractionHandler.PositionContextMenu</c> の desktop 分岐
-    /// (decompiled/.../InteractionHandler.cs:970-983) を再現する。engine thread 前提。
-    /// </remarks>
-    private static void CenterMenu(World world, FrooxContextMenu menu)
-    {
-        var userRoot = world.LocalUser?.Root;
-        if (userRoot is null)
-        {
-            return;
-        }
-
-        var viewPos = world.LocalUserViewPosition;
-        var viewRot = world.LocalUserViewRotation;
-        var headDistance = MathX.Distance(viewPos, userRoot.HeadPosition);
-        var position =
-            viewPos + viewRot * float3.Forward * (0.5f * userRoot.GlobalScale + headDistance);
-
-        menu.Slot.GlobalPosition = position;
-        menu.Slot.GlobalRotation = viewRot;
-        menu.Slot.GlobalScale = float3.One * MathX.Distance(position, viewPos) * 1.5f;
-
-        // Pointer 不在時は exit-lerp ロジックが skip されるため、中央固定で安定する。
-        // FrooxEngine の SyncRef は null 代入で参照をクリアする (nullable-oblivious)。
-        menu.Pointer.Target = null!;
     }
 
     /// <summary>open 済みメニューの項目を列挙順で取得する。未 open なら <see cref="ContextMenuNotReadyException"/>。</summary>

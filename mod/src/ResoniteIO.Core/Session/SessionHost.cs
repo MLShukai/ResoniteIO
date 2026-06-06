@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Inventory;
@@ -86,7 +87,8 @@ public sealed class SessionHost : IAsyncDisposable
         IDashBridge? dashBridge = null,
         IWorldBridge? worldBridge = null,
         IManipulationBridge? manipulationBridge = null,
-        IInventoryBridge? inventoryBridge = null
+        IInventoryBridge? inventoryBridge = null,
+        ICursorBridge? cursorBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -155,6 +157,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(inventoryBridge);
         }
+        if (cursorBridge is not null)
+        {
+            builder.Services.AddSingleton(cursorBridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -175,6 +181,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<WorldService>();
         app.MapGrpcService<ManipulationService>();
         app.MapGrpcService<InventoryService>();
+        app.MapGrpcService<CursorService>();
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
@@ -236,6 +243,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (inventoryBridge is null)
         {
             log.LogWarning("Inventory modality is not configured.");
+        }
+        if (cursorBridge is null)
+        {
+            log.LogWarning("Cursor modality is not configured.");
         }
 
         var runTask = Task.Run(
