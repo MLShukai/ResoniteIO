@@ -290,6 +290,7 @@ public sealed class WorldServiceTests
                 Count = 30,
                 Sort = RecordSort.TotalVisits,
                 SortDirection = RecordSortDirection.Ascending,
+                Search = "puzzle +red -horror",
             }
         );
 
@@ -302,6 +303,40 @@ public sealed class WorldServiceTests
         Assert.Equal(30, q!.Count);
         Assert.Equal(CoreRecordSort.TotalVisits, q!.Sort);
         Assert.Equal(CoreRecordSortDirection.Ascending, q!.SortDirection);
+        Assert.Equal("puzzle +red -horror", q!.Search);
+    }
+
+    [Fact]
+    public async Task ListRecords_forwards_raw_search_phrase_verbatim_to_bridge()
+    {
+        // Service は検索語を一切解析せず、生フレーズをそのまま bridge へ転送する契約
+        // (world.proto ListRecordsRequest.search)。+required / -excluded / "phrase" の
+        // 解析は engine 依存で bridge 側 (SearchQueryParser + RecordSearch) が行い、
+        // e2e で検証する。Service/contract 層では FORWARDING のみを保証する。
+        var bridge = new FakeWorldBridge();
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        await client.ListRecordsAsync(new ListRecordsRequest { Search = "puzzle +red -horror" });
+
+        Assert.NotNull(bridge.LastRecordQuery);
+        Assert.Equal("puzzle +red -horror", bridge.LastRecordQuery!.Search);
+    }
+
+    [Fact]
+    public async Task ListRecords_forwards_empty_default_search_as_empty_string()
+    {
+        // search 未指定 (proto3 string 既定 "") は空文字のまま bridge へ届く契約。
+        var bridge = new FakeWorldBridge();
+        await using var host = await WorldServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.World.WorldClient(channel);
+
+        await client.ListRecordsAsync(new ListRecordsRequest());
+
+        Assert.NotNull(bridge.LastRecordQuery);
+        Assert.Equal("", bridge.LastRecordQuery!.Search);
     }
 
     // ----- RecordSource / Sort / SortDirection enum map (proto → Core) -----

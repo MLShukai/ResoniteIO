@@ -81,6 +81,7 @@ public sealed class WorldService : V1.World.WorldBase
         {
             Source = MapSource(request.Source),
             RequiredTags = request.RequiredTags.ToArray(),
+            Search = request.Search,
             OwnerId = request.OwnerId,
             Offset = (int)request.Offset,
             Count = (int)request.Count,

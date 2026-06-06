@@ -258,6 +258,35 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// <c>ListRecordsRequest</c> の proto field 番号を固定する。とくに
+    /// <c>search = 8</c> (フリーテキスト検索) の wire 番号を Hyrum's law mitigation の
+    /// 観点で明示 pin する (番号変更は Python 側 betterproto2 デコードを静かに壊す)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void ListRecordsRequest_FieldNumbers_MatchSnapshot()
+    {
+        var requestFields = ResoniteIO
+            .V1.ListRecordsRequest.Descriptor.Fields.InFieldNumberOrder()
+            .Select(f => $"{f.FieldNumber}:{f.Name}")
+            .ToArray();
+        Assert.Equal(
+            new[]
+            {
+                "1:source",
+                "2:required_tags",
+                "3:owner_id",
+                "4:offset",
+                "5:count",
+                "6:sort",
+                "7:sort_direction",
+                "8:search",
+            },
+            requestFields
+        );
+    }
+
+    /// <summary>
     /// public 例外型が <see cref="Exception"/> 直系に保たれていることを固定する。
     /// 基底クラスを変えるとユーザー側 <c>catch</c> 句が静かに壊れるため、
     /// 階層変更は契約破壊として扱う。

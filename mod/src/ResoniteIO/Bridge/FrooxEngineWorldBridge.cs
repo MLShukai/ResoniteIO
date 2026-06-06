@@ -48,6 +48,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     private static readonly HttpClient _httpClient = new();
 
     private readonly Engine _engine;
+    private readonly SkyFrostInterface _cloud;
     private readonly FrooxWorldManager _worldManager;
     private readonly SessionsManager _sessions;
     private readonly RecordsManager _records;
@@ -61,6 +62,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         ArgumentNullException.ThrowIfNull(log);
 
         _engine = engine;
+        _cloud = engine.Cloud;
         _worldManager = engine.WorldManager;
         _sessions = engine.Cloud.Sessions;
         _records = engine.Cloud.Records;
@@ -144,6 +146,11 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
         ApplySource(search, query);
 
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            return await SearchRecordsAsync(search, query, count, ct).ConfigureAwait(false);
+        }
+
         ct.ThrowIfCancellationRequested();
         var cloudResult = await records.FindRecords<Record>(search).ConfigureAwait(false);
         if (cloudResult is null || !cloudResult.IsOK || cloudResult.Entity is null)
@@ -170,6 +177,159 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
             Offset = query.Offset,
         };
     }
+
+    /// <summary>
+    /// 自由文検索パス。<see cref="SearchQueryParser"/> で検索フレーズを optional / required /
+    /// excluded 語に分解し、Resonite 自身のページング wrapper (<see cref="RecordSearch{R}"/>) で
+    /// 候補を fetch しつつ、engine UI と同じ substring セマンティクス
+    /// (<c>MergedWorldData.MatchesSearchParameters</c>) で再フィルタする。
+    /// <paramref name="count"/> 件の確定一致が貯まるか、サーバ側の残りが尽きるか、scan 上限
+    /// (500) に達するまで <see cref="RecordSearch{R}.EnsureResults"/> を BatchSize 刻みで広げる。
+    /// </summary>
+    private async Task<RecordPage> SearchRecordsAsync(
+        SearchParameters search,
+        RecordListQuery query,
+        int count,
+        CancellationToken ct
+    )
+    {
+        var optional = new List<string>();
+        var required = new List<string>();
+        var excluded = new List<string>();
+        SearchQueryParser.Parse(query.Search, optional, required, excluded);
+
+        // 明示 --tag の必須タグと、検索フレーズの "+term" 必須語をマージする。
+        if (query.RequiredTags.Count > 0)
+        {
+            foreach (var tag in query.RequiredTags)
+            {
+                required.Add(tag);
+            }
+        }
+
+        if (optional.Count > 0)
+        {
+            search.OptionalTags = new List<string>(optional);
+        }
+        if (required.Count > 0)
+        {
+            search.RequiredTags = new List<string>(required);
+        }
+        if (excluded.Count > 0)
+        {
+            search.ExcludedTags = new List<string>(excluded);
+        }
+
+        var recordSearch = new RecordSearch<Record>(search, _cloud);
+
+        const int scanCap = 500;
+        var matches = new List<WorldRecordSnapshot>(count);
+        var scanned = 0;
+        var target = recordSearch.BatchSize;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            await recordSearch.EnsureResults(target, throwOnError: false).ConfigureAwait(false);
+
+            var fetched = recordSearch.Records;
+            for (; scanned < fetched.Count && matches.Count < count; scanned++)
+            {
+                var record = fetched[scanned];
+                if (record is null)
+                {
+                    continue;
+                }
+                if (MatchesSearchTerms(record, optional, required, excluded))
+                {
+                    matches.Add(ToRecordSnapshot(record));
+                }
+            }
+
+            if (matches.Count >= count || !recordSearch.HasMoreResults || fetched.Count >= scanCap)
+            {
+                break;
+            }
+
+            target = fetched.Count + recordSearch.BatchSize;
+        }
+
+        return new RecordPage
+        {
+            Records = matches,
+            HasMore = recordSearch.HasMoreResults,
+            Offset = query.Offset,
+        };
+    }
+
+    /// <summary>
+    /// engine UI の <c>MergedWorldData.MatchesSearchParameters</c> と同じ substring 判定を
+    /// レコード単体に対して再現する。excluded 語が 1 つでも見つかれば不一致、required 語が
+    /// すべて含まれなければ不一致、required があれば一致、無ければ optional のいずれかが
+    /// 含まれれば一致 (optional も空なら一致)。判定は Name / Description / 各 Tag への
+    /// case-insensitive な <see cref="string.IndexOf(string, StringComparison)"/>。
+    /// </summary>
+    private static bool MatchesSearchTerms(
+        Record record,
+        List<string> optional,
+        List<string> required,
+        List<string> excluded
+    )
+    {
+        foreach (var term in excluded)
+        {
+            if (ContainsTerm(record, term))
+            {
+                return false;
+            }
+        }
+        foreach (var term in required)
+        {
+            if (!ContainsTerm(record, term))
+            {
+                return false;
+            }
+        }
+        if (required.Count > 0)
+        {
+            return true;
+        }
+        if (optional.Count == 0)
+        {
+            return true;
+        }
+        foreach (var term in optional)
+        {
+            if (ContainsTerm(record, term))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>レコードの Name / Description / 各 Tag に <paramref name="term"/> が含まれるか (case-insensitive)。</summary>
+    private static bool ContainsTerm(Record record, string term)
+    {
+        if (ContainsSubstring(record.Name, term) || ContainsSubstring(record.Description, term))
+        {
+            return true;
+        }
+        if (record.Tags is not null)
+        {
+            foreach (var tag in record.Tags)
+            {
+                if (ContainsSubstring(tag, term))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool ContainsSubstring(string? str, string term) =>
+        !string.IsNullOrEmpty(str) && str.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
 
     /// <inheritdoc/>
     public async Task<OpenWorldSnapshot> JoinAsync(JoinTarget target, CancellationToken ct)

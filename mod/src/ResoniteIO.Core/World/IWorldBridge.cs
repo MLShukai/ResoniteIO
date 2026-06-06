@@ -107,6 +107,12 @@ public sealed record RecordListQuery
 {
     public RecordSource Source { get; init; } = RecordSource.Public;
     public IReadOnlyList<string> RequiredTags { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// 自由文の検索フレーズ。空でなければ bridge は Resonite 自身の検索パスを使う
+    /// (<c>+term</c>=必須 / <c>-term</c>=除外 / <c>"quoted"</c>=フレーズ / それ以外=任意)。
+    /// </summary>
+    public string Search { get; init; } = "";
     public string OwnerId { get; init; } = "";
     public int Offset { get; init; }
 
