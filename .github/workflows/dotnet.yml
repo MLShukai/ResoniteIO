@@ -1,0 +1,50 @@
+# C# build & test for the ResoniteIO mod.
+#
+# NOTE: We do NOT build the whole ResoniteIO.sln on CI. The net472
+# ResoniteIO.Renderer project depends on proprietary Unity/Renderite DLLs
+# that are unavailable on public CI runners. Instead we build & test only
+# the two test projects:
+#   - ResoniteIO.Core.Tests (Resonite-independent)
+#   - ResoniteIO.Tests      (Mod; restores the public Resonite.GameLibs
+#                            NuGet fallback; net472 Renderer is not
+#                            referenced by these projects, so it is excluded
+#                            automatically).
+name: C# Build & Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mod/**"
+      - "proto/**"
+      - ".github/workflows/dotnet.yml"
+  pull_request:
+    branches: [main, "release/*"]
+    paths:
+      - "mod/**"
+      - "proto/**"
+      - ".github/workflows/dotnet.yml"
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "${{ env.DOTNET_VERSION }}"
+
+      - name: Restore .NET tools (csharpier, tcli)
+        run: dotnet tool restore
+
+      - name: Test Core (Resonite-independent)
+        run: dotnet test mod/tests/ResoniteIO.Core.Tests/ResoniteIO.Core.Tests.csproj -c Release
+
+      - name: Test Mod (Resonite.GameLibs fallback; net472 Renderer excluded)
+        run: dotnet test mod/tests/ResoniteIO.Tests/ResoniteIO.Tests.csproj -c Release

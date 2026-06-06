@@ -1,0 +1,52 @@
+# Python unit tests (resoio) across supported Python versions.
+# Runs headless with no Resonite — testpaths = tests/resoio.
+name: Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "**/*.pyi"
+      - "python/pyproject.toml"
+      - "python/uv.lock"
+      - ".github/workflows/test.yml"
+  pull_request:
+    branches: [main, "release/*"]
+    paths:
+      - "**/*.py"
+      - "**/*.pyi"
+      - "python/pyproject.toml"
+      - "python/uv.lock"
+      - ".github/workflows/test.yml"
+
+env:
+  UV_VERSION: "0.7.20"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12", "3.13", "3.14"]
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "${{ env.UV_VERSION }}"
+          python-version: "${{ matrix.python-version }}"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run pytest
+        run: uv run pytest -v --cov
