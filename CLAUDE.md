@@ -131,6 +131,7 @@ resonite-io/
 - Python (resoio): **`uv`** + Python `>=3.12`。gRPC は **`betterproto2[grpclib]`** (async)。`pyright` strict、`ruff` (line-length 88、ダブルクォート、isort + combine-as-imports)、`pytest` + `pytest-asyncio`/`pytest-cov`/`pytest-mock`
 - proto: C# 側は csproj の `<Protobuf>` で `dotnet build` 時に自動生成 (Server スタブのみ、commit しない)。Python 側は `just gen-proto` で `python/src/resoio/_generated/` に書き、**commit する**。lint は `buf` (`SERVICE_SUFFIX` / `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except)
 - Docker 開発環境: `debian:bookworm-slim` ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
+- CI / リリース: `.github/workflows/` に品質ゲート (`pre-commit` / `test` (Python 3.12-3.14) / `type-check` / `dotnet` / `proto-check`) と tag-driven リリース (`publish.yml`) を配置。`v*` tag の push で Thunderstore mod + PyPI パッケージを同時公開する。手順は [docs/RELEASE.md](docs/RELEASE.md) と [release-resonite skill](.claude/skills/release-resonite/SKILL.md) 参照 (正規 version = csproj `<Version>`、`python/pyproject.toml` は lockstep)
 
 ## コマンド
 
@@ -225,6 +226,7 @@ public sealed class Example
   - 種別: `feature`, `fix`, `refactor`, `docs`, `chore`
 - 必ずブランチ上で commit する (`main` に直接 commit しない)。作業ブランチは `main` から分岐
 - `main` へのマージはユーザーが判断・実行する
+- リリースは `chore/<日付>/release-vX.Y.Z` で version bump → `main` マージ → `release/X.Y` 上で `vX.Y.Z` tag を push して `publish.yml` を発火させる。詳細は [docs/RELEASE.md](docs/RELEASE.md) / [release-resonite skill](.claude/skills/release-resonite/SKILL.md)
 
 ### コミットメッセージ
 
