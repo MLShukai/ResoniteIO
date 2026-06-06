@@ -54,6 +54,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineMicrophoneBridge? _microphoneBridge;
     private FrooxEngineSpeakerBridge? _speakerBridge;
     private FrooxEngineContextMenuBridge? _contextMenuBridge;
+    private FrooxEngineDashBridge? _dashBridge;
     private FrooxEngineManipulationBridge? _manipulationBridge;
     private FrooxEngineWorldBridge? _worldBridge;
 
@@ -116,6 +117,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _contextMenuBridge = new FrooxEngineContextMenuBridge(Engine.Current, _logSink);
 
+            _dashBridge = new FrooxEngineDashBridge(Engine.Current, _logSink);
+
             _manipulationBridge = new FrooxEngineManipulationBridge(Engine.Current, _logSink);
 
             _worldBridge = new FrooxEngineWorldBridge(Engine.Current, _logSink);
@@ -130,6 +133,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _speakerBridge,
                 _microphoneBridge,
                 contextMenuBridge: _contextMenuBridge,
+                dashBridge: _dashBridge,
                 worldBridge: _worldBridge,
                 manipulationBridge: _manipulationBridge
             );
@@ -187,6 +191,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // ContextMenuBridge は engine 状態を保持せず IDisposable でもないため
         // (reflection MethodInfo は static cache)、参照 null 化のみで足りる。
         _contextMenuBridge = null;
+
+        // DashBridge も engine 状態を保持せず IDisposable でもないため、参照 null 化のみで足りる。
+        _dashBridge = null;
 
         // ManipulationBridge も engine 状態を保持せず IDisposable でもないため参照 null 化のみ。
         _manipulationBridge = null;

@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using Grpc.Net.Client;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Manipulation;
@@ -48,6 +49,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
+        IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null
     ) =>
         StartAsync(
@@ -59,6 +61,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
             speakerBridge,
             microphoneBridge,
             contextMenuBridge,
+            dashBridge,
             manipulationBridge
         );
 
@@ -71,6 +74,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
+        IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null
     )
     {
@@ -91,6 +95,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
                 speakerBridge,
                 microphoneBridge,
                 contextMenuBridge,
+                dashBridge,
                 manipulationBridge: manipulationBridge
             );
         }

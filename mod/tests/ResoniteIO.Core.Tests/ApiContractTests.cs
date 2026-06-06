@@ -1,6 +1,7 @@
 using System.Reflection;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -71,6 +72,16 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.ContextMenu.ContextMenuService",
             "ResoniteIO.Core.ContextMenu.ContextMenuStateSnapshot",
             "ResoniteIO.Core.ContextMenu.IContextMenuBridge",
+            "ResoniteIO.Core.Dash.DashActionResultSnapshot",
+            "ResoniteIO.Core.Dash.DashElementSnapshot",
+            "ResoniteIO.Core.Dash.DashNotReadyException",
+            "ResoniteIO.Core.Dash.DashRectSnapshot",
+            "ResoniteIO.Core.Dash.DashScreenListSnapshot",
+            "ResoniteIO.Core.Dash.DashScreenSnapshot",
+            "ResoniteIO.Core.Dash.DashService",
+            "ResoniteIO.Core.Dash.DashStateSnapshot",
+            "ResoniteIO.Core.Dash.DashTreeSnapshot",
+            "ResoniteIO.Core.Dash.IDashBridge",
             "ResoniteIO.Core.Display.DisplayConfigSnapshot",
             "ResoniteIO.Core.Display.DisplayNotReadyException",
             "ResoniteIO.Core.Display.DisplayService",
@@ -165,6 +176,25 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.ContextMenuOpenRequest",
             "ResoniteIO.V1.ContextMenuReflection",
             "ResoniteIO.V1.ContextMenuState",
+            "ResoniteIO.V1.Dash",
+            "ResoniteIO.V1.Dash+DashBase",
+            "ResoniteIO.V1.DashActionResult",
+            "ResoniteIO.V1.DashCloseRequest",
+            "ResoniteIO.V1.DashElement",
+            "ResoniteIO.V1.DashGetStateRequest",
+            "ResoniteIO.V1.DashGetTreeRequest",
+            "ResoniteIO.V1.DashHighlightRequest",
+            "ResoniteIO.V1.DashInvokeRequest",
+            "ResoniteIO.V1.DashListScreensRequest",
+            "ResoniteIO.V1.DashOpenRequest",
+            "ResoniteIO.V1.DashRect",
+            "ResoniteIO.V1.DashReflection",
+            "ResoniteIO.V1.DashScreen",
+            "ResoniteIO.V1.DashScreenList",
+            "ResoniteIO.V1.DashScrollRequest",
+            "ResoniteIO.V1.DashSetScreenRequest",
+            "ResoniteIO.V1.DashState",
+            "ResoniteIO.V1.DashTree",
             "ResoniteIO.V1.Display",
             "ResoniteIO.V1.Display+DisplayBase",
             "ResoniteIO.V1.DisplayApplyResponse",
@@ -315,6 +345,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(MicrophoneNotReadyException))]
     [InlineData(typeof(DisplayNotReadyException))]
     [InlineData(typeof(ContextMenuNotReadyException))]
+    [InlineData(typeof(DashNotReadyException))]
     [InlineData(typeof(ManipulationNotReadyException))]
     [InlineData(typeof(WorldNotReadyException))]
     [InlineData(typeof(WorldNotFoundException))]
@@ -452,6 +483,30 @@ public sealed class ApiContractTests
                 "InvokeAsync",
                 new[] { typeof(ContextMenuHandSelector), typeof(int), typeof(CancellationToken) }
             )
+        );
+    }
+
+    /// <summary>
+    /// <see cref="IDashBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IDashBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IDashBridge),
+            ("OpenAsync", new[] { typeof(CancellationToken) }),
+            ("CloseAsync", new[] { typeof(CancellationToken) }),
+            ("GetStateAsync", new[] { typeof(CancellationToken) }),
+            ("GetTreeAsync", new[] { typeof(bool), typeof(string), typeof(CancellationToken) }),
+            ("InvokeAsync", new[] { typeof(string), typeof(CancellationToken) }),
+            ("HighlightAsync", new[] { typeof(string), typeof(CancellationToken) }),
+            (
+                "ScrollAsync",
+                new[] { typeof(string), typeof(float), typeof(float), typeof(CancellationToken) }
+            ),
+            ("ListScreensAsync", new[] { typeof(CancellationToken) }),
+            ("SetScreenAsync", new[] { typeof(string), typeof(string), typeof(CancellationToken) })
         );
     }
 

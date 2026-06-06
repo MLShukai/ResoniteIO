@@ -43,6 +43,19 @@ from resoio._generated.resonite_io.v1 import (
     ContextMenuItem,
     ContextMenuOpenRequest,
     ContextMenuState,
+    DashActionResult,
+    DashElement,
+    DashGetTreeRequest,
+    DashHighlightRequest,
+    DashInvokeRequest,
+    DashListScreensRequest,
+    DashRect,
+    DashScreen,
+    DashScreenList,
+    DashScrollRequest,
+    DashSetScreenRequest,
+    DashState,
+    DashTree,
     DisplayApplyResponse,
     DisplayConfig,
     DisplayGetRequest,
@@ -227,6 +240,72 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     ContextMenuInvokeRequest: {
         "hand": 1,
         "index": 2,
+    },
+    # Dash
+    DashState: {
+        "is_open": 1,
+        "open_lerp": 2,
+    },
+    DashRect: {
+        "x": 1,
+        "y": 2,
+        "width": 3,
+        "height": 4,
+        "is_screen_space": 5,
+    },
+    DashElement: {
+        "ref_id": 1,
+        "type": 2,
+        "slot_name": 3,
+        "locale_key": 4,
+        "label": 5,
+        "enabled": 6,
+        "interactable": 7,
+        "rect": 8,
+        "parent_ref_id": 9,
+        "depth": 10,
+    },
+    DashTree: {
+        "elements": 1,
+        "screen_width": 2,
+        "screen_height": 3,
+    },
+    DashActionResult: {
+        "ok": 1,
+        "found": 2,
+        "ref_id": 3,
+        "detail": 4,
+    },
+    DashGetTreeRequest: {
+        "interactable_only": 1,
+        "root_ref_id": 2,
+    },
+    DashInvokeRequest: {
+        "ref_id": 1,
+    },
+    DashHighlightRequest: {
+        "ref_id": 1,
+    },
+    DashScrollRequest: {
+        "ref_id": 1,
+        "delta_x": 2,
+        "delta_y": 3,
+    },
+    DashScreen: {
+        "ref_id": 1,
+        "key": 2,
+        "name": 3,
+        "label": 4,
+        "is_current": 5,
+        "enabled": 6,
+    },
+    DashScreenList: {
+        "screens": 1,
+    },
+    DashListScreensRequest: {},
+    DashSetScreenRequest: {
+        "ref_id": 1,
+        "key": 2,
     },
     # Manipulation
     WorldPoint: {

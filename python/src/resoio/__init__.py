@@ -8,6 +8,15 @@ from resoio.context_menu import (
     ContextMenuItem,
     ContextMenuState,
 )
+from resoio.dash import (
+    DashActionResult,
+    DashClient,
+    DashElement,
+    DashRect,
+    DashScreen,
+    DashState,
+    DashTree,
+)
 from resoio.display import DisplayClient, DisplayInfo
 from resoio.locomotion import (
     DriveSummary,
@@ -59,6 +68,13 @@ __all__ = [
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
+    "DashActionResult",
+    "DashClient",
+    "DashElement",
+    "DashRect",
+    "DashScreen",
+    "DashState",
+    "DashTree",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",

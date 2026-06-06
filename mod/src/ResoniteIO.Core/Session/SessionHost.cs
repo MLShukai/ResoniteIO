@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.ContextMenu;
+using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -81,6 +82,7 @@ public sealed class SessionHost : IAsyncDisposable
         ISpeakerBridge? speakerBridge = null,
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
+        IDashBridge? dashBridge = null,
         IWorldBridge? worldBridge = null,
         IManipulationBridge? manipulationBridge = null
     )
@@ -135,6 +137,10 @@ public sealed class SessionHost : IAsyncDisposable
         {
             builder.Services.AddSingleton(contextMenuBridge);
         }
+        if (dashBridge is not null)
+        {
+            builder.Services.AddSingleton(dashBridge);
+        }
         if (worldBridge is not null)
         {
             builder.Services.AddSingleton(worldBridge);
@@ -159,6 +165,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<SpeakerService>();
         app.MapGrpcService<MicrophoneService>();
         app.MapGrpcService<ContextMenuService>();
+        app.MapGrpcService<DashService>();
         app.MapGrpcService<WorldService>();
         app.MapGrpcService<ManipulationService>();
 
@@ -206,6 +213,10 @@ public sealed class SessionHost : IAsyncDisposable
         if (contextMenuBridge is null)
         {
             log.LogWarning("ContextMenu modality is not configured.");
+        }
+        if (dashBridge is null)
+        {
+            log.LogWarning("Dash modality is not configured.");
         }
         if (worldBridge is null)
         {
