@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-07
+
+0.1.0 公開後に判明したパッケージング不備の hotfix。配布物が動作しない 2 件を修正。
+
+### Fixed
+
+- **Thunderstore mod**: 配布パッケージに `ResoniteIO.dll` / `.pdb` しか含まれず、
+  Core/Mod 二層の `ResoniteIO.Core.dll` や Kestrel/gRPC ランタイム DLL が欠落して
+  mod がロードできなかった問題を修正。Gale deploy と同じ `@(PluginFiles)` 集合を
+  staging して同梱するようにし、必須 DLL を漏れなくパッケージする
+  (`StageThunderstorePlugin` target + `thunderstore.toml`)
+- **Python `resonite-io`**: `pip install resonite-io` 後の `import resoio` が
+  betterproto2 の version 不整合で `ImportError` になる問題を修正。runtime 依存を
+  生成物の compiler と major.minor 一致させ `betterproto2[grpclib]>=0.10,<0.11` に
+  固定 (compiler 0.10.1 で `_generated/` を再生成、dev も lockstep)
+
 ## [0.1.0] - 2026-06-07
 
 最初の公開リリース。Resonite を AI エージェントの実行環境として使うための双方向 IPC
@@ -46,4 +62,5 @@ Socket) の基盤一式。
   バージョン付きドキュメントサイト (MkDocs Material)
 
 [0.1.0]: https://github.com/MLShukai/ResoniteIO/releases/tag/v0.1.0
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...HEAD
+[0.1.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...v0.1.1
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...HEAD

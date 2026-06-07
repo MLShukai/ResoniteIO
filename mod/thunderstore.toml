@@ -32,13 +32,15 @@ icon = "./icon.png"
 readme = "./README.md"
 outdir = "./build"
 
-# 成果物を plugins/ResoniteIO/ 配下に配置 (BepInEx が認識する layout)
+# 成果物を plugins/ResoniteIO/ 配下に配置 (BepInEx が認識する layout)。
+# ResoniteIO.csproj の StageThunderstorePlugin target が、Gale deploy と同じ
+# @(PluginFiles) (mod 本体 + ResoniteIO.Core / RendererShared + Kestrel/gRPC
+# ランタイム DLL 一式) を `_thunderstore-plugin/` に集約する。ここを丸ごと
+# 取り込むことで、必須 DLL を toml に手書き列挙せずに漏れなく同梱できる。
 [[build.copy]]
-source = "./src/ResoniteIO/bin/Release/ResoniteIO.dll"
-target = "plugins/ResoniteIO/"
-
-[[build.copy]]
-source = "./src/ResoniteIO/bin/Release/ResoniteIO.pdb"
+# source は末尾スラッシュ無し: tcli の dir copy は相対パスを substring(source.Length+1)
+# で算出するため、末尾スラッシュを付けると各ファイル名の先頭 1 文字が欠落する。
+source = "./src/ResoniteIO/bin/Release/_thunderstore-plugin"
 target = "plugins/ResoniteIO/"
 
 # CHANGELOG / LICENSE を同梱したい場合はコメント解除する (CHANGELOG は repo root)

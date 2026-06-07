@@ -2,7 +2,7 @@
 # PyPI distribution name. The importable package / CLI command stays `resoio`
 # (see [tool.hatch.build.targets.wheel] below and [project.scripts]).
 name = "resonite-io"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python client for Resonite IO"
 readme = "README.md"
 authors = [{ name = "mlshukai" }]
@@ -11,7 +11,13 @@ requires-python = ">=3.12"
 dependencies = [
   "argcomplete>=3.5",
   "av>=14",
-  "betterproto2[grpclib]",
+  # betterproto2 の runtime は、生成物 (_generated/) をコンパイルした
+  # betterproto2_compiler と major.minor が一致していないと import 時に
+  # check_compiler_version で ImportError になる (compiler a.b.c ↔ runtime x.y.z
+  # は a=x かつ b=y のときのみ互換)。生成物は 0.10.x compiler 製なので runtime も
+  # 0.10.x に固定する。未固定だと `pip install resonite-io` が将来の非互換版を
+  # 引いて import が壊れる。compiler 側の固定は [dependency-groups].dev と lockstep。
+  "betterproto2[grpclib]>=0.10,<0.11",
   "numpy>=2.0",
   "prompt-toolkit>=3.0",
 ]
@@ -48,7 +54,9 @@ packages = ["src/resoio"]
 dev = [
   # Compiler ships as its own package (no `[compiler]` extra exists on
   # betterproto2 itself — confirmed against PyPI metadata 2026-05).
-  "betterproto2_compiler",
+  # runtime betterproto2 (>=0.10,<0.11) と major.minor を揃える: `just gen-proto`
+  # が 0.11+ compiler を引くと生成物が runtime と非互換になり import が壊れる。
+  "betterproto2_compiler>=0.10,<0.11",
   # E2E only: tests/e2e/camera_stream.py uses cv2.VideoWriter to record
   # captured BGRA frames as MP4. The headless distribution avoids X11/Qt
   # system libs (libxcb etc.) which the dev container does not ship.
