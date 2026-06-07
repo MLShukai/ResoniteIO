@@ -556,15 +556,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-from-source-works-today" class="md-nav__link">
+  <a href="#build-from-source" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Build from source (works today)
+        Build from source
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Build from source (works today)">
+    <nav class="md-nav" aria-label="Build from source">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1297,15 +1297,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-from-source-works-today" class="md-nav__link">
+  <a href="#build-from-source" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Build from source (works today)
+        Build from source
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Build from source (works today)">
+    <nav class="md-nav" aria-label="Build from source">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1379,42 +1379,43 @@ tag publishes a numbered version and moves the <strong><code>latest</code></stro
 (top of the page) to switch. To build locally, run <code>just docs-serve</code> / <code>just docs-build</code>.</p>
 </div>
 <h2 id="c-mod-thunderstore">C# mod — Thunderstore<a class="headerlink" href="#c-mod-thunderstore" title="Permanent link">&para;</a></h2>
-<div class="admonition warning">
-<p class="admonition-title">Placeholder</p>
-<p>The Thunderstore package is not published yet. Once it is, you will install it through a
-Resonite mod manager such as <a href="https://github.com/Kesomannen/gale">Gale</a>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a># PLACEHOLDER — not yet available
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Search Thunderstore for &quot;ResoniteIO&quot; and install it into your Gale profile.
+<p>Install through a Resonite mod manager such as <a href="https://github.com/Kesomannen/gale">Gale</a>:
+search Thunderstore for <strong>ResoniteIO</strong> (package <code>mlshukai-ResoniteIO</code>) and add it to your
+Gale profile. The package declares its dependencies (InterprocessLib, RenderiteHook,
+BepisResoniteWrapper, and — transitively — BepisLoader), so the mod manager pulls in the
+full plugin set for you.</p>
+<p>After installing, set the Steam launch option so BepisLoader can hook the client:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>WINEDLLOVERRIDES=&quot;winhttp=n,b&quot; %command%
 </code></pre></div>
-</div>
-<p>Until then, build and deploy the mod from source (see below).</p>
+<p>The <a href="https://github.com/MLShukai/ResoniteIO#readme">repository README</a> explains why the
+launch option is mandatory. Prefer to build the mod yourself? See
+<a href="#build-from-source">Build from source</a> below.</p>
 <h2 id="python-client-pypi">Python client — PyPI<a class="headerlink" href="#python-client-pypi" title="Permanent link">&para;</a></h2>
-<div class="admonition warning">
-<p class="admonition-title">Placeholder</p>
-<p>The PyPI package is not published yet. Once it is:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># PLACEHOLDER — not yet available</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pip<span class="w"> </span>install<span class="w"> </span>resoio
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>resoio
 </code></pre></div>
-</div>
-<p>Until then, install the Python client from source (see below).</p>
-<h2 id="build-from-source-works-today">Build from source (works today)<a class="headerlink" href="#build-from-source-works-today" title="Permanent link">&para;</a></h2>
-<p>This is the supported path right now. The full development environment — .NET 10, <code>uv</code>,
+<p>or, inside a <a href="https://docs.astral.sh/uv/"><code>uv</code></a> project:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>add<span class="w"> </span>resoio
+</code></pre></div>
+<p>The <code>resoio</code> package requires Python ≥ 3.12, is <code>pyright</code>-strict, and ships type
+information (PEP 561).</p>
+<h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
+<p>Building from source is the path for contributing to ResoniteIO or running an unreleased
+version. The full development environment — .NET 10, <code>uv</code>,
 <code>protoc</code>, and tooling — lives inside a dev container; see the
 <a href="https://github.com/MLShukai/ResoniteIO#readme">repository README</a> for the one-time
 <code>just init</code> host setup and how to open the dev container.</p>
 <h3 id="c-mod">C# mod<a class="headerlink" href="#c-mod" title="Permanent link">&para;</a></h3>
 <p>From inside the dev container:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>just<span class="w"> </span>build<span class="w">        </span><span class="c1"># dotnet build -c Release</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>just<span class="w"> </span>build<span class="w">        </span><span class="c1"># dotnet build -c Release</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)</span>
 </code></pre></div>
 <p>The mod requires a Gale profile with BepisLoader and the supporting plugins, plus the Steam
 launch option <code>WINEDLLOVERRIDES="winhttp=n,b" %command%</code>. The README documents the exact
 plugin list and why the launch option is mandatory.</p>
 <h3 id="python-client">Python client<a class="headerlink" href="#python-client" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">cd</span><span class="w"> </span>python
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w">   </span><span class="c1"># creates python/.venv with the resoio package and deps</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">cd</span><span class="w"> </span>python
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w">   </span><span class="c1"># creates python/.venv with the resoio package and deps</span>
 </code></pre></div>
-<p>The <code>resoio</code> package is <code>pyright</code>-strict and ships type information (PEP 561).</p>
 <h2 id="socket-location">Socket location<a class="headerlink" href="#socket-location" title="Permanent link">&para;</a></h2>
 <p>By default the client resolves the socket under <code>~/.resonite-io/</code>. Override it with
 <code>RESONITE_IO_SOCKET</code> (full path) or <code>RESONITE_IO_SOCKET_DIR</code> (directory). See
