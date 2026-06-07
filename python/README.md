@@ -1,37 +1,43 @@
 # resoio
 
-Python client for [Resonite IO](../README.md). Wraps the `resonite_io.v1` gRPC
-schema (UDS transport, async via `grpclib`) into a friendly client library.
+Python client for [ResoniteIO](https://github.com/MLShukai/ResoniteIO) — a bidirectional IPC
+bridge that turns [Resonite](https://resonite.com/) into a runtime environment for AI agents.
+`resoio` wraps the `resonite_io.v1` gRPC schema (Unix Domain Socket transport, async via
+`grpclib`) into a friendly, fully typed client library and a `resoio` CLI.
+
+## Install
+
+```bash
+pip install resoio
+```
+
+## Requires
+
+A Resonite client running the **ResoniteIO mod** on the same host (the two halves connect
+over a Unix Domain Socket). See the documentation for installing the mod.
 
 ## Quick start
 
-```bash
-# From the repo root, install all dependencies (creates python/.venv)
-cd python
-uv sync --all-extras
+```python
+import asyncio
 
-# (Re)generate the protoc output checked into src/resoio/_generated/
-cd .. && bash scripts/gen_proto.sh
+from resoio import SessionClient
 
-# Run the test suite
-cd python && uv run pytest -v --cov
 
-# Type-check (pyright strict, configured via pyproject.toml)
-uv run pyright
+async def main() -> None:
+    async with SessionClient() as session:
+        response = await session.ping("hello")
+        print(response.message)
+
+
+asyncio.run(main())
 ```
 
-## Layout
+## Documentation
 
-```
-python/
-├── pyproject.toml         # uv-managed project, pyright/ruff/pytest config
-├── src/resoio/
-│   ├── __init__.py        # exposes __version__ via importlib.metadata
-│   ├── session.py         # SessionClient (Step 2 placeholder)
-│   ├── py.typed           # PEP 561 marker
-│   └── _generated/        # protoc output, committed
-└── tests/                 # mirrors src/resoio/ 1-to-1
-```
+- **Docs:** <https://mlshukai.github.io/ResoniteIO/>
+- **Source:** <https://github.com/MLShukai/ResoniteIO>
 
-The package is `pyright`-strict for `src/`. The generated protobuf code under
-`_generated/` is excluded from strict type checking and from coverage.
+## License
+
+[MIT](https://github.com/MLShukai/ResoniteIO/blob/main/LICENSE)

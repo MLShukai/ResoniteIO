@@ -11,7 +11,7 @@ version: 0.1.0
 
 - **正規バージョン = csproj `<Version>`** (`mod/src/ResoniteIO/ResoniteIO.csproj`)。`python/pyproject.toml` は lockstep。
 - リリースは **`v*` tag の push** で `.github/workflows/publish.yml` を発火させる。
-- リリースノートのソースは **`mod/CHANGELOG.md`** ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 形式)。
+- リリースノートのソースは **`CHANGELOG.md`** ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 形式)。
 - Thunderstore namespace = **`mlshukai`** (MLShukai チーム)。
 
 ______________________________________________________________________
@@ -26,7 +26,7 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 
 1. `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Version>` を `X.Y.Z` に
 2. `python/pyproject.toml` の `version` を **同じ** `X.Y.Z` に
-3. `mod/CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)
+3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)
 4. `python/` で `uv lock` を回す
 5. `just run` (`format`→`gen-proto`→`build`→`test`→`type`) が green になるまで回す
 6. PR を出す (`github-ops` skill の `gh pr create` HEREDOC)。**main へのマージはユーザーが実行**
@@ -51,7 +51,7 @@ ______________________________________________________________________
    → `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS` で Thunderstore zip、`uv build` で python sdist/wheel
 2. **publish-thunderstore** — `tcli publish` (secret `TCLI_AUTH_TOKEN`、`-p:PublishTS=true -p:TcliToken=...`)
 3. **publish-pypi** — PyPI Trusted Publishing (OIDC)、GitHub environment `pypi`、**token なし**
-4. **github-release** — `mod/CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、tag が `(a|b|rc)[0-9]+$` なら `--prerelease`、mod zip + python dists を添付
+4. **github-release** — `CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、tag が `(a|b|rc)[0-9]+$` なら `--prerelease`、mod zip + python dists を添付
 
 ______________________________________________________________________
 
