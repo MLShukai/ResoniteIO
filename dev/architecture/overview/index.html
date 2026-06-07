@@ -22,7 +22,7 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/icon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
@@ -100,8 +100,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="ResoniteIO" class="md-header__button md-logo" aria-label="ResoniteIO" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../../assets/icon.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -358,8 +357,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="ResoniteIO" class="md-nav__button md-logo" aria-label="ResoniteIO" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../../assets/icon.png" alt="logo">
 
     </a>
     ResoniteIO
@@ -1315,16 +1313,17 @@
 <h1 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
 <p>ResoniteIO connects two processes — the Resonite client and your agent code — over gRPC on
 a Unix Domain Socket (UDS).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────┐         ┌──────────────────────────────┐
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│   Resonite client (C#)      │         │   Your agent (Python)        │
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                             │         │                              │
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  ResoniteIO  (BepInEx mod)  │         │   resoio  (client library)   │
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  ├ FrooxEngine&lt;M&gt;Bridge ────┼── UDS ──┼─→ &lt;Modality&gt;Client            │
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  └ ResoniteIO.Core          │  gRPC   │                              │
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│     ├ gRPC server (Kestrel) │         │   grpclib (async)            │
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│     └ &lt;Modality&gt;Service     │         │                              │
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└─────────────────────────────┘         └──────────────────────────────┘
-</code></pre></div>
+<pre class="mermaid"><code>flowchart LR
+    subgraph client["Resonite client (C#)"]
+        direction TB
+        bridge["ResoniteIO mod&lt;br/&gt;FrooxEngine&amp;lt;Modality&amp;gt;Bridge"]
+        core["ResoniteIO.Core&lt;br/&gt;gRPC server (Kestrel)&lt;br/&gt;&amp;lt;Modality&amp;gt;Service"]
+        bridge --- core
+    end
+    subgraph agent["Your agent (Python)"]
+        py["resoio&lt;br/&gt;&amp;lt;Modality&amp;gt;Client&lt;br/&gt;grpclib (async)"]
+    end
+    core &lt;--&gt;|"gRPC over UDS"| py</code></pre>
 <h2 id="why-grpc-over-uds">Why gRPC over UDS<a class="headerlink" href="#why-grpc-over-uds" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>gRPC</strong> gives a typed, multi-language contract with first-class streaming, which maps
