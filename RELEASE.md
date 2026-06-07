@@ -34,7 +34,7 @@ ______________________________________________________________________
 | `type-check.yml`  | `pyright` strict 型チェック                                                  | PR / push            |
 | `dotnet.yml`      | C# `Core.Tests` のみ (Mod / net472 Renderer は CI から除外)                  | PR / push            |
 | `proto-check.yml` | `just gen-proto` を回して diff が出ないことを確認 (生成物のコミット漏れ検出) | PR / push            |
-| `publish.yml`     | リリース (4 ジョブ直列)。下記 §3 参照                                        | `push: tags: ["v*"]` |
+| `publish.yml`     | リリース (4 ジョブ)。下記 §3 参照                                            | `push: tags: ["v*"]` |
 
 補足:
 
@@ -63,9 +63,11 @@ lockfile を追従させる。Thunderstore zip の `versionNumber` は `Director
 
 ______________________________________________________________________
 
-## 3. `publish.yml` の 4 ジョブ (直列)
+## 3. `publish.yml` の 4 ジョブ
 
-tag `vX.Y.Z` の push で発火し、以下を **直列** に実行する。
+tag `vX.Y.Z` の push で発火する。依存グラフは `build` → (`publish-thunderstore` ∥ `publish-pypi`)
+→ `github-release`。**publish 2 ジョブは `build` にのみ依存し互いに並列**に走る (詳細と
+partial publish の注意は §5)。
 
 ### 3-1. `build` (version guard + 成果物ビルド)
 
@@ -90,7 +92,8 @@ tag `vX.Y.Z` の push で発火し、以下を **直列** に実行する。
 ### 3-4. `github-release`
 
 - `CHANGELOG.md` (repo root) から **`## [X.Y.Z]` セクションを抽出** して Release ノートにする。
-- tag が `(a|b|rc)[0-9]+$` にマッチする場合 (例: `v0.2.0rc1`) は **`--prerelease`** を付ける。
+- tag が `(a|b|rc)[0-9]+$` にマッチする場合は **`--prerelease`** を付ける ロジックが残っているが、
+  **dual publish 経路では到達不能** (Thunderstore が prerelease version を拒否するため。§5 参照)。
 - アセットとして **mod zip + python dists** (sdist/wheel) を添付する。
 
 ______________________________________________________________________
@@ -146,22 +149,44 @@ git push origin vX.Y.Z
 > tag push は `main` への直接 push とは別物。CLAUDE.md の「`main` に直接 push しない」規約は守りつつ、
 > tag は `release/X.Y` を指すものを push する。
 
-push 後、`publish.yml` の 4 ジョブが直列で走る。`gh run watch` / GitHub Actions の UI で進捗を追う。
+push 後、`publish.yml` の 4 ジョブが走る (§3 の依存グラフ参照)。`gh run watch` / GitHub Actions の UI で進捗を追う。
 
 ______________________________________________________________________
 
-## 5. プレリリース (rc) リハーサル
+## 5. プレリリース版 (alpha / beta / rc) は打てない
 
-本番公開の前に rc tag で全経路をリハーサルできる。
+**Thunderstore が prerelease バージョンを受け付けないため、`v0.2.0rc1` のような prerelease tag で
+dual publish をリハーサルすることはできない。** 次の 3 者を同時に満たす prerelease 文字列が存在しない:
 
-```bash
-git tag vX.Y.ZrcN                    # 例: v0.2.0rc1
-git push origin vX.Y.ZrcN
-```
+| 対象                  | 要求する形式                        | 不可な例                                                                                    |
+| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| Thunderstore (`tcli`) | `Major.Minor.Patch` の整数のみ      | `0.1.0-rc1` → `Invalid package version number ... must follow the Major.Minor.Patch format` |
+| .NET (`<Version>`)    | hyphen 付き semver                  | `0.1.0rc1` → `not a valid version string` (受け付けるのは `0.1.0-rc1`)                      |
+| version guard         | tag / csproj / pyproject の完全一致 | 上記 2 つが両立しない時点で詰む                                                             |
 
-- version guard が効くので、csproj `<Version>` と `pyproject.toml` も `X.Y.ZrcN` に揃えておく必要がある。
-- `github-release` は `(a|b|rc)[0-9]+$` 判定で **`--prerelease`** を付ける。
-- PyPI / Thunderstore にも prerelease として publish されるため、本番 tag (`vX.Y.Z`) は rc 検証後に別途打つ。
+.NET が要求する `0.1.0-rc1` を Thunderstore が拒否し、Thunderstore が許す `0.1.0` は prerelease に
+ならない。**Thunderstore に mod を出す限り prerelease チャネルは使えない**と理解する。
+
+`publish.yml` の `github-release` に残る `(a|b|rc)[0-9]+$` → `--prerelease` 判定は上記により dual publish
+経路では到達不能 (将来 python 単独 publish に分離した場合のための残置。消しても害は無い)。
+
+### 代わりのリリース前検証
+
+prerelease リハーサルが使えないので、以下で代替する:
+
+1. **ローカル full check**: `just run` (`format` → `gen-proto` → `build` → `test` → `type`)。
+2. **mod パッケージングのローカル確認**: `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS`
+   (publish はしない)。Thunderstore zip が `mod/build/<namespace>-ResoniteIO-<version>.zip` に出るところまで
+   確認する。CI と同様 InterprocessLib が必要 (§3-1 / `.github/scripts/fetch-interprocesslib.sh`)。
+3. **`build` ジョブが唯一の publish 前ゲート**: `publish.yml` は
+   `build` → (`publish-thunderstore` ∥ `publish-pypi`) → `github-release`。publish 2 ジョブは
+   **`build` にのみ依存し互いに並列**に走る。したがって:
+   - `build` が落ちれば何も publish されない (version 番号は無傷)。
+   - **`build` が通れば Thunderstore と PyPI は独立に publish される**。片方の認証/設定だけ壊れていると
+     **片側だけ公開される partial publish** が起こりうる (PyPI の version は不可逆なので特に注意)。
+     tag を打つ前に §7 の `TCLI_AUTH_TOKEN` と PyPI Trusted Publisher が **両方** 有効か確認する。
+4. PyPI 側だけ事前に確かめたいなら TestPyPI の Trusted Publisher を別途設定して `uv build` の成果物を
+   手元から upload する (Thunderstore には相当する staging が無い)。
 
 ______________________________________________________________________
 
@@ -201,7 +226,7 @@ publish 完了後、以下を確認する:
 
 - [ ] **PyPI ページ** (<https://pypi.org/project/resonite-io/>) に新バージョンが出ている。`pip install resonite-io==X.Y.Z` / `uv add resonite-io==X.Y.Z` が通る
 - [ ] **GitHub Release** が作成され、本文が `CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip + python sdist/wheel** が添付されている
-- [ ] prerelease の場合: Release に **Pre-release** バッジが付いている
+- [ ] **正式版のみ**: prerelease tag は打てない (§5) ので、Release は常に正式版 (Pre-release バッジは付かない)
 - [ ] **Thunderstore** (`mlshukai/ResoniteIO`) に新バージョンが反映されている
 - [ ] **Gale から導入できる**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Gale 経由で Resonite 起動 → `gale/BepInEx/LogOutput.log` (`just log`) に `Loading Plugin ResoniteIO` が出て load されることを確認
   (Gale プロファイル / 実機 load 検証の詳細は [`setup-resonite-env skill`](.claude/skills/setup-resonite-env/SKILL.md) §2 / §6)
