@@ -26,7 +26,9 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 
 1. `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Version>` を `X.Y.Z` に
 2. `python/pyproject.toml` の `version` を **同じ** `X.Y.Z` に
-3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)
+3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)。
+   **末尾の link reference definitions も忘れず追加する** (`[X.Y.Z]: https://github.com/MLShukai/ResoniteIO/releases/tag/vX.Y.Z` と `[unreleased]: ...compare/vX.Y.Z...HEAD`)。
+   これが無いと `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、§2-4 の changelog 抽出 (`## \[X.Y.Z\]` regex) が失敗して Release ノートが generic な "Release X.Y.Z" にフォールバックする。Keep a Changelog 慣習どおり全 version 分の `[version]: url` を揃える
 4. `python/` で `uv lock` を回す
 5. `just run` (`format`→`gen-proto`→`build`→`test`→`type`) が green になるまで回す
 6. PR を出す (`github-ops` skill の `gh pr create` HEREDOC)。**main へのマージはユーザーが実行**
@@ -89,6 +91,7 @@ ______________________________________________________________________
 - **Thunderstore namespace 不一致**: `mod/thunderstore.toml` の `namespace` が `mlshukai` (MLShukai team) であること。team 未作成だと publish できない。
 - **`publish-pypi` が OIDC で弾かれる**: PyPI Trusted Publisher の owner/repo/workflow/environment が移管後の値と一致しているか、GitHub `pypi` environment が存在するかを確認 (§4-2)。
 - **Gale から入らない / load されない**: §6 の検証で `Loading Plugin ResoniteIO` が出るか確認。Gale プロファイル / Steam Launch Options は [`setup-resonite-env`](../setup-resonite-env/SKILL.md) §2 / §3。
+- **Release ノートが "Release X.Y.Z" のまま (CHANGELOG が反映されない)**: `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、`github-release` の抽出 regex (`## \[X.Y.Z\]`) にマッチしていない。CHANGELOG 末尾に該当 version の link reference definition (`[X.Y.Z]: url`) を追加すると見出しが reference link として扱われ mdformat がエスケープしなくなる (§1-1 step 3)。`publish.yml` の regex は変更しない。
 
 ______________________________________________________________________
 
