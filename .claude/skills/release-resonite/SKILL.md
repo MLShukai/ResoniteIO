@@ -97,7 +97,7 @@ ______________________________________________________________________
 
 ## 6. リリース後検証
 
-- PyPI ページに新版が出て `uv add resoio==X.Y.Z` が通る
+- PyPI ページ (distribution `resonite-io`) に新版が出て `uv add resonite-io==X.Y.Z` が通る
 - GitHub Release に mod zip + python sdist/wheel が添付され、本文が CHANGELOG と一致 (rc は Pre-release バッジ)
 - Thunderstore (`mlshukai/ResoniteIO`) に反映
 - **Gale install 検証**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Resonite 起動 → `just log` で `Loading Plugin ResoniteIO` を確認

@@ -53,7 +53,8 @@ _COMMAND_MODULES: list[ModuleType] = [
 
 def _resolve_version() -> str:
     try:
-        return metadata.version("resoio")
+        # PyPI distribution name is `resonite-io` (import package is `resoio`).
+        return metadata.version("resonite-io")
     except metadata.PackageNotFoundError:  # pragma: no cover - editable edge
         return "0+unknown"
 

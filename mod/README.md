@@ -3,7 +3,7 @@
 **ResoniteIO** turns [Resonite](https://resonite.com/) into a runtime environment for AI
 agents. This mod runs inside the Resonite client and exposes vision, audio, movement, and UI
 control to an external agent over gRPC on a Unix Domain Socket. You drive it from the
-companion [`resoio`](https://pypi.org/project/resoio/) Python client.
+companion [`resonite-io`](https://pypi.org/project/resonite-io/) Python client (imported as `resoio`).
 
 ## Requirements
 
@@ -21,7 +21,7 @@ companion [`resoio`](https://pypi.org/project/resoio/) Python client.
 
 ## Usage
 
-Install the [`resoio`](https://pypi.org/project/resoio/) Python client (`pip install resoio`)
+Install the [`resonite-io`](https://pypi.org/project/resonite-io/) Python client (`pip install resonite-io`)
 and connect from your agent code. See the full documentation for setup, the modality matrix,
 and the API reference:
 

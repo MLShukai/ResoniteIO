@@ -1,6 +1,6 @@
 # CLI
 
-Installing `resoio` provides a `resoio` command (entry point `resoio.cli:main`). Commands are
+Installing the `resonite-io` package provides a `resoio` command (entry point `resoio.cli:main`). Commands are
 **flat, named by action** — there are no subcommand groups (e.g. `resoio mic`, not
 `resoio voice mic`). Each command maps to a modality client.
 

@@ -1,7 +1,7 @@
 # リリース手順書 (RELEASE.md)
 
 `ResoniteIO` の **tag-driven リリースパイプライン** の end-to-end runbook。Thunderstore mod
-(`mlshukai-ResoniteIO`) と PyPI パッケージ (`resoio`) の **2 種類の成果物を 1 つの tag で同時に公開する**。
+(`mlshukai-ResoniteIO`) と PyPI パッケージ (distribution `resonite-io`、import は `resoio`) の **2 種類の成果物を 1 つの tag で同時に公開する**。
 
 タスク発火型の要約とトラブルシュートは [`.claude/skills/release-resonite/SKILL.md`](.claude/skills/release-resonite/SKILL.md) に、
 PR / push / `gh` 操作の基本は [`.claude/skills/github-ops/SKILL.md`](.claude/skills/github-ops/SKILL.md) に集約してある。
@@ -16,7 +16,7 @@ ______________________________________________________________________
 - リリースは **tag push で発火** する。`v*` パターンの tag を push すると `.github/workflows/publish.yml` が動く。
 - リリースノートのソースは **`CHANGELOG.md`** (repo root、[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) 形式)。
   `## [X.Y.Z] - YYYY-MM-DD` セクションが GitHub Release の本文と Thunderstore 同梱 changelog に使われる。
-- **Thunderstore namespace = `mlshukai`** (MLShukai チーム)。PyPI distribution name = `resoio`。
+- **Thunderstore namespace = `mlshukai`** (MLShukai チーム)。PyPI distribution name = `resonite-io` (import package は `resoio`)。
 - リポジトリは現在 `Geson-anko/ResoniteIO` にあり、**`MLShukai/ResoniteIO` へ移管予定**。
   CI (非 publish) は移管前の `Geson-anko/ResoniteIO` でも回るが、**最初の publish tag は組織移管の完了後に push する**
   (Trusted Publisher / secret は移管後の `MLShukai/ResoniteIO` を前提に設定するため)。
@@ -199,7 +199,7 @@ ______________________________________________________________________
 
 publish 完了後、以下を確認する:
 
-- [ ] **PyPI ページ** (<https://pypi.org/project/resoio/>) に新バージョンが出ている。`pip install resoio==X.Y.Z` / `uv add resoio==X.Y.Z` が通る
+- [ ] **PyPI ページ** (<https://pypi.org/project/resonite-io/>) に新バージョンが出ている。`pip install resonite-io==X.Y.Z` / `uv add resonite-io==X.Y.Z` が通る
 - [ ] **GitHub Release** が作成され、本文が `CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip + python sdist/wheel** が添付されている
 - [ ] prerelease の場合: Release に **Pre-release** バッジが付いている
 - [ ] **Thunderstore** (`mlshukai/ResoniteIO`) に新バージョンが反映されている

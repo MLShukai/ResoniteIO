@@ -65,7 +65,8 @@ from resoio.world import (
     WorldSession,
 )
 
-__version__: str = _version("resoio")
+# Distribution name on PyPI is `resonite-io`; the import package is `resoio`.
+__version__: str = _version("resonite-io")
 
 __all__ = [
     "CHANNELS",

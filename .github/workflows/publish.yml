@@ -3,7 +3,8 @@ name: publish
 # Tag-driven release pipeline. Pushing a `v*` tag publishes a DUAL artifact:
 #   - C# Thunderstore mod (installable via the Gale mod manager) to the
 #     `mlshukai` Thunderstore team, and
-#   - the Python `resoio` package to PyPI via Trusted Publishing.
+#   - the Python package (distribution `resonite-io`, imported as `resoio`)
+#     to PyPI via Trusted Publishing.
 # Full auto-publish on tag push (no manual approval gate).
 
 on:
@@ -102,7 +103,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: pypi
-      url: https://pypi.org/p/resoio
+      url: https://pypi.org/p/resonite-io
     permissions:
       id-token: write
     steps:
