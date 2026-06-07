@@ -142,7 +142,7 @@ jobs:
           script: |
             const fs = require("fs");
             const tag = context.ref.replace(/^refs\/tags\//, "").replace(/^v/, "");
-            const changelog = fs.readFileSync("mod/CHANGELOG.md", "utf8");
+            const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
             // Escape regex metacharacters in the version so e.g. "1.0.0" does not
             // match "1x0y0". Capture from the `## [<version>]` header up to the
             // next `## [` section header or EOF. The `m` flag is intentionally
