@@ -16,7 +16,7 @@ metadata:
   `python/pyproject.toml` の `version` は **lockstep** で同値に保つ。`build` ジョブの version guard が
   **tag `X.Y.Z` == csproj `<Version>` == pyproject version** を強制し、1 つでもズレると fail する。
   Thunderstore zip の versionNumber は `Directory.Build.targets` の `PackTS` が `--package-version $(Version)` で渡す。
-- **リリースノートのソースは `mod/CHANGELOG.md`** (Keep a Changelog 形式)。`github-release` ジョブが
+- **リリースノートのソースは `CHANGELOG.md`** (repo root、Keep a Changelog 形式)。`github-release` ジョブが
   `## [X.Y.Z]` セクションを抽出して GitHub Release 本文にする。tag が `(a|b|rc)[0-9]+$` なら `--prerelease`。
 - **C# CI (`dotnet.yml`) は `ResoniteIO.Core.Tests` のみ** (Resonite 非依存の Core、`FrameHeader` IPC 契約を含む)。
   **Mod (`ResoniteIO` / `ResoniteIO.Tests`) は clean CI でビルド不可なので除外**する。proprietary DLL 依存のため:
@@ -36,6 +36,6 @@ metadata:
 組織移管後に publish を始めるのは Trusted Publisher / secret が `MLShukai/ResoniteIO` を owner/repo として照合するから。
 
 **How to apply:** リリース関連タスクでは (1) version を上げるときは csproj `<Version>` + `pyproject.toml` + CHANGELOG を
-**必ず 3 点セット** で更新し `uv lock` を回す、(2) リリースノートは `mod/CHANGELOG.md` を編集する (Release 本文を直書きしない)、
+**必ず 3 点セット** で更新し `uv lock` を回す、(2) リリースノートは `CHANGELOG.md` (repo root) を編集する (Release 本文を直書きしない)、
 (3) Thunderstore namespace を変えない (`mlshukai`)、(4) secret / token を PR・commit・ログに貼らない、
 (5) 最初の publish は組織移管完了を待つ。詳細手順は `RELEASE.md` / `release-resonite` skill を参照する。

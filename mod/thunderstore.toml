@@ -41,9 +41,9 @@ target = "plugins/ResoniteIO/"
 source = "./src/ResoniteIO/bin/Release/ResoniteIO.pdb"
 target = "plugins/ResoniteIO/"
 
-# CHANGELOG / LICENSE を同梱したい場合はコメント解除する
+# CHANGELOG / LICENSE を同梱したい場合はコメント解除する (CHANGELOG は repo root)
 # [[build.copy]]
-# source = "./CHANGELOG.md"
+# source = "../CHANGELOG.md"
 # target = "/"
 # [[build.copy]]
 # source = "../LICENSE"

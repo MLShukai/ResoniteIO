@@ -14,7 +14,7 @@ ______________________________________________________________________
 - **正規バージョンソース = csproj `<Version>`** (`mod/src/ResoniteIO/ResoniteIO.csproj`)。
   `python/pyproject.toml` の `version` は **これと lockstep** で同じ値に保つ。
 - リリースは **tag push で発火** する。`v*` パターンの tag を push すると `.github/workflows/publish.yml` が動く。
-- リリースノートのソースは **`mod/CHANGELOG.md`** ([Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) 形式)。
+- リリースノートのソースは **`CHANGELOG.md`** (repo root、[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) 形式)。
   `## [X.Y.Z] - YYYY-MM-DD` セクションが GitHub Release の本文と Thunderstore 同梱 changelog に使われる。
 - **Thunderstore namespace = `mlshukai`** (MLShukai チーム)。PyPI distribution name = `resoio`。
 - リポジトリは現在 `Geson-anko/ResoniteIO` にあり、**`MLShukai/ResoniteIO` へ移管予定**。
@@ -89,7 +89,7 @@ tag `vX.Y.Z` の push で発火し、以下を **直列** に実行する。
 
 ### 3-4. `github-release`
 
-- `mod/CHANGELOG.md` から **`## [X.Y.Z]` セクションを抽出** して Release ノートにする。
+- `CHANGELOG.md` (repo root) から **`## [X.Y.Z]` セクションを抽出** して Release ノートにする。
 - tag が `(a|b|rc)[0-9]+$` にマッチする場合 (例: `v0.2.0rc1`) は **`--prerelease`** を付ける。
 - アセットとして **mod zip + python dists** (sdist/wheel) を添付する。
 
@@ -109,7 +109,7 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 
 1. `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Version>` を `X.Y.Z` に bump
 2. `python/pyproject.toml` の `version` を **同じ** `X.Y.Z` に bump
-3. `mod/CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加
+3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加
    (`## [Unreleased]` の内容を確定版セクションに移し替える。Added / Changed / Fixed 等の見出しは Keep a Changelog に従う)
 4. `python/` で `uv lock` を回して lockfile を追従させる
 5. `just run` (`format` → `gen-proto` → `build` → `test` → `type`) が green になるまで回す
@@ -200,7 +200,7 @@ ______________________________________________________________________
 publish 完了後、以下を確認する:
 
 - [ ] **PyPI ページ** (<https://pypi.org/project/resoio/>) に新バージョンが出ている。`pip install resoio==X.Y.Z` / `uv add resoio==X.Y.Z` が通る
-- [ ] **GitHub Release** が作成され、本文が `mod/CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip + python sdist/wheel** が添付されている
+- [ ] **GitHub Release** が作成され、本文が `CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip + python sdist/wheel** が添付されている
 - [ ] prerelease の場合: Release に **Pre-release** バッジが付いている
 - [ ] **Thunderstore** (`mlshukai/ResoniteIO`) に新バージョンが反映されている
 - [ ] **Gale から導入できる**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Gale 経由で Resonite 起動 → `gale/BepInEx/LogOutput.log` (`just log`) に `Loading Plugin ResoniteIO` が出て load されることを確認
@@ -214,4 +214,4 @@ ______________________________________________________________________
 - [`.claude/skills/github-ops/SKILL.md`](.claude/skills/github-ops/SKILL.md) — push / PR / `gh` の基本と安全規約
 - [`.claude/skills/merge-main/SKILL.md`](.claude/skills/merge-main/SKILL.md) — release ブランチへの main 取り込み
 - [`mod/thunderstore.toml`](mod/thunderstore.toml) / [`mod/Directory.Build.targets`](mod/Directory.Build.targets) — Thunderstore packaging (`PackTS` / namespace / version 受け渡し)
-- [`mod/CHANGELOG.md`](mod/CHANGELOG.md) — リリースノートのソース (Keep a Changelog)
+- [`CHANGELOG.md`](CHANGELOG.md) — リリースノートのソース (Keep a Changelog)

@@ -1,140 +1,101 @@
-# resonite-io
+<p align="center">
+  <img src="mod/icon.png" width="180" alt="ResoniteIO logo">
+</p>
 
-Resonite を AI エージェントの実行環境として使うための双方向 IPC ブリッジ。Resonite クライアント側で動く C# Mod (`ResoniteIO`、BepisLoader) と Python パッケージ (`resoio`) を、gRPC over Unix Domain Socket で接続する monorepo。
+<h1 align="center">ResoniteIO</h1>
 
-設計の背景・スコープ・採用技術・実装計画は [.claude/resonite_io_plan.md](.claude/resonite_io_plan.md) に集約されている。Claude Code 向けのリポジトリ規約は [CLAUDE.md](CLAUDE.md) を参照。
+<p align="center">Turn <a href="https://resonite.com/">Resonite</a> into a runtime environment for AI agents.</p>
 
-## ディレクトリ構成
+<p align="center">
+  <a href="https://thunderstore.io/c/resonite/p/mlshukai/ResoniteIO/"><img src="https://modding.resonite.net/assets/available-on-thunderstore.svg" alt="Available on Thunderstore"></a>
+</p>
 
-```text
-proto/             単一の真実: .proto 定義 (resonite_io.v1)
-mod/               C# 側 (BepisLoader mod, .NET 10)
-python/            Python 側 (resoio, uv + betterproto2 + grpclib)
-scripts/           gen_proto / decompile / container-init のシェルスクリプト
-gale/              Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
-compose.yml        dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
-.devcontainer/     devcontainer.json (compose 参照) / Dockerfile (debian + .NET 10 + uv + protoc) / initialize.sh (host 側 pre-create フック)
-justfile           ルートタスクランナー (全レシピ)
+<p align="center">
+  <a href="https://pypi.org/project/resoio/"><img src="https://img.shields.io/pypi/v/resoio" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/resoio/"><img src="https://img.shields.io/pypi/pyversions/resoio" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/MLShukai/ResoniteIO/actions/workflows/test.yml"><img src="https://github.com/MLShukai/ResoniteIO/actions/workflows/test.yml/badge.svg" alt="Test"></a>
+  <a href="https://github.com/MLShukai/ResoniteIO/actions/workflows/type-check.yml"><img src="https://github.com/MLShukai/ResoniteIO/actions/workflows/type-check.yml/badge.svg" alt="Type Check"></a>
+  <a href="https://github.com/MLShukai/ResoniteIO/actions/workflows/dotnet.yml"><img src="https://github.com/MLShukai/ResoniteIO/actions/workflows/dotnet.yml/badge.svg" alt=".NET"></a>
+</p>
+
+______________________________________________________________________
+
+**ResoniteIO** is a bidirectional IPC bridge that lets AI agents see, hear, speak, move, and
+act inside [Resonite](https://resonite.com/). A C# mod runs inside the Resonite client and a
+Python package (`resoio`) runs wherever your agent code lives; they talk to each other over
+**gRPC on a Unix Domain Socket**.
+
+It is designed like **real-time robotics middleware, not a reinforcement-learning
+environment**: there is no `Observation` / `Action` abstraction and no global `step()`.
+Each capability is an independent, asynchronous **modality** stream carrying its own
+timestamps, and any synchronization you need is done on the receiving side.
+
+## Modalities
+
+| Direction          | Modalities                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| Resonite → Python  | **Camera**, **Speaker** (server-streaming: vision and audio out)                                       |
+| Python → Resonite  | **Microphone**, **Locomotion** (client-streaming: voice in, movement)                                  |
+| Request / response | **Manipulation**, **Display**, **World**, **ContextMenu**, **Dash**, **Inventory**, **Cursor** (unary) |
+
+## Installation
+
+ResoniteIO has two halves that install separately and connect over a Unix Domain Socket.
+
+**1. The mod** (runs inside Resonite) — install it from Thunderstore with a mod manager such
+as [Gale](https://github.com/Kesomannen/gale), then set the Steam launch option
+`WINEDLLOVERRIDES="winhttp=n,b" %command%` (required — see the
+[installation guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/installation/)).
+
+**2. The Python client** (runs with your agent):
+
+```bash
+pip install resoio
 ```
 
-## Quick Start
+See the **[Installation guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/installation/)**
+for the full setup, including the required supporting plugins.
 
-ホスト側に必要なもの: `docker` (24+) / `docker compose v2` / `just` / **[Gale](https://github.com/Kesomannen/gale) v1.5.4+** (Resonite mod manager)、および devcontainer を開くための **VS Code (Dev Containers 拡張) もしくは Zed もしくは [devcontainer CLI](https://github.com/devcontainers/cli)** のいずれか。
+## Quick start
 
-開発ツール (.NET 10 SDK / uv / protoc / pre-commit など) はすべてコンテナ内に閉じている。
+With the mod deployed and Resonite running:
 
-### 1. 一括初期化: `just init`
+```python
+import asyncio
 
-clone 直後に host 上で 1 度だけ実行する。docker / docker compose v2 を検出し、
-`.env` を `.env.example` から作成 (作成時は `$EDITOR` を起動)、`ResonitePath` 検証、
-Gale プロファイルの設置確認までを順に行う。
+from resoio import ConnectionClient
 
-```sh
-just init
+
+async def main() -> None:
+    async with ConnectionClient() as client:
+        response = await client.ping("hello")
+        print(response.message)
+
+
+asyncio.run(main())
 ```
 
-Gale プロファイル未設置時は手順を表示して exit する。表示通りに以下を host で実施し、
-完了後 `just init` を再実行する:
+Or from the command line:
 
-1. host に Gale v1.5.4+ をインストール ([github.com/Kesomannen/gale](https://github.com/Kesomannen/gale))
-2. Gale GUI で 'Create profile' を選び、パスに `<repo>/gale` を指定
-   (**このパスは EMPTY である必要がある — `gale/` ディレクトリを事前に作らない**)
-3. profile に以下を install:
-   - `ResoniteModding-BepisLoader` (>=1.5.1)
-   - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
-   - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
-   - `ResoniteModding-BepInExRenderer` (>=5.4) — Camera v2 (Renderite framebuffer 直取り) 用、Renderer 側 BepInEx 5 framework
-   - `ResoniteModding-RenderiteHook` (>=1.1.1) — engine 側から Renderer プロセスに doorstop を inject する
-   - `Nytra-InterprocessLib` (>=3.0.0) — engine ↔ Renderer 間の共有メモリ queue API
-4. Gale で Resonite を一度起動して `<repo>/gale/BepInEx/` の生成を確認
-
-> `./gale/` は `.gitignore` 済みで host 側の Gale が管理する。リポジトリにはコミットされない。
-
-### 1.1 Steam Launch Options (絶対必須)
-
-Steam で Resonite を選択 → 右クリック → Properties → Launch Options に以下を設定:
-
-```text
-WINEDLLOVERRIDES="winhttp=n,b" %command%
+```bash
+resoio ping --message hello
+resoio record --video out.mp4     # capture the Camera modality to a file
 ```
 
-これは Renderite renderer process 側に doorstop (BepInEx 5) を inject するために必須。
-これが無いと Camera v2 の renderer-side plugin が永遠に load されない。
-Wine は system 同梱 `winhttp.dll` を優先するため、override しないと
-RenderiteHook が deploy した hook 版 `winhttp.dll` が読まれない。
-`host_agent.py` から env で渡しても Steam が sanitize するため通らない
-(Steam Launch Options が唯一の経路)。
+See the **[Quick Start guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/quickstart/)**
+for streaming examples.
 
-### 2. devcontainer を開く
+## Documentation
 
-`just init` を通したら、リポジトリを devcontainer として開く。エディタ別に:
+Full documentation — installation, architecture, every modality, the Python API reference,
+and the CLI — lives at **<https://mlshukai.github.io/ResoniteIO/>**.
 
-- **VS Code**: コマンドパレットから「Dev Containers: Reopen in Container」(要 Dev Containers 拡張)
+## Contributing
 
-- **Zed**: dev container として開く (Zed の devcontainer サポート)
+Development setup, the dev container, and the build/test workflow are documented in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-- **CLI (任意・headless / CI 用)**: `@devcontainers/cli` を入れて以下 (既定では未インストール):
-
-  ```sh
-  devcontainer up --workspace-folder .
-  devcontainer exec --workspace-folder . bash
-  ```
-
-`initializeCommand` / `postCreateCommand` のサポート範囲はエディタによって差があるが、
-core (compose + service + workspaceFolder) はどのエディタでも動く前提。
-
-devcontainer 起動時に以下が自動で走る:
-
-- `initializeCommand` (host 側、作成前): `~/.resonite-io` と `~/.resonite-io-debug` を 0700 で作成し、
-  host の UID/GID を `.env` に記録する (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。
-- `postCreateCommand` (container 内、作成後): `scripts/container-init.sh` を実行
-  = `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink。
-
-### 3. 開発
-
-devcontainer に入った後は、コンテナ内ターミナルで従来どおり:
-
-```sh
-just --list            # 利用可能なレシピ一覧
-just gen-proto         # proto から Python 側コード生成
-just build             # mod ビルド
-just deploy-mod        # gale/BepInEx/plugins/ResoniteIO/ に DLL を配置
-```
-
-deploy された DLL は host user 所有になっている (UID/GID マッピング済み)。
-
-### 4. 後片付け
-
-VS Code / Zed の devcontainer 停止操作で停止する。CLI を使う場合は `docker compose` を直接叩く
-(例: `docker compose down`、image / volume まで消すなら `docker compose down --rmi all -v`)。
-
-## 主なレシピ
-
-| レシピ            | 役割                                                                   |
-| ----------------- | ---------------------------------------------------------------------- |
-| `just init`       | host 側で初回 setup (docker / .env / Gale プロファイルの確認)          |
-| `just gen-proto`  | proto から Python 生成コードを再生成 (`python/src/resoio/_generated/`) |
-| `just format`     | Python (ruff) と C# (csharpier) の両側をフォーマット                   |
-| `just test`       | Python (pytest+cov) と C# (dotnet test) の両側を実行                   |
-| `just type`       | Python の pyright を strict モードで実行                               |
-| `just build`      | C# mod を `dotnet build -c Release`                                    |
-| `just run`        | format → gen-proto → build → test → type を直列実行                    |
-| `just deploy-mod` | `gale/BepInEx/plugins/ResoniteIO/` へ DLL+PDB を配置 (Gale profile)    |
-| `just check-gale` | Gale profile に BepisLoader / 必須 plugin が揃っているか検証           |
-| `just clean`      | 各言語の build/cache 出力を削除                                        |
-
-サブレシピ (`py-test` / `mod-build` 等) は片側だけ動かしたいときに利用する。コンテナの起動・停止は justfile レシピではなく devcontainer (VS Code / Zed / `devcontainer` CLI) で行う ([CLAUDE.md](CLAUDE.md) §実行環境 参照)。
-
-## 開発フロー
-
-- 作業は `<種別>/<日付>/<内容>` のブランチで行う (例: `feature/20260510/skeleton`)。コミットは `<種別>(<スコープ>): <内容>` の形式。詳細は [CLAUDE.md](CLAUDE.md) §Git 運用 を参照。
-- `.env` をリポジトリルートに置き、`.env.example` を参考に `ResonitePath` を設定する。`.env` は git 管理外。
-- 各言語の固有のセットアップ・ツール詳細は [python/README.md](python/README.md) と [mod/README.md](mod/README.md) を参照。
-
-## 実機検証
-
-e2e 検証は Claude が `scripts/host_agent.py` + `scripts/resonite_cli.py` (container ↔ host Resonite bridge) 経由で自動駆動する。`python/tests/e2e/` 配下の harness が canonical で、ユーザが手動で Resonite を立ち上げて確認する手順は、本質的に人間しかできない確認 (Resonite 内別ユーザによる voice 受信確認 → [mod/tests/manual/microphone-verification.md](mod/tests/manual/microphone-verification.md) など) に限定する。
-
-## ライセンス
+## License
 
 [MIT](LICENSE)
