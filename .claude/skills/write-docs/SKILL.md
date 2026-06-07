@@ -28,12 +28,20 @@ RELEASE.md などの maintainer / プロジェクト向けドキュメントは 
 (`resonite_io_plan.md` / `CLAUDE.md` / `README.md` と同列、GitHub 上で読む)。`docs/` に
 maintainer doc を混ぜない (混ぜると mkdocs が拾い、`exclude_docs` での除外管理が増える)。
 
-アイコンは **実体 1 つ + symlink** で重複を避ける: 実体は `mod/icon.png` (256x256、Thunderstore
-が `mod/thunderstore.toml` の `[build].icon` で参照する。**256x256 必須**)、`docs/assets/icon.png`
-は実体への相対 symlink (`../../mod/icon.png`)。mkdocs は symlink を辿って site/ に実体を
-コピーするので公開サイトには実ファイルが載る。元画像から 256x256 を派生するときは Pillow を
-一時利用する (`uv run --with pillow`)。Material の `theme.logo` キーは header 画像用の名前だが、
-中身はブランドアイコン (ロゴ文字ではない)。
+アイコンは **master 1 つ + 派生 + symlink** で重複と手作業を避ける:
+
+- **master** = repo root の `icon.png` (full-size、commit する。現状 1254x1254)。これが唯一の真。
+- **派生** = `mod/icon.png` (256x256)。Thunderstore は **256x256 必須** で `mod/thunderstore.toml`
+  の `[build].icon` が参照する。master から `scripts/resize_icon.py` で生成する。手で作らない:
+  `just icon` を叩くか、`icon.png` を変更して commit すれば pre-commit の `resize-icon` hook が
+  自動再生成する (stale なら fail して再 stage を促す)。Pillow は justfile / pre-commit で
+  **版を pin** し (現 `pillow==12.2.0`)、比較は **pixel ベース** なので PNG 再エンコード差では
+  rewrite されない (環境差での誤検知を防ぐ)。
+- **docs** = `docs/assets/icon.png` は `mod/icon.png` への相対 symlink (`../../mod/icon.png`)。
+  mkdocs は symlink を辿って site/ に実体をコピーするので公開サイトには実ファイルが載る。
+
+master を full-size で持つので `check-added-large-files` の上限を `--maxkb=2048` に緩めてある。
+Material の `theme.logo` キーは header 画像用の名前だが、中身はブランドアイコン (ロゴ文字ではない)。
 
 ## 2. preview / build
 
