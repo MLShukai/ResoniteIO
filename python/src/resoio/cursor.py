@@ -63,7 +63,7 @@ class CursorClient(_BaseClient[CursorStub]):
 
     Use as an async context manager so the gRPC channel is closed
     deterministically. Socket resolution mirrors
-    :class:`resoio.SessionClient`.
+    :class:`resoio.ConnectionClient`.
     """
 
     _logger = _logger

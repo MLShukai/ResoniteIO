@@ -138,7 +138,7 @@ class InventoryClient(_BaseClient[InventoryStub]):
     """Async, stateless client for the Resonite IO ``Inventory`` service.
 
     Use as an async context manager so the gRPC channel closes
-    deterministically. Socket resolution mirrors :class:`resoio.SessionClient`.
+    deterministically. Socket resolution mirrors :class:`resoio.ConnectionClient`.
     """
 
     _logger = _logger
