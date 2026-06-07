@@ -9,11 +9,12 @@ using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Hosting;
 using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
-using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
 using ResoniteIO.Loading;
@@ -44,8 +45,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private PluginAssemblyResolver? _assemblyResolver;
     private BepInExLogSink? _logSink;
     private CancellationTokenSource? _hostCts;
-    private SessionHost? _sessionHost;
-    private FrooxEngineSessionBridge? _sessionBridge;
+    private GrpcHost? _grpcHost;
+    private FrooxEngineConnectionBridge? _connectionBridge;
 
     private ICameraBridge? _cameraBridge;
     private RendererFrameInterprocessReceiver? _frameReceiver;
@@ -64,7 +65,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
     /// (<see cref="BepInExLogSink"/> 等) を参照しない。参照すると <c>ResoniteIO.Core.dll</c>
     /// が早期ロードされ、resolver が発火する前に Resonite 同梱の旧 <c>Google.Protobuf</c>
-    /// が解決され、後の SessionHost 起動で
+    /// が解決され、後の GrpcHost 起動で
     /// <c>TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'</c>
     /// となる。<see cref="BepInExLogSink"/> の生成は <see cref="OnEngineReady"/> に遅延する。
     /// FrooxEngine 触りも未初期化リスクのため OnEngineReady 側に置く。
@@ -94,7 +95,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// </remarks>
     private void OnEngineReady()
     {
-        Log.LogInfo("Engine ready — starting Session gRPC host");
+        Log.LogInfo("Engine ready — starting GrpcHost");
         try
         {
             _hostCts = new CancellationTokenSource();
@@ -102,7 +103,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
             // Core 型に触れる最初のポイント。Load() で attach 済みの resolver により
             // plugin folder 同梱の Core.dll / Google.Protobuf.dll が優先される。
             _logSink = new BepInExLogSink(Log);
-            _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
+            _connectionBridge = new FrooxEngineConnectionBridge(Engine.Current, _logSink);
 
             var pushedBridge = new PushedFrameCameraBridge();
             _cameraBridge = pushedBridge;
@@ -129,10 +130,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _cursorBridge = new FrooxEngineCursorBridge(Engine.Current, _logSink);
 
-            _sessionHost = SessionHost.Start(
+            _grpcHost = GrpcHost.Start(
                 _logSink,
                 _hostCts.Token,
-                _sessionBridge,
+                _connectionBridge,
                 _cameraBridge,
                 _displayBridge,
                 _locomotionBridge,
@@ -145,14 +146,14 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge
             );
-            Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
+            Log.LogInfo($"GrpcHost bound at: {_grpcHost.SocketPath}");
         }
         catch (Exception ex)
         {
             // partial-failure 回復: ここに到達した時点で先行 ctor / Start が成功した
             // resource (receiver / bridge 群 / cts / 部分起動済み host) が leak しうるため、
             // ProcessExit と同じ Dispose chain を best-effort で回す。
-            Log.LogError($"Failed to start Session gRPC host: {ex}");
+            Log.LogError($"Failed to start GrpcHost: {ex}");
             SafeShutdown();
         }
     }
@@ -164,7 +165,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private void SafeShutdown()
     {
         // Dispose 順: receiver → camera → display → locomotion → microphone → speaker
-        //   → session(bridge) → cts → sessionHost → assemblyResolver。
+        //   → connection(bridge) → cts → grpcHost → assemblyResolver。
         // 上流から順に止めることで、下流が残 input を dead bridge に push する race を防ぐ:
         //   - Receiver を先に止めて残 frame が dead CameraBridge に届かないようにする。
         //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し pending な
@@ -175,9 +176,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
         //     操作なので Locomotion と Speaker の間で行う (Speaker の Harmony unpatch
         //     より先に止めて、audio 経路の整合を保つ)。
         //   - SpeakerBridge.Dispose は Harmony unpatch + Channel complete を行い、WASAPI
-        //     audio thread からの push を完全に断つ。SessionHost を畳む前に行うことで
+        //     audio thread からの push を完全に断つ。GrpcHost を畳む前に行うことで
         //     pending な SpeakerService.StreamAudio が完了するか正常終了する。
-        //   - 最後に SessionHost を止めて全 gRPC service を畳む。
+        //   - 最後に GrpcHost を止めて全 gRPC service を畳む。
         SafeDispose(_frameReceiver, nameof(_frameReceiver));
         _frameReceiver = null;
 
@@ -220,8 +221,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
         SafeDispose(_cursorBridge, nameof(_cursorBridge));
         _cursorBridge = null;
 
-        SafeDispose(_sessionBridge, nameof(_sessionBridge));
-        _sessionBridge = null;
+        SafeDispose(_connectionBridge, nameof(_connectionBridge));
+        _connectionBridge = null;
 
         // CancellationTokenSource は Cancel + Dispose の 2 段なので inline で扱う。
         try
@@ -244,17 +245,17 @@ public sealed class ResoniteIOPlugin : BasePlugin
         }
         _hostCts = null;
 
-        // SessionHost は IAsyncDisposable のため sync 化して扱う (ProcessExit の制約)。
+        // GrpcHost は IAsyncDisposable のため sync 化して扱う (ProcessExit の制約)。
         try
         {
-            _sessionHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _grpcHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
             try
             {
                 Log?.LogWarning(
-                    $"SafeDispose({nameof(_sessionHost)}) threw: {ex.GetType().Name}: {ex.Message}"
+                    $"SafeDispose({nameof(_grpcHost)}) threw: {ex.GetType().Name}: {ex.Message}"
                 );
             }
             catch
@@ -262,7 +263,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 // log path may be dead during ProcessExit
             }
         }
-        _sessionHost = null;
+        _grpcHost = null;
 
         SafeDispose(_assemblyResolver, nameof(_assemblyResolver));
         _assemblyResolver = null;

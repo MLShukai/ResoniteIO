@@ -81,7 +81,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         _latest = LocomotionInput.Neutral;
 
         // WorldFocused は新規 focus でしか発火しないため、subscribe 前の初期
-        // snapshot で起動時の窓を埋める (FrooxEngineSessionBridge と同じ pattern)。
+        // snapshot で起動時の窓を埋める (FrooxEngineConnectionBridge と同じ pattern)。
         var initial = _worldManager.FocusedWorld;
         _cachedWorld = initial;
         _worldManager.WorldFocused += OnWorldFocused;

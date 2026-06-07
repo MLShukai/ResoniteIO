@@ -244,7 +244,7 @@
   <!--
     Resonite (Renderite.Host) は .NET 10 CLR (Microsoft.NETCore.App) を
     同梱するが ASP.NET Core shared framework (Microsoft.AspNetCore.App) は
-    持っていないため、Kestrel ベースの SessionHost が依存する DLL を
+    持っていないため、Kestrel ベースの GrpcHost が依存する DLL を
     .NET SDK の shared framework (`$(NetCoreRoot)shared/Microsoft.AspNetCore.App/<version>/`)
     から TargetDir にコピーする。
 
