@@ -39,7 +39,7 @@
     <AssemblyName>ResoniteIO</AssemblyName>
 
     <!-- PluginMetadata 生成元 (BepInEx.ResonitePluginInfoProps が読み取る) -->
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>mlshukai</Authors>
     <PackageId>net.mlshukai.resonite-io</PackageId>
     <Product>ResoniteIO</Product>
@@ -280,9 +280,15 @@
     />
   </Target>
 
-  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置。
+  <!-- plugin folder に同梱する DLL 集合 (@(PluginFiles)) を 1 箇所で算出する。
+       Gale deploy (PostBuild) と Thunderstore staging (StageThunderstorePlugin) が
+       同じ集合を共有するため、ここに集約して重複を避ける。target 内で生成した
+       item はビルド全体に持続し、後続 target から参照できる。CopyAspNetCoreShared-
+       FrameworkRuntime が TargetDir に ASP.NET ランタイム DLL を展開し終えてから
+       ワイルドカードを評価する必要があるため DependsOnTargets で順序を保証する。
+
        Core/Mod 二層構成のため、mod 本体 (ResoniteIO.dll/pdb) に加えて
-       ProjectReference 先の ResoniteIO.Core.dll/pdb / RendererShared もコピーする
+       ProjectReference 先の ResoniteIO.Core.dll/pdb / RendererShared も含める
        (Plugin ロード時の type 解決に必要)。
        ASP.NET Core / Microsoft.Extensions ランタイム DLL は
        `Microsoft.AspNetCore*.dll` と `Microsoft.Extensions.*.dll` のワイルドカードで
@@ -293,7 +299,7 @@
        gRPC ランタイム (Google.Protobuf / Grpc.*) は `_AllowedGrpcDll` で明示。
        BepInExResoniteShim / BepisResoniteWrapper / 0Harmony は Gale プロファイル
        および BepInEx 本体が canonical 版を install するため除外。 -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="ComputePluginFiles" DependsOnTargets="CopyAspNetCoreSharedFrameworkRuntime">
     <ItemGroup>
       <!-- mod 本体 -->
       <PluginFiles Include="$(TargetPath)" />
@@ -335,7 +341,11 @@
       <PluginFiles Remove="$(TargetDir)BepisResoniteWrapper.dll" />
       <PluginFiles Remove="$(TargetDir)0Harmony.dll" />
     </ItemGroup>
+  </Target>
 
+  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に @(PluginFiles) を配置 (開発 deploy)。
+       Gale プロファイルが無い (CI 等) ときは Copy を skip する。 -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" DependsOnTargets="ComputePluginFiles">
     <Copy
       SourceFiles="@(PluginFiles)"
       DestinationFolder="$(PluginTargetDir)"
@@ -345,6 +355,25 @@
       Text="Copied @(PluginFiles->Count()) plugin files to $(PluginTargetDir)"
       Importance="high"
       Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
+    />
+  </Target>
+
+  <!-- Thunderstore パッケージ用 staging。tcli (thunderstore.toml の [[build.copy]]) は
+       静的なファイル列挙しかできず、Core/Mod 二層 + Kestrel/gRPC ランタイム DLL を
+       手書きで網羅・追従するのは破綻するため、PostBuild と同じ @(PluginFiles) を
+       専用ディレクトリへ複製し、thunderstore.toml はそのディレクトリを丸ごと
+       plugins/ResoniteIO/ に取り込む。これで配布物に必須 DLL が漏れなく入る。
+       Gale プロファイル有無に依存せず常に stage する (CI には Gale が無いため)。
+       古い DLL の残留を防ぐため毎回 RemoveDir でクリーンにしてから複製する。 -->
+  <Target Name="StageThunderstorePlugin" AfterTargets="Build" DependsOnTargets="ComputePluginFiles">
+    <PropertyGroup>
+      <ThunderstoreStageDir>$(TargetDir)_thunderstore-plugin\</ThunderstoreStageDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(ThunderstoreStageDir)" />
+    <Copy SourceFiles="@(PluginFiles)" DestinationFolder="$(ThunderstoreStageDir)" />
+    <Message
+      Text="Staged @(PluginFiles->Count()) plugin files for Thunderstore at $(ThunderstoreStageDir)"
+      Importance="high"
     />
   </Target>
 </Project>
