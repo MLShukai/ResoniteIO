@@ -1368,7 +1368,8 @@
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
 <p>ResoniteIO has two halves that install separately: the <strong>C# mod</strong> (runs inside the Resonite
-client) and the <strong><code>resoio</code> Python client</strong> (runs wherever your agent code runs). They
+client) and the <strong><code>resonite-io</code> Python client</strong> (imported as <code>resoio</code>, runs wherever your
+agent code runs). They
 connect over a Unix Domain Socket, so both halves must run on the same host (or share the
 socket directory).</p>
 <div class="admonition note">
@@ -1391,12 +1392,13 @@ full plugin set for you.</p>
 launch option is mandatory. Prefer to build the mod yourself? See
 <a href="#build-from-source">Build from source</a> below.</p>
 <h2 id="python-client-pypi">Python client — PyPI<a class="headerlink" href="#python-client-pypi" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>resoio
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>resonite-io
 </code></pre></div>
 <p>or, inside a <a href="https://docs.astral.sh/uv/"><code>uv</code></a> project:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>add<span class="w"> </span>resoio
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>add<span class="w"> </span>resonite-io
 </code></pre></div>
-<p>The <code>resoio</code> package requires Python ≥ 3.12, is <code>pyright</code>-strict, and ships type
+<p>The distribution is named <code>resonite-io</code> on PyPI but imports as <code>resoio</code>
+(<code>import resoio</code>). It requires Python ≥ 3.12, is <code>pyright</code>-strict, and ships type
 information (PEP 561).</p>
 <h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
 <p>Building from source is the path for contributing to ResoniteIO or running an unreleased
