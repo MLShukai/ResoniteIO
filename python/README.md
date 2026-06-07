@@ -1,14 +1,15 @@
-# resoio
+# resonite-io
 
 Python client for [ResoniteIO](https://github.com/MLShukai/ResoniteIO) — a bidirectional IPC
 bridge that turns [Resonite](https://resonite.com/) into a runtime environment for AI agents.
-`resoio` wraps the `resonite_io.v1` gRPC schema (Unix Domain Socket transport, async via
-`grpclib`) into a friendly, fully typed client library and a `resoio` CLI.
+The `resonite-io` distribution imports as `resoio` and wraps the `resonite_io.v1` gRPC schema
+(Unix Domain Socket transport, async via `grpclib`) into a friendly, fully typed client
+library and a `resoio` CLI.
 
 ## Install
 
 ```bash
-pip install resoio
+pip install resonite-io
 ```
 
 ## Requires

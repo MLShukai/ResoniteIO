@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/resoio/"><img src="https://img.shields.io/pypi/v/resoio" alt="PyPI version"></a>
-  <a href="https://pypi.org/project/resoio/"><img src="https://img.shields.io/pypi/pyversions/resoio" alt="Python versions"></a>
+  <a href="https://pypi.org/project/resonite-io/"><img src="https://img.shields.io/pypi/v/resonite-io" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/resonite-io/"><img src="https://img.shields.io/pypi/pyversions/resonite-io" alt="Python versions"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/MLShukai/ResoniteIO/actions/workflows/test.yml"><img src="https://github.com/MLShukai/ResoniteIO/actions/workflows/test.yml/badge.svg" alt="Test"></a>
   <a href="https://github.com/MLShukai/ResoniteIO/actions/workflows/type-check.yml"><img src="https://github.com/MLShukai/ResoniteIO/actions/workflows/type-check.yml/badge.svg" alt="Type Check"></a>
@@ -51,7 +51,7 @@ as [Gale](https://github.com/Kesomannen/gale), then set the Steam launch option
 **2. The Python client** (runs with your agent):
 
 ```bash
-pip install resoio
+pip install resonite-io
 ```
 
 See the **[Installation guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/installation/)**

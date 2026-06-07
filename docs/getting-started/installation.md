@@ -1,7 +1,8 @@
 # Installation
 
 ResoniteIO has two halves that install separately: the **C# mod** (runs inside the Resonite
-client) and the **`resoio` Python client** (runs wherever your agent code runs). They
+client) and the **`resonite-io` Python client** (imported as `resoio`, runs wherever your
+agent code runs). They
 connect over a Unix Domain Socket, so both halves must run on the same host (or share the
 socket directory).
 
@@ -32,16 +33,17 @@ launch option is mandatory. Prefer to build the mod yourself? See
 ## Python client — PyPI
 
 ```bash
-pip install resoio
+pip install resonite-io
 ```
 
 or, inside a [`uv`](https://docs.astral.sh/uv/) project:
 
 ```bash
-uv add resoio
+uv add resonite-io
 ```
 
-The `resoio` package requires Python ≥ 3.12, is `pyright`-strict, and ships type
+The distribution is named `resonite-io` on PyPI but imports as `resoio`
+(`import resoio`). It requires Python ≥ 3.12, is `pyright`-strict, and ships type
 information (PEP 561).
 
 ## Build from source
