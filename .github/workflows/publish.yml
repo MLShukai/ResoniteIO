@@ -59,6 +59,10 @@ jobs:
             exit 1
           fi
 
+      - name: Provision InterprocessLib (Camera v2 build dependency)
+        shell: bash
+        run: ./.github/scripts/fetch-interprocesslib.sh
+
       - name: Build Thunderstore mod package
         run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS
 
@@ -91,6 +95,10 @@ jobs:
 
       - name: Restore dotnet tools
         run: dotnet tool restore
+
+      - name: Provision InterprocessLib (Camera v2 build dependency)
+        shell: bash
+        run: ./.github/scripts/fetch-interprocesslib.sh
 
       - name: Publish to Thunderstore
         env:
