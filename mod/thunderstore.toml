@@ -12,10 +12,19 @@ description = "Bidirectional IPC bridge mod that exposes Resonite as an executio
 websiteUrl = "https://github.com/MLShukai/ResoniteIO"
 containsNsfwContent = false
 
-# 依存: BepisLoader 本体と Resonite モディング共通ラッパ。
-# バージョンは ResoniteIO.csproj が参照している PackageReference と整合させること。
+# 依存: ResoniteIO が直接必要とする mod を宣言する (deps-of-deps は基本書かない)。
+# RenderiteHook は InterprocessLib 経由で transitive にも来るが、Camera v2 の
+# renderer doorstop inject の起点なので明示しておく。
+# 以下は Thunderstore が transitive に解決するため記載しない:
+#   ResoniteModding-RenderiteHook → ResoniteModding-BepInExRenderer
+#   {Nytra-InterprocessLib, ResoniteModding-BepisResoniteWrapper}
+#     → ResoniteModding-BepisLoader → ResoniteModding-BepInExResoniteShim
+# よって BepInExRenderer / BepisLoader / BepInExResoniteShim は記載不要。
+# 版整合: BepisResoniteWrapper は ResoniteIO.csproj の PackageReference と、
+#         InterprocessLib / RenderiteHook は Gale プロファイル / setup-resonite-env skill と揃える。
 [package.dependencies]
-ResoniteModding-BepisLoader = "1.5.1"
+Nytra-InterprocessLib = "3.0.1"
+ResoniteModding-RenderiteHook = "1.1.1"
 ResoniteModding-BepisResoniteWrapper = "1.0.2"
 
 [build]
