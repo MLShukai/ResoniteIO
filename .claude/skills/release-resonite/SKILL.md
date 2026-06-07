@@ -47,24 +47,38 @@ git push origin vX.Y.Z
 
 ______________________________________________________________________
 
-## 2. `publish.yml` の 4 ジョブ (直列)
+## 2. `publish.yml` の 4 ジョブ
+
+依存グラフ: `build` → (`publish-thunderstore` ∥ `publish-pypi`) → `github-release`。
+publish 2 ジョブは **`build` にのみ依存し互いに並列**。`build` が唯一の publish 前ゲートで、
+通ると Thunderstore / PyPI が独立に publish される (片側だけ壊れると partial publish。§3 参照)。
 
 1. **build** — version guard (tag `X.Y.Z` == csproj `<Version>` == `pyproject.toml` version を検証)
+   → `.github/scripts/fetch-interprocesslib.sh` で InterprocessLib を Thunderstore から取得 (CI には
+   Gale プロファイルが無く NuGet fallback も無いため、PackTS の mod compile に必須)
    → `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS` で Thunderstore zip、`uv build` で python sdist/wheel
-2. **publish-thunderstore** — `tcli publish` (secret `TCLI_AUTH_TOKEN`、`-p:PublishTS=true -p:TcliToken=...`)
+2. **publish-thunderstore** — fetch-interprocesslib.sh + `tcli publish` (secret `TCLI_AUTH_TOKEN`、`-p:PublishTS=true -p:TcliToken=...`)
 3. **publish-pypi** — PyPI Trusted Publishing (OIDC)、GitHub environment `pypi`、**token なし**
-4. **github-release** — `CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、tag が `(a|b|rc)[0-9]+$` なら `--prerelease`、mod zip + python dists を添付
+4. **github-release** — `CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、mod zip + python dists を添付 (prerelease 判定は §3 参照)
 
 ______________________________________________________________________
 
-## 3. プレリリース (rc)
+## 3. プレリリース版 (alpha / beta / rc) は打てない
 
-```bash
-git tag vX.Y.ZrcN && git push origin vX.Y.ZrcN   # 例: v0.2.0rc1
-```
+**Thunderstore が prerelease version を受け付けないため、`v0.2.0rc1` のような prerelease tag での
+dual publish はできない。** 3 者を同時に満たす文字列が存在しない:
 
-csproj `<Version>` と `pyproject.toml` も `X.Y.ZrcN` に揃える (version guard が効く)。`github-release` が `--prerelease` を付ける。
-本番 tag (`vX.Y.Z`) は rc 検証後に別途打つ。
+- **Thunderstore (`tcli`)**: `Major.Minor.Patch` 整数のみ。`0.1.0-rc1` は
+  `Invalid package version number ... must follow the Major.Minor.Patch format` で拒否。
+- **.NET (`<Version>`)**: `0.1.0rc1` (hyphen 無し) は `not a valid version string`。受け付けるのは `0.1.0-rc1`。
+- **version guard**: tag / csproj / pyproject の完全一致を要求 → 上 2 つが両立しない。
+
+`publish.yml` に残る `(a|b|rc)[0-9]+$` → `--prerelease` 判定は dual publish 経路では到達不能 (害は無い)。
+
+**リリース前検証は prerelease 抜きで行う**: ① `just run` ② `dotnet build ... -t:PackTS` のローカル
+zip 生成確認 (publish しない) ③ `build` が通れば Thunderstore / PyPI は並列・独立に publish されるので、
+tag を打つ前に §4 の `TCLI_AUTH_TOKEN` と PyPI Trusted Publisher が **両方** 有効か確認 (片方欠けると
+PyPI の不可逆な version を片側 publish で消費しうる)。詳細は [`RELEASE.md`](../../../RELEASE.md) §5。
 
 ______________________________________________________________________
 
