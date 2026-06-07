@@ -4,9 +4,9 @@
 `.github/workflows/publish.yml` が `## [X.Y.Z]` セクションを抽出して GitHub Release
 本文にする。形式は [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) に従う。
 
-## \[Unreleased\]
+## [Unreleased]
 
-## \[0.1.0\] - 2026-06-07
+## [0.1.0] - 2026-06-07
 
 最初の公開リリース。Resonite を AI エージェントの実行環境として使うための双方向 IPC
 ブリッジ (C# Mod `ResoniteIO` ↔ Python パッケージ `resoio`、gRPC over Unix Domain
@@ -44,3 +44,6 @@ Socket) の基盤一式。
   (`pre-commit` / `test` / `type-check` / `dotnet` / `proto-check`)、`v*` tag 駆動で
   Thunderstore mod + PyPI パッケージを同時公開する `publish.yml`、mike による
   バージョン付きドキュメントサイト (MkDocs Material)
+
+[0.1.0]: https://github.com/MLShukai/ResoniteIO/releases/tag/v0.1.0
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...HEAD
