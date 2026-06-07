@@ -319,7 +319,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../api/session/" class="md-tabs__link">
+        <a href="../../api/connection/" class="md-tabs__link">
           
   
   
@@ -895,14 +895,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/session/" class="md-nav__link">
+      <a href="../../api/connection/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Session
+    Connection
   
 
     
@@ -1369,7 +1369,7 @@ full <strong>Kestrel gRPC round-trip over a real UDS</strong> — no Resonite re
 <li><strong>Pure reads (snapshots)</strong> may run on any thread.</li>
 </ul>
 <h2 id="server-lifecycle-and-shutdown">Server lifecycle and shutdown<a class="headerlink" href="#server-lifecycle-and-shutdown" title="Permanent link">&para;</a></h2>
-<p><code>ResoniteIOPlugin</code> starts the gRPC <code>SessionHost</code> on <code>OnEngineReady</code> (on a separate thread so
+<p><code>ResoniteIOPlugin</code> starts the gRPC <code>GrpcHost</code> on <code>OnEngineReady</code> (on a separate thread so
 the engine is never blocked) and routes both partial-failure and <code>AppDomain.ProcessExit</code>
 through a single <code>SafeShutdown</code> dispose chain, stopping modalities in dependency order.</p>
 <h2 id="further-reading">Further reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>

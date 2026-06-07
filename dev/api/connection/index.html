@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://mlshukai.github.io/ResoniteIO/dev/api/session/">
+        <link rel="canonical" href="https://mlshukai.github.io/ResoniteIO/dev/api/connection/">
       
       
         <link rel="prev" href="../../cli/">
@@ -27,7 +27,7 @@
     
     
       
-        <title>Session - ResoniteIO</title>
+        <title>Connection - ResoniteIO</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#session" class="md-skip">
+        <a href="#connection" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Session
+              Connection
             
           </span>
         </div>
@@ -809,7 +809,7 @@
   <span class="md-ellipsis">
     
   
-    Session
+    Connection
   
 
     
@@ -827,7 +827,7 @@
   <span class="md-ellipsis">
     
   
-    Session
+    Connection
   
 
     
@@ -853,10 +853,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.SessionClient" class="md-nav__link">
+  <a href="#resoio.connection.ConnectionClient" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SessionClient
+        ConnectionClient
       
     </span>
   </a>
@@ -864,7 +864,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.SocketNotFoundError" class="md-nav__link">
+  <a href="#resoio.connection.SocketNotFoundError" class="md-nav__link">
     <span class="md-ellipsis">
       
         SocketNotFoundError
@@ -875,7 +875,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.AmbiguousSocketError" class="md-nav__link">
+  <a href="#resoio.connection.AmbiguousSocketError" class="md-nav__link">
     <span class="md-ellipsis">
       
         AmbiguousSocketError
@@ -1236,10 +1236,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.SessionClient" class="md-nav__link">
+  <a href="#resoio.connection.ConnectionClient" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SessionClient
+        ConnectionClient
       
     </span>
   </a>
@@ -1247,7 +1247,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.SocketNotFoundError" class="md-nav__link">
+  <a href="#resoio.connection.SocketNotFoundError" class="md-nav__link">
     <span class="md-ellipsis">
       
         SocketNotFoundError
@@ -1258,7 +1258,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.session.AmbiguousSocketError" class="md-nav__link">
+  <a href="#resoio.connection.AmbiguousSocketError" class="md-nav__link">
     <span class="md-ellipsis">
       
         AmbiguousSocketError
@@ -1288,28 +1288,28 @@
   
 
 
-<h1 id="session">Session<a class="headerlink" href="#session" title="Permanent link">&para;</a></h1>
+<h1 id="connection">Connection<a class="headerlink" href="#connection" title="Permanent link">&para;</a></h1>
 
 
 <div class="doc doc-object doc-class">
 
 
 
-<h2 id="resoio.session.SessionClient" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">resoio.session.SessionClient</span>
+<h2 id="resoio.connection.ConnectionClient" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.connection.ConnectionClient</span>
 
 
-<a href="#resoio.session.SessionClient" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">SessionClient</span><span class="p">(</span><span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+<a href="#resoio.connection.ConnectionClient" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ConnectionClient</span><span class="p">(</span><span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="resoio._client._BaseClient">_BaseClient</span>[<span title="resoio._generated.resonite_io.v1.SessionStub">SessionStub</span>]</code></p>
+              Bases: <code><span title="resoio._client._BaseClient">_BaseClient</span>[<span title="resoio._generated.resonite_io.v1.ConnectionStub">ConnectionStub</span>]</code></p>
 
 
 
-        <p>Async client for the Resonite IO <code>Session</code> service over a UDS.</p>
+        <p>Async client for the Resonite IO <code>Connection</code> service over a UDS.</p>
 <p>Use as an async context manager so the gRPC channel is closed
 deterministically. With <code>socket_path=None</code> the path is resolved on
 <code>__aenter__</code> via <code>RESONITE_IO_SOCKET</code> →
@@ -1368,11 +1368,11 @@ raise :class:<code>SocketNotFoundError</code> or :class:<code>AmbiguousSocketErr
 
 
 
-<h2 id="resoio.session.SocketNotFoundError" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">resoio.session.SocketNotFoundError</span>
+<h2 id="resoio.connection.SocketNotFoundError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.connection.SocketNotFoundError</span>
 
 
-<a href="#resoio.session.SocketNotFoundError" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#resoio.connection.SocketNotFoundError" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
@@ -1399,11 +1399,11 @@ raise :class:<code>SocketNotFoundError</code> or :class:<code>AmbiguousSocketErr
 
 
 
-<h2 id="resoio.session.AmbiguousSocketError" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">resoio.session.AmbiguousSocketError</span>
+<h2 id="resoio.connection.AmbiguousSocketError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.connection.AmbiguousSocketError</span>
 
 
-<a href="#resoio.session.AmbiguousSocketError" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#resoio.connection.AmbiguousSocketError" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
