@@ -13,32 +13,41 @@ socket directory).
 
 ## C# mod — Thunderstore
 
-!!! warning "Placeholder"
-    The Thunderstore package is not published yet. Once it is, you will install it through a
-    Resonite mod manager such as [Gale](https://github.com/Kesomannen/gale):
+Install through a Resonite mod manager such as [Gale](https://github.com/Kesomannen/gale):
+search Thunderstore for **ResoniteIO** (package `mlshukai-ResoniteIO`) and add it to your
+Gale profile. The package declares its dependencies (InterprocessLib, RenderiteHook,
+BepisResoniteWrapper, and — transitively — BepisLoader), so the mod manager pulls in the
+full plugin set for you.
 
-    ```text
-    # PLACEHOLDER — not yet available
-    Search Thunderstore for "ResoniteIO" and install it into your Gale profile.
-    ```
+After installing, set the Steam launch option so BepisLoader can hook the client:
 
-Until then, build and deploy the mod from source (see below).
+```text
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+```
+
+The [repository README](https://github.com/MLShukai/ResoniteIO#readme) explains why the
+launch option is mandatory. Prefer to build the mod yourself? See
+[Build from source](#build-from-source) below.
 
 ## Python client — PyPI
 
-!!! warning "Placeholder"
-    The PyPI package is not published yet. Once it is:
+```bash
+pip install resoio
+```
 
-    ```bash
-    # PLACEHOLDER — not yet available
-    pip install resoio
-    ```
+or, inside a [`uv`](https://docs.astral.sh/uv/) project:
 
-Until then, install the Python client from source (see below).
+```bash
+uv add resoio
+```
 
-## Build from source (works today)
+The `resoio` package requires Python ≥ 3.12, is `pyright`-strict, and ships type
+information (PEP 561).
 
-This is the supported path right now. The full development environment — .NET 10, `uv`,
+## Build from source
+
+Building from source is the path for contributing to ResoniteIO or running an unreleased
+version. The full development environment — .NET 10, `uv`,
 `protoc`, and tooling — lives inside a dev container; see the
 [repository README](https://github.com/MLShukai/ResoniteIO#readme) for the one-time
 `just init` host setup and how to open the dev container.
@@ -62,8 +71,6 @@ plugin list and why the launch option is mandatory.
 cd python
 uv sync --all-extras   # creates python/.venv with the resoio package and deps
 ```
-
-The `resoio` package is `pyright`-strict and ships type information (PEP 561).
 
 ## Socket location
 
