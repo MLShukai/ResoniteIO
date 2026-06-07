@@ -3,8 +3,8 @@
 `ResoniteIO` の **tag-driven リリースパイプライン** の end-to-end runbook。Thunderstore mod
 (`mlshukai-ResoniteIO`) と PyPI パッケージ (`resoio`) の **2 種類の成果物を 1 つの tag で同時に公開する**。
 
-タスク発火型の要約とトラブルシュートは [`.claude/skills/release-resonite/SKILL.md`](../.claude/skills/release-resonite/SKILL.md) に、
-PR / push / `gh` 操作の基本は [`.claude/skills/github-ops/SKILL.md`](../.claude/skills/github-ops/SKILL.md) に集約してある。
+タスク発火型の要約とトラブルシュートは [`.claude/skills/release-resonite/SKILL.md`](.claude/skills/release-resonite/SKILL.md) に、
+PR / push / `gh` 操作の基本は [`.claude/skills/github-ops/SKILL.md`](.claude/skills/github-ops/SKILL.md) に集約してある。
 本ドキュメントは「実際に 1 リリースを切る」ための正規手順を述べる。
 
 ______________________________________________________________________
@@ -204,14 +204,14 @@ publish 完了後、以下を確認する:
 - [ ] prerelease の場合: Release に **Pre-release** バッジが付いている
 - [ ] **Thunderstore** (`mlshukai/ResoniteIO`) に新バージョンが反映されている
 - [ ] **Gale から導入できる**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Gale 経由で Resonite 起動 → `gale/BepInEx/LogOutput.log` (`just log`) に `Loading Plugin ResoniteIO` が出て load されることを確認
-  (Gale プロファイル / 実機 load 検証の詳細は [`setup-resonite-env skill`](../.claude/skills/setup-resonite-env/SKILL.md) §2 / §6)
+  (Gale プロファイル / 実機 load 検証の詳細は [`setup-resonite-env skill`](.claude/skills/setup-resonite-env/SKILL.md) §2 / §6)
 
 ______________________________________________________________________
 
 ## 9. 関連参照
 
-- [`.claude/skills/release-resonite/SKILL.md`](../.claude/skills/release-resonite/SKILL.md) — タスク発火型のリリース要約 + トラブルシュート
-- [`.claude/skills/github-ops/SKILL.md`](../.claude/skills/github-ops/SKILL.md) — push / PR / `gh` の基本と安全規約
-- [`.claude/skills/merge-main/SKILL.md`](../.claude/skills/merge-main/SKILL.md) — release ブランチへの main 取り込み
-- [`mod/thunderstore.toml`](../mod/thunderstore.toml) / [`mod/Directory.Build.targets`](../mod/Directory.Build.targets) — Thunderstore packaging (`PackTS` / namespace / version 受け渡し)
-- [`mod/CHANGELOG.md`](../mod/CHANGELOG.md) — リリースノートのソース (Keep a Changelog)
+- [`.claude/skills/release-resonite/SKILL.md`](.claude/skills/release-resonite/SKILL.md) — タスク発火型のリリース要約 + トラブルシュート
+- [`.claude/skills/github-ops/SKILL.md`](.claude/skills/github-ops/SKILL.md) — push / PR / `gh` の基本と安全規約
+- [`.claude/skills/merge-main/SKILL.md`](.claude/skills/merge-main/SKILL.md) — release ブランチへの main 取り込み
+- [`mod/thunderstore.toml`](mod/thunderstore.toml) / [`mod/Directory.Build.targets`](mod/Directory.Build.targets) — Thunderstore packaging (`PackTS` / namespace / version 受け渡し)
+- [`mod/CHANGELOG.md`](mod/CHANGELOG.md) — リリースノートのソース (Keep a Changelog)

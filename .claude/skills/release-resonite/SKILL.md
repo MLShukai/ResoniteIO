@@ -7,7 +7,7 @@ version: 0.1.0
 # Release ResoniteIO (tag-driven dual publish)
 
 `ResoniteIO` を **1 つの tag で Thunderstore mod (`mlshukai-ResoniteIO`) と PyPI パッケージ (`resoio`) を同時公開** する
-ための手順 skill。正規の runbook は [`docs/RELEASE.md`](../../../docs/RELEASE.md)。本 skill はそれを行動可能な要約にしたもの。
+ための手順 skill。正規の runbook は [`RELEASE.md`](../../../RELEASE.md)。本 skill はそれを行動可能な要約にしたもの。
 
 - **正規バージョン = csproj `<Version>`** (`mod/src/ResoniteIO/ResoniteIO.csproj`)。`python/pyproject.toml` は lockstep。
 - リリースは **`v*` tag の push** で `.github/workflows/publish.yml` を発火させる。
@@ -103,7 +103,7 @@ ______________________________________________________________________
 
 ## 7. 関連参照
 
-- [`docs/RELEASE.md`](../../../docs/RELEASE.md) — 正規の end-to-end リリース runbook
+- [`RELEASE.md`](../../../RELEASE.md) — 正規の end-to-end リリース runbook
 - [`github-ops`](../github-ops/SKILL.md) — push / PR / `gh` の基本と安全規約
 - [`merge-main`](../merge-main/SKILL.md) — release ブランチへの main 取り込み・コンフリクト解消
 - [`setup-resonite-env`](../setup-resonite-env/SKILL.md) — Gale プロファイル / 実機 load 検証 (§2 / §6)
