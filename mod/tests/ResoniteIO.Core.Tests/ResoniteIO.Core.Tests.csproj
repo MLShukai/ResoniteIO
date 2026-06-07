@@ -26,8 +26,8 @@
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!--
-      Core 側で生成された Server stub (message 型 + Session.SessionBase) と、本 csproj 側で
-      生成された Client stub (message 型 + Session.SessionClient) は同一 namespace に
+      Core 側で生成された Server stub (message 型 + Connection.ConnectionBase) と、本 csproj 側で
+      生成された Client stub (message 型 + Connection.ConnectionClient) は同一 namespace に
       message 型を二重定義する。C# コンパイラは ProjectReference された Core 側を優先
       解決するため挙動には影響しないが、CS0436 警告が出る。Directory.Build.props で
       TreatWarningsAsErrors=true としているため、テストプロジェクト限定で本警告を抑止する。

@@ -14,10 +14,10 @@ namespace ResoniteIO.Core.Tests.Cursor;
 /// (Service 層) と例外 → gRPC Status の翻訳を検証する integration-real テスト。
 /// </summary>
 /// <remarks>
-/// <see cref="SessionHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
-/// <c>"SessionHostEnv"</c> collection で直列化する (harness の契約)。
+/// <see cref="GrpcHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
+/// <c>"GrpcHostEnv"</c> collection で直列化する (harness の契約)。
 /// </remarks>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class CursorServiceTests
 {
     private static CursorStateSnapshot SampleState() =>
@@ -27,7 +27,7 @@ public sealed class CursorServiceTests
     public async Task SetPosition_forwards_xy_to_bridge_and_round_trips_state()
     {
         var bridge = new CursorBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 
@@ -50,7 +50,7 @@ public sealed class CursorServiceTests
     public async Task GetPosition_round_trips_state_without_xy()
     {
         var bridge = new CursorBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 
@@ -81,7 +81,7 @@ public sealed class CursorServiceTests
         // 仕様: 正規化 [0,1] 範囲外 / NaN は Service 層で InvalidArgument に弾かれ、
         // bridge には到達しない (engine 非依存の検証)。
         var bridge = new CursorBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 
@@ -95,7 +95,7 @@ public sealed class CursorServiceTests
     [Fact]
     public async Task SetPosition_without_bridge_returns_Unavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 
@@ -112,7 +112,7 @@ public sealed class CursorServiceTests
         {
             ThrowOnNextCall = new CursorNotReadyException("window not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 
@@ -130,7 +130,7 @@ public sealed class CursorServiceTests
         {
             ThrowOnNextCall = new InvalidOperationException("engine fault"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(cursorBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cursorBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Cursor.CursorClient(channel);
 

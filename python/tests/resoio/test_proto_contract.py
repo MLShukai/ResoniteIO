@@ -405,7 +405,7 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "grabbed": 1,
         "state": 2,
     },
-    # Session
+    # Connection
     PingRequest: {
         "message": 1,
     },

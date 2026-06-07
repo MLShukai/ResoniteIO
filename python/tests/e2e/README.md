@@ -29,19 +29,19 @@ From the dev container:
 
 ```bash
 just e2e-test               # run every e2e file (default)
-just e2e-test session_ping  # run only tests/e2e/session_ping.py
+just e2e-test connection    # run only tests/e2e/connection.py
 ```
 
 The recipe forwards to `pytest -m e2e` with `--override-ini='python_files=*.py'`
 so files in `tests/e2e/` do not need the `test_` prefix. Each scenario lives
 in its own `<name>.py` to keep the run target self-describing.
 
-`session_ping.py` orchestrates:
+`connection.py` orchestrates:
 
 - `just resonite-start` (boots Resonite via Gale)
 - Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
   (up to 120 s).
-- Calls `Session.Ping("e2e-smoke")` once via `SessionClient`.
+- Calls `Connection.Ping("e2e-smoke")` once via `ConnectionClient`.
 - `just resonite-stop` in `finally:` so Resonite is stopped even on
   failure.
 

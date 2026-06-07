@@ -7,21 +7,21 @@ using Xunit;
 namespace ResoniteIO.Core.Tests.Display;
 
 /// <summary>
-/// <see cref="Core.Session.SessionHost"/> が <see cref="Core.Display.DisplayService"/>
+/// <see cref="Core.Hosting.GrpcHost"/> が <see cref="Core.Display.DisplayService"/>
 /// を正しく mount し、注入された <see cref="Core.Display.IDisplayBridge"/> 経由で
 /// Apply / Get RPC を end-to-end で配線できることを検証する統合テスト。
 /// </summary>
 /// <remarks>
 /// 単独 Service の round-trip は <see cref="DisplayServiceTests"/> (Common/DisplayServiceHost
-/// 経由) が担う。本テストは Wave 4 で SessionHost に DisplayService を mount した
+/// 経由) が担う。本テストは Wave 4 で GrpcHost に DisplayService を mount した
 /// **wiring** の retro 検知を目的とする (例えば DI 登録漏れや MapGrpcService 漏れを
 /// 早期検出する)。
 /// </remarks>
-[Collection("SessionHostEnv")]
-public sealed class SessionHostDisplayIntegrationTests
+[Collection("GrpcHostEnv")]
+public sealed class GrpcHostDisplayIntegrationTests
 {
     [Fact]
-    public async Task SessionHost_mounts_DisplayService_with_injected_bridge()
+    public async Task GrpcHost_mounts_DisplayService_with_injected_bridge()
     {
         var bridge = new FakeDisplayBridge
         {
@@ -32,7 +32,7 @@ public sealed class SessionHostDisplayIntegrationTests
                 MaxFps = 60.0f,
             },
         };
-        await using var harness = await SessionHostHarness.StartAsync(displayBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(displayBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Display.DisplayClient(channel);
 
@@ -54,11 +54,11 @@ public sealed class SessionHostDisplayIntegrationTests
     }
 
     [Fact]
-    public async Task SessionHost_DisplayService_without_bridge_returns_Unavailable()
+    public async Task GrpcHost_DisplayService_without_bridge_returns_Unavailable()
     {
         // displayBridge=null で起動 → DisplayService は MapGrpcService で mount される
         // が、bridge 未注入なので各 RPC は Status.Unavailable を返す (Service 既存契約)。
-        await using var harness = await SessionHostHarness.StartAsync(displayBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(displayBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Display.DisplayClient(channel);
 

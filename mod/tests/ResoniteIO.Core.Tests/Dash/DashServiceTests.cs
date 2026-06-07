@@ -14,10 +14,10 @@ namespace ResoniteIO.Core.Tests.Dash;
 /// (3) 例外 → gRPC Status の翻訳を検証する integration-real テスト。
 /// </summary>
 /// <remarks>
-/// <see cref="SessionHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
-/// <c>"SessionHostEnv"</c> collection で直列化する (harness の契約)。
+/// <see cref="GrpcHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
+/// <c>"GrpcHostEnv"</c> collection で直列化する (harness の契約)。
 /// </remarks>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class DashServiceTests
 {
     // ----- Open -----
@@ -29,7 +29,7 @@ public sealed class DashServiceTests
         {
             NextState = new DashStateSnapshot(IsOpen: true, OpenLerp: 0.42f),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -50,7 +50,7 @@ public sealed class DashServiceTests
         {
             NextState = new DashStateSnapshot(IsOpen: false, OpenLerp: 0.0f),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -71,7 +71,7 @@ public sealed class DashServiceTests
         {
             NextState = new DashStateSnapshot(IsOpen: true, OpenLerp: 1.0f),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -89,7 +89,7 @@ public sealed class DashServiceTests
     public async Task GetTree_forwards_interactable_only_and_root_ref_id_to_bridge()
     {
         var bridge = new DashBridgeFake();
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -154,7 +154,7 @@ public sealed class DashServiceTests
                 ScreenHeight: 1080
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -200,7 +200,7 @@ public sealed class DashServiceTests
                 Detail: "pressed"
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -226,7 +226,7 @@ public sealed class DashServiceTests
                 Detail: "hovered"
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -252,7 +252,7 @@ public sealed class DashServiceTests
                 Detail: "not scrollable"
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -291,7 +291,7 @@ public sealed class DashServiceTests
     {
         // dashBridge=null で起動 → Service は mount されるが bridge 未注入なので
         // 各 RPC は Status.Unavailable を返す (Service 契約)。
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -308,7 +308,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new DashNotReadyException("dash not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -327,7 +327,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new ArgumentException("ref_id must not be empty"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -346,7 +346,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new ArgumentOutOfRangeException("deltaY"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -363,7 +363,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new InvalidOperationException("engine fault"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -400,7 +400,7 @@ public sealed class DashServiceTests
         {
             NextScreenList = new DashScreenListSnapshot(new[] { screen0, screen1 }),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -421,7 +421,7 @@ public sealed class DashServiceTests
         {
             NextScreenList = new DashScreenListSnapshot(Array.Empty<DashScreenSnapshot>()),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -456,7 +456,7 @@ public sealed class DashServiceTests
                 Detail: ""
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -484,7 +484,7 @@ public sealed class DashServiceTests
                 Detail: ""
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -513,7 +513,7 @@ public sealed class DashServiceTests
                 Detail: "screen disabled"
             ),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -535,7 +535,7 @@ public sealed class DashServiceTests
         // ref_id / key 両空は Service 層で弾かれ、bridge を呼ばずに InvalidArgument を返す
         // (§4.4: 未指定はクライアントの引数ミス。`ArgumentException → InvalidArgument`)。
         var bridge = new DashBridgeFake();
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -553,7 +553,7 @@ public sealed class DashServiceTests
     [Fact]
     public async Task ListScreens_without_bridge_returns_Unavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -566,7 +566,7 @@ public sealed class DashServiceTests
     [Fact]
     public async Task SetScreen_without_bridge_returns_Unavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -583,7 +583,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new DashNotReadyException("dash not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 
@@ -600,7 +600,7 @@ public sealed class DashServiceTests
         {
             ThrowOnNextCall = new DashNotReadyException("dash not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(dashBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(dashBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Dash.DashClient(channel);
 

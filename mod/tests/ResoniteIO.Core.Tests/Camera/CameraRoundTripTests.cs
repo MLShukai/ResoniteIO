@@ -7,16 +7,16 @@ using Xunit;
 
 namespace ResoniteIO.Core.Tests.Camera;
 
-// SessionHostHarness が RESONITE_IO_SOCKET env var を書き換えるため、SessionHostEnv
+// GrpcHostHarness が RESONITE_IO_SOCKET env var を書き換えるため、GrpcHostEnv
 // collection 内のテストと直列化する必要がある。
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class CameraRoundTripTests
 {
     [Fact]
     public async Task Stream_EmitsRequestedFrames_WithMonotonicIds()
     {
         var bridge = new FakeCameraBridge();
-        await using var harness = await SessionHostHarness.StartAsync(cameraBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cameraBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Camera.CameraClient(channel);
 
@@ -59,7 +59,7 @@ public sealed class CameraRoundTripTests
     public async Task Stream_RespectsFpsLimit_WithinTolerance()
     {
         var bridge = new FakeCameraBridge();
-        await using var harness = await SessionHostHarness.StartAsync(cameraBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cameraBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Camera.CameraClient(channel);
 
@@ -104,7 +104,7 @@ public sealed class CameraRoundTripTests
     public async Task Stream_TranslatesCameraNotReady_ToFailedPrecondition()
     {
         var bridge = new FakeCameraBridge { ThrowNotReady = true };
-        await using var harness = await SessionHostHarness.StartAsync(cameraBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(cameraBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Camera.CameraClient(channel);
 

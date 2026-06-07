@@ -11,20 +11,20 @@ namespace ResoniteIO.Core.Tests.Microphone;
 
 /// <summary>
 /// <see cref="Core.Microphone.MicrophoneService"/> の StreamAudio round-trip と
-/// disconnect 種別通知を SessionHost mount 越しに検証する。
+/// disconnect 種別通知を GrpcHost mount 越しに検証する。
 /// </summary>
 /// <remarks>
-/// <c>SessionHostHarness</c> が <c>RESONITE_IO_SOCKET</c> env を触るので
-/// <c>SessionHostEnv</c> collection で直列化する (他モダリティと同 pattern)。
+/// <c>GrpcHostHarness</c> が <c>RESONITE_IO_SOCKET</c> env を触るので
+/// <c>GrpcHostEnv</c> collection で直列化する (他モダリティと同 pattern)。
 /// </remarks>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class MicrophoneRoundTripTests
 {
     [Fact]
     public async Task StreamAudio_AccumulatesFrames_AndReturnsSummary()
     {
         var bridge = new FakeMicrophoneBridge();
-        await using var harness = await SessionHostHarness.StartAsync(microphoneBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(microphoneBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 
@@ -77,7 +77,7 @@ public sealed class MicrophoneRoundTripTests
     [Fact]
     public async Task StreamAudio_BridgeNull_ReturnsUnavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(microphoneBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(microphoneBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 
@@ -99,7 +99,7 @@ public sealed class MicrophoneRoundTripTests
     public async Task StreamAudio_BridgeNotReady_ReturnsFailedPrecondition()
     {
         var bridge = new FakeMicrophoneBridge { ThrowNotReady = true };
-        await using var harness = await SessionHostHarness.StartAsync(microphoneBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(microphoneBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 
@@ -127,7 +127,7 @@ public sealed class MicrophoneRoundTripTests
     public async Task StreamAudio_BridgeGenericException_ReturnsInternal()
     {
         var bridge = new FakeMicrophoneBridge { ThrowGeneric = true };
-        await using var harness = await SessionHostHarness.StartAsync(microphoneBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(microphoneBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 
@@ -155,7 +155,7 @@ public sealed class MicrophoneRoundTripTests
     public async Task StreamAudio_ClientCancellation_NotifiesCancelledDisconnect()
     {
         var bridge = new FakeMicrophoneBridge();
-        await using var harness = await SessionHostHarness.StartAsync(microphoneBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(microphoneBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Microphone.MicrophoneClient(channel);
 

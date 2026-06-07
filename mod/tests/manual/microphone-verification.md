@@ -52,10 +52,10 @@ just log                       # tail -F BepInEx LogOutput
 engine 側 log に以下が時系列で出ることを確認:
 
 ```text
-[Info   :ResoniteIO] Engine ready — starting Session gRPC host
+[Info   :ResoniteIO] Engine ready — starting GrpcHost
 [Info   :ResoniteIO] Microphone Bridge: registered virtual AudioInput 'ResoniteIO Microphone' (deviceId='resoio-mic-virtual', sampleRate=48000Hz, mono)
 [Info   :ResoniteIO] Microphone Bridge: OverrideAudioInputIndex set to N (ResoniteIO virtual mic auto-promoted to default)
-[Info   :ResoniteIO] SessionHost listening on /home/<user>/.resonite-io/resonite-<pid>.sock
+[Info   :ResoniteIO] GrpcHost listening on /home/<user>/.resonite-io/resonite-<pid>.sock
 ```
 
 (log 文言は実装による微差あり。要点は **registered virtual AudioInput** と

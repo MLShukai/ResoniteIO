@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 import pytest
 
 from resoio._generated.resonite_io.v1 import (
+    ConnectionBase,
     PingRequest,
     PingResponse,
-    SessionBase,
 )
-from resoio.session import (
+from resoio.connection import (
     AmbiguousSocketError,
-    SessionClient,
+    ConnectionClient,
     SocketNotFoundError,
 )
 
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 UdsServer = Callable[["IServable"], Awaitable[str]]
 
 
-class _EchoSession(SessionBase):
+class _EchoConnection(ConnectionBase):
     async def ping(self, message: PingRequest) -> PingResponse:
         return PingResponse(
             message=message.message,
@@ -30,10 +30,10 @@ class _EchoSession(SessionBase):
         )
 
 
-class TestSessionClient:
+class TestConnectionClient:
     async def test_round_trip_over_uds(self, uds_server: UdsServer):
-        socket_path = await uds_server(_EchoSession())
-        async with SessionClient() as client:
+        socket_path = await uds_server(_EchoConnection())
+        async with ConnectionClient() as client:
             assert client.socket_path == socket_path
             resp = await client.ping("hi")
         assert resp.message == "hi"
@@ -45,7 +45,7 @@ class TestSessionClient:
         monkeypatch.delenv("RESONITE_IO_SOCKET", raising=False)
         monkeypatch.setenv("RESONITE_IO_SOCKET_DIR", str(tmp_path))
         with pytest.raises(SocketNotFoundError):
-            async with SessionClient():
+            async with ConnectionClient():
                 pass
 
     async def test_raises_when_socket_ambiguous(
@@ -56,5 +56,5 @@ class TestSessionClient:
         monkeypatch.delenv("RESONITE_IO_SOCKET", raising=False)
         monkeypatch.setenv("RESONITE_IO_SOCKET_DIR", str(tmp_path))
         with pytest.raises(AmbiguousSocketError):
-            async with SessionClient():
+            async with ConnectionClient():
                 pass
