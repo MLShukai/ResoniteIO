@@ -3,16 +3,18 @@
 ResoniteIO connects two processes — the Resonite client and your agent code — over gRPC on
 a Unix Domain Socket (UDS).
 
-```text
-┌─────────────────────────────┐         ┌──────────────────────────────┐
-│   Resonite client (C#)      │         │   Your agent (Python)        │
-│                             │         │                              │
-│  ResoniteIO  (BepInEx mod)  │         │   resoio  (client library)   │
-│  ├ FrooxEngine<M>Bridge ────┼── UDS ──┼─→ <Modality>Client            │
-│  └ ResoniteIO.Core          │  gRPC   │                              │
-│     ├ gRPC server (Kestrel) │         │   grpclib (async)            │
-│     └ <Modality>Service     │         │                              │
-└─────────────────────────────┘         └──────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph client["Resonite client (C#)"]
+        direction TB
+        bridge["ResoniteIO mod<br/>FrooxEngine&lt;Modality&gt;Bridge"]
+        core["ResoniteIO.Core<br/>gRPC server (Kestrel)<br/>&lt;Modality&gt;Service"]
+        bridge --- core
+    end
+    subgraph agent["Your agent (Python)"]
+        py["resoio<br/>&lt;Modality&gt;Client<br/>grpclib (async)"]
+    end
+    core <-->|"gRPC over UDS"| py
 ```
 
 ## Why gRPC over UDS

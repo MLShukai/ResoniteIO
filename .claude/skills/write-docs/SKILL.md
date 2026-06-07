@@ -17,10 +17,23 @@ ResoniteIO の公開ドキュメントは **MkDocs Material + `mkdocstrings[pyth
 | ドキュメント本体    | リポジトリルート `docs/`                                        |
 | Python API の生成元 | `python/src/resoio/*.py` の docstring (mkdocstrings が静的解析) |
 | docs 依存           | `python/pyproject.toml` の uv `[dependency-groups].docs`        |
+| アイコン / favicon  | `docs/assets/icon.png` (`theme.logo` / `theme.favicon`)         |
 
 `mkdocs.yml` をルートに置く理由: docs は Python クライアントと C# mod (アーキテクチャ) の両方を
 扱うため。uv プロジェクトは `python/` のままなので、mkdocs は `-f ../mkdocs.yml` 経由で動かす
 (justfile レシピが面倒を見る)。
+
+**ユーザー docs と project docs を分ける**: `docs/` は **公開サイト (ユーザー向け) 専用**。
+RELEASE.md などの maintainer / プロジェクト向けドキュメントは **repo root** に置く
+(`resonite_io_plan.md` / `CLAUDE.md` / `README.md` と同列、GitHub 上で読む)。`docs/` に
+maintainer doc を混ぜない (混ぜると mkdocs が拾い、`exclude_docs` での除外管理が増える)。
+
+アイコンは **実体 1 つ + symlink** で重複を避ける: 実体は `mod/icon.png` (256x256、Thunderstore
+が `mod/thunderstore.toml` の `[build].icon` で参照する。**256x256 必須**)、`docs/assets/icon.png`
+は実体への相対 symlink (`../../mod/icon.png`)。mkdocs は symlink を辿って site/ に実体を
+コピーするので公開サイトには実ファイルが載る。元画像から 256x256 を派生するときは Pillow を
+一時利用する (`uv run --with pillow`)。Material の `theme.logo` キーは header 画像用の名前だが、
+中身はブランドアイコン (ロゴ文字ではない)。
 
 ## 2. preview / build
 
@@ -94,6 +107,13 @@ docs deps (`mkdocs` / `mkdocs-material` / `mkdocstrings` / `mike`) は `python/p
 
 これらは手書き。コード例や表は実装に追従させる (CLI コマンドやモダリティの方向/RPC 種別は
 `resonite_io_plan.md` と各 `*.proto` が正)。
+
+## 4.1 図は mermaid で書く
+
+図は ASCII アートではなく **mermaid** で書く。mermaid という言語指定のコードフェンスを使い、
+`mkdocs.yml` の `pymdownx.superfences` custom_fence で有効化済み (Material が mermaid.js を
+自動ロード)。例は `docs/architecture/overview.md` のアーキテクチャ図。山括弧 `<` `>` を含む
+ラベルは `&lt;` `&gt;` でエスケープする (mermaid は山括弧を HTML と解釈するため)。
 
 ## 5. C# は自動 API 無し
 
