@@ -69,4 +69,4 @@ The `resoio` package is `pyright`-strict and ships type information (PEP 561).
 
 By default the client resolves the socket under `~/.resonite-io/`. Override it with
 `RESONITE_IO_SOCKET` (full path) or `RESONITE_IO_SOCKET_DIR` (directory). See
-[`SessionClient`](../api/session.md) for the resolution order.
+[`ConnectionClient`](../api/connection.md) for the resolution order.

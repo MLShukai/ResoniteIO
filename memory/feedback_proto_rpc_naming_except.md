@@ -15,7 +15,7 @@ Step 3 で Camera を追加する際にこのルールを除外した (commit `8
 オブジェクト」として命名する方針が固まっている。`StreamFramesResponse` のような
 RPC 名にバインドされた envelope 名は、他モダリティ (Audio: `AudioChunk`, Locomotion:
 `PoseSample` 等) と命名が揃わず、Python 側 dataclass を直接 import する際にも冗長。
-`SERVICE_SUFFIX` を既に except している (`Session` / `Camera` を service 名に採る)
+`SERVICE_SUFFIX` を既に except している (`Connection` / `Camera` を service 名に採る)
 方針の延長線上にある統一規約。
 
 **How to apply:** 新しいモダリティ proto を追加するとき、message 型はドメイン名で

@@ -17,4 +17,4 @@ that does the null-bridge `Unavailable` throw + the try/catch translation in one
 
 In the matching `FrooxEngine<Modality>Bridge`, the two engine-dispatch helpers also dedup: implement `RunOnEngineTaskAsync(Func<Task>)` as `await (await RunOnEngineAsync(fn, ct))` instead of copying the TCS/RunSynchronously/ct.Register block.
 
-SessionHost per-modality DI/MapGrpcService/null-warning blocks repeat across ALL modalities — do NOT extract a World-only helper there; that's a cross-modality change out of a single-modality refactor's scope.
+GrpcHost per-modality DI/MapGrpcService/null-warning blocks repeat across ALL modalities — do NOT extract a World-only helper there; that's a cross-modality change out of a single-modality refactor's scope.

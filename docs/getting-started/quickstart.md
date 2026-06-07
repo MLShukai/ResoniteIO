@@ -12,11 +12,11 @@ deterministically. With `socket_path=None` the socket path is resolved on entry 
 ```python
 import asyncio
 
-from resoio import SessionClient
+from resoio import ConnectionClient
 
 
 async def main() -> None:
-    async with SessionClient() as session:
+    async with ConnectionClient() as session:
         response = await session.ping("hello")
         print(response.message)
 
@@ -56,4 +56,4 @@ resoio record --video out.mp4     # capture Camera (and/or Speaker) to a file
 ```
 
 See the [CLI](../cli.md) page for the full command list, and the
-[API Reference](../api/session.md) for every client.
+[API Reference](../api/connection.md) for every client.

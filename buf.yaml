@@ -5,7 +5,7 @@ lint:
   use:
     - DEFAULT
   # SERVICE_SUFFIX は service 名に "Service" 接尾辞を要求するが、本プロジェクトでは
-  # `Session` / `Camera` / `Locomotion` といったモダリティ名そのものを service 名に
+  # `Connection` / `Camera` / `Locomotion` といったモダリティ名そのものを service 名に
   # 採用する方針 (Plan §2.1) のため除外する。
   #
   # RPC_REQUEST_STANDARD_NAME / RPC_RESPONSE_STANDARD_NAME は RPC ごとに

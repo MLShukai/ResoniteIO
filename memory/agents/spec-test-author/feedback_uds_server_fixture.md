@@ -38,7 +38,7 @@ fake construction. Factory also supports >1 server per test if ever needed.
   defined between the preamble and `fake = ...`, or a configured-fake
   preamble) that the regex misses — fix those by hand.
 
-**Migrated to uds_server (B-2, 2026-06-06):** test_session (1 of 3),
+**Migrated to uds_server (B-2, 2026-06-06):** test_connection (1 of 3),
 test_camera, test_speaker, test_microphone, test_locomotion, test_display,
 test_inventory, test_manipulation, test_world, test_context_menu, test_dash.
 **Left alone:** cli/test_record.py (B-3) — its server interleaves with a

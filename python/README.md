@@ -27,7 +27,7 @@ python/
 ├── pyproject.toml         # uv-managed project, pyright/ruff/pytest config
 ├── src/resoio/
 │   ├── __init__.py        # exposes __version__ via importlib.metadata
-│   ├── session.py         # SessionClient (Step 2 placeholder)
+│   ├── connection.py      # ConnectionClient (Step 2 placeholder)
 │   ├── py.typed           # PEP 561 marker
 │   └── _generated/        # protoc output, committed
 └── tests/                 # mirrors src/resoio/ 1-to-1

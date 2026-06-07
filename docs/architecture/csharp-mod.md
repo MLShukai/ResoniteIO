@@ -45,7 +45,7 @@ FrooxEngine has thread affinity. Bridge implementations follow two rules:
 
 ## Server lifecycle and shutdown
 
-`ResoniteIOPlugin` starts the gRPC `SessionHost` on `OnEngineReady` (on a separate thread so
+`ResoniteIOPlugin` starts the gRPC `GrpcHost` on `OnEngineReady` (on a separate thread so
 the engine is never blocked) and routes both partial-failure and `AppDomain.ProcessExit`
 through a single `SafeShutdown` dispose chain, stopping modalities in dependency order.
 

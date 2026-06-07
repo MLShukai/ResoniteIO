@@ -5,9 +5,9 @@ metadata:
   type: feedback
 ---
 
-When given an implementation spec on a feature branch whose name matches the task (e.g., `feature/20260516/grpc-session-ping` for a Step 2 Session task), **inspect `git log` first** to see whether a prior agent run already landed the work. The spec's description of the current code ("currently placeholder") may be out of date.
+When given an implementation spec on a feature branch whose name matches the task (e.g., `feature/20260516/grpc-session-ping` for a Step 2 Connection task), **inspect `git log` first** to see whether a prior agent run already landed the work. The spec's description of the current code ("currently placeholder") may be out of date.
 
-**Why:** A prior run on `feature/20260516/grpc-session-ping` had already committed `SessionClient`, generated stub, and round-trip test as `eea819a feat(python/session): SessionClient と in-process UDS round-trip テスト`. The user-provided spec still described `session.py` as a placeholder. Re-implementing would have either duplicated work or fought the existing commit. Verifying first revealed that only Step 5 (pytest e2e marker + `--ignore=tests/e2e`) and Step 6 (`__init__.py` re-exports) of the spec were missing, which fit cleanly in a follow-on commit.
+**Why:** A prior run on `feature/20260516/grpc-session-ping` had already committed `ConnectionClient`, generated stub, and round-trip test as `eea819a feat(python/connection): ConnectionClient と in-process UDS round-trip テスト`. The user-provided spec still described `connection.py` as a placeholder. Re-implementing would have either duplicated work or fought the existing commit. Verifying first revealed that only Step 5 (pytest e2e marker + `--ignore=tests/e2e`) and Step 6 (`__init__.py` re-exports) of the spec were missing, which fit cleanly in a follow-on commit.
 
 **How to apply:**
 

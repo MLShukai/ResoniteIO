@@ -96,7 +96,7 @@ nav:
       - C# Mod: architecture/csharp-mod.md
   - CLI: cli.md
   - API Reference:
-      - Session: api/session.md
+      - Connection: api/connection.md
       - Camera: api/camera.md
       - Speaker: api/speaker.md
       - Microphone: api/microphone.md

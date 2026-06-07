@@ -12,7 +12,7 @@ resoio --help
 
 | Command | Modality | Direction | Notes |
 | --- | --- | --- | --- |
-| `resoio ping` | Session | unary | Liveness check. |
+| `resoio ping` | Connection | unary | Liveness check. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio locomotion` | Locomotion | Python → Resonite | Send movement commands. |
@@ -44,4 +44,4 @@ resoio cursor center
 ```
 
 Run any command with `--help` for its full flag list. For programmatic use, see the
-[API Reference](api/session.md).
+[API Reference](api/connection.md).

@@ -63,7 +63,7 @@ memory: project
 ## ワークフロー
 
 1. **仕様の精読**: 仕様書 ([resonite_io_plan.md](../../resonite_io_plan.md) の該当 Step を含む) を読み、入力・出力・振る舞い・エッジケース・エラー条件・性能/セキュリティ制約を洗い出す。曖昧さがあり実装に影響する場合は、推測で進めず、orchestrator に明確化を依頼する
-2. **既存コードの把握**: 関連モダリティ (Session / Camera / Speaker / Microphone / Locomotion / Display) の Core 側 Service と Mod 側 Bridge、Python 側 Client を読み、命名規則・既存ヘルパ・dispatch パターン (engine thread への marshalling など) を確認する。重複や不整合を避ける
+2. **既存コードの把握**: 関連モダリティ (Connection / Camera / Speaker / Microphone / Locomotion / Display) の Core 側 Service と Mod 側 Bridge、Python 側 Client を読み、命名規則・既存ヘルパ・dispatch パターン (engine thread への marshalling など) を確認する。重複や不整合を避ける
 3. **公開 API の決定**: proto → C# `<Modality>Service` / `I<Modality>Bridge` → Python `<Modality>Client` の順にシグネチャ・型・配置を先に決める。余計な surface area は作らない
 4. **実装**: 仕様通り、最小限の範囲で書く。仕様にないオプションや「将来の柔軟性」を勝手に追加しない。proto 変更があれば `just gen-proto` を流す
 5. **テストの確認**: `spec-test-author` がテストを書いていれば、`just test` を実行して通ることを確認する。落ちていれば実装を直す (テストは触らない)。テストがまだ無い場合は、その旨を報告して進める

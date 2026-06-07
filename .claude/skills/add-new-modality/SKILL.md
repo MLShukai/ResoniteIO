@@ -156,12 +156,12 @@ ______________________________________________________________________
 ### C# 側
 
 - xunit
-- **Core 側** (`ResoniteIO.Core.Tests`): Resonite 非依存なので **Kestrel ラウンドトリップを含む統合テストを書ける**。tmp_path UDS に SessionHost を bind、`Grpc.Net.Client` から実 RPC を投げて検証
+- **Core 側** (`ResoniteIO.Core.Tests`): Resonite 非依存なので **Kestrel ラウンドトリップを含む統合テストを書ける**。tmp_path UDS に GrpcHost を bind、`Grpc.Net.Client` から実 RPC を投げて検証
 - **Mod 側** (`ResoniteIO.Tests`): FrooxEngine 依存があるため smoke test と Bridge adapter ロジック (engine API を呼ばない範囲) のみ。実 engine を要するシナリオは `python/tests/e2e/<modality>.py` を Claude が host-agent 経由で自動駆動する。Claude が自動化できない確認のみ `mod/tests/manual/` に markdown で残す
 
 ### Test-only Service host
 
-SessionHost に mount しない wave の Core 側 modality は、**test 専用の最小 Kestrel host を分離** して round-trip テストを書く。
+GrpcHost に mount しない wave の Core 側 modality は、**test 専用の最小 Kestrel host を分離** して round-trip テストを書く。
 詳細: [`feedback_test_only_service_host.md`](../../memory/feedback_test_only_service_host.md)
 
 ### Streaming pacing tolerance
@@ -176,7 +176,7 @@ ______________________________________________________________________
 `ResoniteIOPlugin` は `SafeShutdown` 経由で partial-failure / `AppDomain.ProcessExit` どちらも同じ Dispose chain に集約する。順序は:
 
 ```
-receiver → camera → display → locomotion → microphone → speaker → session
+receiver → camera → display → locomotion → microphone → speaker → connection
 ```
 
 新規モダリティを足すときは、依存方向 (例: 出力系より入力系を先に止めるか) を考慮して chain の適切な位置に挿入する。
