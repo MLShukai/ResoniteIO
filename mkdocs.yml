@@ -6,14 +6,12 @@ site_url: https://mlshukai.github.io/ResoniteIO/
 repo_url: https://github.com/MLShukai/ResoniteIO
 repo_name: MLShukai/ResoniteIO
 
-# In-repo maintainer docs that are not part of the published site. RELEASE.md
-# is a release runbook with links to ../.claude and ../mod (outside docs_dir),
-# read on GitHub rather than on the site.
-exclude_docs: |
-  RELEASE.md
-
 theme:
   name: material
+  # Brand icon (icon.png). `logo` is just Material's key name for the header
+  # image; docs/assets/icon.png is a symlink to the real file at mod/icon.png.
+  logo: assets/icon.png
+  favicon: assets/icon.png
 
   features:
     - navigation.tracking
@@ -48,7 +46,12 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        # Render ```mermaid blocks as diagrams (Material loads mermaid.js).
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite

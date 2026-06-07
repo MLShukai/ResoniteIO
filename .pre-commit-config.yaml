@@ -14,12 +14,17 @@ repos:
       - id: end-of-file-fixer
       - id: check-docstring-first
       - id: check-yaml
+        # mkdocs.yml は mermaid 用に `!!python/name:` カスタムタグを使う。safe
+        # loader 前提の check-yaml では解決できないため除外 (mkdocs build が検証)。
+        exclude: ^mkdocs\.yml$
       - id: check-toml
       - id: debug-statements
       - id: detect-private-key
       - id: check-executables-have-shebangs
       - id: check-case-conflict
       - id: check-added-large-files
+        # 既定 500KB だと full-size の icon.png master (~1.9MB) を弾くため緩める。
+        args: ["--maxkb=2048"]
       - id: check-merge-conflict
       - id: check-symlinks
       - id: mixed-line-ending
@@ -138,6 +143,21 @@ repos:
         entry: shfmt -w -i 2 -ci -bn
         language: system
         types: [shell]
+        require_serial: true
+
+  # ===== Assets (icon) =====
+  # ルートの full-size icon.png を master とし、Thunderstore 用 mod/icon.png
+  # (256x256) を派生させる。icon.png が変わったら自動で再生成し、stale なら
+  # fail させて再 stage を促す (`just icon` と同じ script)。Pillow は justfile と
+  # 揃えて pin する。pixel 比較なので PNG 再エンコード差では rewrite されない。
+  - repo: local
+    hooks:
+      - id: resize-icon
+        name: resize icon.png -> mod/icon.png (256x256)
+        entry: uv run --no-project --with 'pillow==12.2.0' python scripts/resize_icon.py
+        language: system
+        files: ^icon\.png$
+        pass_filenames: false
         require_serial: true
 
   # ===== Protobuf =====

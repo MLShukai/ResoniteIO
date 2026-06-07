@@ -73,6 +73,13 @@ init:
 gen-proto:
     bash scripts/gen_proto.sh
 
+# ルートの full-size icon.png (master) から mod/icon.png (256x256) を再生成する。
+# Thunderstore は 256x256 必須、docs/assets/icon.png は mod/icon.png への symlink。
+# pre-commit の resize-icon hook が icon.png 変更時に自動で同じ script を走らせる。
+# Pillow は pre-commit と版を揃えるため pin する (描画の決定性を保つ)。
+icon:
+    uv run --no-project --with 'pillow==12.2.0' python scripts/resize_icon.py
+
 # Resonite の主要 first-party DLL を ILSpy で decompile し、
 # プロジェクトルートの decompiled/ に project 形式で書き出す。
 # 既存の decompiled/ は wipe される (idempotent)。要 .env の ResonitePath。
