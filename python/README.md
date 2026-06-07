@@ -21,12 +21,12 @@ over a Unix Domain Socket). See the documentation for installing the mod.
 ```python
 import asyncio
 
-from resoio import SessionClient
+from resoio import ConnectionClient
 
 
 async def main() -> None:
-    async with SessionClient() as session:
-        response = await session.ping("hello")
+    async with ConnectionClient() as client:
+        response = await client.ping("hello")
         print(response.message)
 
 

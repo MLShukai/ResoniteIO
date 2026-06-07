@@ -48,6 +48,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "AmbiguousSocketError",
     "AudioChunk",
     "CameraClient",
+    "ConnectionClient",
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
@@ -84,7 +85,6 @@ _EXPECTED_PUBLIC_NAMES = (
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
-    "SessionClient",
     "SessionFilter",
     "SessionPage",
     "SocketNotFoundError",
@@ -144,7 +144,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
 @pytest.mark.parametrize(
     "client_name",
     [
-        "SessionClient",
+        "ConnectionClient",
         "CameraClient",
         "SpeakerClient",
         "MicrophoneClient",

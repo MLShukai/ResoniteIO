@@ -36,7 +36,7 @@ Resonite-independent.
 - [Quick Start](getting-started/quickstart.md) — your first `ping` and a camera stream.
 - [Architecture › Overview](architecture/overview.md) — Core/Mod layering and transport.
 - [Architecture › Modalities](architecture/modalities.md) — the full modality matrix.
-- [API Reference](api/session.md) — the `resoio` Python client API.
+- [API Reference](api/connection.md) — the `resoio` Python client API.
 - [CLI](cli.md) — the `resoio` command-line tool.
 
 ## License

@@ -1,4 +1,4 @@
-// Session service: 制御プレーンの最小 RPC を定義する。
+// Connection service: 制御プレーンの最小 RPC を定義する。
 //
 // `Ping` は両言語間のコード生成パイプラインと UDS gRPC 疎通を確認するための
 // スモーク RPC。Step 1 (Skeleton) では本 RPC のみを提供し、モダリティごとの
@@ -22,9 +22,9 @@ message PingResponse {
   int64 server_unix_nanos = 2;
 }
 
-// Session は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
+// Connection は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
 // 分割するため、本 service は接続確認と将来的な capability negotiation のみを
 // 担当する。
-service Session {
+service Connection {
   rpc Ping(PingRequest) returns (PingResponse);
 }

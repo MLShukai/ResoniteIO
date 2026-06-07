@@ -9,18 +9,18 @@ namespace ResoniteIO.Core.Tests.Locomotion;
 
 /// <summary>
 /// <see cref="Core.Locomotion.LocomotionService"/> の Drive client-streaming
-/// round-trip と disconnect 種別通知を SessionHost mount 越しに検証する。
-/// SessionHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
-/// <c>SessionHostEnv</c> collection で直列化。
+/// round-trip と disconnect 種別通知を GrpcHost mount 越しに検証する。
+/// GrpcHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
+/// <c>GrpcHostEnv</c> collection で直列化。
 /// </summary>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class LocomotionRoundTripTests
 {
     [Fact]
     public async Task Drive_RecordsLatestState_AndReturnsCount()
     {
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -95,7 +95,7 @@ public sealed class LocomotionRoundTripTests
     public async Task Drive_ClientCancellation_NotifiesCancelledDisconnect()
     {
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -125,7 +125,7 @@ public sealed class LocomotionRoundTripTests
     [Fact]
     public async Task Drive_WithoutBridge_ReturnsUnavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 

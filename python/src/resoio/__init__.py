@@ -3,6 +3,11 @@
 from importlib.metadata import version as _version
 
 from resoio.camera import CameraClient, Frame
+from resoio.connection import (
+    AmbiguousSocketError,
+    ConnectionClient,
+    SocketNotFoundError,
+)
 from resoio.context_menu import (
     ContextMenuClient,
     ContextMenuItem,
@@ -39,11 +44,6 @@ from resoio.microphone import (
     MicrophoneClient,
     MicrophoneStreamSummary,
 )
-from resoio.session import (
-    AmbiguousSocketError,
-    SessionClient,
-    SocketNotFoundError,
-)
 from resoio.speaker import (
     CHANNELS,
     DTYPE,
@@ -74,6 +74,7 @@ __all__ = [
     "AmbiguousSocketError",
     "AudioChunk",
     "CameraClient",
+    "ConnectionClient",
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
@@ -110,7 +111,6 @@ __all__ = [
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
-    "SessionClient",
     "SessionFilter",
     "SessionPage",
     "SocketNotFoundError",

@@ -111,7 +111,7 @@ async def stream_frames(self, fps: float = 30.0) -> AsyncIterator[CameraFrame]:
         on the Resonite side, not the Python side.
 
     Raises:
-        SessionNotReady: The UDS socket at `$HOME/.resonite-io/`
+        ConnectionNotReady: The UDS socket at `$HOME/.resonite-io/`
             has not yet been bound by the mod.
         GRPCError: Underlying grpclib transport error.
     """

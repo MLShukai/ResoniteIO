@@ -23,5 +23,5 @@ bridge が optional (null 経路で Unavailable を検証する) なら delegate
 `CreateChannel()` / `await using`) は基底が public 提供するので不変に保てる。
 
 複数 Service を mount し env var (`RESONITE_IO_SOCKET`) で socket 解決する統合経路は
-別物 (`SessionHostHarness`)。これは Kestrel を直接立てず `SessionHost.Start` を使うので
+別物 (`GrpcHostHarness`)。これは Kestrel を直接立てず `GrpcHost.Start` を使うので
 基底には寄せない。

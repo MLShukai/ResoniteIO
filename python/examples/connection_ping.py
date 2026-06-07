@@ -1,4 +1,4 @@
-"""Minimal Session.Ping example.
+"""Minimal Connection.Ping example.
 
 Sends a single ping over the Resonite IO UDS and prints the server
 timestamp plus the measured round-trip time. Assumes a Resonite client
@@ -6,7 +6,7 @@ with the ResoniteIO mod loaded is running on the host.
 
 Run from inside the dev container:
 
-    uv run python python/examples/session_ping.py
+    uv run python python/examples/connection_ping.py
 """
 
 import asyncio
@@ -15,7 +15,7 @@ import time
 import grpclib.exceptions
 from grpclib.const import Status
 
-from resoio import SessionClient
+from resoio import ConnectionClient
 
 SOCKET_PATH: str | None = None
 MESSAGE = "hello"
@@ -24,7 +24,7 @@ READY_INTERVAL_S = 2.0
 
 
 async def wait_for_ready() -> None:
-    """Block until Session.Ping returns OK.
+    """Block until Connection.Ping returns OK.
 
     During cold boot the UDS may be bound before the engine is fully
     ready, in which case the server replies with FAILED_PRECONDITION.
@@ -33,7 +33,7 @@ async def wait_for_ready() -> None:
     deadline = time.monotonic() + READY_TIMEOUT_S
     while True:
         try:
-            async with SessionClient(SOCKET_PATH) as client:
+            async with ConnectionClient(SOCKET_PATH) as client:
                 await client.ping("ready?")
             return
         except grpclib.exceptions.GRPCError as e:
@@ -41,14 +41,14 @@ async def wait_for_ready() -> None:
                 raise
             if time.monotonic() > deadline:
                 raise TimeoutError(
-                    f"Session did not become ready in {READY_TIMEOUT_S:.0f}s"
+                    f"Connection did not become ready in {READY_TIMEOUT_S:.0f}s"
                 ) from e
             await asyncio.sleep(READY_INTERVAL_S)
 
 
 async def main() -> None:
     await wait_for_ready()
-    async with SessionClient(SOCKET_PATH) as client:
+    async with ConnectionClient(SOCKET_PATH) as client:
         # monotonic_ns is immune to wall-clock jumps (NTP step / DST)
         # that would otherwise produce negative or inflated RTTs.
         t0 = time.monotonic_ns()

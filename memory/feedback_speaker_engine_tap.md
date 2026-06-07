@@ -50,11 +50,11 @@ ______________________________________________________________________
 
 ## SafeShutdown 順序
 
-`ResoniteIOPlugin.SafeShutdown` の dispose chain は **Locomotion → Speaker → SessionBridge** の順:
+`ResoniteIOPlugin.SafeShutdown` の dispose chain は **Locomotion → Speaker → ConnectionBridge** の順:
 
 - Locomotion を最初に止めて user input (ExternalInput) の継続注入を停止
 - Speaker は WASAPI thread が in-flight 中の可能性があるため次 (Harmony unpatch + Channel complete で in-flight Postfix は早期 return する)
-- SessionBridge は engine bridging の最後 (gRPC server 自体を止めるのは別 dispose chain なので、本順序は engine 側 bridges の解除順)
+- ConnectionBridge は engine bridging の最後 (gRPC server 自体を止めるのは別 dispose chain なので、本順序は engine 側 bridges の解除順)
 
 ## 関連
 

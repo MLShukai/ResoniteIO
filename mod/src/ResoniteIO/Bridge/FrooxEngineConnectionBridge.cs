@@ -1,7 +1,7 @@
 using System;
 using FrooxEngine;
+using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.Logging;
-using ResoniteIO.Core.Session;
 
 namespace ResoniteIO.Bridge;
 
@@ -13,14 +13,14 @@ namespace ResoniteIO.Bridge;
 /// <c>User.UserName</c> は <c>Sync&lt;string&gt;</c> 経由で参照型の代入として publish
 /// されるので、読み出しで tearing が起きても crash しない (古い参照が返るだけ)。
 /// </remarks>
-internal sealed class FrooxEngineSessionBridge : ISessionBridge, IDisposable
+internal sealed class FrooxEngineConnectionBridge : IConnectionBridge, IDisposable
 {
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
     private volatile World? _focusedWorld;
     private bool _disposed;
 
-    public FrooxEngineSessionBridge(Engine engine, ILogSink log)
+    public FrooxEngineConnectionBridge(Engine engine, ILogSink log)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(log);

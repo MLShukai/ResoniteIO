@@ -1,15 +1,15 @@
 using ResoniteIO.Core.Tests.Common;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests.Session;
+namespace ResoniteIO.Core.Tests.Connection;
 
-[Collection("SessionHostEnv")]
-public sealed class SessionHostLifecycleTests
+[Collection("GrpcHostEnv")]
+public sealed class GrpcHostLifecycleTests
 {
     [Fact]
     public async Task UnlinksSocket_AfterDispose()
     {
-        var harness = await SessionHostHarness.StartAsync();
+        var harness = await GrpcHostHarness.StartAsync();
         var socketPath = harness.SocketPath;
         Assert.True(
             File.Exists(socketPath),

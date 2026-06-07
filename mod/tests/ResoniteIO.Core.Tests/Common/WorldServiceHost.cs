@@ -9,9 +9,9 @@ namespace ResoniteIO.Core.Tests.Common;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Step 6 の並行作業時点で <c>SessionHost.cs</c> への World mount は別エージェントが
+/// Step 6 の並行作業時点で <c>GrpcHost.cs</c> への World mount は別エージェントが
 /// 進めている。本 helper は test 専用に <see cref="WorldService"/> だけを載せた host を
-/// 立て、SessionHost 統合と独立に round-trip を検証する (<see cref="DisplayServiceHost"/>
+/// 立て、GrpcHost 統合と独立に round-trip を検証する (<see cref="DisplayServiceHost"/>
 /// と同じ隔離戦略)。
 /// </para>
 /// <para>

@@ -1,15 +1,16 @@
 using System.Reflection;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Hosting;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
-using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
 using Xunit;
@@ -53,7 +54,7 @@ public sealed class ApiContractTests
     [Trait("Category", "ApiContract")]
     public void ResoniteIOCore_ExportedTypes_MatchSnapshot()
     {
-        var actual = typeof(SessionHost)
+        var actual = typeof(GrpcHost)
             .Assembly.GetExportedTypes()
             .Select(t => t.FullName ?? t.Name)
             .Where(name => name.StartsWith("ResoniteIO.Core.", StringComparison.Ordinal))
@@ -68,6 +69,8 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Camera.CameraService",
             "ResoniteIO.Core.Camera.ICameraBridge",
             "ResoniteIO.Core.Camera.PushedFrameCameraBridge",
+            "ResoniteIO.Core.Connection.ConnectionService",
+            "ResoniteIO.Core.Connection.IConnectionBridge",
             "ResoniteIO.Core.ContextMenu.ContextMenuHandSelector",
             "ResoniteIO.Core.ContextMenu.ContextMenuItemSnapshot",
             "ResoniteIO.Core.ContextMenu.ContextMenuNotReadyException",
@@ -92,6 +95,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Display.DisplayNotReadyException",
             "ResoniteIO.Core.Display.DisplayService",
             "ResoniteIO.Core.Display.IDisplayBridge",
+            "ResoniteIO.Core.Hosting.GrpcHost",
             "ResoniteIO.Core.Inventory.IInventoryBridge",
             "ResoniteIO.Core.Inventory.InventoryCloudException",
             "ResoniteIO.Core.Inventory.InventoryConflictException",
@@ -122,9 +126,6 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Microphone.MicrophoneFrame",
             "ResoniteIO.Core.Microphone.MicrophoneNotReadyException",
             "ResoniteIO.Core.Microphone.MicrophoneService",
-            "ResoniteIO.Core.Session.ISessionBridge",
-            "ResoniteIO.Core.Session.SessionHost",
-            "ResoniteIO.Core.Session.SessionService",
             "ResoniteIO.Core.Speaker.AudioFrame",
             "ResoniteIO.Core.Speaker.ISpeakerBridge",
             "ResoniteIO.Core.Speaker.PushedAudioFrameSpeakerBridge",
@@ -167,7 +168,7 @@ public sealed class ApiContractTests
     [Trait("Category", "ApiContract")]
     public void ResoniteIOV1_GeneratedProtoTypes_MatchSnapshot()
     {
-        var actual = typeof(SessionHost)
+        var actual = typeof(GrpcHost)
             .Assembly.GetExportedTypes()
             .Select(t => t.FullName ?? t.Name)
             .Where(name => name.StartsWith("ResoniteIO.V1.", StringComparison.Ordinal))
@@ -183,6 +184,9 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.CameraFrameFormat",
             "ResoniteIO.V1.CameraReflection",
             "ResoniteIO.V1.CameraStreamRequest",
+            "ResoniteIO.V1.Connection",
+            "ResoniteIO.V1.Connection+ConnectionBase",
+            "ResoniteIO.V1.ConnectionReflection",
             "ResoniteIO.V1.ContextMenu",
             "ResoniteIO.V1.ContextMenu+ContextMenuBase",
             "ResoniteIO.V1.ContextMenuCloseRequest",
@@ -283,10 +287,7 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.RecordSort",
             "ResoniteIO.V1.RecordSortDirection",
             "ResoniteIO.V1.RecordSource",
-            "ResoniteIO.V1.Session",
-            "ResoniteIO.V1.Session+SessionBase",
             "ResoniteIO.V1.SessionFilter",
-            "ResoniteIO.V1.SessionReflection",
             "ResoniteIO.V1.Speaker",
             "ResoniteIO.V1.Speaker+SpeakerBase",
             "ResoniteIO.V1.SpeakerReflection",
@@ -413,13 +414,13 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
-    /// <see cref="ISessionBridge"/> の public property シグネチャを固定する。
+    /// <see cref="IConnectionBridge"/> の public property シグネチャを固定する。
     /// </summary>
     [Fact]
     [Trait("Category", "ApiContract")]
-    public void ISessionBridge_Properties_MatchSnapshot()
+    public void IConnectionBridge_Properties_MatchSnapshot()
     {
-        var properties = typeof(ISessionBridge)
+        var properties = typeof(IConnectionBridge)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .Select(p => $"{p.PropertyType.FullName} {p.Name}")
             .OrderBy(s => s, StringComparer.Ordinal)

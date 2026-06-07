@@ -7,18 +7,18 @@ using Xunit;
 namespace ResoniteIO.Core.Tests.Inventory;
 
 /// <summary>
-/// <see cref="Core.Session.SessionHost"/> が <see cref="Core.Inventory.InventoryService"/>
+/// <see cref="Core.Hosting.GrpcHost"/> が <see cref="Core.Inventory.InventoryService"/>
 /// を正しく mount し、注入された <see cref="Core.Inventory.IInventoryBridge"/> 経由で
 /// RPC を end-to-end で配線できることを検証する統合テスト (DI / MapGrpcService 漏れの retro 検知)。
 /// </summary>
-[Collection("SessionHostEnv")]
-public sealed class SessionHostInventoryIntegrationTests
+[Collection("GrpcHostEnv")]
+public sealed class GrpcHostInventoryIntegrationTests
 {
     [Fact]
-    public async Task SessionHost_mounts_InventoryService_with_injected_bridge()
+    public async Task GrpcHost_mounts_InventoryService_with_injected_bridge()
     {
         var bridge = new FakeInventoryBridge();
-        await using var harness = await SessionHostHarness.StartAsync(inventoryBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(inventoryBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Inventory.InventoryClient(channel);
 
@@ -33,9 +33,9 @@ public sealed class SessionHostInventoryIntegrationTests
     }
 
     [Fact]
-    public async Task SessionHost_InventoryService_without_bridge_returns_Unavailable()
+    public async Task GrpcHost_InventoryService_without_bridge_returns_Unavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(inventoryBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(inventoryBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Inventory.InventoryClient(channel);
 

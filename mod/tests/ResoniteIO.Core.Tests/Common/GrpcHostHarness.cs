@@ -1,38 +1,39 @@
 using System.Net.Sockets;
 using Grpc.Net.Client;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Hosting;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
-using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 
 namespace ResoniteIO.Core.Tests.Common;
 
 /// <summary>
-/// テスト用に <see cref="SessionHost"/> を tmp_path UDS 上で起動・停止する harness。
+/// テスト用に <see cref="GrpcHost"/> を tmp_path UDS 上で起動・停止する harness。
 /// </summary>
 /// <remarks>
 /// <c>RESONITE_IO_SOCKET</c> env var を読み書きするため、これを使うテストクラスは
-/// xunit collection <c>"SessionHostEnv"</c> で直列化する必要がある。
+/// xunit collection <c>"GrpcHostEnv"</c> で直列化する必要がある。
 /// </remarks>
-internal sealed class SessionHostHarness : IAsyncDisposable
+internal sealed class GrpcHostHarness : IAsyncDisposable
 {
     public string SocketPath { get; }
-    public SessionHost Host { get; }
+    public GrpcHost Host { get; }
 
     private readonly CancellationTokenSource _cts;
     private readonly string? _previousEnv;
     private bool _disposed;
 
-    private SessionHostHarness(
+    private GrpcHostHarness(
         string socketPath,
-        SessionHost host,
+        GrpcHost host,
         CancellationTokenSource cts,
         string? previousEnv
     )
@@ -43,8 +44,8 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         _previousEnv = previousEnv;
     }
 
-    public static Task<SessionHostHarness> StartAsync(
-        ISessionBridge? bridge = null,
+    public static Task<GrpcHostHarness> StartAsync(
+        IConnectionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
         ILocomotionBridge? locomotionBridge = null,
@@ -71,9 +72,9 @@ internal sealed class SessionHostHarness : IAsyncDisposable
             cursorBridge
         );
 
-    public static async Task<SessionHostHarness> StartAsync(
+    public static async Task<GrpcHostHarness> StartAsync(
         string socketPath,
-        ISessionBridge? bridge = null,
+        IConnectionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
         ILocomotionBridge? locomotionBridge = null,
@@ -90,10 +91,10 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         Environment.SetEnvironmentVariable("RESONITE_IO_SOCKET", socketPath);
 
         var cts = new CancellationTokenSource();
-        SessionHost host;
+        GrpcHost host;
         try
         {
-            host = SessionHost.Start(
+            host = GrpcHost.Start(
                 new NullLogSink(),
                 cts.Token,
                 bridge,
@@ -122,7 +123,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
             $"socket file did not appear at {socketPath}"
         );
 
-        return new SessionHostHarness(socketPath, host, cts, previousEnv);
+        return new GrpcHostHarness(socketPath, host, cts, previousEnv);
     }
 
     public GrpcChannel CreateChannel()

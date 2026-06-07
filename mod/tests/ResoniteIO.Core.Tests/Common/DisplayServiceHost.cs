@@ -9,10 +9,10 @@ namespace ResoniteIO.Core.Tests.Common;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Wave 2 では <c>SessionHost.cs</c> に <see cref="DisplayService"/> を mount しない
+/// Wave 2 では <c>GrpcHost.cs</c> に <see cref="DisplayService"/> を mount しない
 /// (Plan 同期点制約)。本 helper は test 専用に <see cref="DisplayService"/> だけを
 /// 載せた host を立てて round-trip 検証を可能にする。Wave 4 / C8 で
-/// <c>SessionHost</c> に mount された後は本 helper は不要になるが、
+/// <c>GrpcHost</c> に mount された後は本 helper は不要になるが、
 /// Display 単体の挙動を <see cref="Camera.CameraService"/> 等から隔離する利点もある
 /// ので残しておく価値はある (Wave 4+ の整理判断)。
 /// </para>

@@ -9,18 +9,18 @@ namespace ResoniteIO.Core.Tests.Locomotion;
 
 /// <summary>
 /// <see cref="Core.Locomotion.LocomotionService"/> の Reset RPC を
-/// SessionHost mount 越しに検証する。特に proto3 wire default = 0 を
+/// GrpcHost mount 越しに検証する。特に proto3 wire default = 0 を
 /// Service 層で "全 reset" に展開する規約を全 false / 部分 / 全 true で押さえる。
-/// SessionHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
-/// <c>SessionHostEnv</c> collection で直列化。
+/// GrpcHostHarness が <c>RESONITE_IO_SOCKET</c> env を触るため
+/// <c>GrpcHostEnv</c> collection で直列化。
 /// </summary>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class LocomotionResetRoundTripTests
 {
     [Fact]
     public async Task Reset_WithoutBridge_ReturnsUnavailable()
     {
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -40,7 +40,7 @@ public sealed class LocomotionResetRoundTripTests
         {
             ResetThrows = new InvalidOperationException("simulated bridge failure"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -57,7 +57,7 @@ public sealed class LocomotionResetRoundTripTests
     {
         // 全 bool false (proto3 wire default) → Service が All に展開する規約。
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -77,7 +77,7 @@ public sealed class LocomotionResetRoundTripTests
     public async Task Reset_PartialRequest_PassesSpecifiedFlags()
     {
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -98,7 +98,7 @@ public sealed class LocomotionResetRoundTripTests
     public async Task Reset_AllExplicit_ReturnsAllInSummary()
     {
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -130,7 +130,7 @@ public sealed class LocomotionResetRoundTripTests
         // LocomotionInput.ApplyReset の単体テストで担保するため、ここでは
         // append-only な timeline を直接 assert する)。
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -186,7 +186,7 @@ public sealed class LocomotionResetRoundTripTests
     {
         // active Drive stream と平行する Reset RPC が stream 自体を中断しないこと。
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -219,7 +219,7 @@ public sealed class LocomotionResetRoundTripTests
         // (Bridge 側は append-only な list なので derived state ではなく
         //  SetStates[^1] と Resets を直接 assert する)。
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 
@@ -248,7 +248,7 @@ public sealed class LocomotionResetRoundTripTests
         // 「前回 cancel → 今回 1 件目」の 2 event 構造として観測される) と
         // なることを timeline 上で確認する。
         var bridge = new FakeLocomotionBridge();
-        await using var harness = await SessionHostHarness.StartAsync(locomotionBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Locomotion.LocomotionClient(channel);
 

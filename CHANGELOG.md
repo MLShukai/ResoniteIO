@@ -20,14 +20,14 @@ Socket) の基盤一式。
   `ResoniteIO.Core` (gRPC server / Service / 各モダリティのドメインロジック) と、
   engine bridging のみを担う薄い BepInEx adapter `ResoniteIO` (BepisLoader) に分離。
   依存方向は Core ← Mod
-- **モダリティ群** (各モダリティは独立した非同期ストリーム): `Session` (Ping) /
+- **モダリティ群** (各モダリティは独立した非同期ストリーム): `Connection` (Ping) /
   `Camera` (server-streaming RGB フレーム) / `Speaker` (server-streaming 音声、
   Resonite → Python) / `Microphone` (client-streaming 音声、Python → Resonite) /
   `Locomotion` (client-streaming) / `Manipulation` (Grab/Release unary) /
   `Display` / `World` / `ContextMenu` / `Dash` / `Inventory` /
   `Cursor` (desktop カーソルを正規化座標で set/get)
 - **Python パッケージ `resoio`**: モダリティ単位の async クライアント
-  (`SessionClient` / `CameraClient` / `SpeakerClient` / `MicrophoneClient` /
+  (`ConnectionClient` / `CameraClient` / `SpeakerClient` / `MicrophoneClient` /
   `LocomotionClient` / `ManipulationClient` / `DisplayClient` / `WorldClient` /
   `ContextMenuClient` / `DashClient` / `InventoryClient` / `CursorClient`)。
   betterproto2 + grpclib ベース、pyright strict 準拠

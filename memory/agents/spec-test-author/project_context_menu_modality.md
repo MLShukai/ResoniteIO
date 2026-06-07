@@ -13,5 +13,5 @@ ContextMenu modality (Resonite の T キー radial メニュー操作) が reson
 - Core contract: `namespace ResoniteIO.Core.ContextMenu` に `ContextMenuHandSelector` enum / `ContextMenuItemSnapshot` / `ContextMenuStateSnapshot` records / `IContextMenuBridge` / `ContextMenuNotReadyException` / `ContextMenuService`。
 - Service 例外翻訳: bridge null → Unavailable、`ContextMenuNotReadyException` → FailedPrecondition、`ArgumentOutOfRangeException` → InvalidArgument、その他 → Internal。
 - proto hand enum: UNSPECIFIED(0)/PRIMARY(1) → Primary, LEFT(2) → Left, RIGHT(3) → Right。生成 C# enum 名は prefix 剥がれて `ContextMenuHand.{Unspecified,Primary,Left,Right}`。
-- `ContextMenuService` は `SessionHost.Start` に mount 済 (`contextMenuBridge` が Start の最後の optional 引数)。Display と違い別 host helper は不要 — `SessionHostHarness` で end-to-end に流せる。
-- tests: `mod/tests/ResoniteIO.Core.Tests/ContextMenu/ContextMenuServiceTests.cs` (integration-real)、fake は `Common/Fakes/ContextMenuBridgeFake.cs`。`[Collection("SessionHostEnv")]` 必須 (harness が env var を触る)。
+- `ContextMenuService` は `GrpcHost.Start` に mount 済 (`contextMenuBridge` が Start の最後の optional 引数)。Display と違い別 host helper は不要 — `GrpcHostHarness` で end-to-end に流せる。
+- tests: `mod/tests/ResoniteIO.Core.Tests/ContextMenu/ContextMenuServiceTests.cs` (integration-real)、fake は `Common/Fakes/ContextMenuBridgeFake.cs`。`[Collection("GrpcHostEnv")]` 必須 (harness が env var を触る)。

@@ -36,7 +36,7 @@ public string UserName { get; }                     // userName.Value (Sync<stri
 - 旧 focused world が destroy された場合は `FocusedWorld = null` のクリア経路もある
 - event は **focus 切替時に 1 回**。subscriber が後から購読しても既存 focus 状態の
   通知は来ない → 後発購読時は `WorldManager.FocusedWorld` を直接読んで初期 snapshot
-  を確保する必要がある (`FrooxEngineSessionBridge.cs` で実装)
+  を確保する必要がある (`FrooxEngineConnectionBridge.cs` で実装)
 
 ## スレッド安全性
 
@@ -48,7 +48,7 @@ public string UserName { get; }                     // userName.Value (Sync<stri
 
 ## ResoniteIO での利用ポイント
 
-- Step 2: `FrooxEngineSessionBridge` が `WorldFocused` を購読してログ出力 + snapshot 更新
+- Step 2: `FrooxEngineConnectionBridge` が `WorldFocused` を購読してログ出力 + snapshot 更新
 - Step 3+ (Camera 等): per-frame で snapshot を読む場合も上記 tearing 許容性で十分。
   precision が必要になったら engine tick 上から push する設計に切り替える
 

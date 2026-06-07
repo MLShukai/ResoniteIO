@@ -10,7 +10,7 @@ The symmetric Dispose-time revert (``cleared OverrideAudioInputIndex``)
 is NOT asserted here: ``just resonite-stop`` runs a SIGTERM→SIGKILL race
 in which BepInEx's file log writer is typically reaped before
 AppDomain.ProcessExit-driven dispose lines reach disk. The dispose path
-is exercised whenever Resonite shuts down cleanly (e.g. SessionHost
+is exercised whenever Resonite shuts down cleanly (e.g. GrpcHost
 bind failure shows the dispose lines in ``LogOutput.log.prev``), and is
 visually inspected in manual verification — see
 ``mod/tests/manual/microphone-verification.md``.
@@ -65,7 +65,7 @@ class TestMicrophoneAutoDefault:
             socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
             os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
 
-            # The UDS socket appears only after SessionHost.Start, which runs
+            # The UDS socket appears only after GrpcHost.Start, which runs
             # after the Microphone Bridge ctor — so the auto-promote log must
             # already be persisted on disk when we read here.
             log_after_start = _read_log()

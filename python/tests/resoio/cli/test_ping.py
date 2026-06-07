@@ -5,14 +5,14 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
+    ConnectionBase,
     PingRequest,
     PingResponse,
-    SessionBase,
 )
 from resoio.cli import _amain, _build_parser
 
 
-class _EchoSession(SessionBase):
+class _EchoConnection(ConnectionBase):
     async def ping(self, message: PingRequest) -> PingResponse:
         return PingResponse(
             message=message.message,
@@ -26,7 +26,7 @@ async def test_ping_round_trip(
     capsys: pytest.CaptureFixture[str],
 ):
     socket_path = tmp_path / "rio.sock"
-    server = Server([_EchoSession()])
+    server = Server([_EchoConnection()])
     await server.start(path=str(socket_path))
     try:
         monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
@@ -48,7 +48,7 @@ async def test_ping_with_count(
     capsys: pytest.CaptureFixture[str],
 ):
     socket_path = tmp_path / "rio.sock"
-    server = Server([_EchoSession()])
+    server = Server([_EchoConnection()])
     await server.start(path=str(socket_path))
     try:
         monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))

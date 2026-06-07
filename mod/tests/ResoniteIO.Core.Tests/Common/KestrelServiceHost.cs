@@ -20,8 +20,8 @@ namespace ResoniteIO.Core.Tests.Common;
 /// channel 生成 / dispose の同形ボイラープレートはここに集約する。
 /// </para>
 /// <para>
-/// <c>SessionHost</c> 統合経路 (複数 Service を mount し env var で socket を解決する)
-/// は <see cref="SessionHostHarness"/> が担当する。本クラスは単一 Service を隔離して
+/// <c>GrpcHost</c> 統合経路 (複数 Service を mount し env var で socket を解決する)
+/// は <see cref="GrpcHostHarness"/> が担当する。本クラスは単一 Service を隔離して
 /// 検証する用途に限定する。
 /// </para>
 /// </remarks>

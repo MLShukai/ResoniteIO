@@ -14,10 +14,10 @@ namespace ResoniteIO.Core.Tests.ContextMenu;
 /// (3) 例外 → gRPC Status の翻訳を検証する integration-real テスト。
 /// </summary>
 /// <remarks>
-/// <see cref="SessionHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
-/// <c>"SessionHostEnv"</c> collection で直列化する (harness の契約)。
+/// <see cref="GrpcHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
+/// <c>"GrpcHostEnv"</c> collection で直列化する (harness の契約)。
 /// </remarks>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class ContextMenuServiceTests
 {
     /// <summary>2 項目 + ハイライト中の state を返す Bridge を立て、各 RPC が全 field を
@@ -78,7 +78,7 @@ public sealed class ContextMenuServiceTests
     public async Task Open_forwards_hand_to_bridge_and_round_trips_state()
     {
         var bridge = new ContextMenuBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -104,7 +104,7 @@ public sealed class ContextMenuServiceTests
             HighlightedIndex: -1
         );
         var bridge = new ContextMenuBridgeFake { NextState = closedState };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -127,7 +127,7 @@ public sealed class ContextMenuServiceTests
     public async Task GetState_forwards_hand_to_bridge_and_round_trips_state()
     {
         var bridge = new ContextMenuBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -148,7 +148,7 @@ public sealed class ContextMenuServiceTests
     public async Task Highlight_forwards_hand_and_index_to_bridge_and_round_trips_state()
     {
         var bridge = new ContextMenuBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -169,7 +169,7 @@ public sealed class ContextMenuServiceTests
     public async Task Invoke_forwards_hand_and_index_to_bridge_and_round_trips_state()
     {
         var bridge = new ContextMenuBridgeFake { NextState = SampleState() };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -198,7 +198,7 @@ public sealed class ContextMenuServiceTests
     {
         // 仕様: UNSPECIFIED(0) / PRIMARY(1) → Primary、LEFT(2) → Left、RIGHT(3) → Right。
         var bridge = new ContextMenuBridgeFake();
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -215,7 +215,7 @@ public sealed class ContextMenuServiceTests
     {
         // contextMenuBridge=null で起動 → Service は mount されるが bridge 未注入なので
         // 各 RPC は Status.Unavailable を返す (Service 契約)。
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -232,7 +232,7 @@ public sealed class ContextMenuServiceTests
         {
             ThrowOnNextCall = new ContextMenuNotReadyException("local user not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -251,7 +251,7 @@ public sealed class ContextMenuServiceTests
         {
             ThrowOnNextCall = new ArgumentOutOfRangeException("index"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 
@@ -268,7 +268,7 @@ public sealed class ContextMenuServiceTests
         {
             ThrowOnNextCall = new InvalidOperationException("engine fault"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(contextMenuBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(contextMenuBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.ContextMenu.ContextMenuClient(channel);
 

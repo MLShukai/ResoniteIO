@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Camera;
+using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
@@ -17,15 +18,15 @@ using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
 
-namespace ResoniteIO.Core.Session;
+namespace ResoniteIO.Core.Hosting;
 
 /// <summary>
 /// Kestrel + UDS 上で ResoniteIO の全モダリティ gRPC service を hosting する lifecycle。
 /// </summary>
 /// <remarks>
 /// <para>
-/// 名前は <c>SessionHost</c> だが実体は <see cref="SessionService"/> /
-/// <see cref="CameraService"/> 等を 1 つの UDS endpoint に集約するプロセス全体の host。
+/// 全モダリティ (<see cref="ConnectionService"/> / <see cref="CameraService"/> 等) の
+/// gRPC service を 1 つの UDS endpoint に集約するプロセス全体の host。
 /// 新しいモダリティを追加するときも本クラスから <c>MapGrpcService&lt;NewService&gt;()</c>
 /// する (UDS は 1 本に固定し、client は modality ごとに stub を切り替える)。
 /// </para>
@@ -39,7 +40,7 @@ namespace ResoniteIO.Core.Session;
 /// username 差を吸収)。
 /// </para>
 /// </remarks>
-public sealed class SessionHost : IAsyncDisposable
+public sealed class GrpcHost : IAsyncDisposable
 {
     private const string SocketFilePrefix = "resonite-";
     private const string SocketFileSuffix = ".sock";
@@ -55,7 +56,7 @@ public sealed class SessionHost : IAsyncDisposable
     /// </summary>
     public string SocketPath { get; }
 
-    private SessionHost(WebApplication app, ILogSink log, string socketPath, Task runTask)
+    private GrpcHost(WebApplication app, ILogSink log, string socketPath, Task runTask)
     {
         _app = app;
         _log = log;
@@ -74,10 +75,10 @@ public sealed class SessionHost : IAsyncDisposable
     /// socket path を解決できない場合 (<c>HOME</c> 未設定等) は
     /// <see cref="InvalidOperationException"/>。
     /// </remarks>
-    public static SessionHost Start(
+    public static GrpcHost Start(
         ILogSink log,
         CancellationToken cancellationToken,
-        ISessionBridge? bridge = null,
+        IConnectionBridge? bridge = null,
         ICameraBridge? cameraBridge = null,
         IDisplayBridge? displayBridge = null,
         ILocomotionBridge? locomotionBridge = null,
@@ -170,7 +171,7 @@ public sealed class SessionHost : IAsyncDisposable
         });
 
         var app = builder.Build();
-        app.MapGrpcService<SessionService>();
+        app.MapGrpcService<ConnectionService>();
         app.MapGrpcService<CameraService>();
         app.MapGrpcService<DisplayService>();
         app.MapGrpcService<LocomotionService>();
@@ -183,7 +184,7 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();
 
-        log.LogInfo($"SessionHost binding UDS at {socketPath}");
+        log.LogInfo($"GrpcHost binding UDS at {socketPath}");
 
         // Sync-wait on StartAsync so SocketPath is guaranteed accept-ready on return.
         try
@@ -192,17 +193,17 @@ public sealed class SessionHost : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            log.LogError($"SessionHost failed to start Kestrel: {ex}");
+            log.LogError($"GrpcHost failed to start Kestrel: {ex}");
             TryUnlink(socketPath);
             app.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
         }
 
-        log.LogInfo($"SessionHost listening on {socketPath}");
+        log.LogInfo($"GrpcHost listening on {socketPath}");
 
         if (bridge is null)
         {
-            log.LogWarning("Session modality is not configured.");
+            log.LogWarning("Connection modality is not configured.");
         }
         if (cameraBridge is null)
         {
@@ -259,13 +260,13 @@ public sealed class SessionHost : IAsyncDisposable
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
-                    log.LogError($"SessionHost runTask faulted: {ex}");
+                    log.LogError($"GrpcHost runTask faulted: {ex}");
                 }
             },
             CancellationToken.None
         );
 
-        return new SessionHost(app, log, socketPath, runTask);
+        return new GrpcHost(app, log, socketPath, runTask);
     }
 
     public async ValueTask DisposeAsync()
@@ -282,7 +283,7 @@ public sealed class SessionHost : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _log.LogWarning($"SessionHost.StopAsync threw: {ex.GetType().Name}: {ex.Message}");
+            _log.LogWarning($"GrpcHost.StopAsync threw: {ex.GetType().Name}: {ex.Message}");
         }
 
         try
@@ -292,7 +293,7 @@ public sealed class SessionHost : IAsyncDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _log.LogWarning($"SessionHost run task threw: {ex.GetType().Name}: {ex.Message}");
+            _log.LogWarning($"GrpcHost run task threw: {ex.GetType().Name}: {ex.Message}");
         }
 
         await _app.DisposeAsync().ConfigureAwait(false);

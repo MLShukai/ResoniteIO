@@ -20,7 +20,7 @@ memory: project
   - **C# (`ResoniteIO.Core` / `ResoniteIO`)**: `public` 修飾子を持つ型 / メソッド / プロパティ / interface (`I<Modality>Service`, `I<Modality>Bridge` 等)
   - **proto (`proto/resonite_io/v1/*.proto`)**: `service` / `rpc` / `message` / `enum` (wire 互換性は不可侵)
   - CLI コマンドのサブコマンド名・引数・出力フォーマット (`resoio ping` / `record` / `mic` / `locomotion` / `display`)
-  - ファイルパス・モジュールパス (`resoio.camera.CameraClient`、`ResoniteIO.Core.Session.SessionHost` の import path)
+  - ファイルパス・モジュールパス (`resoio.camera.CameraClient`、`ResoniteIO.Core.Hosting.GrpcHost` の import path)
 - 変更してよい対象:
   - private 名 (Python `_` prefix のモジュール / 関数 / クラス / 属性、C# `private` / `internal` メンバ)
   - 関数本体の実装（外部から観測できない振る舞いは保持しつつ簡素化）
@@ -173,7 +173,7 @@ memory: project
 - このコードベース固有の命名規則・コーディングパターン
 - resonite-io / Resonite / FrooxEngine 特有のドメイン用語・抽象化 (engine thread、`World.RunSynchronously`、`ProtoFlux`、`SafeShutdown` など)
 - ruff / pyright strict / C# warnings-as-errors 設定で頻出する違反パターン
-- 各モダリティ (Session / Camera / Speaker / Microphone / Locomotion / Display) の責務と相互関係
+- 各モダリティ (Connection / Camera / Speaker / Microphone / Locomotion / Display) の責務と相互関係
 - public / private 境界の判断に迷ったケースとその結着
 
 # Persistent Agent Memory

@@ -2,17 +2,17 @@ using System.Diagnostics;
 using ResoniteIO.Core.Tests.Common;
 using Xunit;
 
-namespace ResoniteIO.Core.Tests.Session;
+namespace ResoniteIO.Core.Tests.Connection;
 
-[Collection("SessionHostEnv")]
-public sealed class SessionHostStaleSocketTests : IDisposable
+[Collection("GrpcHostEnv")]
+public sealed class GrpcHostStaleSocketTests : IDisposable
 {
     private readonly string _tmpDir = Path.Combine(
         Path.GetTempPath(),
         $"rio-stale-{Guid.NewGuid():N}"
     );
 
-    public SessionHostStaleSocketTests()
+    public GrpcHostStaleSocketTests()
     {
         Directory.CreateDirectory(_tmpDir);
     }
@@ -33,7 +33,7 @@ public sealed class SessionHostStaleSocketTests : IDisposable
         var stalePath = Path.Combine(_tmpDir, $"resonite-{stalePid}.sock");
         File.WriteAllText(stalePath, "");
 
-        await using var harness = await SessionHostHarness.StartAsync(SocketPathInTmp());
+        await using var harness = await GrpcHostHarness.StartAsync(SocketPathInTmp());
 
         Assert.False(File.Exists(stalePath), $"stale socket should be purged: {stalePath}");
     }
@@ -47,7 +47,7 @@ public sealed class SessionHostStaleSocketTests : IDisposable
             var livePath = Path.Combine(_tmpDir, $"resonite-{live.Id}.sock");
             File.WriteAllText(livePath, "");
 
-            await using var harness = await SessionHostHarness.StartAsync(SocketPathInTmp());
+            await using var harness = await GrpcHostHarness.StartAsync(SocketPathInTmp());
 
             Assert.True(File.Exists(livePath), $"live PID socket must be kept: {livePath}");
         }
@@ -66,7 +66,7 @@ public sealed class SessionHostStaleSocketTests : IDisposable
         File.WriteAllText(nonSocket, "");
         File.WriteAllText(nonNumeric, "");
 
-        await using var harness = await SessionHostHarness.StartAsync(SocketPathInTmp());
+        await using var harness = await GrpcHostHarness.StartAsync(SocketPathInTmp());
 
         Assert.True(File.Exists(nonSocket), "non-matching filename must be kept");
         Assert.True(File.Exists(nonNumeric), "non-numeric PID filename must be kept");
@@ -77,7 +77,7 @@ public sealed class SessionHostStaleSocketTests : IDisposable
     {
         Directory.Delete(_tmpDir, recursive: true);
 
-        await using var harness = await SessionHostHarness.StartAsync(SocketPathInTmp());
+        await using var harness = await GrpcHostHarness.StartAsync(SocketPathInTmp());
 
         Assert.True(File.Exists(harness.SocketPath));
     }

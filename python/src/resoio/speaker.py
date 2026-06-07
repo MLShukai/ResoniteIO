@@ -54,7 +54,7 @@ class SpeakerClient(_BaseClient[SpeakerStub]):
 
     Use as an async context manager so the gRPC channel is closed
     deterministically. Socket resolution mirrors
-    :class:`resoio.SessionClient`. The wire format is fixed at
+    :class:`resoio.ConnectionClient`. The wire format is fixed at
     48 kHz / Stereo / float32 LE; constants are exposed at module level
     (:data:`SAMPLE_RATE`, :data:`CHANNELS`, :data:`DTYPE`).
     """

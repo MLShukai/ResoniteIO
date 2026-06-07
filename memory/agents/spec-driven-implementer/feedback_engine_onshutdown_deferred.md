@@ -5,9 +5,9 @@ metadata:
   type: feedback
 ---
 
-ResoniteIO mod の Session gRPC server (Core 側 `SessionHost`) と Camera Bridge の停止は、
+ResoniteIO mod の gRPC server (Core 側 `GrpcHost`) と Camera Bridge の停止は、
 現状 **`AppDomain.ProcessExit` 一本** で best-effort cleanup を行っている
-(`SessionHost.cs:121` で `processExitHandler` を attach、`ResoniteIOPlugin.cs:80` でも
+(`GrpcHost.cs:121` で `processExitHandler` を attach、`ResoniteIOPlugin.cs:80` でも
 `OnProcessExit` を attach)。これは plan §7 リスク欄「`BasePlugin` に Unload 相当が無い」
 と整合する暫定実装。
 
@@ -15,7 +15,7 @@ ResoniteIO mod の Session gRPC server (Core 側 `SessionHost`) と Camera Bridg
 の `Engine.OnShutdown` 系 API がより早く graceful に Kestrel を畳めるなら
 そちらを購読すべきだが、Step 2 ではここに時間をかけず `AppDomain.ProcessExit`
 で先に進む決定をし、**Step 3 (Camera) でも調査せず先送りした** (Camera 実装と E2E
-スケジュール優先)。SIGKILL されたら socket file は残るが、`SessionHost.Start` が
+スケジュール優先)。SIGKILL されたら socket file は残るが、`GrpcHost.Start` が
 bind 直前に stale socket を `File.Delete` するので次回起動時には自動回復する。
 Camera Bridge 側も `FrooxEngineCameraBridge.cs:288` で「engine shutdown 後の
 RunSynchronously は no-op になり例外を飲む」と明示しており、ProcessExit 経由で

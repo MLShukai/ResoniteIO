@@ -6,15 +6,15 @@ using Xunit;
 
 namespace ResoniteIO.Core.Tests.Speaker;
 
-// SessionHostHarness は RESONITE_IO_SOCKET env var を書き換えるため、SessionHostEnv
+// GrpcHostHarness は RESONITE_IO_SOCKET env var を書き換えるため、GrpcHostEnv
 // collection 内で直列化する。
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class SpeakerRoundTripTests
 {
     [Fact]
     public async Task Stream_returns_Unavailable_when_bridge_not_configured()
     {
-        await using var harness = await SessionHostHarness.StartAsync(speakerBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(speakerBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Speaker.SpeakerClient(channel);
 
@@ -35,7 +35,7 @@ public sealed class SpeakerRoundTripTests
     public async Task Stream_translates_SpeakerNotReadyException_to_FailedPrecondition()
     {
         var bridge = new FakeSpeakerBridge { ThrowNotReady = true };
-        await using var harness = await SessionHostHarness.StartAsync(speakerBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(speakerBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Speaker.SpeakerClient(channel);
 
@@ -56,7 +56,7 @@ public sealed class SpeakerRoundTripTests
     public async Task Stream_translates_generic_bridge_exception_to_Internal()
     {
         var bridge = new FakeSpeakerBridge { ThrowGeneric = true };
-        await using var harness = await SessionHostHarness.StartAsync(speakerBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(speakerBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Speaker.SpeakerClient(channel);
 
@@ -87,7 +87,7 @@ public sealed class SpeakerRoundTripTests
             FakeSpeakerBridge.MakeFrame(frameId: 2L, sampleCount: 4, unixNanos: 3_000L)
         );
 
-        await using var harness = await SessionHostHarness.StartAsync(speakerBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(speakerBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Speaker.SpeakerClient(channel);
 

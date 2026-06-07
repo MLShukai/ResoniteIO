@@ -9,7 +9,7 @@ When trimming docstrings/comments under `mod/src/ResoniteIO{,.Core,.Renderer,.Re
 `mod/tests/ResoniteIO.Core.Tests/`, and `python/src/resoio/`, these WHY notes
 are load-bearing and must NOT be cut.
 
-- Items 1–5 originate from Step 2 (Session / loader).
+- Items 1–5 originate from Step 2 (Connection / loader).
 - Items 6–9 originate from Step 3 (Camera v1, since removed at `ff44bf8`
   but the WHY patterns recurred in v2).
 - Items 10–14 originate from Camera v2 (renderer process bridge under
@@ -39,18 +39,18 @@ are load-bearing and must NOT be cut.
 
     - `ResoniteIOPlugin.Load`: must not touch any `ResoniteIO.Core` type
       before `PluginAssemblyResolver` is attached, or Resonite's bundled
-      old Google.Protobuf wins resolution and SessionHost fails with
+      old Google.Protobuf wins resolution and GrpcHost fails with
       `TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'`.
     - `PluginAssemblyResolver`: takes `ManualLogSource` directly instead
       of `ILogSink` for the same reason (Core dll must not preload).
 
-02. **Sync<string> tearing tolerance** in `FrooxEngineSessionBridge`:
+02. **Sync<string> tearing tolerance** in `FrooxEngineConnectionBridge`:
     getters can be read from any thread because the underlying values are
     reference-typed publishes via `Sync<string>` — tearing yields a stale
     ref, never a crash.
 
-03. **`[Collection("SessionHostEnv")]`** on RoundTrip / Lifecycle /
-    BridgeWiring **and CameraRoundTrip** tests: `SessionHostHarness`
+03. **`[Collection("GrpcHostEnv")]`** on RoundTrip / Lifecycle /
+    BridgeWiring **and CameraRoundTrip** tests: `GrpcHostHarness`
     mutates the `RESONITE_IO_SOCKET` env var, so any test using the
     harness must serialize via this collection (extended in Step 3 to
     cover Camera tests too).
@@ -231,9 +231,9 @@ are load-bearing and must NOT be cut.
     (`ResoniteIOPlugin.SafeShutdown` ordering block, the bullet
     "SpeakerBridge.Dispose は Harmony unpatch + Channel complete を行い、
     WASAPI audio thread からの push を完全に断つ"): the order
-    receiver → camera → display → locomotion → speaker → session → cts →
-    sessionHost → resolver is intentional. SpeakerBridge must Dispose
-    before SessionHost so pending `SpeakerService.StreamAudio` calls see
+    receiver → camera → display → locomotion → speaker → connection → cts →
+    grpcHost → resolver is intentional. SpeakerBridge must Dispose
+    before GrpcHost so pending `SpeakerService.StreamAudio` calls see
     the channel complete and exit cleanly (avoiding RpcException from
     abrupt service teardown). Keep the chain comment intact — it's the
     only place documenting the WASAPI-stop contract.

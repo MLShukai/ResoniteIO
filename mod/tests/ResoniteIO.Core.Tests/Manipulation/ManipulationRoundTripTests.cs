@@ -17,12 +17,12 @@ namespace ResoniteIO.Core.Tests.Manipulation;
 /// (4) 例外 / 未注入 → gRPC Status の翻訳。
 /// </summary>
 /// <remarks>
-/// <see cref="SessionHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
-/// <c>"SessionHostEnv"</c> collection で直列化する (harness の契約)。
+/// <see cref="GrpcHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
+/// <c>"GrpcHostEnv"</c> collection で直列化する (harness の契約)。
 /// field の取り違えを検出するため、各 RPC で hand / point / radius / object_names に
 /// 互いに異なる識別可能な値を使う。
 /// </remarks>
-[Collection("SessionHostEnv")]
+[Collection("GrpcHostEnv")]
 public sealed class ManipulationRoundTripTests
 {
     private const float DefaultRadius = 0.1f;
@@ -39,7 +39,7 @@ public sealed class ManipulationRoundTripTests
             GrabSucceeds = true,
             GrabbedObjectNames = new[] { "Cube" },
         };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -77,7 +77,7 @@ public sealed class ManipulationRoundTripTests
     {
         // proto WorldPoint 不在 → Bridge は null point を受け取る (= 手の現在位置を使う契約)。
         var bridge = new FakeManipulationBridge();
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -97,7 +97,7 @@ public sealed class ManipulationRoundTripTests
     {
         // 仕様: radius <=0 のとき Service が 0.1m に解決してから Bridge へ渡す。
         var bridge = new FakeManipulationBridge();
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -114,7 +114,7 @@ public sealed class ManipulationRoundTripTests
     {
         // 仕様: 負の radius も <=0 として 0.1m に解決される。
         var bridge = new FakeManipulationBridge();
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -131,7 +131,7 @@ public sealed class ManipulationRoundTripTests
     {
         // 仕様: 正の radius はそのまま Bridge へ渡る (default に置き換わらない)。
         var bridge = new FakeManipulationBridge();
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -150,7 +150,7 @@ public sealed class ManipulationRoundTripTests
     {
         // 仕様: 範囲に grabbable が無いとき Grabbed=false を返すだけでエラーにはしない。
         var bridge = new FakeManipulationBridge { GrabSucceeds = false };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -175,7 +175,7 @@ public sealed class ManipulationRoundTripTests
             GrabSucceeds = true,
             GrabbedObjectNames = new[] { "Held" },
         };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -206,7 +206,7 @@ public sealed class ManipulationRoundTripTests
         // 順序込みで round-trip すること。
         var bridge = new FakeManipulationBridge();
         bridge.SeedHeld(ManipulationHandSelector.Right, new[] { "Alpha", "Beta", "Gamma" });
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -238,7 +238,7 @@ public sealed class ManipulationRoundTripTests
     {
         // 仕様: UNSPECIFIED(0) / PRIMARY(1) → Primary、LEFT(2) → Left、RIGHT(3) → Right。
         var bridge = new FakeManipulationBridge();
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -267,7 +267,7 @@ public sealed class ManipulationRoundTripTests
             ManipulationHandSelector.Right => ManipulationHand.Right,
             _ => ManipulationHand.Primary,
         };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -285,7 +285,7 @@ public sealed class ManipulationRoundTripTests
     {
         // manipulationBridge=null で起動 → Service は mount されるが bridge 未注入なので
         // 各 RPC は Status.Unavailable を返す (Service 契約)。
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: null);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: null);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -302,7 +302,7 @@ public sealed class ManipulationRoundTripTests
         {
             ThrowOnNextCall = new ManipulationNotReadyException("local user not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 
@@ -321,7 +321,7 @@ public sealed class ManipulationRoundTripTests
         {
             ThrowOnNextCall = new ManipulationNotReadyException("handler not ready"),
         };
-        await using var harness = await SessionHostHarness.StartAsync(manipulationBridge: bridge);
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
         var client = new V1.Manipulation.ManipulationClient(channel);
 

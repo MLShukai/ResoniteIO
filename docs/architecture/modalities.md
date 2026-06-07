@@ -8,7 +8,7 @@ any subset.
 
 | Modality | Direction | RPC style | Python client | What it does |
 | --- | --- | --- | --- | --- |
-| Session | request/response | unary | [`SessionClient`](../api/session.md) | Liveness check (`ping`). |
+| Connection | request/response | unary | [`ConnectionClient`](../api/connection.md) | Liveness check (`ping`). |
 | Camera | Resonite → Python | server-streaming | [`CameraClient`](../api/camera.md) | RGBA frames from the headset/view. |
 | Speaker | Resonite → Python | server-streaming | [`SpeakerClient`](../api/speaker.md) | Audio rendered by Resonite (engine output tap). |
 | Microphone | Python → Resonite | client-streaming | [`MicrophoneClient`](../api/microphone.md) | Push audio into Resonite as a virtual mic. |

@@ -59,7 +59,7 @@ resonite-io は OS / 3rd-party ライブラリ / Resonite engine 結合が支配
 
 ### 4. 公開 API 契約テストは例外（明示マーカー必須）
 
-外部利用者が `from resoio import SessionClient, CameraClient` / `using ResoniteIO.Core.Session;` するような公開 API 名・基底クラス・型エイリアス・proto wire 互換は、契約として固定する価値がある (Hyrum's law mitigation)。**原則 3 の唯一の例外**:
+外部利用者が `from resoio import ConnectionClient, CameraClient` / `using ResoniteIO.Core.Connection;` するような公開 API 名・基底クラス・型エイリアス・proto wire 互換は、契約として固定する価値がある (Hyrum's law mitigation)。**原則 3 の唯一の例外**:
 
 - 集約場所:
   - Python: `python/tests/resoio/test_api_contract.py`
