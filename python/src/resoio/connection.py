@@ -9,20 +9,12 @@ from grpclib.client import Channel
 
 from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import ConnectionStub, PingRequest, PingResponse
-from resoio._socket import (
-    AmbiguousSocketError,
-    SocketNotFoundError,
-)
 
-# Re-exported for backwards compatibility: the exception types historically
-# lived in this module and are documented in ``ConnectionClient`` docstring.
 __all__ = [
-    "AmbiguousSocketError",
     "ConnectionClient",
-    "SocketNotFoundError",
 ]
 
-_logger = logging.getLogger("resoio.connection")
+_logger = logging.getLogger(__name__)
 
 
 class ConnectionClient(_BaseClient[ConnectionStub]):

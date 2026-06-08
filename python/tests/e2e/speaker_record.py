@@ -30,7 +30,7 @@ import numpy as np
 from grpclib.const import Status
 
 from resoio.cli.record import _WavFloat32Writer  # noqa: PLC2701
-from resoio.speaker import CHANNELS, SAMPLE_RATE, AudioChunk, SpeakerClient
+from resoio.speaker import CHANNELS, SAMPLE_RATE, SpeakerChunk, SpeakerClient
 from tests.helpers import mark_e2e
 
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
@@ -76,7 +76,7 @@ class TestSpeakerRecord:
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "record.wav"
 
-        def _chunk_has_audio(chunk: AudioChunk) -> bool:
+        def _chunk_has_audio(chunk: SpeakerChunk) -> bool:
             """Return True when ``chunk`` carries any non-zero sample.
 
             'Dummy Output' driver emits zero-valued frames at the

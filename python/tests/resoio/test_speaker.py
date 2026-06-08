@@ -12,7 +12,7 @@ from resoio._generated.resonite_io.v1 import (
 )
 from resoio.speaker import (
     CHANNELS,
-    AudioChunk,
+    SpeakerChunk,
     SpeakerClient,
 )
 
@@ -56,7 +56,7 @@ class _ConstantSpeaker(SpeakerBase):
 class TestSpeakerClient:
     async def test_round_trip_over_uds(self, uds_server: UdsServer):
         socket_path = await uds_server(_ConstantSpeaker())
-        chunks: list[AudioChunk] = []
+        chunks: list[SpeakerChunk] = []
         async with SpeakerClient() as client:
             assert client.socket_path == socket_path
             async for chunk in client.stream():

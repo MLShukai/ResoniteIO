@@ -4,14 +4,19 @@ A real ``grpclib.server.Server`` is started on a real Unix Domain Socket with
 an in-process fake ``WorldBase`` servicer; ``WorldClient`` is pointed at it via
 ``RESONITE_IO_SOCKET``. These tests assert two contracts of ``WorldClient``:
 
-  1. wire response  -> public dataclass mapping (tuples for repeated fields,
-     unix-nanos ints, ``OpenWorld`` unwrapping, ``has_world`` handling), and
+  1. the methods return the GENERATED proto types directly (the hand-written
+     output mirror dataclasses were removed), so repeated fields surface as
+     ``list`` and ``join`` / ``start_world`` / ``focus`` unwrap the response's
+     single ``OpenWorld`` payload (raising when the server omits it), and
   2. public request args -> wire request mapping, especially the public-enum to
      wire-enum translation (e.g. public ``SessionFilter.ALL`` is sent as wire
-     ``SessionFilter.UNSPECIFIED``).
+     ``SessionFilter.UNSPECIFIED``), asserted on the request the fake captures.
 
 Per testing-strategy: no mocking of grpclib / asyncio / betterproto internals —
-the only fake is the self-owned ``WorldBase`` servicer surface.
+the only fake is the self-owned ``WorldBase`` servicer surface. The output
+types (``WorldSession`` / ``WorldRecord`` / ``OpenWorld`` and the response
+messages) are the generated proto types, re-exported from ``resoio.world``;
+field values are asserted via their generated field names.
 """
 
 from collections.abc import Awaitable, Callable
@@ -36,7 +41,6 @@ from resoio._generated.resonite_io.v1 import (
     ListRecordsResponse,
     ListSessionsRequest,
     ListSessionsResponse,
-    OpenWorld as WireOpenWorld,
     RecordSort as WireRecordSort,
     RecordSortDirection as WireRecordSortDirection,
     RecordSource as WireRecordSource,
@@ -44,18 +48,13 @@ from resoio._generated.resonite_io.v1 import (
     StartWorldRequest,
     StartWorldResponse,
     WorldBase,
-    WorldRecord as WireWorldRecord,
-    WorldSession as WireWorldSession,
 )
 from resoio.world import (
     OpenWorld,
-    RecordPage,
     RecordSort,
     RecordSortDirection,
     RecordSource,
     SessionFilter,
-    SessionPage,
-    Thumbnail,
     WorldClient,
     WorldRecord,
     WorldSession,
@@ -80,10 +79,10 @@ class _FakeWorld(WorldBase):
         *,
         sessions_response: ListSessionsResponse | None = None,
         records_response: ListRecordsResponse | None = None,
-        join_world: WireOpenWorld | None = None,
-        start_world_world: WireOpenWorld | None = None,
-        open_worlds: list[WireOpenWorld] | None = None,
-        focus_world: WireOpenWorld | None = None,
+        join_world: OpenWorld | None = None,
+        start_world_world: OpenWorld | None = None,
+        open_worlds: list[OpenWorld] | None = None,
+        focus_world: OpenWorld | None = None,
         current_response: GetCurrentResponse | None = None,
         thumbnail_response: FetchThumbnailResponse | None = None,
     ) -> None:
@@ -148,10 +147,10 @@ class _FakeWorld(WorldBase):
 
 
 class TestListSessions:
-    async def test_maps_response_into_session_page_with_tuple_fields(
+    async def test_returns_generated_response_with_list_fields(
         self, uds_server: UdsServer
     ):
-        wire_session = WireWorldSession(
+        wire_session = WorldSession(
             session_id="S-MyriaPolyworld",
             name="Myria",
             description="a busy session",
@@ -181,39 +180,37 @@ class TestListSessions:
         )
         await uds_server(fake)
         async with WorldClient() as client:
-            page = await client.list_sessions()
+            response = await client.list_sessions()
 
-        assert isinstance(page, SessionPage)
-        assert page.total_count == 42
-        assert page.page == 2
-        assert page.page_size == 10
-        assert isinstance(page.sessions, tuple)
-        assert len(page.sessions) == 1
+        # The method returns the generated ListSessionsResponse directly.
+        assert isinstance(response, ListSessionsResponse)
+        assert response.total_count == 42
+        assert response.page == 2
+        assert response.page_size == 10
+        # Repeated fields surface as list (generated proto type), not tuple.
+        assert isinstance(response.sessions, list)
+        assert len(response.sessions) == 1
 
-        got = page.sessions[0]
-        assert got == WorldSession(
-            session_id="S-MyriaPolyworld",
-            name="Myria",
-            description="a busy session",
-            host_user_id="U-host",
-            host_username="Host",
-            session_urls=("lnl-nat://abc/1", "lnl-nat://abc/2"),
-            thumbnail_url="https://thumb/1.webp",
-            joined_users=7,
-            active_users=5,
-            maximum_users=24,
-            tags=("game", "social"),
-            access_level="Anyone",
-            headless_host=True,
-            mobile_friendly=False,
-            corresponding_world_id="R-world",
-            universe_id="universe-7",
-            session_begin_unix_nanos=1_700_000_000_000_000_000,
-            last_update_unix_nanos=1_700_000_500_000_000_000,
-        )
-        # Repeated fields must surface as tuples (frozen/hashable dataclass).
-        assert isinstance(got.session_urls, tuple)
-        assert isinstance(got.tags, tuple)
+        got = response.sessions[0]
+        assert isinstance(got, WorldSession)
+        assert got.session_id == "S-MyriaPolyworld"
+        assert got.name == "Myria"
+        assert got.description == "a busy session"
+        assert got.host_user_id == "U-host"
+        assert got.host_username == "Host"
+        assert got.session_urls == ["lnl-nat://abc/1", "lnl-nat://abc/2"]
+        assert got.thumbnail_url == "https://thumb/1.webp"
+        assert got.joined_users == 7
+        assert got.active_users == 5
+        assert got.maximum_users == 24
+        assert got.tags == ["game", "social"]
+        assert got.access_level == "Anyone"
+        assert got.headless_host is True
+        assert got.mobile_friendly is False
+        assert got.corresponding_world_id == "R-world"
+        assert got.universe_id == "universe-7"
+        assert got.session_begin_unix_nanos == 1_700_000_000_000_000_000
+        assert got.last_update_unix_nanos == 1_700_000_500_000_000_000
 
     async def test_request_carries_search_and_paging_with_all_filter_as_unspecified(
         self, uds_server: UdsServer
@@ -262,10 +259,10 @@ class TestListSessions:
 
 
 class TestListRecords:
-    async def test_maps_response_into_record_page_with_tuple_fields(
+    async def test_returns_generated_response_with_list_fields(
         self, uds_server: UdsServer
     ):
-        wire_record = WireWorldRecord(
+        wire_record = WorldRecord(
             record_id="R-template",
             owner_id="U-owner",
             name="Template World",
@@ -284,25 +281,25 @@ class TestListRecords:
         )
         await uds_server(fake)
         async with WorldClient() as client:
-            page = await client.list_records()
+            response = await client.list_records()
 
-        assert isinstance(page, RecordPage)
-        assert page.has_more is True
-        assert page.offset == 60
-        assert isinstance(page.records, tuple)
-        assert page.records == (
-            WorldRecord(
-                record_id="R-template",
-                owner_id="U-owner",
-                name="Template World",
-                description="starter",
-                thumbnail_url="https://thumb/r.webp",
-                tags=("template", "starter"),
-                record_url="resrec:///U-owner/R-template",
-                last_modification_unix_nanos=1_699_000_000_000_000_000,
-            ),
-        )
-        assert isinstance(page.records[0].tags, tuple)
+        assert isinstance(response, ListRecordsResponse)
+        assert response.has_more is True
+        assert response.offset == 60
+        # Repeated fields surface as list (generated proto type), not tuple.
+        assert isinstance(response.records, list)
+        assert len(response.records) == 1
+
+        got = response.records[0]
+        assert isinstance(got, WorldRecord)
+        assert got.record_id == "R-template"
+        assert got.owner_id == "U-owner"
+        assert got.name == "Template World"
+        assert got.description == "starter"
+        assert got.thumbnail_url == "https://thumb/r.webp"
+        assert got.tags == ["template", "starter"]
+        assert got.record_url == "resrec:///U-owner/R-template"
+        assert got.last_modification_unix_nanos == 1_699_000_000_000_000_000
 
     async def test_request_carries_source_tags_owner_offset_and_count(
         self, uds_server: UdsServer
@@ -389,8 +386,8 @@ class TestListRecords:
             await client.list_records()
 
 
-def _open_world() -> WireOpenWorld:
-    return WireOpenWorld(
+def _open_world() -> OpenWorld:
+    return OpenWorld(
         handle=3,
         session_id="S-joined",
         name="Joined World",
@@ -400,6 +397,25 @@ def _open_world() -> WireOpenWorld:
     )
 
 
+def _assert_open_world(
+    world: object,
+    *,
+    handle: int,
+    session_id: str,
+    name: str,
+    focused: bool,
+    user_count: int,
+    access_level: str,
+) -> None:
+    assert isinstance(world, OpenWorld)
+    assert world.handle == handle
+    assert world.session_id == session_id
+    assert world.name == name
+    assert world.focused is focused
+    assert world.user_count == user_count
+    assert world.access_level == access_level
+
+
 class TestJoin:
     async def test_join_by_session_id_returns_open_world(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
@@ -407,7 +423,9 @@ class TestJoin:
         async with WorldClient() as client:
             world = await client.join(session_id="S-target")
 
-        assert world == OpenWorld(
+        # join unwraps JoinResponse.world into the generated OpenWorld.
+        _assert_open_world(
+            world,
             handle=3,
             session_id="S-joined",
             name="Joined World",
@@ -434,6 +452,17 @@ class TestJoin:
         assert wire.session_url == "lnl-nat://abc/42"
         assert wire.session_id == ""
         assert wire.focus is False
+
+    async def test_join_raises_runtime_error_when_world_omitted(
+        self, uds_server: UdsServer
+    ):
+        # The server returned a JoinResponse with no world payload; the
+        # unwrapping client must raise rather than return None.
+        fake = _FakeWorld(join_world=None)
+        await uds_server(fake)
+        async with WorldClient() as client:
+            with pytest.raises(RuntimeError):
+                await client.join(session_id="S-target")
 
     async def test_join_with_neither_raises_value_error(self, uds_server: UdsServer):
         fake = _FakeWorld(join_world=_open_world())
@@ -462,7 +491,7 @@ class TestStartWorld:
     async def test_start_world_returns_open_world_and_carries_request(
         self, uds_server: UdsServer
     ):
-        started = WireOpenWorld(
+        started = OpenWorld(
             handle=9,
             session_id="S-new",
             name="Fresh Session",
@@ -477,7 +506,8 @@ class TestStartWorld:
                 record_id="R-template", owner_id="U-owner", focus=False
             )
 
-        assert world == OpenWorld(
+        _assert_open_world(
+            world,
             handle=9,
             session_id="S-new",
             name="Fresh Session",
@@ -501,6 +531,15 @@ class TestStartWorld:
         assert wire.owner_id == ""
         assert wire.focus is True
 
+    async def test_start_world_raises_runtime_error_when_world_omitted(
+        self, uds_server: UdsServer
+    ):
+        fake = _FakeWorld(start_world_world=None)
+        await uds_server(fake)
+        async with WorldClient() as client:
+            with pytest.raises(RuntimeError):
+                await client.start_world(record_id="R-template")
+
     async def test_raises_when_not_connected(self):
         client = WorldClient()
         with pytest.raises(RuntimeError, match="not connected"):
@@ -510,7 +549,7 @@ class TestStartWorld:
 class TestListOpenWorlds:
     async def test_returns_list_of_open_worlds(self, uds_server: UdsServer):
         worlds = [
-            WireOpenWorld(
+            OpenWorld(
                 handle=1,
                 session_id="S-a",
                 name="A",
@@ -518,7 +557,7 @@ class TestListOpenWorlds:
                 user_count=2,
                 access_level="Anyone",
             ),
-            WireOpenWorld(
+            OpenWorld(
                 handle=2,
                 session_id="S-b",
                 name="B",
@@ -532,24 +571,26 @@ class TestListOpenWorlds:
         async with WorldClient() as client:
             result = await client.list_open_worlds()
 
-        assert result == [
-            OpenWorld(
-                handle=1,
-                session_id="S-a",
-                name="A",
-                focused=True,
-                user_count=2,
-                access_level="Anyone",
-            ),
-            OpenWorld(
-                handle=2,
-                session_id="S-b",
-                name="B",
-                focused=False,
-                user_count=0,
-                access_level="Private",
-            ),
-        ]
+        assert isinstance(result, list)
+        assert len(result) == 2
+        _assert_open_world(
+            result[0],
+            handle=1,
+            session_id="S-a",
+            name="A",
+            focused=True,
+            user_count=2,
+            access_level="Anyone",
+        )
+        _assert_open_world(
+            result[1],
+            handle=2,
+            session_id="S-b",
+            name="B",
+            focused=False,
+            user_count=0,
+            access_level="Private",
+        )
         assert len(fake.list_open_worlds_requests) == 1
 
     async def test_returns_empty_list_when_no_worlds_open(self, uds_server: UdsServer):
@@ -570,7 +611,7 @@ class TestFocus:
     async def test_focus_sends_handle_and_returns_open_world(
         self, uds_server: UdsServer
     ):
-        focused = WireOpenWorld(
+        focused = OpenWorld(
             handle=5,
             session_id="S-focused",
             name="Now Focused",
@@ -583,7 +624,8 @@ class TestFocus:
         async with WorldClient() as client:
             world = await client.focus(5)
 
-        assert world == OpenWorld(
+        _assert_open_world(
+            world,
             handle=5,
             session_id="S-focused",
             name="Now Focused",
@@ -593,6 +635,15 @@ class TestFocus:
         )
         assert len(fake.focus_requests) == 1
         assert fake.focus_requests[0].handle == 5
+
+    async def test_focus_raises_runtime_error_when_world_omitted(
+        self, uds_server: UdsServer
+    ):
+        fake = _FakeWorld(focus_world=None)
+        await uds_server(fake)
+        async with WorldClient() as client:
+            with pytest.raises(RuntimeError):
+                await client.focus(5)
 
     async def test_raises_when_not_connected(self):
         client = WorldClient()
@@ -619,7 +670,7 @@ class TestLeave:
 
 class TestGetCurrent:
     async def test_returns_open_world_when_has_world_true(self, uds_server: UdsServer):
-        current = WireOpenWorld(
+        current = OpenWorld(
             handle=2,
             session_id="S-current",
             name="Current",
@@ -634,7 +685,8 @@ class TestGetCurrent:
         async with WorldClient() as client:
             world = await client.get_current()
 
-        assert world == OpenWorld(
+        _assert_open_world(
+            world,
             handle=2,
             session_id="S-current",
             name="Current",
@@ -663,7 +715,7 @@ class TestGetCurrent:
 
 
 class TestFetchThumbnail:
-    async def test_sends_uri_and_returns_thumbnail_with_bytes_and_content_type(
+    async def test_sends_uri_and_returns_response_with_bytes_and_content_type(
         self, uds_server: UdsServer
     ):
         webp_bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 "
@@ -675,16 +727,16 @@ class TestFetchThumbnail:
         )
         await uds_server(fake)
         async with WorldClient() as client:
-            thumbnail = await client.fetch_thumbnail("resdb:///abc.webp")
+            response = await client.fetch_thumbnail("resdb:///abc.webp")
 
         # The user-facing ``uri`` arg must travel verbatim on the wire.
         assert len(fake.fetch_thumbnail_requests) == 1
         assert fake.fetch_thumbnail_requests[0].uri == "resdb:///abc.webp"
 
-        assert thumbnail == Thumbnail(
-            data=webp_bytes,
-            content_type="image/webp",
-        )
+        # The method returns the generated FetchThumbnailResponse directly.
+        assert isinstance(response, FetchThumbnailResponse)
+        assert response.data == webp_bytes
+        assert response.content_type == "image/webp"
 
     async def test_allows_empty_content_type_with_returned_bytes(
         self, uds_server: UdsServer
@@ -700,10 +752,11 @@ class TestFetchThumbnail:
         )
         await uds_server(fake)
         async with WorldClient() as client:
-            thumbnail = await client.fetch_thumbnail("resdb:///no-type")
+            response = await client.fetch_thumbnail("resdb:///no-type")
 
         assert fake.fetch_thumbnail_requests[0].uri == "resdb:///no-type"
-        assert thumbnail == Thumbnail(data=raw_bytes, content_type="")
+        assert response.data == raw_bytes
+        assert response.content_type == ""
 
     async def test_raises_when_not_connected(self):
         client = WorldClient()

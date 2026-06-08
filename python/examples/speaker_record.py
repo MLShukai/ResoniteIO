@@ -22,7 +22,8 @@ import grpclib.exceptions
 import numpy as np
 from grpclib.const import Status
 
-from resoio import CHANNELS, DTYPE, SAMPLE_RATE, SpeakerClient
+from resoio import SpeakerClient
+from resoio.speaker import CHANNELS, DTYPE, SAMPLE_RATE
 
 SOCKET_PATH: str | None = None
 DURATION_S = 5.0

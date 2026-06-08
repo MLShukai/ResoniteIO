@@ -2,6 +2,6 @@
 
 ::: resoio.microphone.MicrophoneClient
 
-::: resoio.microphone.MicrophoneAudioChunk
-
 ::: resoio.microphone.MicrophoneStreamSummary
+
+::: resoio.microphone.paced
