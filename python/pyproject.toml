@@ -2,7 +2,7 @@
 # PyPI distribution name. The importable package / CLI command stays `resoio`
 # (see [tool.hatch.build.targets.wheel] below and [project.scripts]).
 name = "resonite-io"
-version = "0.1.1"
+version = "0.2.0"
 description = "Python client for Resonite IO"
 readme = "README.md"
 authors = [{ name = "mlshukai" }]

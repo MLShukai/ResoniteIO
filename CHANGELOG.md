@@ -6,6 +6,55 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-08
+
+Python クライアント `resoio` の public API を実装都合の漏れから洗練する**破壊的**
+リリース。あわせて locomotion の入力モデルを部分更新方式に刷新し、視点回転 (yaw/pitch)
+の実機反映バグを修正した。0.1.x からの移行には下記 Removed / Changed の API 変更への
+追従が必要。
+
+### Added
+
+- **Python `resoio`**: top-level export に受信チャンク型 `SpeakerChunk` と、`World`
+  modality の生成 proto 応答型 `ListSessionsResponse` / `ListRecordsResponse` /
+  `FetchThumbnailResponse` を追加
+
+### Changed
+
+- **Python `resoio` Locomotion (破壊的)**: 移動入力を全 field 必須の単発コマンド
+  `LocomotionCmd` から、変化した field だけを送る部分更新 `LocomotionClient.send(field=None)`
+  に刷新。`None` の field は wire に乗せず Resonite 側 bridge が前回値を保持する。drive
+  summary は `async with` 終了後に `drive_summary` property で取得する。基盤として proto
+  `LocomotionCommand` の制御 8 field を `optional` 化 (field presence)、C# Core に
+  `LocomotionPartialInput` + `MergeInto` を追加し present field のみ held state へ
+  マージする方式へ変更
+- **Python `resoio` Speaker (破壊的)**: 受信チャンク型 `AudioChunk` を `SpeakerChunk`
+  にリネーム。定数 `CHANNELS` / `DTYPE` / `SAMPLE_RATE` を top-level export から除外
+  (microphone と名前衝突するため `resoio.speaker` module-level には残置)
+- **Python `resoio` Microphone (破壊的)**: ラッパ型 `MicrophoneAudioChunk` を撤去し、
+  `stream()` / `paced()` が raw NumPy ndarray を直接受け取るように変更 (frame_id /
+  unix_nanos はライブラリが自動管理)
+- **Python `resoio` Camera (破壊的)**: `Frame.width` / `height` / `channels` を `pixels`
+  由来の read-only property に変更。`stream()` から `width` / `height` / `fps_limit`
+  引数を除去 (解像度設定は Display modality の責務)
+- **Python `resoio` World (破壊的)**: 出力 mirror dataclass `RecordPage` / `SessionPage`
+  / `Thumbnail` を撤去し、生成 proto 応答型を直接公開。入力側の enum remap (`RecordSort`
+  等) は維持
+- **Python `resoio` (破壊的)**: socket 例外 `AmbiguousSocketError` / `SocketNotFoundError`
+  の定義元を `resoio.connection` から内部 `resoio._client` に移し top-level から
+  re-export。`resoio.connection` module は `Ping` 専用に純化 (top-level の import 名は
+  不変だが `from resoio.connection import AmbiguousSocketError` 等は破壊的)
+- **Thunderstore mod**: 配布パッケージに `CHANGELOG.md` と `LICENSE` を同梱
+- **Thunderstore mod**: publish categories を拡充 (`mods` に加えて `tools` /
+  `audio` / `controls`)
+- **ドキュメント**: Linux のみ対応 (Windows 非対応) を README / docs サイトに明記
+
+### Removed
+
+- **Python `resoio`**: top-level export から `LocomotionCmd` / `AudioChunk` /
+  `MicrophoneAudioChunk` / `CHANNELS` / `DTYPE` / `SAMPLE_RATE` / `RecordPage` /
+  `SessionPage` / `Thumbnail` を削除 (上記 Changed の API 刷新に伴う)
+
 ### Fixed
 
 - **Thunderstore mod**: 配布パッケージが ASP.NET Core shared framework を丸ごと同梱して
@@ -14,13 +63,13 @@
   (Invalid submission) されていた問題を修正。同梱 DLL を GrpcHost (Kestrel + gRPC) の
   実依存閉包だけに絞る allow-list 方式 (`_BundledAspNetCoreDll`) に変更し、
   67 files / 4.9MB に削減 (機能・wire 互換に変更なし)
-
-### Changed
-
-- **Thunderstore mod**: 配布パッケージに `CHANGELOG.md` と `LICENSE` を同梱
-- **Thunderstore mod**: publish categories を拡充 (`mods` に加えて `tools` /
-  `audio` / `controls`)
-- **ドキュメント**: Linux のみ対応 (Windows 非対応) を README / docs サイトに明記
+- **mod Locomotion**: 視点回転 (yaw/pitch) が cursor lock の無い間 engine に届かず
+  avatar が回頭しなかった問題を修正。`ScreenCameraInputs.Look.Active` が
+  `InputInterface.IsCursorLocked` に gate されるため、look 入力中だけ低 priority の
+  cursor lock を内部取得して前提を満たす (入力が 0 / Dispose 時等に解放、既存の
+  cursor lock は上書きしない)
+- **Python `resoio` Locomotion**: `LocomotionClient.__aexit__` が drive task の例外時に
+  channel close を skip して接続を leak していたのを try/finally で常時 close するよう修正
 
 ## [0.1.1] - 2026-06-07
 
@@ -79,4 +128,5 @@ Socket) の基盤一式。
 
 [0.1.0]: https://github.com/MLShukai/ResoniteIO/releases/tag/v0.1.0
 [0.1.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...v0.1.1
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...HEAD
+[0.2.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...v0.2.0
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.2.0...HEAD
