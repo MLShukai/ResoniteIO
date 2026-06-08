@@ -36,6 +36,9 @@ namespace ResoniteIO.Bridge;
 /// </remarks>
 internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposable
 {
+    private const float _lookNeutralEpsilon = 0.0001f;
+    private const int _lookCursorLockPriority = -1_000_000;
+
     // typed delegate は static field で 1 度だけ解決 (TickStep が毎 tick 利用)。
     // 引数順は (declaring type, field type)、逆順は silently wrong delegate を
     // 返すため要 review (feedback_locomotion_external_input.md §3)。
@@ -68,6 +71,9 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     private World? _cachedWorld;
     private World? _repeaterWorld;
     private bool _repeaterRunning;
+    private World? _lookLockWorld;
+    private IWorldElement? _lookLockElement;
+    private CursorLock? _lookCursorLock;
 
     private volatile bool _disposed;
 
@@ -186,6 +192,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
 
         _log.LogDebug($"LocomotionBridge: world refocused → {world?.Name ?? "<null>"}");
+        ReleaseLookCursorLock();
 
         if (restartNeeded && world is not null && !world.IsDisposed)
         {
@@ -292,11 +299,15 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         {
             ApplyToEngine(smooth, fpc, head, snapshot, jumpSnapshot);
         }
-        else if (jumpSnapshot)
+        else
         {
-            lock (_lock)
+            ReleaseLookCursorLockOnEngine();
+            if (jumpSnapshot)
             {
-                _jumpPending = true;
+                lock (_lock)
+                {
+                    _jumpPending = true;
+                }
             }
         }
 
@@ -317,7 +328,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
     }
 
-    private static void ApplyToEngine(
+    private void ApplyToEngine(
         SmoothLocomotionBase smooth,
         FirstPersonTargettingController? fpc,
         HeadSimulator? head,
@@ -328,6 +339,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         var normalInput = _smoothNormalInputRef(smooth);
         if (normalInput is null || normalInput.Move is null || normalInput.Jump is null)
         {
+            ReleaseLookCursorLockOnEngine();
             return;
         }
 
@@ -375,8 +387,17 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             var screenInputs = _firstPersonInputsRef(fpc);
             if (screenInputs?.Look is not null)
             {
+                UpdateLookCursorLock(fpc, snapshot);
                 screenInputs.Look.ExternalInput = new float2(snapshot.YawRate, snapshot.PitchRate);
             }
+            else
+            {
+                ReleaseLookCursorLockOnEngine();
+            }
+        }
+        else
+        {
+            ReleaseLookCursorLockOnEngine();
         }
 
         // crouch は値 0 でも書く (engine の += 0 は副作用なし、idle 戻し兼用)。
@@ -418,6 +439,147 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         return (loco, fpc, head);
     }
 
+    private static bool HasLookInput(LocomotionInput snapshot) =>
+        Math.Abs(snapshot.YawRate) > _lookNeutralEpsilon
+        || Math.Abs(snapshot.PitchRate) > _lookNeutralEpsilon;
+
+    private void UpdateLookCursorLock(FirstPersonTargettingController fpc, LocomotionInput snapshot)
+    {
+        if (!HasLookInput(snapshot))
+        {
+            ReleaseLookCursorLockOnEngine();
+            return;
+        }
+
+        var world = fpc.World;
+        if (world is null || world.IsDisposed || fpc.IsRemoved)
+        {
+            ReleaseLookCursorLockOnEngine();
+            return;
+        }
+
+        World? lockWorld;
+        IWorldElement? lockElement;
+        CursorLock? cursorLock;
+        lock (_lock)
+        {
+            lockWorld = _lookLockWorld;
+            lockElement = _lookLockElement;
+            cursorLock = _lookCursorLock;
+        }
+
+        if (cursorLock is not null)
+        {
+            if (
+                ReferenceEquals(lockWorld, world)
+                && lockElement is not null
+                && ReferenceEquals(lockElement, fpc)
+                && !lockElement.IsRemoved
+            )
+            {
+                if (
+                    world.Input.LockCursor is null
+                    || ReferenceEquals(world.Input.LockCursor, cursorLock)
+                )
+                {
+                    return;
+                }
+            }
+
+            ReleaseLookCursorLockOnEngine();
+        }
+
+        if (world.Input.LockCursor is not null || world.InputInterface.Mouse is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var position = (int2)world.InputInterface.Mouse.WindowPosition.Value;
+            world.Input.UnregisterCursorLock(fpc);
+            var registered = world.Input.RegisterCursorLock(fpc, position, _lookCursorLockPriority);
+            registered.priority = _lookCursorLockPriority;
+
+            lock (_lock)
+            {
+                _lookLockWorld = world;
+                _lookLockElement = fpc;
+                _lookCursorLock = registered;
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"LocomotionBridge: failed to acquire look cursor lock: {ex.Message}");
+        }
+    }
+
+    private void ReleaseLookCursorLock()
+    {
+        World? world;
+        IWorldElement? element;
+        lock (_lock)
+        {
+            world = _lookLockWorld;
+            element = _lookLockElement;
+            _lookLockWorld = null;
+            _lookLockElement = null;
+            _lookCursorLock = null;
+        }
+
+        if (world is null || element is null || world.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            world.RunSynchronously(
+                () => TryUnregisterLookCursorLock(world, element),
+                immediatellyIfPossible: true
+            );
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"LocomotionBridge: failed to release look cursor lock: {ex.Message}");
+        }
+    }
+
+    private void ReleaseLookCursorLockOnEngine()
+    {
+        World? world;
+        IWorldElement? element;
+        lock (_lock)
+        {
+            world = _lookLockWorld;
+            element = _lookLockElement;
+            _lookLockWorld = null;
+            _lookLockElement = null;
+            _lookCursorLock = null;
+        }
+
+        if (world is null || element is null || world.IsDisposed)
+        {
+            return;
+        }
+
+        TryUnregisterLookCursorLock(world, element);
+    }
+
+    private void TryUnregisterLookCursorLock(World world, IWorldElement element)
+    {
+        try
+        {
+            world.Input.UnregisterCursorLock(element);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(
+                $"LocomotionBridge: UnregisterCursorLock threw: {ex.GetType().Name}: {ex.Message}"
+            );
+        }
+    }
+
     private void MarkRepeaterStopped(World? expected)
     {
         lock (_lock)
@@ -428,6 +590,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
                 _repeaterWorld = null;
             }
         }
+        ReleaseLookCursorLock();
     }
 
     public void Dispose()
@@ -454,6 +617,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             _repeaterWorld = null;
             _cachedWorld = null;
         }
+        ReleaseLookCursorLock();
 
         _log.LogInfo("Locomotion Bridge disposed: state cleared, repeater stopped");
     }

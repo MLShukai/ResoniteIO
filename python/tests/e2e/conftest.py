@@ -15,6 +15,7 @@ SOCKET_DIR: Path = Path.home() / ".resonite-io"
 SOCKET_GLOB = "resonite-*.sock"
 SOCKET_APPEAR_TIMEOUT_S = 120.0
 SOCKET_APPEAR_POLL_S = 1.0
+POST_SOCKET_STARTUP_SETTLE_S = 30.0
 DEBUG_SOCKET: Path = Path.home() / ".resonite-io-debug" / "host-agent.sock"
 
 
@@ -85,6 +86,11 @@ def resonite_session() -> Iterator[Path]:
     try:
         socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
         os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
+        # The mod binds the UDS before the focused home world is fully loaded.
+        # Give the whole e2e suite one shared startup settle window so modality
+        # tests do not race against the loading screen or partially initialized
+        # world state.
+        time.sleep(POST_SOCKET_STARTUP_SETTLE_S)
         yield socket_path
     finally:
         # stop is best-effort (process may already be dead); the purge below
