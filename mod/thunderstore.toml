@@ -43,6 +43,21 @@ outdir = "./build"
 source = "./src/ResoniteIO/bin/Release/_thunderstore-plugin"
 target = "plugins/ResoniteIO/"
 
+# Renderer 側 plugin (Camera v2、net472 Unity Mono、BepInEx 5) を同梱する。
+# Gale の BepisLoader installer は package 内 top-level `Renderer/` を engine 側
+# `plugins/` とは別系統の `Renderer/BepInEx/plugins/<FullName>/` へ routing する
+# (Kesomannen/gale: bepinex.rs の Subdir::flat_separated("Renderer", ...))。
+# Renderer plugin は UnityEngine.CoreModule が非再配布なため CI で build できない。
+# そのため Resonite のあるローカルで build した成果物を mod/prebuilt/renderer/ に
+# commit し (drift guard: scripts/renderer-prebuilt-hash.sh + mod/prebuilt/renderer.sha256)、
+# pack/CI はそれを build せずそのまま同梱する。更新は `just renderer-prebuild`。
+# mod/prebuilt/renderer/ には DLL/PDB のみを置き (hash file は zip に入れない方針で
+# 兄弟パス mod/prebuilt/renderer.sha256 に分離してある)、この dir を丸ごと取り込む。
+# source は末尾スラッシュ無し (上の注記参照)。
+[[build.copy]]
+source = "./prebuilt/renderer"
+target = "Renderer/ResoniteIO.Renderer/"
+
 # CHANGELOG / LICENSE を同梱する (いずれも repo root なので mod/ から見て ../)。
 [[build.copy]]
 source = "../CHANGELOG.md"
