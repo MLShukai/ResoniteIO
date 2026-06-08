@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Thunderstore mod**: 配布パッケージが ASP.NET Core shared framework を丸ごと同梱して
+  131 files / 24MB に膨張し (Blazor / MVC / Razor / Identity / SignalR 等の未使用 DLL を
+  含む)、Thunderstore のモデレーションで「別 mod のファイル混入」と見なされ reject
+  (Invalid submission) されていた問題を修正。同梱 DLL を GrpcHost (Kestrel + gRPC) の
+  実依存閉包だけに絞る allow-list 方式 (`_BundledAspNetCoreDll`) に変更し、
+  67 files / 4.9MB に削減 (機能・wire 互換に変更なし)
+
+### Changed
+
+- **Thunderstore mod**: 配布パッケージに `CHANGELOG.md` と `LICENSE` を同梱
+- **Thunderstore mod**: publish categories を拡充 (`mods` に加えて `tools` /
+  `audio` / `controls`)
+- **ドキュメント**: Linux のみ対応 (Windows 非対応) を README / docs サイトに明記
+
 ## [0.1.1] - 2026-06-07
 
 0.1.0 公開後に判明したパッケージング不備の hotfix。配布物が動作しない 2 件を修正。
