@@ -43,17 +43,20 @@ outdir = "./build"
 source = "./src/ResoniteIO/bin/Release/_thunderstore-plugin"
 target = "plugins/ResoniteIO/"
 
-# CHANGELOG / LICENSE を同梱したい場合はコメント解除する (CHANGELOG は repo root)
-# [[build.copy]]
-# source = "../CHANGELOG.md"
-# target = "/"
-# [[build.copy]]
-# source = "../LICENSE"
-# target = "/"
+# CHANGELOG / LICENSE を同梱する (いずれも repo root なので mod/ から見て ../)。
+[[build.copy]]
+source = "../CHANGELOG.md"
+target = "/"
+[[build.copy]]
+source = "../LICENSE"
+target = "/"
 
 [publish]
 repository = "https://thunderstore.io"
 communities = ["resonite"]
 
+# Resonite community のカテゴリ slug。AI エージェント実行環境を提供する開発者向け
+# ツールであり (tools)、Speaker/Microphone で音声を双方向に流し (audio)、
+# Locomotion/Cursor/Manipulation でアバター入力を制御する (controls)。
 [publish.categories]
-resonite = ["mods"]
+resonite = ["mods", "tools", "audio", "controls"]
