@@ -1308,6 +1308,11 @@
 into a runtime environment for AI agents. A C# mod running inside the Resonite client
 (<code>ResoniteIO</code>, loaded via BepisLoader) and a Python package (<code>resoio</code>) talk to each other
 over <strong>gRPC on a Unix Domain Socket</strong>.</p>
+<div class="admonition note">
+<p class="admonition-title">Linux only</p>
+<p>ResoniteIO targets Resonite running on Linux through Steam Play (Proton). Windows is not
+supported. See <a href="getting-started/installation/">Installation</a> for details.</p>
+</div>
 <h2 id="design-philosophy">Design philosophy<a class="headerlink" href="#design-philosophy" title="Permanent link">&para;</a></h2>
 <p>ResoniteIO is built like <strong>real-time robotics middleware, not a reinforcement-learning
 environment</strong>. There is no <code>Observation</code> / <code>Action</code> abstraction and no global <code>step()</code>.
