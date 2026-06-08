@@ -42,11 +42,7 @@ pytestmark = pytest.mark.api_contract
 # this list sorted (matches what ``resoio.__init__`` does) so the diff
 # stays minimal when a single name is added or removed.
 _EXPECTED_PUBLIC_NAMES = (
-    "CHANNELS",
-    "DTYPE",
-    "SAMPLE_RATE",
     "AmbiguousSocketError",
-    "AudioChunk",
     "CameraClient",
     "ConnectionClient",
     "ContextMenuClient",
@@ -64,6 +60,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
+    "FetchThumbnailResponse",
     "Frame",
     "GrabResult",
     "GrabState",
@@ -73,23 +70,21 @@ _EXPECTED_PUBLIC_NAMES = (
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "ListRecordsResponse",
+    "ListSessionsResponse",
     "LocomotionClient",
-    "LocomotionCmd",
     "ManipulationClient",
-    "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
     "OpenWorld",
-    "RecordPage",
     "RecordSort",
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
     "SessionFilter",
-    "SessionPage",
     "SocketNotFoundError",
+    "SpeakerChunk",
     "SpeakerClient",
-    "Thumbnail",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
@@ -229,27 +224,28 @@ def test_public_world_enum_members_match_snapshot(
 
 
 # ---------------------------------------------------------------------------
-# Public Thumbnail dataclass + WorldClient.fetch_thumbnail signature
+# Public FetchThumbnailResponse + WorldClient.fetch_thumbnail signature
 #
 # These pin the public shape of the World thumbnail-fetch API a downstream
-# caller writes against: the ``Thumbnail`` value object and the
+# caller writes against: the generated ``FetchThumbnailResponse`` value object
+# (the hand-written ``Thumbnail`` mirror was removed in the API refinement —
+# the method now returns the generated proto type directly) and the
 # ``fetch_thumbnail(uri)`` entry point. Contract pins, not behaviour tests —
 # the round-trip behaviour lives in test_world.py. An intentional change
 # updates these snapshots in the same commit.
 # ---------------------------------------------------------------------------
 
 
-def test_thumbnail_is_a_frozen_dataclass():
-    """Downstream code may use ``Thumbnail`` as a hashable value (dict key /
-    set member); freezing the dataclass is part of the public promise."""
-    assert dataclasses.is_dataclass(resoio.Thumbnail)
-    params = resoio.Thumbnail.__dataclass_params__
-    assert params.frozen is True
+def test_fetch_thumbnail_response_is_a_dataclass():
+    """``FetchThumbnailResponse`` is re-exported as the public thumbnail value
+    object; downstream code constructs / unpacks it as a dataclass."""
+    assert dataclasses.is_dataclass(resoio.FetchThumbnailResponse)
 
 
-def test_thumbnail_field_names_and_types_match_snapshot():
-    """Pin ``Thumbnail`` fields: ``data: bytes`` then ``content_type: str``."""
-    fields = dataclasses.fields(resoio.Thumbnail)
+def test_fetch_thumbnail_response_field_names_and_types_match_snapshot():
+    """Pin the public thumbnail payload fields: ``data: bytes`` then
+    ``content_type: str`` (the generated proto field names/types)."""
+    fields = dataclasses.fields(resoio.FetchThumbnailResponse)
     actual = {f.name: f.type for f in fields}
     assert actual == {
         "data": "bytes",
@@ -273,11 +269,12 @@ def test_fetch_thumbnail_signature_takes_one_positional_uri_str():
     )
 
 
-def test_fetch_thumbnail_returns_thumbnail():
-    """Pin the documented return type as the public ``Thumbnail`` value
-    object."""
+def test_fetch_thumbnail_returns_fetch_thumbnail_response():
+    """Pin the documented return type as the generated
+    ``FetchThumbnailResponse`` value object (the ``Thumbnail`` mirror was
+    removed; the method now returns the proto type directly)."""
     sig = inspect.signature(resoio.WorldClient.fetch_thumbnail)
-    assert sig.return_annotation == "Thumbnail"
+    assert sig.return_annotation == "FetchThumbnailResponse"
 
 
 # ---------------------------------------------------------------------------
@@ -304,12 +301,23 @@ _EXPECTED_LIST_RECORDS_PARAMS: dict[str, tuple[str, object]] = {
 }
 
 
-def test_list_records_is_a_coroutine_returning_record_page():
-    """Pin ``WorldClient.list_records`` as an async method returning the public
-    ``RecordPage`` value object."""
+def test_list_records_is_a_coroutine_returning_list_records_response():
+    """Pin ``WorldClient.list_records`` as an async method returning the
+    generated ``ListRecordsResponse`` (``.records`` list / ``.has_more`` /
+    ``.offset``); the hand-written ``RecordPage`` mirror was removed."""
     assert inspect.iscoroutinefunction(resoio.WorldClient.list_records)
     sig = inspect.signature(resoio.WorldClient.list_records)
-    assert sig.return_annotation == "RecordPage"
+    assert sig.return_annotation == "ListRecordsResponse"
+
+
+def test_list_sessions_is_a_coroutine_returning_list_sessions_response():
+    """Pin ``WorldClient.list_sessions`` as an async method returning the
+    generated ``ListSessionsResponse`` (``.sessions`` list / ``.total_count`` /
+    ``.page`` / ``.page_size``); the hand-written ``SessionPage`` mirror was
+    removed."""
+    assert inspect.iscoroutinefunction(resoio.WorldClient.list_sessions)
+    sig = inspect.signature(resoio.WorldClient.list_sessions)
+    assert sig.return_annotation == "ListSessionsResponse"
 
 
 def test_list_records_params_are_all_keyword_only_in_declared_order():

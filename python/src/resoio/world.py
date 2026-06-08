@@ -6,7 +6,6 @@ from __future__ import annotations
 import enum
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import override
 
 from grpclib.client import Channel
@@ -14,39 +13,42 @@ from grpclib.client import Channel
 from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     FetchThumbnailRequest,
+    FetchThumbnailResponse,
     FocusRequest,
     GetCurrentRequest,
     JoinRequest,
     LeaveRequest,
     ListOpenWorldsRequest,
     ListRecordsRequest,
+    ListRecordsResponse,
     ListSessionsRequest,
-    OpenWorld as _WireOpenWorld,
+    ListSessionsResponse,
+    OpenWorld,
     RecordSort as _WireRecordSort,
     RecordSortDirection as _WireRecordSortDirection,
     RecordSource as _WireRecordSource,
     SessionFilter as _WireSessionFilter,
     StartWorldRequest,
-    WorldRecord as _WireWorldRecord,
-    WorldSession as _WireWorldSession,
+    WorldRecord,
+    WorldSession,
     WorldStub,
 )
 
 __all__ = [
+    "FetchThumbnailResponse",
+    "ListRecordsResponse",
+    "ListSessionsResponse",
     "OpenWorld",
-    "RecordPage",
     "RecordSort",
     "RecordSortDirection",
     "RecordSource",
     "SessionFilter",
-    "SessionPage",
-    "Thumbnail",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
 ]
 
-_logger = logging.getLogger("resoio.world")
+_logger = logging.getLogger(__name__)
 
 
 class SessionFilter(enum.Enum):
@@ -124,136 +126,17 @@ _RECORD_SORT_DIRECTION_TO_WIRE: dict[RecordSortDirection, _WireRecordSortDirecti
 }
 
 
-@dataclass(frozen=True, slots=True)
-class WorldSession:
-    """One live session (a tile in the world browser)."""
+def _require_world(world: OpenWorld | None) -> OpenWorld:
+    """Unwrap a single-``OpenWorld`` payload, raising if the server omitted it.
 
-    session_id: str
-    name: str
-    description: str
-    host_user_id: str
-    host_username: str
-    session_urls: tuple[str, ...]
-    thumbnail_url: str
-    joined_users: int
-    active_users: int
-    maximum_users: int
-    tags: tuple[str, ...]
-    access_level: str
-    headless_host: bool
-    mobile_friendly: bool
-    corresponding_world_id: str
-    universe_id: str
-    session_begin_unix_nanos: int
-    last_update_unix_nanos: int
-
-
-@dataclass(frozen=True, slots=True)
-class WorldRecord:
-    """One world record (a saved world / template)."""
-
-    record_id: str
-    owner_id: str
-    name: str
-    description: str
-    thumbnail_url: str
-    tags: tuple[str, ...]
-    record_url: str
-    last_modification_unix_nanos: int
-
-
-@dataclass(frozen=True, slots=True)
-class OpenWorld:
-    """One locally-open world."""
-
-    handle: int
-    session_id: str
-    name: str
-    focused: bool
-    user_count: int
-    access_level: str
-
-
-@dataclass(frozen=True, slots=True)
-class SessionPage:
-    """A page of :class:`WorldSession` results."""
-
-    sessions: tuple[WorldSession, ...]
-    total_count: int
-    page: int
-    page_size: int
-
-
-@dataclass(frozen=True, slots=True)
-class RecordPage:
-    """A page of :class:`WorldRecord` results."""
-
-    records: tuple[WorldRecord, ...]
-    has_more: bool
-    offset: int
-
-
-@dataclass(frozen=True, slots=True)
-class Thumbnail:
-    """A fetched thumbnail image and its MIME type."""
-
-    data: bytes
-    content_type: str
-
-
-def _session_from_wire(wire: _WireWorldSession) -> WorldSession:
-    return WorldSession(
-        session_id=wire.session_id,
-        name=wire.name,
-        description=wire.description,
-        host_user_id=wire.host_user_id,
-        host_username=wire.host_username,
-        session_urls=tuple(wire.session_urls),
-        thumbnail_url=wire.thumbnail_url,
-        joined_users=wire.joined_users,
-        active_users=wire.active_users,
-        maximum_users=wire.maximum_users,
-        tags=tuple(wire.tags),
-        access_level=wire.access_level,
-        headless_host=wire.headless_host,
-        mobile_friendly=wire.mobile_friendly,
-        corresponding_world_id=wire.corresponding_world_id,
-        universe_id=wire.universe_id,
-        session_begin_unix_nanos=wire.session_begin_unix_nanos,
-        last_update_unix_nanos=wire.last_update_unix_nanos,
-    )
-
-
-def _record_from_wire(wire: _WireWorldRecord) -> WorldRecord:
-    return WorldRecord(
-        record_id=wire.record_id,
-        owner_id=wire.owner_id,
-        name=wire.name,
-        description=wire.description,
-        thumbnail_url=wire.thumbnail_url,
-        tags=tuple(wire.tags),
-        record_url=wire.record_url,
-        last_modification_unix_nanos=wire.last_modification_unix_nanos,
-    )
-
-
-def _open_world_from_wire(wire: _WireOpenWorld) -> OpenWorld:
-    return OpenWorld(
-        handle=wire.handle,
-        session_id=wire.session_id,
-        name=wire.name,
-        focused=wire.focused,
-        user_count=wire.user_count,
-        access_level=wire.access_level,
-    )
-
-
-def _open_world_from_response(wire: _WireOpenWorld | None) -> OpenWorld:
-    """Convert the optional ``OpenWorld`` a single-world response promised to
-    populate, raising if the server left it unset."""
-    if wire is None:
+    The ``join`` / ``start_world`` / ``focus`` RPCs each return a response whose
+    ``world`` field is populated on success; a missing world is a protocol
+    violation rather than a normal "no world" signal (use ``get_current`` for
+    the latter).
+    """
+    if world is None:
         raise RuntimeError("World response did not include an OpenWorld.")
-    return _open_world_from_wire(wire)
+    return world
 
 
 class WorldClient(_BaseClient[WorldStub]):
@@ -278,7 +161,7 @@ class WorldClient(_BaseClient[WorldStub]):
         min_active_users: int = 0,
         page: int = 0,
         page_size: int = 0,
-    ) -> SessionPage:
+    ) -> ListSessionsResponse:
         """List live sessions (filter / search / paging applied mod-side)."""
         stub = self._require_stub()
         request = ListSessionsRequest(
@@ -288,13 +171,7 @@ class WorldClient(_BaseClient[WorldStub]):
             page=page,
             page_size=page_size,
         )
-        response = await stub.list_sessions(request)
-        return SessionPage(
-            sessions=tuple(_session_from_wire(s) for s in response.sessions),
-            total_count=response.total_count,
-            page=response.page,
-            page_size=response.page_size,
-        )
+        return await stub.list_sessions(request)
 
     async def list_records(
         self,
@@ -307,7 +184,7 @@ class WorldClient(_BaseClient[WorldStub]):
         count: int = 0,
         sort: RecordSort = RecordSort.CREATION_DATE,
         sort_direction: RecordSortDirection = RecordSortDirection.DESCENDING,
-    ) -> RecordPage:
+    ) -> ListRecordsResponse:
         """List world records (use ``sort=RANDOM`` for the random tab).
 
         ``search`` is a free-text query mirroring the World tab (``+term``
@@ -324,12 +201,7 @@ class WorldClient(_BaseClient[WorldStub]):
             sort=_RECORD_SORT_TO_WIRE[sort],
             sort_direction=_RECORD_SORT_DIRECTION_TO_WIRE[sort_direction],
         )
-        response = await stub.list_records(request)
-        return RecordPage(
-            records=tuple(_record_from_wire(r) for r in response.records),
-            has_more=response.has_more,
-            offset=response.offset,
-        )
+        return await stub.list_records(request)
 
     async def join(
         self,
@@ -351,7 +223,7 @@ class WorldClient(_BaseClient[WorldStub]):
             focus=focus,
         )
         response = await stub.join(request)
-        return _open_world_from_response(response.world)
+        return _require_world(response.world)
 
     async def start_world(
         self,
@@ -368,19 +240,19 @@ class WorldClient(_BaseClient[WorldStub]):
             focus=focus,
         )
         response = await stub.start_world(request)
-        return _open_world_from_response(response.world)
+        return _require_world(response.world)
 
     async def list_open_worlds(self) -> list[OpenWorld]:
         """List the locally-open worlds."""
         stub = self._require_stub()
         response = await stub.list_open_worlds(ListOpenWorldsRequest())
-        return [_open_world_from_wire(w) for w in response.worlds]
+        return list(response.worlds)
 
     async def focus(self, handle: int) -> OpenWorld:
         """Focus a locally-open world by handle."""
         stub = self._require_stub()
         response = await stub.focus(FocusRequest(handle=handle))
-        return _open_world_from_response(response.world)
+        return _require_world(response.world)
 
     async def leave(self, handle: int) -> None:
         """Leave a locally-open world by handle."""
@@ -394,10 +266,9 @@ class WorldClient(_BaseClient[WorldStub]):
         response = await stub.get_current(GetCurrentRequest())
         if not response.has_world:
             return None
-        return _open_world_from_response(response.world)
+        return response.world
 
-    async def fetch_thumbnail(self, uri: str) -> Thumbnail:
+    async def fetch_thumbnail(self, uri: str) -> FetchThumbnailResponse:
         """Fetch a thumbnail image by its ``resdb:///`` or ``https://`` URI."""
         stub = self._require_stub()
-        response = await stub.fetch_thumbnail(FetchThumbnailRequest(uri=uri))
-        return Thumbnail(data=response.data, content_type=response.content_type)
+        return await stub.fetch_thumbnail(FetchThumbnailRequest(uri=uri))

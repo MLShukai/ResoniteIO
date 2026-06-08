@@ -10,26 +10,81 @@ methods.
 
 from __future__ import annotations
 
+import glob
 import logging
+import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from types import TracebackType
-from typing import ClassVar, Generic, Self, TypeVar
+from typing import ClassVar, Self
 
 # betterproto2 generates one ``ServiceStub`` subclass per service; bounding
 # the type var on that base makes each subclass pin a concrete stub type.
 from betterproto2.grpclib.grpclib_client import ServiceStub
 from grpclib.client import Channel
 
-from resoio._socket import resolve_socket_path
-
 __all__ = [
+    "AmbiguousSocketError",
+    "SocketNotFoundError",
     "_BaseClient",
 ]
 
-TStub = TypeVar("TStub", bound=ServiceStub)
+_SOCKET_GLOB = "resonite-*.sock"
+_DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
 
 
-class _BaseClient(ABC, Generic[TStub]):
+class SocketNotFoundError(RuntimeError):
+    """No ``resonite-*.sock`` matched the configured search directory."""
+
+
+class AmbiguousSocketError(RuntimeError):
+    """Multiple candidate sockets found; set ``RESONITE_IO_SOCKET`` to pick
+    one."""
+
+
+def resolve_socket_path() -> str:
+    """Resolve the UDS path for a Resonite IO gRPC client.
+
+    Resolution order is unified across all modality clients so a
+    zero-argument client just works under the same effective user as the
+    running mod (including across the pressure-vessel sandbox):
+
+    1. ``RESONITE_IO_SOCKET`` (explicit absolute path)
+    2. ``RESONITE_IO_SOCKET_DIR`` (directory containing ``resonite-*.sock``)
+    3. ``~/.resonite-io/`` (matches the C# Mod default)
+
+    Empty env-var values fall through to the next step so a stray
+    ``FOO=`` in shell config does not produce a bogus empty path.
+    """
+    explicit = os.environ.get("RESONITE_IO_SOCKET")
+    if explicit:
+        return explicit
+
+    search_dir = os.environ.get("RESONITE_IO_SOCKET_DIR")
+    if search_dir:
+        return _pick_single_socket(search_dir)
+
+    return _pick_single_socket(str(Path.home() / _DEFAULT_SOCKET_DIR_NAME))
+
+
+def _pick_single_socket(directory: str) -> str:
+    pattern = os.path.join(directory, _SOCKET_GLOB)
+    candidates = sorted(glob.glob(pattern))
+    if not candidates:
+        raise SocketNotFoundError(
+            f"No Resonite IO socket matched {pattern!r}. "
+            "Is the mod running and bound to a UDS?"
+        )
+    if len(candidates) > 1:
+        joined = ", ".join(candidates)
+        raise AmbiguousSocketError(
+            f"Multiple Resonite IO sockets matched {pattern!r}: {joined}. "
+            "Set RESONITE_IO_SOCKET to disambiguate."
+        )
+    return candidates[0]
+
+
+class _BaseClient[TStub: ServiceStub](ABC):
     """Async UDS gRPC channel lifecycle shared by every modality client.
 
     Subclasses set the class attributes :attr:`_logger` and

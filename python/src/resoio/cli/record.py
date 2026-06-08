@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from av.video.stream import VideoStream
 
     from resoio.camera import CameraClient, Frame
-    from resoio.speaker import AudioChunk
+    from resoio.speaker import SpeakerChunk
 
 
 Mode = Literal["muxed", "video", "audio"]
@@ -341,7 +341,7 @@ class _WavFloat32Writer:
         self._fp = fp
         self._bytes_written = 0
 
-    def write(self, chunk: AudioChunk) -> None:
+    def write(self, chunk: SpeakerChunk) -> None:
         """Append one chunk's interleaved float32 LE samples to the file.
 
         ``chunk.samples`` is ``(N, 2)`` float32; ``tobytes()`` returns a
@@ -797,7 +797,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
             _mux_video_packets(container, v_stream, vf)
 
     async def audio_pump(spk: SpeakerClient) -> None:
-        """Pull AudioChunks, encode AAC, share ``t0`` with video."""
+        """Pull SpeakerChunks, encode AAC, share ``t0`` with video."""
         nonlocal audio_pts_initialised
         sample_offset = 0
         # See video_pump: muxing an AAC packet before v_stream has real
@@ -818,7 +818,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
             if pts <= state.audio_pts_seen:
                 pts = state.audio_pts_seen + 1
             state.audio_pts_seen = pts
-            # AudioChunk samples is (N, 2) interleaved L,R — transpose to
+            # SpeakerChunk samples is (N, 2) interleaved L,R — transpose to
             # planar (2, N) for the "fltp" sample format.
             planar = np.ascontiguousarray(chunk.samples.T)
             af = av.AudioFrame.from_ndarray(planar, format="fltp", layout="stereo")

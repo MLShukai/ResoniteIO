@@ -2,7 +2,7 @@
 
 ::: resoio.speaker.SpeakerClient
 
-::: resoio.speaker.AudioChunk
+::: resoio.speaker.SpeakerChunk
 
 ::: resoio.speaker.SAMPLE_RATE
 

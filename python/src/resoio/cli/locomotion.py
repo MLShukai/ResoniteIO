@@ -3,9 +3,12 @@
 The mod-side bridge is a **stateful repeater** — it holds the most
 recent command and re-injects it into the engine every update tick — so
 this CLI is purely event-driven: a :class:`asyncio.Event` is set on
-each state-altering keystroke, the producer wakes and emits a single
-:class:`LocomotionCmd`, and then blocks again until the next keypress.
-No tick loop is required. On graceful exit (``q`` / EOF) the CLI calls
+each state-altering keystroke, the loop wakes and calls
+:meth:`LocomotionClient.send` once with the full hold-state, and then
+blocks again until the next keypress. No tick loop is required. The CLI
+holds the full state of every axis, so it passes all fields on every
+``send`` (equivalent to the previous full-command behaviour). On graceful
+exit (``q`` / EOF) the CLI calls
 :meth:`LocomotionClient.reset` before closing the stream so the avatar
 ends up neutral; Ctrl-C (UDS drop) is handled bridge-side by
 auto-resetting on disconnect, no CLI cleanup needed.
@@ -19,15 +22,13 @@ import os
 import sys
 import termios
 import tty
-from collections.abc import AsyncIterator, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TextIO
 
-from resoio.locomotion import LocomotionCmd
-
 if TYPE_CHECKING:
-    from resoio.locomotion import DriveSummary
+    from resoio.locomotion import DriveSummary, LocomotionClient
 
 
 @dataclass
@@ -49,26 +50,29 @@ class _DriveState:
     sprint_on: bool = False
     crouch_on: bool = False
     # ``jump_pending`` is a single-shot signal: set by Space, drained by
-    # the next :meth:`to_cmd` call with ``consume_jump=True`` (the wire
+    # the next :meth:`emit` call with ``consume_jump=True`` (the wire
     # producer). Consume-once at the engine level lives on the bridge —
     # it fires jump on exactly one tick — so this latch only exists to
     # make sure subsequent emits do not re-send ``jump=True``.
     jump_pending: bool = False
 
-    def to_cmd(
-        self, sprint_velocity: float, *, consume_jump: bool = False
-    ) -> LocomotionCmd:
-        """Snapshot the current state into a :class:`LocomotionCmd`.
+    async def emit(
+        self,
+        client: LocomotionClient,
+        sprint_velocity: float,
+        *,
+        consume_jump: bool = False,
+    ) -> None:
+        """Send the full current hold-state via :meth:`LocomotionClient.send`.
 
-        When ``consume_jump`` is ``False`` (default), this is a pure read:
-        no field on ``self`` is mutated, so callers that only inspect
-        state (e.g. tests, hypothetical status renderers) cannot
-        accidentally drain the jump pulse. The wire producer
-        (``_run_drive.commands``) passes ``consume_jump=True`` to drain
-        ``jump_pending`` atomically with the snapshot, keeping the drain
-        in exactly one place.
+        The CLI tracks every axis, so it always passes all fields (the
+        bridge keeps no field "unset" from this caller's perspective —
+        same behaviour as the previous full-command producer). When
+        ``consume_jump`` is ``True`` the ``jump_pending`` latch is drained
+        atomically with the send, keeping the drain in exactly one place;
+        with the default ``False`` no field on ``self`` is mutated.
         """
-        cmd = LocomotionCmd(
+        await client.send(
             move_forward=self.forward,
             move_right=self.right,
             move_up=self.up,
@@ -80,7 +84,6 @@ class _DriveState:
         )
         if consume_jump:
             self.jump_pending = False
-        return cmd
 
     def reset(self) -> None:
         """Reset every axis to neutral (the ``x`` / ``0`` stop-all key)."""
@@ -151,11 +154,11 @@ def _apply_key(
 ) -> bool:
     """Apply ``key`` to ``state``; return ``True`` iff an exit was requested.
 
-    ``state_changed`` is the wake signal driving the event-driven
-    :func:`commands` producer. Any recognised key that mutates ``state``
-    sets it so the next iteration emits exactly one fresh
-    :class:`LocomotionCmd`. Unrecognised keys and the ``q`` exit key do
-    not set it (the former never changed state; the latter triggers a
+    ``state_changed`` is the wake signal driving the event-driven send
+    loop. Any recognised key that mutates ``state`` sets it so the next
+    iteration emits exactly one fresh
+    :meth:`LocomotionClient.send`. Unrecognised keys and the ``q`` exit key
+    do not set it (the former never changed state; the latter triggers a
     separate stop path).
     """
     match key:
@@ -181,7 +184,7 @@ def _apply_key(
             state.pitch_rate = -look_rate if state.pitch_rate == 0.0 else 0.0
         case " ":
             # Bridge handles consume-once: emitting jump=True in one
-            # LocomotionCmd fires jump on exactly one engine tick.
+            # send() fires jump on exactly one engine tick.
             state.jump_pending = True
         case "t":
             state.sprint_on = not state.sprint_on
@@ -335,9 +338,10 @@ async def _wait_for_bridge_ready(
     ``FAILED_PRECONDITION``.
 
     Same shape as ``tests/e2e/locomotion.py:_wait_for_camera_ready``: open
-    a fresh client, push a single neutral command, and accept either a
-    clean summary or a ``FAILED_PRECONDITION`` GRPCError as a retry
-    signal. Anything else propagates immediately.
+    a fresh client, push a single neutral ``send()`` (all fields unset, so
+    the bridge keeps its initial neutral state), and accept either a clean
+    exit or a ``FAILED_PRECONDITION`` GRPCError as a retry signal. Anything
+    else propagates immediately.
     """
     import time
 
@@ -350,11 +354,7 @@ async def _wait_for_bridge_ready(
     while True:
         try:
             async with LocomotionClient(socket_path) as client:
-
-                async def _one_neutral() -> AsyncIterator[LocomotionCmd]:
-                    yield LocomotionCmd()
-
-                await client.drive(_one_neutral())
+                await client.send()
             return
         except grpclib.exceptions.GRPCError as exc:
             if exc.status != Status.FAILED_PRECONDITION:
@@ -427,8 +427,8 @@ async def _run_drive(args: argparse.Namespace) -> int:
 
     state = _DriveState()
     stop_event = asyncio.Event()
-    # state_changed wakes the event-driven `commands()` producer. The
-    # bridge is a stateful repeater so we only emit on actual change.
+    # state_changed wakes the event-driven send loop. The bridge is a
+    # stateful repeater so we only emit on actual change.
     state_changed = asyncio.Event()
     parser = _KeyParser()
     loop = asyncio.get_running_loop()
@@ -460,31 +460,27 @@ async def _run_drive(args: argparse.Namespace) -> int:
                     state_changed.set()
                     return
 
-    summary: DriveSummary
+    summary: DriveSummary | None = None
     with _raw_tty(sys.stdin):
         loop.add_reader(stdin_fd, on_stdin)
         try:
             async with LocomotionClient(args.socket) as client:
-
-                async def commands() -> AsyncIterator[LocomotionCmd]:
+                try:
                     # Initial neutral so the bridge sees the client and
                     # latches a defined state immediately, instead of
                     # waiting for the first keystroke. ``consume_jump=True``
                     # is the single drain site for ``jump_pending``: the
                     # bridge handles consume-once at the engine level, but
                     # the next emit must not re-send ``jump=True``.
-                    yield state.to_cmd(sprint, consume_jump=True)
+                    await state.emit(client, sprint, consume_jump=True)
                     _write_status(sys.stderr, state, sprint)
                     while not stop_event.is_set():
                         await state_changed.wait()
                         state_changed.clear()
                         if stop_event.is_set():
                             break
-                        yield state.to_cmd(sprint, consume_jump=True)
+                        await state.emit(client, sprint, consume_jump=True)
                         _write_status(sys.stderr, state, sprint)
-
-                try:
-                    summary = await client.drive(commands())
                 except grpclib.exceptions.GRPCError as exc:
                     print(
                         f"\nlocomotion drive failed: {exc.status.name} {exc.message}",
@@ -504,11 +500,19 @@ async def _run_drive(args: argparse.Namespace) -> int:
                         f"\nlocomotion reset failed: {exc.status.name} {exc.message}",
                         file=sys.stderr,
                     )
+
+            # Context has exited: the Drive stream was closed gracefully and
+            # the server summary is resolved on the client.
+            summary = client.drive_summary
         finally:
             loop.remove_reader(stdin_fd)
             # Close the status line so subsequent stderr output starts on
             # a fresh row regardless of how we exited.
             print("", file=sys.stderr)
+
+    if summary is None:
+        print("locomotion drive: no summary produced", file=sys.stderr)
+        return 1
 
     print(
         f"received_count={summary.received_count} "

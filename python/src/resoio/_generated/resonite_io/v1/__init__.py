@@ -1568,60 +1568,77 @@ default_message_pool.register_message(
 @dataclass(eq=False, repr=False)
 class LocomotionCommand(betterproto2.Message):
     """
-    クライアントからサーバへ送る制御コマンド。全 field は変化があった時だけ
-    送れば mod 側 Bridge が engine update tick ごとに再注入する。
+    クライアントからサーバへ送る制御コマンド。**部分更新**: client は変化した
+    field だけを送り、未設定 (未送信) の field は wire に乗らない。mod 側 Bridge は
+    stateful repeater で保持中の state を持ち、未設定 field は前回値をそのまま保持・
+    engine update tick ごとに再注入する。全 8 制御 field は proto3 `optional`
+    (explicit presence) なので「送った / 送らない」を wire で区別できる。
     """
 
-    move_forward: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
+    move_forward: "float | None" = betterproto2.field(
+        1, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
     -1=back, +1=forward。視点方向 (fly/noclip では向いた方向、walk では水平)。
+    未設定なら Bridge は前回値を保持。
     """
 
-    move_right: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
+    move_right: "float | None" = betterproto2.field(
+        2, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
-    -1=left, +1=right (strafe)。
+    -1=left, +1=right (strafe)。未設定なら前回値を保持。
     """
 
-    move_up: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
+    move_up: "float | None" = betterproto2.field(
+        3, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
     -1=down, +1=up。**ワールド絶対**上下 (視点 pitch と独立)。
     SmoothLocomotion の Move に効き fly/noclip で上下移動、歩行系では engine が
-    自動的に無視。proto3 wire default 0 = 中立 (velocity と違い 0 が単位元)。
+    自動的に無視。未設定なら前回値を保持。
     """
 
-    yaw_rate: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
+    yaw_rate: "float | None" = betterproto2.field(
+        4, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
-    Yaw angular rate, positive=right.
+    Yaw angular rate, positive=right。未設定なら前回値を保持。
     """
 
-    pitch_rate: "float" = betterproto2.field(5, betterproto2.TYPE_FLOAT)
+    pitch_rate: "float | None" = betterproto2.field(
+        5, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
     Pitch angular rate, positive=up. Bridge は符号反転せず engine にそのまま
     渡す (decompile からは反転が必要に見えるが実機検証で逆挙動を確認、
-    feedback_locomotion_external_input.md §2 参照)。
+    feedback_locomotion_external_input.md §2 参照)。未設定なら前回値を保持。
     """
 
-    jump: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
+    jump: "bool | None" = betterproto2.field(6, betterproto2.TYPE_BOOL, optional=True)
     """
-    Space 相当の **pulse**。Bridge は受信した次 1 engine tick だけ apply し
-    latch を下げる (consume-once)。client 側で false に戻す責務は無い。
-    """
-
-    velocity: "float" = betterproto2.field(7, betterproto2.TYPE_FLOAT)
-    """
-    Move に掛けるスカラー倍率。**単位元は 1.0** (通常歩行)。Python
-    `LocomotionCmd.velocity` は default=1.0 を保証し、Bridge は proto.velocity
-    を素のまま Move に掛ける (再解釈なし)。engine の
-    `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当は 2.0 を明示する。
-
-    注意: proto3 wire default は 0。raw proto を直接生成して velocity を設定
-    しないと Move が 0 倍され停止する (convenience client なら default 1.0 で
-    回避済み)。**ここが velocity セマンティクスの正典。**
+    Space 相当の **pulse**。present かつ true のときだけ jump が 1 pulse 発火し、
+    Bridge は受信した次 1 engine tick だけ apply し latch を下げる (consume-once)。
+    未設定 / present かつ false は pending を立てず、既存 pending も取り消さない。
     """
 
-    crouch: "float" = betterproto2.field(8, betterproto2.TYPE_FLOAT)
+    velocity: "float | None" = betterproto2.field(
+        7, betterproto2.TYPE_FLOAT, optional=True
+    )
     """
-    Crouch 強度 [0..1]。
+    Move に掛けるスカラー倍率。**単位元は 1.0** (通常歩行)。単位元 1.0 は Bridge の
+    初期 state (`LocomotionInput.Neutral` の velocity=1.0) が担保するため、Python
+    側 wrapper で default 1.0 を保証する必要はない。未設定なら Bridge は前回値
+    (起動直後は 1.0) を保持。Bridge は proto.velocity を素のまま Move に掛ける
+    (再解釈なし)。engine の `ScreenLocomotionDirection.FastMultiplier` (=2.0) 相当は
+    2.0 を明示する。**ここが velocity セマンティクスの正典。**
+    """
+
+    crouch: "float | None" = betterproto2.field(
+        8, betterproto2.TYPE_FLOAT, optional=True
+    )
+    """
+    Crouch 強度 [0..1]。未設定なら前回値を保持。
     """
 
     unix_nanos: "int" = betterproto2.field(9, betterproto2.TYPE_INT64)

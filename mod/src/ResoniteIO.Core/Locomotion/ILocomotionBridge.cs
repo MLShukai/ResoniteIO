@@ -6,8 +6,9 @@ namespace ResoniteIO.Core.Locomotion;
 /// <remarks>
 /// <para>
 /// stateful repeater: Bridge は最新コマンドを保持し engine update tick ごとに
-/// ExternalInput へ再注入する。Service は変化があった command のみ
-/// <see cref="SetState"/> へ流せばよい。
+/// ExternalInput へ再注入する。Service は変化があった field のみを含む
+/// <see cref="LocomotionPartialInput"/> を <see cref="SetState"/> へ流せばよい
+/// (present field のみが保持 state にマージされる)。
 /// </para>
 /// <para>
 /// 本契約は **任意スレッドから呼ばれる**。engine thread への dispatch は実装側
@@ -23,8 +24,12 @@ namespace ResoniteIO.Core.Locomotion;
 /// </remarks>
 public interface ILocomotionBridge
 {
-    /// <summary>最新コマンドを Bridge state に latest-wins で書き込む。</summary>
-    void SetState(LocomotionInput command);
+    /// <summary>
+    /// 差分コマンドを Bridge state にマージする。<paramref name="delta"/> の
+    /// present (非 null) field のみが保持中の state に上書きされ、未設定
+    /// (null) field は前回値をそのまま保持する。
+    /// </summary>
+    void SetState(LocomotionPartialInput delta);
 
     /// <summary>
     /// 指定 field を中立値に戻す。<see cref="LocomotionResetFlags.None"/> は
@@ -100,6 +105,45 @@ public readonly record struct LocomotionInput(
         }
         return state;
     }
+}
+
+/// <summary>
+/// <see cref="ILocomotionBridge.SetState"/> へ渡す差分コマンド。全制御 field は
+/// nullable で、present (非 null) の field のみが保持 state にマージされる
+/// (proto3 <c>optional</c> の field presence を Core 層に写したもの)。
+/// </summary>
+/// <remarks>各 field の semantics は <c>proto/resonite_io/v1/locomotion.proto</c>。</remarks>
+public readonly record struct LocomotionPartialInput(
+    float? MoveForward,
+    float? MoveRight,
+    float? MoveUp,
+    float? YawRate,
+    float? PitchRate,
+    bool? Jump,
+    float? Velocity,
+    float? Crouch,
+    long UnixNanos
+)
+{
+    /// <summary>
+    /// <paramref name="baseState"/> に present (非 null) field のみを上書きした
+    /// 派生 <see cref="LocomotionInput"/> を返す。未設定 (null) field は
+    /// <paramref name="baseState"/> の値を保持する。<see cref="LocomotionInput.UnixNanos"/>
+    /// は本 delta の <see cref="UnixNanos"/> を採用する。
+    /// </summary>
+    public LocomotionInput MergeInto(LocomotionInput baseState) =>
+        baseState with
+        {
+            MoveForward = MoveForward ?? baseState.MoveForward,
+            MoveRight = MoveRight ?? baseState.MoveRight,
+            MoveUp = MoveUp ?? baseState.MoveUp,
+            YawRate = YawRate ?? baseState.YawRate,
+            PitchRate = PitchRate ?? baseState.PitchRate,
+            Jump = Jump ?? baseState.Jump,
+            Velocity = Velocity ?? baseState.Velocity,
+            Crouch = Crouch ?? baseState.Crouch,
+            UnixNanos = UnixNanos,
+        };
 }
 
 /// <summary>

@@ -17,8 +17,8 @@ import grpclib.exceptions
 import numpy as np
 from grpclib.const import Status
 
-from resoio import DTYPE, SAMPLE_RATE, MicrophoneAudioChunk, MicrophoneClient
-from resoio.microphone import paced
+from resoio import MicrophoneClient
+from resoio.microphone import DTYPE, SAMPLE_RATE, paced
 
 SOCKET_PATH: str | None = None
 FREQ_HZ = 440.0
@@ -40,17 +40,18 @@ def build_sine() -> np.ndarray:
     return (AMPLITUDE * np.sin(2 * np.pi * FREQ_HZ * t)).astype(DTYPE, copy=False)
 
 
-async def iter_chunks(samples: np.ndarray) -> AsyncIterator[MicrophoneAudioChunk]:
+async def iter_chunks(samples: np.ndarray) -> AsyncIterator[np.ndarray]:
     """Slice samples into 1024-sample chunks; trailing remainder is dropped.
 
     1024 samples ~ 21.3 ms matches the CLI default and the bridge's
-    preferred frame size.
+    preferred frame size. MicrophoneClient owns frame_id / unix_nanos,
+    so the caller just hands over raw 1-D float32 arrays.
     """
     full_chunks = samples.shape[0] // CHUNK_SAMPLES
     for i in range(full_chunks):
         start = i * CHUNK_SAMPLES
         end = start + CHUNK_SAMPLES
-        yield MicrophoneAudioChunk(samples=samples[start:end], frame_id=i)
+        yield samples[start:end]
 
 
 async def wait_for_ready() -> None:
@@ -63,7 +64,7 @@ async def wait_for_ready() -> None:
         try:
             async with MicrophoneClient(SOCKET_PATH) as client:
 
-                async def empty() -> AsyncIterator[MicrophoneAudioChunk]:
+                async def empty() -> AsyncIterator[np.ndarray]:
                     return
                     yield  # pragma: no cover - makes this a generator
 

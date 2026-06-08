@@ -8,7 +8,7 @@
 
 ::: resoio.world.OpenWorld
 
-::: resoio.world.RecordPage
+::: resoio.world.ListRecordsResponse
 
 ::: resoio.world.RecordSort
 
@@ -18,6 +18,6 @@
 
 ::: resoio.world.SessionFilter
 
-::: resoio.world.SessionPage
+::: resoio.world.ListSessionsResponse
 
-::: resoio.world.Thumbnail
+::: resoio.world.FetchThumbnailResponse

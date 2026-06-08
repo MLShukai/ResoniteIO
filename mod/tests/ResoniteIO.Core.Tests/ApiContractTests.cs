@@ -111,6 +111,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Locomotion.ILocomotionBridge",
             "ResoniteIO.Core.Locomotion.LocomotionDisconnectReason",
             "ResoniteIO.Core.Locomotion.LocomotionInput",
+            "ResoniteIO.Core.Locomotion.LocomotionPartialInput",
             "ResoniteIO.Core.Locomotion.LocomotionResetFlags",
             "ResoniteIO.Core.Locomotion.LocomotionService",
             "ResoniteIO.Core.Logging.ILogSink",
@@ -486,7 +487,7 @@ public sealed class ApiContractTests
             typeof(ILocomotionBridge),
             ("NotifyDisconnect", new[] { typeof(LocomotionDisconnectReason) }),
             ("Reset", new[] { typeof(LocomotionResetFlags) }),
-            ("SetState", new[] { typeof(LocomotionInput) })
+            ("SetState", new[] { typeof(LocomotionPartialInput) })
         );
     }
 

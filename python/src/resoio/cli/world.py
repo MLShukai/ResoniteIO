@@ -362,7 +362,7 @@ def _print_listing(
 
 
 def _print_sessions(
-    sessions: tuple[WorldSession, ...], *, wide: bool, limit: int, show_all: bool
+    sessions: list[WorldSession], *, wide: bool, limit: int, show_all: bool
 ) -> None:
     rows = [
         (
@@ -381,7 +381,7 @@ def _print_sessions(
 
 
 def _print_records(
-    records: tuple[WorldRecord, ...], *, wide: bool, limit: int, show_all: bool
+    records: list[WorldRecord], *, wide: bool, limit: int, show_all: bool
 ) -> None:
     rows = [
         (

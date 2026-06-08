@@ -99,7 +99,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     }
 
     /// <inheritdoc/>
-    public void SetState(LocomotionInput command)
+    public void SetState(LocomotionPartialInput delta)
     {
         if (_disposed)
         {
@@ -111,10 +111,12 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         World? worldToStart;
         lock (_lock)
         {
-            _latest = command;
-            // jump=true の rising edge だけが latch を立てる (false SetState は
-            // 既存 pending を取り消さない)。consume-once 化は TickStep 側で行う。
-            if (command.Jump)
+            // present field のみを保持 state にマージ (未設定は前回値を保持)。
+            _latest = delta.MergeInto(_latest);
+            // jump が present かつ true の rising edge だけが latch を立てる
+            // (None/false は既存 pending を取り消さない)。consume-once 化は
+            // TickStep 側で行う。
+            if (delta.Jump == true)
             {
                 _jumpPending = true;
             }
@@ -514,20 +516,40 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
     }
 
-    private void ReleaseLookCursorLock()
+    /// <summary>
+    /// 保持中の look cursor lock state を snapshot + clear する (lock 内)。release
+    /// 対象が無い (未取得 / world 破棄済み) なら <c>false</c> を返す。release の
+    /// dispatch 方法 (engine thread 直 or <c>RunSynchronously</c>) は呼び出し側が決める。
+    /// </summary>
+    private bool TryTakeLookCursorLock(out World world, out IWorldElement element)
     {
-        World? world;
-        IWorldElement? element;
+        World? takenWorld;
+        IWorldElement? takenElement;
         lock (_lock)
         {
-            world = _lookLockWorld;
-            element = _lookLockElement;
+            takenWorld = _lookLockWorld;
+            takenElement = _lookLockElement;
             _lookLockWorld = null;
             _lookLockElement = null;
             _lookCursorLock = null;
         }
 
-        if (world is null || element is null || world.IsDisposed)
+        if (takenWorld is null || takenElement is null || takenWorld.IsDisposed)
+        {
+            world = null!;
+            element = null!;
+            return false;
+        }
+
+        world = takenWorld;
+        element = takenElement;
+        return true;
+    }
+
+    /// <summary>任意スレッドから呼べる release。unregister を engine thread へ dispatch する。</summary>
+    private void ReleaseLookCursorLock()
+    {
+        if (!TryTakeLookCursorLock(out var world, out var element))
         {
             return;
         }
@@ -545,25 +567,13 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
     }
 
+    /// <summary>engine thread 上 (TickStep 内) からの release。直接 unregister する。</summary>
     private void ReleaseLookCursorLockOnEngine()
     {
-        World? world;
-        IWorldElement? element;
-        lock (_lock)
+        if (TryTakeLookCursorLock(out var world, out var element))
         {
-            world = _lookLockWorld;
-            element = _lookLockElement;
-            _lookLockWorld = null;
-            _lookLockElement = null;
-            _lookCursorLock = null;
+            TryUnregisterLookCursorLock(world, element);
         }
-
-        if (world is null || element is null || world.IsDisposed)
-        {
-            return;
-        }
-
-        TryUnregisterLookCursorLock(world, element);
     }
 
     private void TryUnregisterLookCursorLock(World world, IWorldElement element)

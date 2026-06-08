@@ -2,12 +2,9 @@
 
 from importlib.metadata import version as _version
 
+from resoio._client import AmbiguousSocketError, SocketNotFoundError
 from resoio.camera import CameraClient, Frame
-from resoio.connection import (
-    AmbiguousSocketError,
-    ConnectionClient,
-    SocketNotFoundError,
-)
+from resoio.connection import ConnectionClient
 from resoio.context_menu import (
     ContextMenuClient,
     ContextMenuItem,
@@ -35,31 +32,23 @@ from resoio.inventory import (
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
-    LocomotionCmd,
     ResetSummary,
 )
 from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from resoio.microphone import (
-    MicrophoneAudioChunk,
     MicrophoneClient,
     MicrophoneStreamSummary,
 )
-from resoio.speaker import (
-    CHANNELS,
-    DTYPE,
-    SAMPLE_RATE,
-    AudioChunk,
-    SpeakerClient,
-)
+from resoio.speaker import SpeakerChunk, SpeakerClient
 from resoio.world import (
+    FetchThumbnailResponse,
+    ListRecordsResponse,
+    ListSessionsResponse,
     OpenWorld,
-    RecordPage,
     RecordSort,
     RecordSortDirection,
     RecordSource,
     SessionFilter,
-    SessionPage,
-    Thumbnail,
     WorldClient,
     WorldRecord,
     WorldSession,
@@ -69,11 +58,7 @@ from resoio.world import (
 __version__: str = _version("resonite-io")
 
 __all__ = [
-    "CHANNELS",
-    "DTYPE",
-    "SAMPLE_RATE",
     "AmbiguousSocketError",
-    "AudioChunk",
     "CameraClient",
     "ConnectionClient",
     "ContextMenuClient",
@@ -91,6 +76,7 @@ __all__ = [
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
+    "FetchThumbnailResponse",
     "Frame",
     "GrabResult",
     "GrabState",
@@ -100,23 +86,21 @@ __all__ = [
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "ListRecordsResponse",
+    "ListSessionsResponse",
     "LocomotionClient",
-    "LocomotionCmd",
     "ManipulationClient",
-    "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
     "OpenWorld",
-    "RecordPage",
     "RecordSort",
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
     "SessionFilter",
-    "SessionPage",
     "SocketNotFoundError",
+    "SpeakerChunk",
     "SpeakerClient",
-    "Thumbnail",
     "WorldClient",
     "WorldRecord",
     "WorldSession",

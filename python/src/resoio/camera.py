@@ -19,7 +19,7 @@ __all__ = [
     "Frame",
 ]
 
-_logger = logging.getLogger("resoio.camera")
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,16 +28,27 @@ class Frame:
 
     ``pixels`` is an ``(H, W, 4)`` RGBA8 view over the protobuf payload
     bytes (read-only; call ``.copy()`` for a writable array). Row 0 is
-    the image top. ``unix_nanos`` is the server-side capture timestamp
+    the image top. ``height`` / ``width`` / ``channels`` are derived from
+    ``pixels.shape``. ``unix_nanos`` is the server-side capture timestamp
     in UTC nanos since the Unix epoch. ``frame_id`` is a server-side
     monotonic counter that restarts at 0 per ``stream()`` call.
     """
 
     pixels: NDArray[np.uint8]
-    width: int
-    height: int
     unix_nanos: int
     frame_id: int
+
+    @property
+    def height(self) -> int:
+        return int(self.pixels.shape[0])
+
+    @property
+    def width(self) -> int:
+        return int(self.pixels.shape[1])
+
+    @property
+    def channels(self) -> int:
+        return int(self.pixels.shape[2])
 
 
 class CameraClient(_BaseClient[CameraStub]):
@@ -55,33 +66,21 @@ class CameraClient(_BaseClient[CameraStub]):
     def _make_stub(self, channel: Channel) -> CameraStub:
         return CameraStub(channel)
 
-    async def stream(
-        self,
-        width: int = 0,
-        height: int = 0,
-        fps_limit: float = 0.0,
-    ) -> AsyncIterator[Frame]:
+    async def stream(self) -> AsyncIterator[Frame]:
         """Stream camera frames from the server.
 
-        ``width`` / ``height`` of 0 request the server default
-        (640×480); ``fps_limit`` of 0 means uncapped (best-effort native
-        fps). Raises :class:`RuntimeError` if called outside
-        ``async with``.
+        The capture resolution is the Display modality's responsibility;
+        frames arrive uncapped (best-effort native fps). Raises
+        :class:`RuntimeError` if called outside ``async with``.
         """
         stub = self._require_stub()
-        request = CameraStreamRequest(
-            width=width,
-            height=height,
-            fps_limit=fps_limit,
-        )
+        request = CameraStreamRequest()
         async for raw in stub.stream_frames(request):
             pixels = np.frombuffer(raw.pixels, dtype=np.uint8).reshape(
                 raw.height, raw.width, 4
             )
             yield Frame(
                 pixels=pixels,
-                width=raw.width,
-                height=raw.height,
                 unix_nanos=raw.unix_nanos,
                 frame_id=raw.frame_id,
             )

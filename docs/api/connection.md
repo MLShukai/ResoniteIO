@@ -2,6 +2,6 @@
 
 ::: resoio.connection.ConnectionClient
 
-::: resoio.connection.SocketNotFoundError
+::: resoio.SocketNotFoundError
 
-::: resoio.connection.AmbiguousSocketError
+::: resoio.AmbiguousSocketError

@@ -29,7 +29,7 @@ from typing import IO, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
-from resoio.microphone import DTYPE, SAMPLE_RATE, MicrophoneAudioChunk, paced
+from resoio.microphone import DTYPE, SAMPLE_RATE, paced
 
 if TYPE_CHECKING:
     from resoio.microphone import MicrophoneStreamSummary
@@ -169,7 +169,7 @@ async def _wait_for_bridge_ready(
         try:
             async with MicrophoneClient(socket_path) as client:
 
-                async def _empty() -> AsyncIterator[MicrophoneAudioChunk]:
+                async def _empty() -> AsyncIterator[NDArray[np.float32]]:
                     return
                     yield  # pragma: no cover — marks this a generator
 
@@ -189,7 +189,7 @@ async def _wait_for_bridge_ready(
 def _iter_wav_chunks(
     samples: NDArray[np.float32],
     max_samples: int | None,
-) -> AsyncIterator[MicrophoneAudioChunk]:
+) -> AsyncIterator[NDArray[np.float32]]:
     """Slice a pre-loaded mono buffer into wire-sized frames, paced.
 
     Trailing remainder shorter than a full chunk is dropped, not zero-
@@ -204,16 +204,13 @@ def _iter_wav_chunks(
 
     async def _slice(
         start_idx: int, stop_idx: int
-    ) -> AsyncIterator[MicrophoneAudioChunk]:
+    ) -> AsyncIterator[NDArray[np.float32]]:
         for i in range(start_idx, stop_idx):
             start = i * _CHUNK_SAMPLES
             end = start + _CHUNK_SAMPLES
-            yield MicrophoneAudioChunk(
-                samples=samples[start:end].astype(DTYPE, copy=False),
-                frame_id=i,
-            )
+            yield samples[start:end].astype(DTYPE, copy=False)
 
-    async def _gen() -> AsyncIterator[MicrophoneAudioChunk]:
+    async def _gen() -> AsyncIterator[NDArray[np.float32]]:
         # Warmup burst is unpaced; the tail goes through ``paced`` so
         # all real-time emission logic stays in ``resoio.microphone``.
         async for chunk in _slice(0, warmup_end):
@@ -229,7 +226,7 @@ def _iter_wav_chunks(
 def _iter_stdin_chunks(
     stream: IO[bytes],
     max_samples: int | None,
-) -> AsyncIterator[MicrophoneAudioChunk]:
+) -> AsyncIterator[NDArray[np.float32]]:
     """Read raw float32 LE mono PCM from ``stream`` in 1024-sample frames.
 
     Reads run inside ``asyncio.to_thread`` so the event loop keeps
@@ -238,8 +235,7 @@ def _iter_stdin_chunks(
     """
     chunk_bytes = _CHUNK_SAMPLES * DTYPE.itemsize
 
-    async def _gen() -> AsyncIterator[MicrophoneAudioChunk]:
-        frame_id = 0
+    async def _gen() -> AsyncIterator[NDArray[np.float32]]:
         samples_emitted = 0
         while True:
             if max_samples is not None and samples_emitted >= max_samples:
@@ -252,11 +248,7 @@ def _iter_stdin_chunks(
             if len(data) < remaining_bytes:
                 return  # EOF or short pipe read — drop the partial tail.
             samples = np.frombuffer(data, dtype=DTYPE)
-            yield MicrophoneAudioChunk(
-                samples=samples,
-                frame_id=frame_id,
-            )
-            frame_id += 1
+            yield samples
             samples_emitted += samples.shape[0]
 
     return _gen()
@@ -293,7 +285,7 @@ async def _run(args: argparse.Namespace) -> int:
             return 1
 
     try:
-        chunks: AsyncIterator[MicrophoneAudioChunk]
+        chunks: AsyncIterator[NDArray[np.float32]]
         if source == "-":
             chunks = _iter_stdin_chunks(sys.stdin.buffer, max_samples)
         else:
