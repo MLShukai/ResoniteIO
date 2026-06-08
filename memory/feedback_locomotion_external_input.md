@@ -332,7 +332,7 @@ HFR と LUVR の選択も「engine binding と完全に同じ rotation を採る
   body-local 変換には不向き
 - 新しい proto field (e.g. `body_relative: bool`) で world-fixed mode を
   opt-in したい場合のみ別経路を足す
-- 実機検証は `python/tests/e2e/locomotion.py` (Claude が host-agent
+- 実機検証は `python/tests/e2e/locomotion.py` (Codex が host-agent
   経由で自動駆動する) の 20 s シナリオ MP4 を目視 / フレーム比較する:
   - 前進方向: 0-3 s phase と 9-11 s phase で「yaw 旋回後に前進方向が
     画面上で変わる」こと

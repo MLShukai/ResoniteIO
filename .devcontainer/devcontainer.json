@@ -10,12 +10,11 @@
   // host 側で UDS dir を 0700 作成し、host uid/gid を .env に upsert する (compose の
   // build-arg が読む)。compose 方式では updateRemoteUserUID が効かないため必須。
   "initializeCommand": "bash .devcontainer/initialize.sh",
-  // deps 解決 (dotnet tool restore + uv sync + pre-commit + Claude 設定 symlink)。
+  // deps 解決 (dotnet tool restore + uv sync + pre-commit)。
   "postCreateCommand": "bash scripts/container-init.sh",
   "customizations": {
     "vscode": {
       "extensions": [
-        "anthropic.claude-code",
         "nefrob.vscode-just-syntax",
         "ms-python.python",
         "ms-python.vscode-pylance",
