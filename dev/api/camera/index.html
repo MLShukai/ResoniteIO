@@ -1335,21 +1335,21 @@ deterministically. Socket resolution mirrors
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/resoio/_client.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-47">47</a></span>
-<span class="normal"><a href="#__codelineno-0-48">48</a></span>
-<span class="normal"><a href="#__codelineno-0-49">49</a></span>
-<span class="normal"><a href="#__codelineno-0-50">50</a></span>
-<span class="normal"><a href="#__codelineno-0-51">51</a></span>
-<span class="normal"><a href="#__codelineno-0-52">52</a></span>
-<span class="normal"><a href="#__codelineno-0-53">53</a></span>
-<span class="normal"><a href="#__codelineno-0-54">54</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-47" name="__codelineno-0-47"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-48" name="__codelineno-0-48"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
-<a id="__codelineno-0-49" name="__codelineno-0-49"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
-<a id="__codelineno-0-50" name="__codelineno-0-50"></a>    <span class="c1"># errors surface at the connect site.</span>
-<a id="__codelineno-0-51" name="__codelineno-0-51"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
-<a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-54" name="__codelineno-0-54"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-102" name="__codelineno-0-102"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="c1"># errors surface at the connect site.</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div></td></tr></table></div>
                   </details>
 
@@ -1378,32 +1378,20 @@ deterministically. Socket resolution mirrors
   </span>
 
 <a href="#resoio.camera.CameraClient.stream" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">(</span><span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fps_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Stream camera frames from the server.</p>
-<p><code>width</code> / <code>height</code> of 0 request the server default
-(640×480); <code>fps_limit</code> of 0 means uncapped (best-effort native
-fps). Raises :class:<code>RuntimeError</code> if called outside
-<code>async with</code>.</p>
+<p>The capture resolution is the Display modality's responsibility;
+frames arrive uncapped (best-effort native fps). Raises
+:class:<code>RuntimeError</code> if called outside <code>async with</code>.</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/camera.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-58">58</a></span>
-<span class="normal"><a href="#__codelineno-0-59">59</a></span>
-<span class="normal"><a href="#__codelineno-0-60">60</a></span>
-<span class="normal"><a href="#__codelineno-0-61">61</a></span>
-<span class="normal"><a href="#__codelineno-0-62">62</a></span>
-<span class="normal"><a href="#__codelineno-0-63">63</a></span>
-<span class="normal"><a href="#__codelineno-0-64">64</a></span>
-<span class="normal"><a href="#__codelineno-0-65">65</a></span>
-<span class="normal"><a href="#__codelineno-0-66">66</a></span>
-<span class="normal"><a href="#__codelineno-0-67">67</a></span>
-<span class="normal"><a href="#__codelineno-0-68">68</a></span>
-<span class="normal"><a href="#__codelineno-0-69">69</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-69">69</a></span>
 <span class="normal"><a href="#__codelineno-0-70">70</a></span>
 <span class="normal"><a href="#__codelineno-0-71">71</a></span>
 <span class="normal"><a href="#__codelineno-0-72">72</a></span>
@@ -1420,37 +1408,24 @@ fps). Raises :class:<code>RuntimeError</code> if called outside
 <span class="normal"><a href="#__codelineno-0-83">83</a></span>
 <span class="normal"><a href="#__codelineno-0-84">84</a></span>
 <span class="normal"><a href="#__codelineno-0-85">85</a></span>
-<span class="normal"><a href="#__codelineno-0-86">86</a></span>
-<span class="normal"><a href="#__codelineno-0-87">87</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-58" name="__codelineno-0-58"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span>
-<a id="__codelineno-0-59" name="__codelineno-0-59"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-0-61" name="__codelineno-0-61"></a>    <span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-0-62" name="__codelineno-0-62"></a>    <span class="n">fps_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]:</span>
-<a id="__codelineno-0-64" name="__codelineno-0-64"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stream camera frames from the server.</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65"></a>
-<a id="__codelineno-0-66" name="__codelineno-0-66"></a><span class="sd">    ``width`` / ``height`` of 0 request the server default</span>
-<a id="__codelineno-0-67" name="__codelineno-0-67"></a><span class="sd">    (640×480); ``fps_limit`` of 0 means uncapped (best-effort native</span>
-<a id="__codelineno-0-68" name="__codelineno-0-68"></a><span class="sd">    fps). Raises :class:`RuntimeError` if called outside</span>
-<a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="sd">    ``async with``.</span>
-<a id="__codelineno-0-70" name="__codelineno-0-70"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-71" name="__codelineno-0-71"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
-<a id="__codelineno-0-72" name="__codelineno-0-72"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">CameraStreamRequest</span><span class="p">(</span>
-<a id="__codelineno-0-73" name="__codelineno-0-73"></a>        <span class="n">width</span><span class="o">=</span><span class="n">width</span><span class="p">,</span>
-<a id="__codelineno-0-74" name="__codelineno-0-74"></a>        <span class="n">height</span><span class="o">=</span><span class="n">height</span><span class="p">,</span>
-<a id="__codelineno-0-75" name="__codelineno-0-75"></a>        <span class="n">fps_limit</span><span class="o">=</span><span class="n">fps_limit</span><span class="p">,</span>
-<a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="p">)</span>
-<a id="__codelineno-0-77" name="__codelineno-0-77"></a>    <span class="k">async</span> <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">stub</span><span class="o">.</span><span class="n">stream_frames</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-<a id="__codelineno-0-78" name="__codelineno-0-78"></a>        <span class="n">pixels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">pixels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
-<a id="__codelineno-0-79" name="__codelineno-0-79"></a>            <span class="n">raw</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="n">raw</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="mi">4</span>
-<a id="__codelineno-0-80" name="__codelineno-0-80"></a>        <span class="p">)</span>
-<a id="__codelineno-0-81" name="__codelineno-0-81"></a>        <span class="k">yield</span> <span class="n">Frame</span><span class="p">(</span>
-<a id="__codelineno-0-82" name="__codelineno-0-82"></a>            <span class="n">pixels</span><span class="o">=</span><span class="n">pixels</span><span class="p">,</span>
-<a id="__codelineno-0-83" name="__codelineno-0-83"></a>            <span class="n">width</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">width</span><span class="p">,</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a>            <span class="n">height</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">height</span><span class="p">,</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a>            <span class="n">unix_nanos</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">unix_nanos</span><span class="p">,</span>
-<a id="__codelineno-0-86" name="__codelineno-0-86"></a>            <span class="n">frame_id</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">frame_id</span><span class="p">,</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87"></a>        <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-86">86</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]:</span>
+<a id="__codelineno-0-70" name="__codelineno-0-70"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stream camera frames from the server.</span>
+<a id="__codelineno-0-71" name="__codelineno-0-71"></a>
+<a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">    The capture resolution is the Display modality&#39;s responsibility;</span>
+<a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="sd">    frames arrive uncapped (best-effort native fps). Raises</span>
+<a id="__codelineno-0-74" name="__codelineno-0-74"></a><span class="sd">    :class:`RuntimeError` if called outside ``async with``.</span>
+<a id="__codelineno-0-75" name="__codelineno-0-75"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-77" name="__codelineno-0-77"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">CameraStreamRequest</span><span class="p">()</span>
+<a id="__codelineno-0-78" name="__codelineno-0-78"></a>    <span class="k">async</span> <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">stub</span><span class="o">.</span><span class="n">stream_frames</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<a id="__codelineno-0-79" name="__codelineno-0-79"></a>        <span class="n">pixels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">pixels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+<a id="__codelineno-0-80" name="__codelineno-0-80"></a>            <span class="n">raw</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="n">raw</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="mi">4</span>
+<a id="__codelineno-0-81" name="__codelineno-0-81"></a>        <span class="p">)</span>
+<a id="__codelineno-0-82" name="__codelineno-0-82"></a>        <span class="k">yield</span> <span class="n">Frame</span><span class="p">(</span>
+<a id="__codelineno-0-83" name="__codelineno-0-83"></a>            <span class="n">pixels</span><span class="o">=</span><span class="n">pixels</span><span class="p">,</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a>            <span class="n">unix_nanos</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">unix_nanos</span><span class="p">,</span>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a>            <span class="n">frame_id</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">frame_id</span><span class="p">,</span>
+<a id="__codelineno-0-86" name="__codelineno-0-86"></a>        <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1478,7 +1453,7 @@ fps). Raises :class:<code>RuntimeError</code> if called outside
   </span>
 
 <a href="#resoio.camera.Frame" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Frame</span><span class="p">(</span><span class="n">pixels</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">uint8</span><span class="p">],</span> <span class="n">width</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">height</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">unix_nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frame_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Frame</span><span class="p">(</span><span class="n">pixels</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">uint8</span><span class="p">],</span> <span class="n">unix_nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frame_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1488,7 +1463,8 @@ fps). Raises :class:<code>RuntimeError</code> if called outside
         <p>One decoded camera frame.</p>
 <p><code>pixels</code> is an <code>(H, W, 4)</code> RGBA8 view over the protobuf payload
 bytes (read-only; call <code>.copy()</code> for a writable array). Row 0 is
-the image top. <code>unix_nanos</code> is the server-side capture timestamp
+the image top. <code>height</code> / <code>width</code> / <code>channels</code> are derived from
+<code>pixels.shape</code>. <code>unix_nanos</code> is the server-side capture timestamp
 in UTC nanos since the Unix epoch. <code>frame_id</code> is a server-side
 monotonic counter that restarts at 0 per <code>stream()</code> call.</p>
 

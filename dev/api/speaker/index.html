@@ -937,10 +937,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.speaker.AudioChunk" class="md-nav__link">
+  <a href="#resoio.speaker.SpeakerChunk" class="md-nav__link">
     <span class="md-ellipsis">
       
-        AudioChunk
+        SpeakerChunk
       
     </span>
   </a>
@@ -1303,10 +1303,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resoio.speaker.AudioChunk" class="md-nav__link">
+  <a href="#resoio.speaker.SpeakerChunk" class="md-nav__link">
     <span class="md-ellipsis">
       
-        AudioChunk
+        SpeakerChunk
       
     </span>
   </a>
@@ -1403,21 +1403,21 @@ deterministically. Socket resolution mirrors
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/resoio/_client.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-47">47</a></span>
-<span class="normal"><a href="#__codelineno-0-48">48</a></span>
-<span class="normal"><a href="#__codelineno-0-49">49</a></span>
-<span class="normal"><a href="#__codelineno-0-50">50</a></span>
-<span class="normal"><a href="#__codelineno-0-51">51</a></span>
-<span class="normal"><a href="#__codelineno-0-52">52</a></span>
-<span class="normal"><a href="#__codelineno-0-53">53</a></span>
-<span class="normal"><a href="#__codelineno-0-54">54</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-47" name="__codelineno-0-47"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-48" name="__codelineno-0-48"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
-<a id="__codelineno-0-49" name="__codelineno-0-49"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
-<a id="__codelineno-0-50" name="__codelineno-0-50"></a>    <span class="c1"># errors surface at the connect site.</span>
-<a id="__codelineno-0-51" name="__codelineno-0-51"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
-<a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-54" name="__codelineno-0-54"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-102" name="__codelineno-0-102"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="c1"># errors surface at the connect site.</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div></td></tr></table></div>
                   </details>
 
@@ -1446,13 +1446,13 @@ deterministically. Socket resolution mirrors
   </span>
 
 <a href="#resoio.speaker.SpeakerClient.stream" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AudioChunk</span><span class="p">]</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">SpeakerChunk</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Stream the Resonite final audio mix from the server.</p>
-<p>Yields one :class:<code>AudioChunk</code> per server-emitted <code>AudioFrame</code>.
+<p>Yields one :class:<code>SpeakerChunk</code> per server-emitted <code>AudioFrame</code>.
 Raises :class:<code>RuntimeError</code> if called outside <code>async with</code>.</p>
 
 
@@ -1472,17 +1472,17 @@ Raises :class:<code>RuntimeError</code> if called outside <code>async with</code
 <span class="normal"><a href="#__codelineno-0-80">80</a></span>
 <span class="normal"><a href="#__codelineno-0-81">81</a></span>
 <span class="normal"><a href="#__codelineno-0-82">82</a></span>
-<span class="normal"><a href="#__codelineno-0-83">83</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AudioChunk</span><span class="p">]:</span>
+<span class="normal"><a href="#__codelineno-0-83">83</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">SpeakerChunk</span><span class="p">]:</span>
 <a id="__codelineno-0-70" name="__codelineno-0-70"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stream the Resonite final audio mix from the server.</span>
 <a id="__codelineno-0-71" name="__codelineno-0-71"></a>
-<a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">    Yields one :class:`AudioChunk` per server-emitted ``AudioFrame``.</span>
+<a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">    Yields one :class:`SpeakerChunk` per server-emitted ``AudioFrame``.</span>
 <a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="sd">    Raises :class:`RuntimeError` if called outside ``async with``.</span>
 <a id="__codelineno-0-74" name="__codelineno-0-74"></a><span class="sd">    &quot;&quot;&quot;</span>
 <a id="__codelineno-0-75" name="__codelineno-0-75"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
 <a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">SpeakerStreamRequest</span><span class="p">()</span>
 <a id="__codelineno-0-77" name="__codelineno-0-77"></a>    <span class="k">async</span> <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">stub</span><span class="o">.</span><span class="n">stream_audio</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
 <a id="__codelineno-0-78" name="__codelineno-0-78"></a>        <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">CHANNELS</span><span class="p">)</span>
-<a id="__codelineno-0-79" name="__codelineno-0-79"></a>        <span class="k">yield</span> <span class="n">AudioChunk</span><span class="p">(</span>
+<a id="__codelineno-0-79" name="__codelineno-0-79"></a>        <span class="k">yield</span> <span class="n">SpeakerChunk</span><span class="p">(</span>
 <a id="__codelineno-0-80" name="__codelineno-0-80"></a>            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
 <a id="__codelineno-0-81" name="__codelineno-0-81"></a>            <span class="n">unix_nanos</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">unix_nanos</span><span class="p">,</span>
 <a id="__codelineno-0-82" name="__codelineno-0-82"></a>            <span class="n">frame_id</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">frame_id</span><span class="p">,</span>
@@ -1505,16 +1505,16 @@ Raises :class:<code>RuntimeError</code> if called outside <code>async with</code
 
 
 
-<h2 id="resoio.speaker.AudioChunk" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">resoio.speaker.AudioChunk</span>
+<h2 id="resoio.speaker.SpeakerChunk" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.speaker.SpeakerChunk</span>
 
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
   </span>
 
-<a href="#resoio.speaker.AudioChunk" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">AudioChunk</span><span class="p">(</span><span class="n">samples</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">float32</span><span class="p">],</span> <span class="n">unix_nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frame_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
+<a href="#resoio.speaker.SpeakerChunk" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">SpeakerChunk</span><span class="p">(</span><span class="n">samples</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">float32</span><span class="p">],</span> <span class="n">unix_nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frame_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
