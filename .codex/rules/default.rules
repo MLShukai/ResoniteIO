@@ -1,0 +1,202 @@
+# Migrated from .claude/settings.json and .claude/settings.container.json.
+#
+# Codex rules apply to shell commands that request execution outside the
+# sandbox. Non-shell Claude permissions such as Read/Edit/Write/WebFetch are
+# handled by Codex tools, sandbox settings, and runtime approval mode rather
+# than by prefix_rule entries.
+
+prefix_rule(
+    pattern = [
+        [
+            "awk",
+            "cat",
+            "cd",
+            "command",
+            "echo",
+            "file",
+            "find",
+            "grep",
+            "head",
+            "ls",
+            "rg",
+            "shfmt",
+            "shellcheck",
+            "stat",
+            "strings",
+            "tail",
+            "tree",
+            "unzip",
+            "wc",
+        ],
+    ],
+    decision = "allow",
+    justification = "Repository inspection and formatting helper commands migrated from Claude allow rules.",
+    match = ["rg AGENTS.md", "find . -maxdepth 2 -type f", "shellcheck scripts/container-init.sh"],
+    not_match = ["sudo rg AGENTS.md"],
+)
+
+prefix_rule(
+    pattern = ["git", "-C"],
+    decision = "forbidden",
+    justification = "Use the current working directory instead of git -C so repository scope stays explicit.",
+    match = ["git -C /tmp status"],
+    not_match = ["git status"],
+)
+
+prefix_rule(
+    pattern = ["sudo"],
+    decision = "forbidden",
+    justification = "Do not use sudo from Codex-managed project workflows.",
+    match = ["sudo apt update"],
+    not_match = ["apt update"],
+)
+
+prefix_rule(
+    pattern = ["rm", "-rf", "/"],
+    decision = "forbidden",
+    justification = "Never remove the filesystem root.",
+    match = ["rm -rf /"],
+    not_match = ["rm -rf .pytest_cache"],
+)
+
+prefix_rule(
+    pattern = [
+        "git",
+        [
+            "add",
+            "blame",
+            "branch",
+            "check-ignore",
+            "checkout",
+            "commit",
+            "diff",
+            "fetch",
+            "log",
+            "mv",
+            "pull",
+            "push",
+            "remote",
+            "restore",
+            "rev-parse",
+            "rm",
+            "show",
+            "stash",
+            "status",
+            "switch",
+            "tag",
+        ],
+    ],
+    decision = "allow",
+    justification = "Git operations allowed by the previous Claude project settings.",
+    match = ["git status --short", "git commit -m test", "git push origin HEAD"],
+    not_match = ["git -C /tmp status", "git reset --hard"],
+)
+
+prefix_rule(
+    pattern = ["just"],
+    decision = "allow",
+    justification = "The project wraps build, test, proto generation, docs, and Resonite control commands in just recipes.",
+    match = ["just run", "just gen-proto", "just resonite-status"],
+)
+
+prefix_rule(
+    pattern = ["uv", ["add", "build", "lock", "pip", "python", "python3", "sync", "venv"]],
+    decision = "allow",
+    justification = "Python environment and packaging commands allowed by the previous Claude project settings.",
+    match = ["uv sync --all-extras", "uv pip show grpclib", "uv lock"],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", ["pre-commit", "pyright", "pytest", "python", "python3", "resoio", "ruff"]],
+    decision = "allow",
+    justification = "Project Python commands run through uv-managed environments.",
+    match = ["uv run pytest", "uv run python -m pytest", "uv run ruff check"],
+)
+
+prefix_rule(
+    pattern = ["uvx"],
+    decision = "allow",
+    justification = "Ad-hoc uvx helper execution was allowed in the previous Claude project settings.",
+    match = ["uvx pyright --version"],
+)
+
+prefix_rule(
+    pattern = ["pre-commit", "run"],
+    decision = "allow",
+    justification = "Pre-commit checks are part of the repository quality gate.",
+    match = ["pre-commit run --all-files", "pre-commit run --files AGENTS.md"],
+)
+
+prefix_rule(
+    pattern = [
+        "dotnet",
+        [
+            "--info",
+            "--version",
+            "add",
+            "build",
+            "csharpier",
+            "format",
+            "ilspycmd",
+            "new",
+            "remove",
+            "restore",
+            "sln",
+            "test",
+            "tool",
+        ],
+    ],
+    decision = "allow",
+    justification = ".NET build, test, local-tool, and decompile commands allowed by the previous Claude project settings.",
+    match = ["dotnet build", "dotnet tool restore", "dotnet ilspycmd --version"],
+)
+
+prefix_rule(
+    pattern = ["csharpier"],
+    decision = "allow",
+    justification = "C# formatting helper allowed by the previous Claude project settings.",
+    match = ["csharpier format mod/src"],
+)
+
+prefix_rule(
+    pattern = ["protoc"],
+    decision = "allow",
+    justification = "Proto tooling is part of the repository generation workflow.",
+    match = ["protoc --version"],
+)
+
+prefix_rule(
+    pattern = [["./scripts/gen_proto.sh", "scripts/gen_proto.sh"]],
+    decision = "allow",
+    justification = "Repository proto generation script.",
+    match = ["scripts/gen_proto.sh", "./scripts/gen_proto.sh"],
+)
+
+prefix_rule(
+    pattern = [
+        "bash",
+        [
+            "scripts/container-init.sh",
+            "scripts/decompile.sh",
+            "scripts/gen_proto.sh",
+            "scripts/lib.sh",
+        ],
+    ],
+    decision = "allow",
+    justification = "Repository scripts under scripts/ were allowed by the previous Claude project settings.",
+    match = ["bash scripts/gen_proto.sh", "bash scripts/container-init.sh", "bash scripts/lib.sh"],
+)
+
+prefix_rule(
+    pattern = ["docker", "compose"],
+    decision = "allow",
+    justification = "Devcontainer and host-agent workflows use docker compose.",
+    match = ["docker compose ps", "docker compose -f compose.yml build"],
+)
+
+prefix_rule(
+    pattern = ["gh"],
+    decision = "allow",
+    justification = "GitHub CLI operations were allowed in the previous container Claude settings.",
+    match = ["gh pr status", "gh pr create --fill"],
+)
