@@ -125,6 +125,75 @@ mod-test:
 mod-pack:
     cd mod && dotnet build ResoniteIO.sln -c Release -t:PackTS -v d
 
+# ===== Renderer prebuilt (Camera v2) ====================================
+#
+# Camera v2 の Renderer 側 plugin (net472 / Unity Mono / BepInEx 5) は
+# UnityEngine.CoreModule が非再配布なため CI で build できない。そのため
+# Resonite のあるローカルで build した成果物を mod/prebuilt/renderer/ に commit し、
+# pack/CI はそれを build せずそのまま同梱する (thunderstore.toml の [[build.copy]])。
+# 成果物が Renderer ソースに対して古くならないよう source-hash drift guard を設ける
+# (scripts/renderer-prebuilt-hash.sh + mod/prebuilt/renderer.sha256 + check-renderer-prebuilt)。
+
+# Renderer をローカル Release build し、committed prebuilt 成果物と source hash を更新する。
+# **Resonite (ResonitePath) が必須** (Unity/Renderite DLL の解決に要る)。
+# 成果物の DLL/PDB は mod/prebuilt/renderer/ に、source hash は兄弟パス
+# mod/prebuilt/renderer.sha256 に書く (hash file は zip に入れない方針で dir 外に分離)。
+# 実行後 mod/prebuilt/ の差分を commit すること。
+renderer-prebuild:
+    @if [ -z "${ResonitePath:-}" ] || [ ! -d "${ResonitePath:-}" ]; then \
+        echo "ERROR: Renderer の prebuild には Resonite (ResonitePath) が必要です。" >&2; \
+        echo "       devcontainer + bind-mount された Resonite 環境で実行してください。" >&2; \
+        echo "       (ResonitePath='${ResonitePath:-<unset>}')" >&2; \
+        exit 1; \
+    fi
+    cd mod && dotnet build src/ResoniteIO.Renderer/ResoniteIO.Renderer.csproj -c Release
+    @SRC="mod/src/ResoniteIO.Renderer/bin/Release/net472"; \
+    DEST="mod/prebuilt/renderer"; \
+    if [ ! -f "$SRC/ResoniteIO.Renderer.dll" ]; then \
+        echo "ERROR: build 出力に ResoniteIO.Renderer.dll が見当たりません ($SRC)。" >&2; \
+        exit 1; \
+    fi; \
+    rm -rf "$DEST"; \
+    mkdir -p "$DEST"; \
+    cp "$SRC/ResoniteIO.Renderer.dll" "$DEST/"; \
+    for f in ResoniteIO.Renderer.pdb ResoniteIO.RendererShared.dll System.Memory.dll; do \
+        if [ -f "$SRC/$f" ]; then cp "$SRC/$f" "$DEST/"; fi; \
+    done; \
+    echo "[renderer-prebuild] Copied prebuilt file-set to $DEST/:"; \
+    ls -1 "$DEST"
+    bash scripts/renderer-prebuilt-hash.sh > mod/prebuilt/renderer.sha256
+    @echo "[renderer-prebuild] Wrote source hash to mod/prebuilt/renderer.sha256:"
+    @cat mod/prebuilt/renderer.sha256
+    @echo "[renderer-prebuild] 完了。mod/prebuilt/ の差分を commit してください。"
+
+# committed prebuilt が Renderer ソースと同期しているか検証する。
+# Resonite 不要・build 不要 (CI でそのまま走らせるための軽量 drift guard)。
+# 不一致なら非 0 で fail し、refresh 手順を案内する。
+check-renderer-prebuilt:
+    @HASH_FILE="mod/prebuilt/renderer.sha256"; \
+    DLL="mod/prebuilt/renderer/ResoniteIO.Renderer.dll"; \
+    if [ ! -f "$HASH_FILE" ]; then \
+        echo "ERROR: $HASH_FILE が存在しません (Renderer prebuilt が未 commit)。" >&2; \
+        echo "       Resonite のあるローカルで 'just renderer-prebuild' を実行し commit してください。" >&2; \
+        exit 1; \
+    fi; \
+    if [ ! -f "$DLL" ]; then \
+        echo "ERROR: $DLL が存在しません (prebuilt 本体欠落)。" >&2; \
+        echo "       Resonite のあるローカルで 'just renderer-prebuild' を実行し commit してください。" >&2; \
+        exit 1; \
+    fi; \
+    EXPECTED="$(cat "$HASH_FILE")"; \
+    ACTUAL="$(bash scripts/renderer-prebuilt-hash.sh)"; \
+    if [ "$EXPECTED" != "$ACTUAL" ]; then \
+        echo "ERROR: Renderer のソースが committed prebuilt と乖離しています。" >&2; \
+        echo "       Resonite のあるローカル環境で 'just renderer-prebuild' を実行し、" >&2; \
+        echo "       mod/prebuilt/ の差分を commit してください。" >&2; \
+        echo "       expected=$EXPECTED" >&2; \
+        echo "       actual  =$ACTUAL" >&2; \
+        exit 1; \
+    fi; \
+    echo "[check-renderer-prebuilt] OK: Renderer prebuilt は最新です ($ACTUAL)。"
+
 # ローカル開発成果物と Gale プロファイルに配置された plugin を撤去する。
 # Engine 側 (`gale/BepInEx/plugins/ResoniteIO`) と Renderer 側
 # (`gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer`、Camera v2 用) の
@@ -251,8 +320,10 @@ log:
     fi; \
     tail -F "$LOG"
 
-# format → gen-proto → build → test → type を直列実行。コミット前のゲート。
-run: format gen-proto build test type
+# format → gen-proto → build → test → type → check-renderer-prebuilt を直列実行。
+# コミット前のゲート。末尾の check-renderer-prebuilt は Renderer ソースを変更したのに
+# committed prebuilt の更新を忘れていないかを検出する drift guard (build/test に非依存)。
+run: format gen-proto build test type check-renderer-prebuilt
 
 # ===== Docs (mkdocs) ====================================================
 #

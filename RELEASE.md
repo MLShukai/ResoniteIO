@@ -27,14 +27,14 @@ ______________________________________________________________________
 
 `.github/workflows/` に 6 本。前 5 本は PR / push の品質ゲート、最後の 1 本が tag-driven のリリース。
 
-| ワークフロー      | 名前 / 役割                                                                  | trigger              |
-| ----------------- | ---------------------------------------------------------------------------- | -------------------- |
-| `pre-commit.yml`  | Format & Lint (`pre-commit` を GitHub Actions 内で実行)                      | PR / push            |
-| `test.yml`        | Python テスト matrix (3.12 / 3.13 / 3.14、`ubuntu-latest`)                   | PR / push            |
-| `type-check.yml`  | `pyright` strict 型チェック                                                  | PR / push            |
-| `dotnet.yml`      | C# `Core.Tests` のみ (Mod / net472 Renderer は CI から除外)                  | PR / push            |
-| `proto-check.yml` | `just gen-proto` を回して diff が出ないことを確認 (生成物のコミット漏れ検出) | PR / push            |
-| `publish.yml`     | リリース (4 ジョブ)。下記 §3 参照                                            | `push: tags: ["v*"]` |
+| ワークフロー      | 名前 / 役割                                                                                          | trigger              |
+| ----------------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `pre-commit.yml`  | Format & Lint (`pre-commit` を GitHub Actions 内で実行)                                              | PR / push            |
+| `test.yml`        | Python テスト matrix (3.12 / 3.13 / 3.14、`ubuntu-latest`)                                           | PR / push            |
+| `type-check.yml`  | `pyright` strict 型チェック                                                                          | PR / push            |
+| `dotnet.yml`      | C# `Core.Tests` のみ (Mod / net472 Renderer は CI から除外)。Renderer prebuilt の drift guard も実行 | PR / push            |
+| `proto-check.yml` | `just gen-proto` を回して diff が出ないことを確認 (生成物のコミット漏れ検出)                         | PR / push            |
+| `publish.yml`     | リリース (4 ジョブ)。下記 §3 参照                                                                    | `push: tags: ["v*"]` |
 
 補足:
 
@@ -73,8 +73,12 @@ partial publish の注意は §5)。
 
 - **version guard**: tag の `X.Y.Z` が csproj `<Version>` および `python/pyproject.toml` の `version` と
   一致するか検証。1 つでも食い違えば即 fail (誤った tag を弾く安全弁)。
+- **Renderer prebuilt drift guard**: committed prebuilt (`mod/prebuilt/renderer/`) が Renderer ソースと
+  同期しているかを source hash で検証 (`mod/prebuilt/renderer.sha256` と `scripts/renderer-prebuilt-hash.sh` の
+  出力を照合)。乖離していれば build より前に fast-fail する (`just renderer-prebuild` でローカル更新を案内)。
 - **Thunderstore zip**: `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS`
-  → `mod/build/mlshukai-ResoniteIO-X.Y.Z.zip` を生成。
+  → `mod/build/mlshukai-ResoniteIO-X.Y.Z.zip` を生成。PackTS は Renderer を live build せず、committed
+  prebuilt (`mod/prebuilt/renderer/`) をそのまま同梱する (Renderer は UnityEngine.CoreModule が非再配布なため CI で build 不能)。
 - **Python dists**: `uv build` → `python/dist/` に sdist (`.tar.gz`) と wheel (`.whl`)。
 
 ### 3-2. `publish-thunderstore`
@@ -115,7 +119,10 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加
    (`## [Unreleased]` の内容を確定版セクションに移し替える。Added / Changed / Fixed 等の見出しは Keep a Changelog に従う)
 4. `python/` で `uv lock` を回して lockfile を追従させる
-5. `just run` (`format` → `gen-proto` → `build` → `test` → `type`) が green になるまで回す
+5. **Renderer ソース (`mod/src/ResoniteIO.Renderer/` / `mod/src/ResoniteIO.RendererShared/`) を変更した release のみ**:
+   Resonite のあるローカル環境で `just renderer-prebuild` を実行し、`mod/prebuilt/renderer/` の差分を commit する
+   (committed prebuilt が古いと `build` ジョブの drift guard で fail する)
+6. `just run` (`format` → `gen-proto` → `build` → `test` → `type` → `check-renderer-prebuilt`) が green になるまで回す
 
 ```bash
 gh pr create --base main \

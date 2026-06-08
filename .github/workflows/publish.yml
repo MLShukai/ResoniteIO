@@ -59,6 +59,18 @@ jobs:
             exit 1
           fi
 
+      - name: Renderer prebuilt drift guard (committed DLL must match renderer sources)
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="$(cat mod/prebuilt/renderer.sha256)"
+          ACTUAL="$(bash scripts/renderer-prebuilt-hash.sh)"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Renderer prebuilt is stale. Run 'just renderer-prebuild' locally (with Resonite) and commit mod/prebuilt/renderer/."
+            echo "expected=$EXPECTED actual=$ACTUAL"
+            exit 1
+          fi
+
       - name: Provision InterprocessLib (Camera v2 build dependency)
         shell: bash
         run: ./.github/scripts/fetch-interprocesslib.sh

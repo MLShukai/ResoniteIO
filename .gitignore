@@ -134,6 +134,17 @@ nunit-*.xml
 *.exe
 
 # =============================================================================
+# Committed prebuilt Renderer plugin (Camera v2)
+# =============================================================================
+
+# Renderer plugin は CI で build 不能 (UnityEngine.CoreModule が非再配布) なため
+# ローカル build 成果物を commit する。上の global *.dll/*.pdb ignore を negate する。
+# source hash (mod/prebuilt/renderer.sha256) は *.dll/*.pdb に該当しないので negate 不要。
+!mod/prebuilt/renderer/
+!mod/prebuilt/renderer/*.dll
+!mod/prebuilt/renderer/*.pdb
+
+# =============================================================================
 # Protobuf
 # =============================================================================
 
