@@ -6,6 +6,11 @@ agent code runs). They
 connect over a Unix Domain Socket, so both halves must run on the same host (or share the
 socket directory).
 
+!!! warning "Linux only"
+    ResoniteIO targets Resonite running on Linux through Steam Play (Proton) and communicates
+    over a Unix Domain Socket. **Windows is not supported, and there are no plans to support
+    it.**
+
 !!! note "Documentation versions"
     These docs are versioned with [mike](https://github.com/jimporter/mike) and deployed to
     GitHub Pages by CI: pushing to `main` updates the **`dev`** version, and a stable release

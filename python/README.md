@@ -14,6 +14,10 @@ pip install resonite-io
 
 ## Requires
 
+**Linux only.** The client connects over a Unix Domain Socket (POSIX) and targets a Resonite
+client running on Linux through Steam Play (Proton). Windows is not supported, and there are
+no plans to support it.
+
 A Resonite client running the **ResoniteIO mod** on the same host (the two halves connect
 over a Unix Domain Socket). See the documentation for installing the mod.
 

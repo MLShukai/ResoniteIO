@@ -5,6 +5,10 @@ into a runtime environment for AI agents. A C# mod running inside the Resonite c
 (`ResoniteIO`, loaded via BepisLoader) and a Python package (`resoio`) talk to each other
 over **gRPC on a Unix Domain Socket**.
 
+!!! note "Linux only"
+    ResoniteIO targets Resonite running on Linux through Steam Play (Proton). Windows is not
+    supported. See [Installation](getting-started/installation.md) for details.
+
 ## Design philosophy
 
 ResoniteIO is built like **real-time robotics middleware, not a reinforcement-learning

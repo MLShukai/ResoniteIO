@@ -7,6 +7,10 @@ companion [`resonite-io`](https://pypi.org/project/resonite-io/) Python client (
 
 ## Requirements
 
+- **Linux only.** ResoniteIO targets Resonite running on Linux through Steam Play (Proton)
+  and bridges to the Python client over a Unix Domain Socket. Windows is not supported, and
+  there are no plans to support it.
+
 - The supporting plugins (BepisLoader, BepInExResoniteShim, BepisResoniteWrapper,
   RenderiteHook, InterprocessLib) are resolved automatically as dependencies — install this
   package through a mod manager such as [Gale](https://github.com/Kesomannen/gale).
