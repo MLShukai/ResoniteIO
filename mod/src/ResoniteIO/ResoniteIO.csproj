@@ -39,7 +39,7 @@
     <AssemblyName>ResoniteIO</AssemblyName>
 
     <!-- PluginMetadata 生成元 (BepInEx.ResonitePluginInfoProps が読み取る) -->
-    <Version>0.1.1</Version>
+    <Version>0.2.0</Version>
     <Authors>mlshukai</Authors>
     <PackageId>net.mlshukai.resonite-io</PackageId>
     <Product>ResoniteIO</Product>
