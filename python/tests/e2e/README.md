@@ -41,6 +41,8 @@ in its own `<name>.py` to keep the run target self-describing.
 - `just resonite-start` (boots Resonite via Gale)
 - Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
   (up to 120 s).
+- Waits 45 s after the UDS appears so the focused home world can finish
+  loading before a scenario starts.
 - Calls `Connection.Ping("e2e-smoke")` once via `ConnectionClient`.
 - `just resonite-stop` in `finally:` so Resonite is stopped even on
   failure.

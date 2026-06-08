@@ -47,6 +47,7 @@ from pathlib import Path
 
 import cv2
 import grpclib
+import numpy as np
 from grpclib.const import Status
 from numpy.typing import NDArray
 
@@ -81,6 +82,14 @@ _CAPTURE_HEIGHT = 480
 _CAPTURE_FPS = 30.0
 _MIN_CAMERA_FRAMES = 180
 
+_LOOK_CAPTURE_FPS = 10.0
+_LOOK_CAPTURE_WARMUP_FRAMES = 3
+_LOOK_YAW_RATE = 90.0
+_LOOK_PITCH_RATE = 30.0
+_LOOK_YAW_DURATION_S = 1.5
+_LOOK_PITCH_DURATION_S = 1.5
+_MIN_LOOK_MEAN_ABS_DELTA = 2.0
+
 # Both bridges return FAILED_PRECONDITION until LocalUser / FocusedWorld
 # are ready (and for Locomotion, until SmoothLocomotionBase is the
 # active module). Retry budget is generous because world switch is a
@@ -114,6 +123,76 @@ async def _wait_for_camera_ready() -> None:
             await asyncio.sleep(_BRIDGE_READY_RETRY_INTERVAL_S)
 
 
+async def _capture_look_frame(out_dir: Path, label: str) -> NDArray[np.uint8]:
+    frame_pixels: NDArray[np.uint8] | None = None
+    count = 0
+    async with CameraClient() as cam:
+        async for frame in cam.stream(
+            width=_CAPTURE_WIDTH,
+            height=_CAPTURE_HEIGHT,
+            fps_limit=_LOOK_CAPTURE_FPS,
+        ):
+            frame_pixels = frame.pixels.copy()
+            count += 1
+            if count >= _LOOK_CAPTURE_WARMUP_FRAMES:
+                break
+
+    if frame_pixels is None:
+        raise AssertionError("Camera stream ended before yielding a frame.")
+
+    bgr = cv2.cvtColor(frame_pixels, cv2.COLOR_RGBA2BGR)
+    path = out_dir / f"{label}.png"
+    assert cv2.imwrite(str(path), bgr), f"failed to write {path}"
+    return frame_pixels
+
+
+async def _drive_look(command: LocomotionCmd, duration_s: float) -> int:
+    sent = 0
+    t0 = time.monotonic()
+
+    async def commands() -> AsyncIterator[LocomotionCmd]:
+        nonlocal sent
+        while time.monotonic() - t0 < duration_s:
+            yield command
+            sent += 1
+            await asyncio.sleep(_TICK_INTERVAL_S)
+        yield LocomotionCmd()
+        sent += 1
+
+    async with LocomotionClient() as client:
+        await client.drive(commands())
+        await client.reset(look=True)
+    return sent
+
+
+def _mean_abs_delta(a: NDArray[np.uint8], b: NDArray[np.uint8]) -> float:
+    height = min(a.shape[0], b.shape[0])
+    width = min(a.shape[1], b.shape[1])
+    a_rgb = a[:height, :width, :3].astype(np.int16)
+    b_rgb = b[:height, :width, :3].astype(np.int16)
+    return float(np.mean(np.abs(a_rgb - b_rgb)))
+
+
+async def _verify_look_changes(out_dir: Path) -> tuple[int, int, float, float]:
+    baseline = await _capture_look_frame(out_dir, "look_00_baseline")
+    yaw_sent = await _drive_look(
+        LocomotionCmd(yaw_rate=_LOOK_YAW_RATE), _LOOK_YAW_DURATION_S
+    )
+    yawed = await _capture_look_frame(out_dir, "look_01_after_yaw")
+
+    pitch_sent = await _drive_look(
+        LocomotionCmd(pitch_rate=_LOOK_PITCH_RATE), _LOOK_PITCH_DURATION_S
+    )
+    pitched = await _capture_look_frame(out_dir, "look_02_after_pitch")
+
+    return (
+        yaw_sent,
+        pitch_sent,
+        _mean_abs_delta(baseline, yawed),
+        _mean_abs_delta(yawed, pitched),
+    )
+
+
 def _scenario_command(elapsed: float) -> LocomotionCmd:
     """Return the command to send at ``elapsed`` seconds into the scenario.
 
@@ -142,9 +221,9 @@ def _scenario_command(elapsed: float) -> LocomotionCmd:
         # let the repeater hold the last command indefinitely).
         return LocomotionCmd()
     if elapsed < 11.0:
-        return LocomotionCmd(yaw_rate=0.5)
+        return LocomotionCmd(yaw_rate=90.0)
     if elapsed < 13.0:
-        return LocomotionCmd(pitch_rate=0.5)
+        return LocomotionCmd(pitch_rate=30.0)
     if elapsed < 14.0:
         # Bridge latches jump=True for a single engine tick and drops it,
         # so re-sending here at 30 Hz produces ~30 jump pulses (one per
@@ -286,7 +365,7 @@ class TestLocomotionDrive:
                         ) from e
                     await asyncio.sleep(_BRIDGE_READY_RETRY_INTERVAL_S)
 
-        async def run() -> tuple[int, int]:
+        async def run() -> tuple[int, int, int, int, float, float]:
             # Gate both streams behind a single Camera readiness probe;
             # the Locomotion retry loop handles its own FAILED_PRECONDITION
             # because the world-switch step lives between LocalUser
@@ -298,10 +377,27 @@ class TestLocomotionDrive:
             finally:
                 stop_event.set()
             frames_captured = await camera_task
-            return commands_sent, frames_captured
+            yaw_sent, pitch_sent, yaw_delta, pitch_delta = await _verify_look_changes(
+                out_dir
+            )
+            return (
+                commands_sent,
+                frames_captured,
+                yaw_sent,
+                pitch_sent,
+                yaw_delta,
+                pitch_delta,
+            )
 
         try:
-            commands_sent, frames_captured = asyncio.run(run())
+            (
+                commands_sent,
+                frames_captured,
+                yaw_sent,
+                pitch_sent,
+                yaw_delta,
+                pitch_delta,
+            ) = asyncio.run(run())
         finally:
             if writer is not None:
                 writer.release()
@@ -312,6 +408,10 @@ class TestLocomotionDrive:
         print(
             f"locomotion commands={commands_sent}, camera frames={frames_captured}, "
             f"writer_size={writer_size}"
+        )
+        print(
+            f"locomotion look: yaw_sent={yaw_sent}, pitch_sent={pitch_sent}, "
+            f"yaw_delta={yaw_delta:.3f}, pitch_delta={pitch_delta:.3f}"
         )
 
         assert out_path.exists(), f"MP4 not created at {out_path}"
@@ -332,4 +432,12 @@ class TestLocomotionDrive:
             f"expected >= {_MIN_COMMANDS} locomotion commands in "
             f"~{_SCENARIO_DURATION_S:.0f}s @ {_TICK_HZ} Hz, "
             f"got {commands_sent}"
+        )
+        assert yaw_delta >= _MIN_LOOK_MEAN_ABS_DELTA, (
+            f"yaw did not visibly change the camera frame "
+            f"(mean abs delta {yaw_delta:.3f} < {_MIN_LOOK_MEAN_ABS_DELTA})"
+        )
+        assert pitch_delta >= _MIN_LOOK_MEAN_ABS_DELTA, (
+            f"pitch did not visibly change the camera frame "
+            f"(mean abs delta {pitch_delta:.3f} < {_MIN_LOOK_MEAN_ABS_DELTA})"
         )
