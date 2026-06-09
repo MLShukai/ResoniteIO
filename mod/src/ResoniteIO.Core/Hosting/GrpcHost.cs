@@ -89,7 +89,8 @@ public sealed class GrpcHost : IAsyncDisposable
         IWorldBridge? worldBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        string modVersion = "0.0.0-dev"
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -114,6 +115,7 @@ public sealed class GrpcHost : IAsyncDisposable
             o.MaxSendMessageSize = int.MaxValue;
         });
         builder.Services.AddSingleton(log);
+        builder.Services.AddSingleton(new ModInfo(modVersion));
         if (bridge is not null)
         {
             builder.Services.AddSingleton(bridge);

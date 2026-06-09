@@ -14,6 +14,7 @@ import glob
 import logging
 import os
 from abc import ABC, abstractmethod
+from importlib import metadata
 from pathlib import Path
 from types import TracebackType
 from typing import ClassVar, Self
@@ -27,10 +28,87 @@ __all__ = [
     "AmbiguousSocketError",
     "SocketNotFoundError",
     "_BaseClient",
+    "_reset_version_check",
 ]
 
 _SOCKET_GLOB = "resonite-*.sock"
 _DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
+
+# PyPI distribution name (the import package is `resoio`); used for version lookup.
+_DISTRIBUTION_NAME = "resonite-io"
+_RELEASES_URL = "https://github.com/MLShukai/ResoniteIO/releases"
+_LATEST_ZIP_CMD = (
+    "curl -L -o ResoniteIO.zip "
+    "https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip"
+)
+
+# Process-global guard: the mod/client version mismatch warning fires at most once
+# per process, on the first successful version probe across any modality client.
+_version_checked = False
+
+
+def _reset_version_check() -> None:
+    """Reset the once-per-process version-probe guard (test hook only)."""
+    global _version_checked
+    _version_checked = False
+
+
+async def _maybe_warn_version_mismatch(
+    channel: Channel, logger: logging.Logger
+) -> None:
+    """Probe the mod version once per process and warn on mismatch.
+
+    Runs on the first client ``__aenter__`` after which it never repeats (guarded
+    by :data:`_version_checked`). Never raises: a connection-level failure leaves
+    the guard unset so a later connect retries, while a server response (match,
+    mismatch, or an old mod missing the RPC) marks the probe done.
+    """
+    global _version_checked
+    if _version_checked:
+        return
+
+    # Local imports keep the import graph acyclic (connection stub <-> _client).
+    from grpclib.const import Status
+    from grpclib.exceptions import GRPCError
+
+    from resoio._generated.resonite_io.v1 import ConnectionStub, GetModVersionRequest
+
+    try:
+        client_version = metadata.version(_DISTRIBUTION_NAME)
+    except metadata.PackageNotFoundError:
+        # Editable checkout without installed metadata: cannot compare; skip.
+        return
+
+    try:
+        stub = ConnectionStub(channel)
+        mod_version = (await stub.get_mod_version(GetModVersionRequest())).version
+    except GRPCError as exc:
+        if exc.status is Status.UNIMPLEMENTED:
+            _version_checked = True
+            logger.warning(
+                "ResoniteIO mod is too old to report its version (client=%s); "
+                "please update it from %s. Latest mod: %s",
+                client_version,
+                _RELEASES_URL,
+                _LATEST_ZIP_CMD,
+            )
+        return
+    except Exception:
+        # Connection-level / unexpected failure: leave the guard unset so the
+        # probe retries on a later connect. Never break __aenter__.
+        return
+
+    _version_checked = True
+    if mod_version != client_version:
+        logger.warning(
+            "ResoniteIO version mismatch: mod=%s, client=%s. Install a matching "
+            "mod build from %s via Gale (Import > Local mod...), or `pip install` "
+            "a matching resonite-io. Latest mod: %s",
+            mod_version,
+            client_version,
+            _RELEASES_URL,
+            _LATEST_ZIP_CMD,
+        )
 
 
 class SocketNotFoundError(RuntimeError):
@@ -133,6 +211,7 @@ class _BaseClient[TStub: ServiceStub](ABC):
         self._channel = channel
         self._stub = self._make_stub(channel)
         self._resolved_path = path
+        await _maybe_warn_version_mismatch(channel, self._logger)
         return self
 
     async def __aexit__(

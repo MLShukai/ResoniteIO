@@ -4,12 +4,14 @@ Per CLAUDE.md / testing-strategy the project consolidates shared
 fixtures here as the surface grows.
 """
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 from grpclib.server import Server
+
+from resoio import _client
 
 if TYPE_CHECKING:
     # grpclib's own type for "an object Server([...]) accepts": a generated
@@ -17,6 +19,21 @@ if TYPE_CHECKING:
     # imported at runtime (testing-strategy: don't depend on 3rd-party
     # internals at runtime).
     from grpclib._typing import IServable
+
+
+@pytest.fixture(autouse=True)
+def _mod_version_probe_done() -> Iterator[None]:
+    """Mark the once-per-process mod-version probe as already done per test.
+
+    The probe fires a ``GetModVersion`` RPC on the first client ``__aenter__``
+    per process (see ``resoio._client._maybe_warn_version_mismatch``). Left
+    unmanaged it would run against whichever fake server connects first and
+    couple tests through module state. Defaulting it to "done" keeps unrelated
+    connects probe-free; the version-check tests reset it explicitly to
+    exercise the behaviour.
+    """
+    _client._version_checked = True
+    yield
 
 
 @pytest.fixture

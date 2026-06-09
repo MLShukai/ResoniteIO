@@ -7,10 +7,6 @@
 <p align="center">Turn <a href="https://resonite.com/">Resonite</a> into a runtime environment for AI agents.</p>
 
 <p align="center">
-  <a href="https://thunderstore.io/c/resonite/p/mlshukai/ResoniteIO/"><img src="https://modding.resonite.net/assets/available-on-thunderstore.svg" alt="Available on Thunderstore"></a>
-</p>
-
-<p align="center">
   <a href="https://pypi.org/project/resonite-io/"><img src="https://img.shields.io/pypi/v/resonite-io" alt="PyPI version"></a>
   <a href="https://pypi.org/project/resonite-io/"><img src="https://img.shields.io/pypi/pyversions/resonite-io" alt="Python versions"></a>
   <img src="https://img.shields.io/badge/platform-Linux-blue" alt="Platform: Linux">
@@ -48,10 +44,17 @@ timestamps, and any synchronization you need is done on the receiving side.
 
 ResoniteIO has two halves that install separately and connect over a Unix Domain Socket.
 
-**1. The mod** (runs inside Resonite) — install it from Thunderstore with a mod manager such
-as [Gale](https://github.com/Kesomannen/gale), then set the Steam launch option
-`WINEDLLOVERRIDES="winhttp=n,b" %command%` (required — see the
-[installation guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/installation/)).
+**1. The mod** (runs inside Resonite) — download the latest mod zip from
+[GitHub Releases](https://github.com/MLShukai/ResoniteIO/releases) and import it into a mod
+manager such as [Gale](https://github.com/Kesomannen/gale) via **Import > Local mod...**, then
+set the Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (required — see the
+[installation guide](https://mlshukai.github.io/ResoniteIO/latest/getting-started/installation/)
+for the supporting plugins you must install first). Grab the newest build in one command:
+
+```bash
+curl -L -o ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+# or: wget -O ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+```
 
 **2. The Python client** (runs with your agent):
 

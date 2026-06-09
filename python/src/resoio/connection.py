@@ -8,7 +8,12 @@ from typing import override
 from grpclib.client import Channel
 
 from resoio._client import _BaseClient
-from resoio._generated.resonite_io.v1 import ConnectionStub, PingRequest, PingResponse
+from resoio._generated.resonite_io.v1 import (
+    ConnectionStub,
+    GetModVersionRequest,
+    PingRequest,
+    PingResponse,
+)
 
 __all__ = [
     "ConnectionClient",
@@ -37,3 +42,10 @@ class ConnectionClient(_BaseClient[ConnectionStub]):
     async def ping(self, message: str) -> PingResponse:
         stub = self._require_stub()
         return await stub.ping(PingRequest(message=message))
+
+    async def get_mod_version(self) -> str:
+        """Return the running C# Mod's version string (csproj
+        ``<Version>``)."""
+        stub = self._require_stub()
+        response = await stub.get_mod_version(GetModVersionRequest())
+        return response.version

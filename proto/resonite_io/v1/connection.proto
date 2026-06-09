@@ -22,9 +22,20 @@ message PingResponse {
   int64 server_unix_nanos = 2;
 }
 
+// GetModVersionRequest は引数を持たない (mod のバージョン文字列を問い合わせる)。
+message GetModVersionRequest {}
+
+// GetModVersionResponse は実行中の C# Mod のバージョン (csproj `<Version>` 由来の
+// `PluginMetadata.VERSION`) を返す。クライアントは自身のパッケージ版と照合し、
+// 不一致なら整合する版の取得をユーザーに促す。
+message GetModVersionResponse {
+  string version = 1;
+}
+
 // Connection は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
 // 分割するため、本 service は接続確認と将来的な capability negotiation のみを
 // 担当する。
 service Connection {
   rpc Ping(PingRequest) returns (PingResponse);
+  rpc GetModVersion(GetModVersionRequest) returns (GetModVersionResponse);
 }
