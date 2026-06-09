@@ -24,6 +24,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+`ConnectionClient` also exposes `get_mod_version()`, which returns the running C# mod's
+version string — compare it against `resoio.__version__` to warn on a client/mod mismatch.
+
 ## Stream camera frames
 
 `Camera` is a server-streaming modality (Resonite → Python). Each [`Frame`](../api/camera.md)
@@ -57,3 +60,12 @@ resoio record --video out.mp4     # capture Camera (and/or Speaker) to a file
 
 See the [CLI](../cli.md) page for the full command list, and the
 [API Reference](../api/connection.md) for every client.
+
+## Runnable examples
+
+Every modality has a minimal, runnable script under
+[`python/examples/`](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples) (one
+file per modality) — the fastest way to see a client's call shape end to end. Each
+[API Reference](../api/connection.md) page links its matching example, and the
+[examples README](https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/README.md)
+lists the per-modality preconditions.

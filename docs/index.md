@@ -42,6 +42,7 @@ Resonite-independent.
 - [Architecture › Modalities](architecture/modalities.md) — the full modality matrix.
 - [API Reference](api/connection.md) — the `resoio` Python client API.
 - [CLI](cli.md) — the `resoio` command-line tool.
+- [Examples](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples) — minimal runnable scripts, one per modality.
 
 ## License
 
