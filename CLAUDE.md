@@ -151,7 +151,7 @@ resonite-io/
 
 全レシピは `just --list` で取得可能。サブコマンド分離 (`just py-test` / `just mod-build` 等) は troubleshooting 時のフォールバック。
 
-**`.proto` を変更した場合は必ず `just gen-proto` を再実行し、生成物の差分も同じ commit に含める** (CI で再生成 diff を取るチェックを入れる予定)。
+**`.proto` を変更した場合は必ず `just gen-proto` を再実行し、生成物の差分も同じ commit に含める** (CI の `proto-check` workflow が再生成 diff を検証する)。
 
 ## 実行環境
 
