@@ -21,6 +21,10 @@ any subset.
 | Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse and spawn inventory items. |
 | Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/get the desktop cursor in normalized coords. |
 
+Each modality also ships a minimal runnable script under
+[`python/examples/`](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples), and the
+matching [API Reference](../api/connection.md) page links it.
+
 ## Direction conventions
 
 Audio is split by direction on purpose: **Speaker** carries Resonite → Python audio (what

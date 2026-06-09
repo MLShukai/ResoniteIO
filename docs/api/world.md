@@ -1,5 +1,8 @@
 # World
 
+!!! example "Runnable example"
+    [`python/examples/world_browse.py`](https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/world_browse.py) — session list → join → list open worlds → focus → leave.
+
 ::: resoio.world.WorldClient
 
 ::: resoio.world.WorldRecord
