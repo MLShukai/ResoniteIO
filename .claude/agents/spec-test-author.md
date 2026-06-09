@@ -1,7 +1,7 @@
 ---
 name: spec-test-author
 description: "Use this agent when you need tests that codify a specification — tests that act as executable spec, verifying real behavior of the public interface rather than implementation details. This agent writes tests based on the spec (not the existing implementation), keeps test scenarios explicit and descriptive, and avoids meaningless tautological tests. It is the counterpart to spec-driven-implementer in TDD-style multi-agent workflows. Examples:\\n<example>\\nContext: A spec has been produced and the implementer is about to start coding.\\nuser: \"この仕様に対するテストを先に書いてほしい。実装は spec-driven-implementer が並行で進める。\"\\nassistant: \"Agent toolでspec-test-author agentを起動して、仕様を反映した明示的なテストを記述します。\"\\n<commentary>\\nThe test author writes spec-grounded tests in parallel with implementation.\\n</commentary>\\n</example>\\n<example>\\nContext: Implementation exists but tests are missing or too coupled to internals.\\nuser: \"既存の実装にテストを足したいけど、内部実装に引きずられないように仕様ベースで書いてほしい。\"\\nassistant: \"Agent toolでspec-test-author agentを起動して、公開振る舞いに焦点を当てたテストを記述します。\"\\n<commentary>\\nThe author focuses on the spec/contract, not the current implementation's quirks.\\n</commentary>\\n</example>\\n<example>\\nContext: The implementer questions whether a failing test is correct.\\nuser: \"spec-driven-implementer から『このテストは仕様 X と矛盾しているのでは』という質問が来ている。\"\\nassistant: \"Agent toolでspec-test-author agentに渡して、テストの正当性を判定し、必要なら修正してもらいます。\"\\n<commentary>\\nOnly spec-test-author is allowed to edit tests; implementer cannot modify them.\\n</commentary>\\n</example>"
-model: opus
+model: inherit
 color: cyan
 memory: project
 ---
