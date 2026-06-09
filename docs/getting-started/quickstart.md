@@ -24,13 +24,16 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`ConnectionClient` also exposes `get_mod_version()`, which returns the running C# mod's
-version string — compare it against `resoio.__version__` to warn on a client/mod mismatch.
+Any client already logs a one-time warning on its first connection if the running C# mod's
+version differs from the installed `resoio` package. `ConnectionClient.get_mod_version()`
+returns that mod version string if you want to check it explicitly.
 
 ## Stream camera frames
 
 `Camera` is a server-streaming modality (Resonite → Python). Each [`Frame`](../api/camera.md)
-carries an `(H, W, 4)` RGBA8 array plus a capture timestamp.
+carries an `(H, W, 4)` RGBA8 array plus a capture timestamp. `stream()` takes no arguments —
+frames arrive uncapped at best-effort native fps, and the capture resolution is the
+[Display](../api/display.md) modality's responsibility.
 
 ```python
 import asyncio
@@ -40,7 +43,7 @@ from resoio import CameraClient
 
 async def main() -> None:
     async with CameraClient() as camera:
-        async for frame in camera.stream(width=640, height=480, fps_limit=30):
+        async for frame in camera.stream():
             print(frame.frame_id, frame.width, frame.height, frame.pixels.shape)
             if frame.frame_id >= 100:
                 break
