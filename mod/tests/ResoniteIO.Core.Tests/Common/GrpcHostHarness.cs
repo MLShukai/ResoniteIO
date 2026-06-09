@@ -55,7 +55,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        string modVersion = "0.0.0-dev"
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
@@ -69,7 +70,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
             dashBridge,
             manipulationBridge,
             inventoryBridge,
-            cursorBridge
+            cursorBridge,
+            modVersion
         );
 
     public static async Task<GrpcHostHarness> StartAsync(
@@ -84,7 +86,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        string modVersion = "0.0.0-dev"
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -107,7 +110,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
                 dashBridge,
                 manipulationBridge: manipulationBridge,
                 inventoryBridge: inventoryBridge,
-                cursorBridge: cursorBridge
+                cursorBridge: cursorBridge,
+                modVersion: modVersion
             );
         }
         catch

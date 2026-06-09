@@ -144,7 +144,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 worldBridge: _worldBridge,
                 manipulationBridge: _manipulationBridge,
                 inventoryBridge: _inventoryBridge,
-                cursorBridge: _cursorBridge
+                cursorBridge: _cursorBridge,
+                modVersion: PluginMetadata.VERSION
             );
             Log.LogInfo($"GrpcHost bound at: {_grpcHost.SocketPath}");
         }

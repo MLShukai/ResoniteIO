@@ -57,6 +57,8 @@ __all__ = (
     "FocusResponse",
     "GetCurrentRequest",
     "GetCurrentResponse",
+    "GetModVersionRequest",
+    "GetModVersionResponse",
     "InventoryBase",
     "InventoryCopyRequest",
     "InventoryEntry",
@@ -1158,6 +1160,36 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class GetModVersionRequest(betterproto2.Message):
+    """
+    GetModVersionRequest は引数を持たない (mod のバージョン文字列を問い合わせる)。
+    """
+
+    pass
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GetModVersionRequest", GetModVersionRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class GetModVersionResponse(betterproto2.Message):
+    """
+    GetModVersionResponse は実行中の C# Mod のバージョン (csproj `<Version>` 由来の
+    `PluginMetadata.VERSION`) を返す。クライアントは自身のパッケージ版と照合し、
+    不一致なら整合する版の取得をユーザーに促す。
+    """
+
+    version: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GetModVersionResponse", GetModVersionResponse
+)
+
+
+@dataclass(eq=False, repr=False)
 class InventoryCopyRequest(betterproto2.Message):
     source_path: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
     """
@@ -2180,6 +2212,26 @@ class ConnectionStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
+    async def get_mod_version(
+        self,
+        message: "GetModVersionRequest | None" = None,
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "GetModVersionResponse":
+        if message is None:
+            message = GetModVersionRequest()
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Connection/GetModVersion",
+            message,
+            GetModVersionResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
 
 class ContextMenuStub(betterproto2_grpclib.ServiceStub):
     async def open(
@@ -3115,12 +3167,26 @@ class ConnectionBase(betterproto2_grpclib.ServiceBase):
     async def ping(self, message: "PingRequest") -> "PingResponse":
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def get_mod_version(
+        self, message: "GetModVersionRequest"
+    ) -> "GetModVersionResponse":
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def __rpc_ping(
         self, stream: "grpclib.server.Stream[PingRequest, PingResponse]"
     ) -> None:
         request = await stream.recv_message()
         assert request is not None
         response = await self.ping(request)
+        await stream.send_message(response)
+
+    async def __rpc_get_mod_version(
+        self,
+        stream: "grpclib.server.Stream[GetModVersionRequest, GetModVersionResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.get_mod_version(request)
         await stream.send_message(response)
 
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
@@ -3130,6 +3196,12 @@ class ConnectionBase(betterproto2_grpclib.ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 PingRequest,
                 PingResponse,
+            ),
+            "/resonite_io.v1.Connection/GetModVersion": grpclib.const.Handler(
+                self.__rpc_get_mod_version,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GetModVersionRequest,
+                GetModVersionResponse,
             ),
         }
 

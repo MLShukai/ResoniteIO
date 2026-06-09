@@ -69,6 +69,8 @@ from resoio._generated.resonite_io.v1 import (
     FocusResponse,
     GetCurrentRequest,
     GetCurrentResponse,
+    GetModVersionRequest,
+    GetModVersionResponse,
     InventoryCopyRequest,
     InventoryEntry,
     InventoryEntryKind,
@@ -412,6 +414,10 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     PingResponse: {
         "message": 1,
         "server_unix_nanos": 2,
+    },
+    GetModVersionRequest: {},
+    GetModVersionResponse: {
+        "version": 1,
     },
     # World
     WorldSession: {
