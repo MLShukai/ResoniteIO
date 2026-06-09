@@ -146,14 +146,22 @@ public sealed class DashService : V1.Dash.DashBase
             switch (ex)
             {
                 case DashNotReadyException notReady:
-                    _log.LogInfo($"Dash.{rpc}: bridge not ready: {notReady.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "Dash",
+                        rpc,
+                        StatusCode.FailedPrecondition,
+                        "bridge not ready",
+                        notReady
                     );
                 case ArgumentException invalid:
-                    _log.LogInfo($"Dash.{rpc}: invalid argument: {invalid.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "Dash",
+                        rpc,
+                        StatusCode.InvalidArgument,
+                        "invalid argument",
+                        invalid
                     );
                 default:
                     return null;
