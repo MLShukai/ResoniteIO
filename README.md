@@ -30,11 +30,11 @@ timestamps, and any synchronization you need is done on the receiving side.
 
 ## Modalities
 
-| Direction          | Modalities                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| Resonite → Python  | **Camera**, **Speaker** (server-streaming: vision and audio out)                                       |
-| Python → Resonite  | **Microphone**, **Locomotion** (client-streaming: voice in, movement)                                  |
-| Request / response | **Manipulation**, **Display**, **World**, **ContextMenu**, **Dash**, **Inventory**, **Cursor** (unary) |
+| Direction          | Modalities                                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Resonite → Python  | **Camera**, **Speaker** (server-streaming: vision and audio out)                                                       |
+| Python → Resonite  | **Microphone**, **Locomotion** (client-streaming: voice in, movement)                                                  |
+| Request / response | **Connection**, **Manipulation**, **Display**, **World**, **ContextMenu**, **Dash**, **Inventory**, **Cursor** (unary) |
 
 ## Installation
 
