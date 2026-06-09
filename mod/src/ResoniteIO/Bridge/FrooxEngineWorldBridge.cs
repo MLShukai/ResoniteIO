@@ -425,14 +425,8 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 
         var world = await RunOnEngineAsync(() => ResolveWorld(handle), ct).ConfigureAwait(false);
 
-        await RunOnEngineAsync(
-                () =>
-                {
-                    _worldManager.FocusWorld(world);
-                    return true;
-                },
-                ct
-            )
+        await ResolveDispatchWorld()
+            .RunOnEngineAsync(() => _worldManager.FocusWorld(world), ct)
             .ConfigureAwait(false);
 
         // FocusWorld は _setWorldFocus に積むだけで、FocusedWorld の更新は後続 tick。
@@ -795,26 +789,8 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     /// engine update tick 上で <paramref name="fn"/> を one-shot 実行し結果を await する。
     /// userspace world に marshal する (常に存在する engine world を使う)。
     /// </summary>
-    private async Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct)
-    {
-        var world = ResolveDispatchWorld();
-        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.TrySetResult(fn());
-            }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
-    }
+    private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct) =>
+        ResolveDispatchWorld().RunOnEngineAsync(fn, ct);
 
     /// <summary>
     /// engine update tick 上で <paramref name="fn"/> (engine API を呼ぶ <see cref="Task"/> 起動)
