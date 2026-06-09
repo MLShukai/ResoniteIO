@@ -1,4 +1,7 @@
-"""Client for the Resonite IO ``Microphone`` gRPC streaming service.
+"""Client for the Resonite IO ``Microphone`` modality (Python -> Resonite).
+
+Client-streaming RPC: the client pushes mono float32 chunks that become
+the local user's voice in Resonite.
 
 The bridge on the mod side registers a virtual ``AudioInput`` device
 with Resonite; samples pushed through :meth:`MicrophoneClient.stream`

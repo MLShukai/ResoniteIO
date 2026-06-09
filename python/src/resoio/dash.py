@@ -1,4 +1,6 @@
-"""Client for the Resonite IO ``Dash`` unary RPCs (userspace radiant dash).
+"""Client for the Resonite IO ``Dash`` modality (Python -> Resonite).
+
+Unary RPCs driving the userspace radiant dash overlay.
 
 The Dash service mirrors the userspace overlay opened by the dash button.
 Open / close / get-state RPCs return a :class:`DashState` snapshot of the

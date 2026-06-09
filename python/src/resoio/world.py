@@ -1,5 +1,8 @@
-"""Client for the Resonite IO ``World`` unary RPCs (session / record browsing,
-join / start, and local open-world management)."""
+"""Client for the Resonite IO ``World`` modality (session / world control).
+
+Unary RPCs covering session and world-record browsing, joining and
+starting sessions, and managing the locally-open worlds.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
-"""Client for the Resonite IO ``Manipulation`` unary RPCs (grab / release).
+"""Client for the Resonite IO ``Manipulation`` modality (Python -> Resonite).
+
+Unary RPCs (grab / release / get-state) controlling what a hand holds.
 
 The Manipulation service lets a Python client grab and release grabbable
 objects in Resonite via a chosen hand (``primary`` / ``left`` /
