@@ -18,7 +18,7 @@ namespace ResoniteIO.Bridge;
 /// <para>
 /// 全操作は <see cref="World.RunSynchronously(System.Action)"/> で engine thread に
 /// one-shot で marshal し、<see cref="TaskCompletionSource{T}"/> で結果を待つ
-/// (<see cref="RunOnEngineAsync{T}"/>)。<see cref="WorldManager.FocusedWorld"/> /
+/// (<see cref="EngineDispatch.RunOnEngineAsync{T}"/>)。<see cref="WorldManager.FocusedWorld"/> /
 /// <c>LocalUser</c> / <see cref="InteractionHandler"/> / <see cref="Grabber"/> が
 /// 未準備なら <see cref="ManipulationNotReadyException"/> を投げ、Service 層で
 /// FailedPrecondition に翻訳する。
@@ -53,85 +53,64 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
         CancellationToken ct
     )
     {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var world = ResolveWorld();
-                var resolved = ResolveSelector(world, hand);
-                var grabber = ResolveGrabber(world, resolved);
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var world = ResolveWorld();
+                    var resolved = ResolveSelector(world, hand);
+                    var grabber = ResolveGrabber(world, resolved);
 
-                // proximity grab の中心。point 未指定なら手 (holder slot) の現在 world 位置。
-                var center = point is { } p
-                    ? new float3(p.X, p.Y, p.Z)
-                    : ResolveHandPosition(grabber);
+                    // proximity grab の中心。point 未指定なら手 (holder slot) の現在 world 位置。
+                    var center = point is { } p
+                        ? new float3(p.X, p.Y, p.Z)
+                        : ResolveHandPosition(grabber);
 
-                // Grabber.Grab(float3 point, float radius) — proximity grab。
-                // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
-                var grabbed = grabber.Grab(center, radius);
+                    // Grabber.Grab(float3 point, float radius) — proximity grab。
+                    // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
+                    var grabbed = grabber.Grab(center, radius);
 
-                return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
-            },
-            ct
-        );
+                    return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
+                },
+                ct
+            );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> ReleaseAsync(ManipulationHandSelector hand, CancellationToken ct)
     {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var world = ResolveWorld();
-                var resolved = ResolveSelector(world, hand);
-                var grabber = ResolveGrabber(world, resolved);
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var world = ResolveWorld();
+                    var resolved = ResolveSelector(world, hand);
+                    var grabber = ResolveGrabber(world, resolved);
 
-                // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
-                // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
-                grabber.Release();
+                    // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
+                    // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
+                    grabber.Release();
 
-                return ReadSnapshot(resolved, grabber);
-            },
-            ct
-        );
+                    return ReadSnapshot(resolved, grabber);
+                },
+                ct
+            );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> GetStateAsync(ManipulationHandSelector hand, CancellationToken ct)
     {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var world = ResolveWorld();
-                var resolved = ResolveSelector(world, hand);
-                var grabber = ResolveGrabber(world, resolved);
-                return ReadSnapshot(resolved, grabber);
-            },
-            ct
-        );
-    }
-
-    /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private static async Task<T> RunOnEngineAsync<T>(World world, Func<T> fn, CancellationToken ct)
-    {
-        var tcs = new TaskCompletionSource<T>();
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.SetResult(fn());
-            }
-            catch (Exception e)
-            {
-                tcs.SetException(e);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var world = ResolveWorld();
+                    var resolved = ResolveSelector(world, hand);
+                    var grabber = ResolveGrabber(world, resolved);
+                    return ReadSnapshot(resolved, grabber);
+                },
+                ct
+            );
     }
 
     /// <summary>現在 focus されている world を取得する。未準備なら <see cref="ManipulationNotReadyException"/>。</summary>
