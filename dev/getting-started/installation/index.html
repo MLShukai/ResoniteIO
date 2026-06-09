@@ -534,10 +534,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#c-mod-thunderstore" class="md-nav__link">
+  <a href="#c-mod-github-releases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C# mod — Thunderstore
+        C# mod — GitHub Releases
       
     </span>
   </a>
@@ -1275,10 +1275,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#c-mod-thunderstore" class="md-nav__link">
+  <a href="#c-mod-github-releases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C# mod — Thunderstore
+        C# mod — GitHub Releases
       
     </span>
   </a>
@@ -1385,23 +1385,40 @@ GitHub Pages by CI: pushing to <code>main</code> updates the <strong><code>dev</
 tag publishes a numbered version and moves the <strong><code>latest</code></strong> alias. Use the version selector
 (top of the page) to switch. To build locally, run <code>just docs-serve</code> / <code>just docs-build</code>.</p>
 </div>
-<h2 id="c-mod-thunderstore">C# mod — Thunderstore<a class="headerlink" href="#c-mod-thunderstore" title="Permanent link">&para;</a></h2>
-<p>Install through a Resonite mod manager such as <a href="https://github.com/Kesomannen/gale">Gale</a>:
-search Thunderstore for <strong>ResoniteIO</strong> (package <code>mlshukai-ResoniteIO</code>) and add it to your
-Gale profile. The package declares its dependencies (InterprocessLib, RenderiteHook,
-BepisResoniteWrapper, and — transitively — BepisLoader), so the mod manager pulls in the
-full plugin set for you.</p>
-<p>After installing, set the Steam launch option so BepisLoader can hook the client:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>WINEDLLOVERRIDES=&quot;winhttp=n,b&quot; %command%
+<h2 id="c-mod-github-releases">C# mod — GitHub Releases<a class="headerlink" href="#c-mod-github-releases" title="Permanent link">&para;</a></h2>
+<p>The mod is distributed as a zip on
+<a href="https://github.com/MLShukai/ResoniteIO/releases">GitHub Releases</a> and installed into
+<a href="https://github.com/Kesomannen/gale">Gale</a> via <strong>Import &gt; Local mod...</strong>.</p>
+<p><strong>1. Download the latest mod zip.</strong> It lands in the current directory by default; change the
+output path with <code>-o</code> / <code>-O</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-L<span class="w"> </span>-o<span class="w"> </span>ResoniteIO.zip<span class="w"> </span>https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># or:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>wget<span class="w"> </span>-O<span class="w"> </span>ResoniteIO.zip<span class="w"> </span>https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+</code></pre></div>
+<p><strong>2. Install the supporting plugins first.</strong> A local import does <strong>not</strong> resolve dependencies
+automatically (unlike a Thunderstore install), so add these to your Gale profile from the
+mod manager before importing ResoniteIO:</p>
+<ul>
+<li><code>ResoniteModding-BepisLoader</code></li>
+<li><code>ResoniteModding-BepInExResoniteShim</code></li>
+<li><code>ResoniteModding-BepisResoniteWrapper</code></li>
+<li><code>ResoniteModding-BepInExRenderer</code> — Camera v2 (Renderite framebuffer)</li>
+<li><code>ResoniteModding-RenderiteHook</code> — injects doorstop into the renderer process</li>
+<li><code>Nytra-InterprocessLib</code> — shared-memory queue between engine and renderer</li>
+</ul>
+<p><strong>3. Import the mod.</strong> In Gale, choose <strong>Import &gt; Local mod...</strong> and select the downloaded
+<code>ResoniteIO.zip</code>.</p>
+<p><strong>4. Set the Steam launch option</strong> so BepisLoader can hook the client:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>WINEDLLOVERRIDES=&quot;winhttp=n,b&quot; %command%
 </code></pre></div>
 <p>The <a href="https://github.com/MLShukai/ResoniteIO#readme">repository README</a> explains why the
 launch option is mandatory. Prefer to build the mod yourself? See
 <a href="#build-from-source">Build from source</a> below.</p>
 <h2 id="python-client-pypi">Python client — PyPI<a class="headerlink" href="#python-client-pypi" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>resonite-io
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>resonite-io
 </code></pre></div>
 <p>or, inside a <a href="https://docs.astral.sh/uv/"><code>uv</code></a> project:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>add<span class="w"> </span>resonite-io
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>add<span class="w"> </span>resonite-io
 </code></pre></div>
 <p>The distribution is named <code>resonite-io</code> on PyPI but imports as <code>resoio</code>
 (<code>import resoio</code>). It requires Python ≥ 3.12, is <code>pyright</code>-strict, and ships type
@@ -1414,15 +1431,15 @@ version. The full development environment — .NET 10, <code>uv</code>,
 <code>just init</code> host setup and how to open the dev container.</p>
 <h3 id="c-mod">C# mod<a class="headerlink" href="#c-mod" title="Permanent link">&para;</a></h3>
 <p>From inside the dev container:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>just<span class="w"> </span>build<span class="w">        </span><span class="c1"># dotnet build -c Release</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>just<span class="w"> </span>build<span class="w">        </span><span class="c1"># dotnet build -c Release</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)</span>
 </code></pre></div>
 <p>The mod requires a Gale profile with BepisLoader and the supporting plugins, plus the Steam
 launch option <code>WINEDLLOVERRIDES="winhttp=n,b" %command%</code>. The README documents the exact
 plugin list and why the launch option is mandatory.</p>
 <h3 id="python-client">Python client<a class="headerlink" href="#python-client" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">cd</span><span class="w"> </span>python
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w">   </span><span class="c1"># creates python/.venv with the resoio package and deps</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">cd</span><span class="w"> </span>python
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w">   </span><span class="c1"># creates python/.venv with the resoio package and deps</span>
 </code></pre></div>
 <h2 id="socket-location">Socket location<a class="headerlink" href="#socket-location" title="Permanent link">&para;</a></h2>
 <p>By default the client resolves the socket under <code>~/.resonite-io/</code>. Override it with
