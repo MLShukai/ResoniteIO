@@ -17,15 +17,36 @@ socket directory).
     tag publishes a numbered version and moves the **`latest`** alias. Use the version selector
     (top of the page) to switch. To build locally, run `just docs-serve` / `just docs-build`.
 
-## C# mod — Thunderstore
+## C# mod — GitHub Releases
 
-Install through a Resonite mod manager such as [Gale](https://github.com/Kesomannen/gale):
-search Thunderstore for **ResoniteIO** (package `mlshukai-ResoniteIO`) and add it to your
-Gale profile. The package declares its dependencies (InterprocessLib, RenderiteHook,
-BepisResoniteWrapper, and — transitively — BepisLoader), so the mod manager pulls in the
-full plugin set for you.
+The mod is distributed as a zip on
+[GitHub Releases](https://github.com/MLShukai/ResoniteIO/releases) and installed into
+[Gale](https://github.com/Kesomannen/gale) via **Import > Local mod...**.
 
-After installing, set the Steam launch option so BepisLoader can hook the client:
+**1. Download the latest mod zip.** It lands in the current directory by default; change the
+output path with `-o` / `-O`.
+
+```bash
+curl -L -o ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+# or:
+wget -O ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+```
+
+**2. Install the supporting plugins first.** A local import does **not** resolve dependencies
+automatically (unlike a Thunderstore install), so add these to your Gale profile from the
+mod manager before importing ResoniteIO:
+
+- `ResoniteModding-BepisLoader`
+- `ResoniteModding-BepInExResoniteShim`
+- `ResoniteModding-BepisResoniteWrapper`
+- `ResoniteModding-BepInExRenderer` — Camera v2 (Renderite framebuffer)
+- `ResoniteModding-RenderiteHook` — injects doorstop into the renderer process
+- `Nytra-InterprocessLib` — shared-memory queue between engine and renderer
+
+**3. Import the mod.** In Gale, choose **Import > Local mod...** and select the downloaded
+`ResoniteIO.zip`.
+
+**4. Set the Steam launch option** so BepisLoader can hook the client:
 
 ```text
 WINEDLLOVERRIDES="winhttp=n,b" %command%

@@ -1,7 +1,14 @@
 # リリース手順書 (RELEASE.md)
 
-`ResoniteIO` の **tag-driven リリースパイプライン** の end-to-end runbook。Thunderstore mod
-(`mlshukai-ResoniteIO`) と PyPI パッケージ (distribution `resonite-io`、import は `resoio`) の **2 種類の成果物を 1 つの tag で同時に公開する**。
+`ResoniteIO` の **tag-driven リリースパイプライン** の end-to-end runbook。mod zip (GitHub
+Release に添付、Gale の `Import > Local mod...` で導入) と PyPI パッケージ (distribution
+`resonite-io`、import は `resoio`) の **2 種類の成果物を 1 つの tag で同時に公開する**。
+
+> **配布経路の変更 (重要)**: Thunderstore への upload は **現在停止中**。パッケージが承認されず、
+> その layout が store の流儀に合わなかったため、配布は **GitHub Release のみ** に切り替えた。
+> `publish.yml` の `publish-thunderstore` ジョブは将来の再開に備えて **コメントアウトで残置**して
+> ある。mod zip は従来どおり `PackTS` (tcli) で **ビルド** し、GitHub Release に添付する
+> (`thunderstore.toml` / `Directory.Build.targets` / tcli はこの zip 生成に引き続き使う)。
 
 タスク発火型の要約とトラブルシュートは [`.claude/skills/release-resonite/SKILL.md`](.claude/skills/release-resonite/SKILL.md) に、
 PR / push / `gh` 操作の基本は [`.claude/skills/github-ops/SKILL.md`](.claude/skills/github-ops/SKILL.md) に集約してある。
@@ -34,7 +41,7 @@ ______________________________________________________________________
 | `type-check.yml`  | `pyright` strict 型チェック                                                                          | PR / push            |
 | `dotnet.yml`      | C# `Core.Tests` のみ (Mod / net472 Renderer は CI から除外)。Renderer prebuilt の drift guard も実行 | PR / push            |
 | `proto-check.yml` | `just gen-proto` を回して diff が出ないことを確認 (生成物のコミット漏れ検出)                         | PR / push            |
-| `publish.yml`     | リリース (4 ジョブ)。下記 §3 参照                                                                    | `push: tags: ["v*"]` |
+| `publish.yml`     | リリース (3 ジョブ。Thunderstore upload は停止中で残置)。下記 §3 参照                                | `push: tags: ["v*"]` |
 
 補足:
 
@@ -63,11 +70,11 @@ lockfile を追従させる。Thunderstore zip の `versionNumber` は `Director
 
 ______________________________________________________________________
 
-## 3. `publish.yml` の 4 ジョブ
+## 3. `publish.yml` のジョブ
 
-tag `vX.Y.Z` の push で発火する。依存グラフは `build` → (`publish-thunderstore` ∥ `publish-pypi`)
-→ `github-release`。**publish 2 ジョブは `build` にのみ依存し互いに並列**に走る (詳細と
-partial publish の注意は §5)。
+tag `vX.Y.Z` の push で発火する。依存グラフは `build` → `publish-pypi` → `github-release`。
+(`publish-thunderstore` ジョブは upload 停止中のため **コメントアウトで残置**しており、現行の
+依存グラフには含まれない。)
 
 ### 3-1. `build` (version guard + 成果物ビルド)
 
@@ -81,11 +88,14 @@ partial publish の注意は §5)。
   prebuilt (`mod/prebuilt/renderer/`) をそのまま同梱する (Renderer は UnityEngine.CoreModule が非再配布なため CI で build 不能)。
 - **Python dists**: `uv build` → `python/dist/` に sdist (`.tar.gz`) と wheel (`.whl`)。
 
-### 3-2. `publish-thunderstore`
+### 3-2. `publish-thunderstore` (停止中・コメントアウト残置)
 
-- `tcli publish` で Thunderstore (`resonite` community) にアップロード。
-- 認証は GitHub secret **`TCLI_AUTH_TOKEN`**。`-p:PublishTS=true -p:TcliToken=...` を `PackTS` に渡して実行する。
-- namespace は `mod/thunderstore.toml` の `mlshukai`。
+- **現在は無効**。`publish.yml` 内でジョブ全体がコメントアウトされており、tag push でも実行されない。
+- 将来 store 配布を再開する場合の中身: `tcli publish` で Thunderstore (`resonite` community) に
+  アップロード。認証は GitHub secret **`TCLI_AUTH_TOKEN`**、`-p:PublishTS=true -p:TcliToken=...` を
+  `PackTS` に渡す。namespace は `mod/thunderstore.toml` の `mlshukai`。
+- なお mod zip 自体は `build` ジョブの `PackTS` で生成され、§3-4 の GitHub Release に添付される
+  (store upload とは独立)。
 
 ### 3-3. `publish-pypi`
 
@@ -96,9 +106,11 @@ partial publish の注意は §5)。
 ### 3-4. `github-release`
 
 - `CHANGELOG.md` (repo root) から **`## [X.Y.Z]` セクションを抽出** して Release ノートにする。
-- tag が `(a|b|rc)[0-9]+$` にマッチする場合は **`--prerelease`** を付ける ロジックが残っているが、
-  **dual publish 経路では到達不能** (Thunderstore が prerelease version を拒否するため。§5 参照)。
-- アセットとして **mod zip + python dists** (sdist/wheel) を添付する。
+- tag が `(a|b|rc)[0-9]+$` にマッチする場合は **`--prerelease`** を付ける (§5 参照)。
+- アセットとして **mod zip (`mlshukai-ResoniteIO-X.Y.Z.zip` + 固定名 `ResoniteIO.zip`) + python
+  dists** (sdist/wheel) を添付する。固定名コピーにより
+  `https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip` で常に最新を
+  取得できる (`build` ジョブの "Collect artifacts" で生成)。
 
 ______________________________________________________________________
 
@@ -156,11 +168,17 @@ git push origin vX.Y.Z
 > tag push は `main` への直接 push とは別物。CLAUDE.md の「`main` に直接 push しない」規約は守りつつ、
 > tag は `release/X.Y` を指すものを push する。
 
-push 後、`publish.yml` の 4 ジョブが走る (§3 の依存グラフ参照)。`gh run watch` / GitHub Actions の UI で進捗を追う。
+push 後、`publish.yml` のジョブが走る (§3 の依存グラフ参照)。`gh run watch` / GitHub Actions の UI で進捗を追う。
 
 ______________________________________________________________________
 
-## 5. プレリリース版 (alpha / beta / rc) は打てない
+## 5. プレリリース版 (alpha / beta / rc) — Thunderstore 停止中は可能
+
+> **現状 (Thunderstore upload 停止中)**: 下記の「打てない」制約は **Thunderstore に publish する場合の話**。
+> 現在は GitHub Release + PyPI のみで、両者とも prerelease を受け付けるため、`<Version>` を
+> `0.1.0-rc1` (hyphen 付き、.NET 有効、3 箇所で完全一致) にすれば `v0.1.0-rc1` tag で prerelease を
+> 切れる (`github-release` の `--prerelease` 判定が発火する)。以下の表は store 配布を再開したときの
+> 制約として残す。
 
 **Thunderstore が prerelease バージョンを受け付けないため、`v0.2.0rc1` のような prerelease tag で
 dual publish をリハーサルすることはできない。** 次の 3 者を同時に満たす prerelease 文字列が存在しない:
@@ -186,14 +204,12 @@ prerelease リハーサルが使えないので、以下で代替する:
    (publish はしない)。Thunderstore zip が `mod/build/<namespace>-ResoniteIO-<version>.zip` に出るところまで
    確認する。CI と同様 InterprocessLib が必要 (§3-1 / `.github/scripts/fetch-interprocesslib.sh`)。
 3. **`build` ジョブが唯一の publish 前ゲート**: `publish.yml` は
-   `build` → (`publish-thunderstore` ∥ `publish-pypi`) → `github-release`。publish 2 ジョブは
-   **`build` にのみ依存し互いに並列**に走る。したがって:
+   `build` → `publish-pypi` → `github-release` (Thunderstore upload 停止中)。したがって:
    - `build` が落ちれば何も publish されない (version 番号は無傷)。
-   - **`build` が通れば Thunderstore と PyPI は独立に publish される**。片方の認証/設定だけ壊れていると
-     **片側だけ公開される partial publish** が起こりうる (PyPI の version は不可逆なので特に注意)。
-     tag を打つ前に §7 の `TCLI_AUTH_TOKEN` と PyPI Trusted Publisher が **両方** 有効か確認する。
+   - `build` が通れば PyPI publish → GitHub Release の順で進む。PyPI の version は不可逆なので、
+     tag を打つ前に PyPI Trusted Publisher が有効か確認する。
 4. PyPI 側だけ事前に確かめたいなら TestPyPI の Trusted Publisher を別途設定して `uv build` の成果物を
-   手元から upload する (Thunderstore には相当する staging が無い)。
+   手元から upload する。
 
 ______________________________________________________________________
 
@@ -215,9 +231,10 @@ ______________________________________________________________________
 
 0. **リポジトリ移管**: `Geson-anko/ResoniteIO` → `MLShukai/ResoniteIO` に transfer する。
    **最初の publish tag はこの移管完了後に push する**。CI (非 publish) は移管前でも回せる。
-1. **Thunderstore チーム + secret**:
-   - Thunderstore で team `MLShukai` (namespace `mlshukai`) を作成。
-   - team の service account token を発行し、GitHub repo secret **`TCLI_AUTH_TOKEN`** に登録。
+1. **Thunderstore チーム + secret** (現在は不要 — upload 停止中):
+   - store 配布を再開する場合のみ: Thunderstore で team `MLShukai` (namespace `mlshukai`) を作成し、
+     team の service account token を GitHub repo secret **`TCLI_AUTH_TOKEN`** に登録して
+     `publish.yml` の `publish-thunderstore` ジョブのコメントアウトを解除する。
 2. **PyPI Trusted Publisher + environment**:
    - PyPI 側で Trusted Publisher を設定 (owner `MLShukai` / repo `ResoniteIO` / workflow `publish.yml` / environment `pypi`)。
    - GitHub repo に `pypi` environment を作成する (`publish-pypi` ジョブがこの environment で動く)。
@@ -232,10 +249,10 @@ ______________________________________________________________________
 publish 完了後、以下を確認する:
 
 - [ ] **PyPI ページ** (<https://pypi.org/project/resonite-io/>) に新バージョンが出ている。`pip install resonite-io==X.Y.Z` / `uv add resonite-io==X.Y.Z` が通る
-- [ ] **GitHub Release** が作成され、本文が `CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip + python sdist/wheel** が添付されている
-- [ ] **正式版のみ**: prerelease tag は打てない (§5) ので、Release は常に正式版 (Pre-release バッジは付かない)
-- [ ] **Thunderstore** (`mlshukai/ResoniteIO`) に新バージョンが反映されている
-- [ ] **Gale から導入できる**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Gale 経由で Resonite 起動 → `gale/BepInEx/LogOutput.log` (`just log`) に `Loading Plugin ResoniteIO` が出て load されることを確認
+- [ ] **GitHub Release** が作成され、本文が `CHANGELOG.md` の `## [X.Y.Z]` と一致し、**mod zip
+  (versioned + 固定名 `ResoniteIO.zip`) + python sdist/wheel** が添付されている
+- [ ] **固定名 latest URL** が機能する: `curl -L -o /tmp/ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip` で最新 zip が落ちる
+- [ ] **Gale から導入できる**: 最新 zip を DL → Gale `Import > Local mod...` で import (supporting plugins は事前に導入) → Gale 経由で Resonite 起動 → `gale/BepInEx/LogOutput.log` (`just log`) に `Loading Plugin ResoniteIO` が出て load されることを確認
   (Gale プロファイル / 実機 load 検証の詳細は [`setup-resonite-env skill`](.claude/skills/setup-resonite-env/SKILL.md) §2 / §6)
 
 ______________________________________________________________________
