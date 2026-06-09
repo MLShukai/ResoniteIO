@@ -52,6 +52,13 @@ internal static class BridgeFault
         {
             throw;
         }
+        catch (IOException) when (ct.IsCancellationRequested)
+        {
+            // Kestrel UDS では client cancel が OperationCanceledException でなく IOException で
+            // 表面化する経路がある (feedback_grpc_client_cancel_exception_surface)。
+            // Internal に翻訳せず素通しする。
+            throw;
+        }
         catch (Exception ex)
         {
             var translated = translate?.Invoke(ex);
@@ -65,5 +72,28 @@ internal static class BridgeFault
                 new Status(StatusCode.Internal, $"{modality} bridge faulted: {ex.Message}")
             );
         }
+    }
+
+    /// <summary>
+    /// モダリティ固有例外を <c>LogInfo</c> したうえで <see cref="RpcException"/> に翻訳する定型ヘルパ。
+    /// 各 Service の <c>translate</c> delegate 内の "NotReady → FailedPrecondition" 等の case を畳む。
+    /// </summary>
+    /// <param name="log">情報ログの出力先。</param>
+    /// <param name="modality">"World" / "Dash" 等のモダリティ名 (ログに使う)。</param>
+    /// <param name="rpc">"Join" / "Open" 等の RPC 名 (ログに使う)。</param>
+    /// <param name="code">翻訳後の gRPC status code。</param>
+    /// <param name="label">"bridge not ready" / "not found" 等のログ内ラベル。</param>
+    /// <param name="ex">翻訳対象の例外。<see cref="Exception.Message"/> を Status.Detail に転写する。</param>
+    public static RpcException Translate(
+        ILogSink log,
+        string modality,
+        string rpc,
+        StatusCode code,
+        string label,
+        Exception ex
+    )
+    {
+        log.LogInfo($"{modality}.{rpc}: {label}: {ex.Message}");
+        return new RpcException(new Status(code, ex.Message));
     }
 }

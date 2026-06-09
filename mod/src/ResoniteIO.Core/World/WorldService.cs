@@ -272,7 +272,7 @@ public sealed class WorldService : V1.World.WorldBase
     /// client cancel (<see cref="OperationCanceledException"/> / <see cref="IOException"/> かつ
     /// token cancel 済み) はそのまま伝播させる。
     /// </summary>
-    private async Task<T> CallBridgeAsync<T>(
+    private Task<T> CallBridgeAsync<T>(
         string rpc,
         ServerCallContext context,
         Func<IWorldBridge, CancellationToken, Task<T>> call
@@ -280,37 +280,40 @@ public sealed class WorldService : V1.World.WorldBase
     {
         var bridge = BridgeGuard.Require(_bridge, _log, "World", "IWorldBridge", rpc);
 
-        try
-        {
-            return await call(bridge, context.CancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-            when (ex is not (OperationCanceledException or IOException)
-                || !context.CancellationToken.IsCancellationRequested
-            )
-        {
-            // client cancel は filter で除外され、ここには来ない (そのまま伝播)。
-            throw Translate(rpc, ex);
-        }
-    }
+        return BridgeFault.InvokeAsync(
+            _log,
+            "World",
+            rpc,
+            ct => call(bridge, ct),
+            context.CancellationToken,
+            Translate
+        );
 
-    private RpcException Translate(string rpc, Exception ex)
-    {
-        switch (ex)
+        RpcException? Translate(Exception ex)
         {
-            case WorldNotReadyException notReady:
-                _log.LogInfo($"World.{rpc}: bridge not ready: {notReady.Message}");
-                return new RpcException(
-                    new Status(StatusCode.FailedPrecondition, notReady.Message)
-                );
-            case WorldNotFoundException notFound:
-                _log.LogInfo($"World.{rpc}: not found: {notFound.Message}");
-                return new RpcException(new Status(StatusCode.NotFound, notFound.Message));
-            default:
-                _log.LogError($"World.{rpc}: bridge faulted: {ex}");
-                return new RpcException(
-                    new Status(StatusCode.Internal, $"World bridge faulted: {ex.Message}")
-                );
+            switch (ex)
+            {
+                case WorldNotReadyException notReady:
+                    return BridgeFault.Translate(
+                        _log,
+                        "World",
+                        rpc,
+                        StatusCode.FailedPrecondition,
+                        "bridge not ready",
+                        notReady
+                    );
+                case WorldNotFoundException notFound:
+                    return BridgeFault.Translate(
+                        _log,
+                        "World",
+                        rpc,
+                        StatusCode.NotFound,
+                        "not found",
+                        notFound
+                    );
+                default:
+                    return null;
+            }
         }
     }
 
