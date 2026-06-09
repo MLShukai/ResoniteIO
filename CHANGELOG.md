@@ -7,6 +7,34 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-09
+
+Adds a mod/client version-compatibility check and switches distribution to
+GitHub Release only (Thunderstore upload paused).
+
+### Added
+
+- **`Connection.GetModVersion`**: Added a unary RPC that returns the running
+  mod version. The Python client probes it once per process on first connect
+  (`_BaseClient.__aenter__`) and warns when the mod is older than or mismatched
+  with the client, pointing to the GitHub Release for an aligned build. The
+  probe never fails the connection (errors are swallowed). Exposed on the Python
+  side as `ConnectionClient.get_mod_version()`. The `ModInfo` is injected into
+  the Core `ConnectionService` (Core ← Mod direction preserved; the Mod supplies
+  `PluginMetadata.VERSION` via `GrpcHost.Start(modVersion)`)
+
+### Changed
+
+- **Distribution**: Switched to distributing via GitHub Release only.
+  Thunderstore upload is paused (package unapproved + layout mismatch); the mod
+  is installed through Gale's `Import > Local mod...`. The zip build pipeline
+  (`tcli` / `PackTS` / `thunderstore.toml`) is retained for future store
+  re-enablement, and the `github-release` job additionally attaches a fixed-name
+  `ResoniteIO.zip` for a stable `releases/latest/download/ResoniteIO.zip` URL.
+  README / installation docs now describe the GitHub Release zip → Gale local
+  import flow (supporting plugins must be installed beforehand, since local
+  import does not auto-resolve dependencies)
+
 ## [0.2.0] - 2026-06-08
 
 A **breaking** release that refines the public API of the Python client `resoio`,
@@ -156,4 +184,5 @@ bridge that uses Resonite as an execution environment for AI agents (C# mod
 [0.1.0]: https://github.com/MLShukai/ResoniteIO/releases/tag/v0.1.0
 [0.1.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...v0.1.1
 [0.2.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...v0.2.0
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.2.0...HEAD
+[0.3.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.2.0...v0.3.0
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.3.0...HEAD
