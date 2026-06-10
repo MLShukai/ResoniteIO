@@ -1,11 +1,14 @@
-"""``resoio cursor`` subcommand: move / read the desktop cursor.
+"""``resoio cursor`` subcommand: move / hold / read the desktop cursor.
 
 Flat dispatch via a positional ``action`` (no nested subparsers per
 project convention):
 
 * ``set <x> <y>`` — move the cursor to normalized ``(x, y)`` in ``[0, 1]``
-* ``center`` — move the cursor to the screen center ``(0.5, 0.5)``
-* ``get`` — print the current cursor position (no movement)
+  and hold it there until ``release``
+* ``center`` — move the cursor to the screen center ``(0.5, 0.5)`` and
+  hold it there until ``release``
+* ``get`` — print the current cursor position and hold state (no movement)
+* ``release`` — release the hold (idempotent)
 
 The shared ``-s/--socket`` flag comes from the common parent parser.
 After every action the resulting cursor state is printed.
@@ -32,17 +35,19 @@ def register(
     parser = subparsers.add_parser(
         "cursor",
         parents=[common],
-        help="Move / read the desktop cursor (set/center/get).",
+        help="Move / hold / read the desktop cursor (set/center/get/release).",
         description=(
             "Drive the Resonite IO Cursor service from the shell. Pick an "
-            "action: 'set' needs normalized x y in [0,1]; 'center' moves to "
-            "(0.5, 0.5); 'get' prints the current position. The resulting "
-            "cursor state is printed after every action."
+            "action: 'set' needs normalized x y in [0,1] and holds the cursor "
+            "there until 'release'; 'center' moves to (0.5, 0.5) and holds; "
+            "'get' prints the current position and hold state; 'release' "
+            "releases the hold. The resulting cursor state is printed after "
+            "every action."
         ),
     )
     parser.add_argument(
         "action",
-        choices=["set", "center", "get"],
+        choices=["set", "center", "get", "release"],
         help="The cursor action to perform.",
     )
     parser.add_argument(
@@ -63,7 +68,10 @@ def register(
 
 
 def _format_state(state: CursorState) -> str:
-    return f"x={state.x} y={state.y} window={state.window_width}x{state.window_height}"
+    return (
+        f"x={state.x} y={state.y} "
+        f"window={state.window_width}x{state.window_height} held={state.held}"
+    )
 
 
 async def _run(args: argparse.Namespace) -> int:
@@ -88,6 +96,8 @@ async def _run(args: argparse.Namespace) -> int:
             state = await client.set_position(args.x, args.y)
         elif action == "center":
             state = await client.set_position(0.5, 0.5)
+        elif action == "release":
+            state = await client.release()
         else:
             state = await client.get_position()
 

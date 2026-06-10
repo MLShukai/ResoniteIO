@@ -208,6 +208,7 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.Cursor+CursorBase",
             "ResoniteIO.V1.CursorGetPositionRequest",
             "ResoniteIO.V1.CursorReflection",
+            "ResoniteIO.V1.CursorReleaseRequest",
             "ResoniteIO.V1.CursorSetPositionRequest",
             "ResoniteIO.V1.CursorState",
             "ResoniteIO.V1.Dash",
@@ -559,7 +560,8 @@ public sealed class ApiContractTests
         AssertMethodSignatures(
             typeof(ICursorBridge),
             ("SetPositionAsync", new[] { typeof(float), typeof(float), typeof(CancellationToken) }),
-            ("GetPositionAsync", new[] { typeof(CancellationToken) })
+            ("GetPositionAsync", new[] { typeof(CancellationToken) }),
+            ("ReleaseAsync", new[] { typeof(CancellationToken) })
         );
     }
 

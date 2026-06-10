@@ -44,6 +44,7 @@ from resoio._generated.resonite_io.v1 import (
     ContextMenuOpenRequest,
     ContextMenuState,
     CursorGetPositionRequest,
+    CursorReleaseRequest,
     CursorSetPositionRequest,
     CursorState,
     DashActionResult,
@@ -264,12 +265,14 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "y": 2,
         "window_width": 3,
         "window_height": 4,
+        "held": 5,
     },
     CursorSetPositionRequest: {
         "x": 1,
         "y": 2,
     },
     CursorGetPositionRequest: {},
+    CursorReleaseRequest: {},
     # Inventory
     InventoryEntry: {
         "name": 1,
