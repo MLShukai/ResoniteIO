@@ -86,6 +86,12 @@ icon:
 decompile:
     bash scripts/decompile.sh
 
+# Claude 側 agent 資産を Codex 用 mirror に再生成する。
+# .claude/skills -> .agents/skills、.claude/agents -> .codex/agents、
+# .claude/settings*.json -> .codex/rules/default.rules。
+migrate-codex *ARGS:
+    python3 scripts/migrate_codex.py {{ARGS}}
+
 # ===== Python (python/) =================================================
 
 py-format:

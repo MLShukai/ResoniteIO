@@ -6,7 +6,7 @@ version: 0.1.0
 
 # GitHub Operations (gh CLI)
 
-resonite-io リポジトリでの GitHub 連携 (PR / issue / push) のための skill。**`gh` CLI と `git` はコンテナ内で実行する前提**で、Dockerfile に `gh` apt パッケージを同梱済み。
+resonite-io リポジトリでの GitHub 連携 (PR / issue / push) のための skill。**`gh` CLI と `git` はコンテナ内で実行する前提**で、Dockerfile に `gh` apt パッケージを同梱済み (`.codex/rules/default.rules` で `Bash(git push:*)` / `Bash(gh:*)` を allow 済み)。
 
 このリポジトリの git 運用規約 ([AGENTS.md](../../../AGENTS.md) の「Git 運用」「自走開発フロー」節) を `gh` 操作に落とし込む手順書。
 
@@ -175,6 +175,6 @@ ______________________________________________________________________
 ## 9. 関連設定・参照
 
 - [`Dockerfile`](../../../.devcontainer/Dockerfile) — `gh` apt パッケージのインストール block
-- [`.codex/config.toml`](../../../.codex/config.toml) — Codex project-scoped 設定
+- [`.codex/rules/default.rules`](../../../.codex/rules/default.rules) — `Bash(git push:*)` / `Bash(gh:*)` の allow 設定
 - [`AGENTS.md`](../../../AGENTS.md) — Git 運用節 (branch / commit 命名規約)
 - [`memory/feedback_git_no_pager.md`](../../../memory/feedback_git_no_pager.md) — `git --no-pager` は不要 (`gh` 側も同様に pager 自動 bypass)

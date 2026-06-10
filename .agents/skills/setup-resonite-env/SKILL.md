@@ -29,7 +29,7 @@ ______________________________________________________________________
 3. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash` (`@devcontainers/cli`、既定では未インストール)
 4. devcontainer が自動実行する:
    - `initializeCommand` (host 側・作成前): `~/.resonite-io{,-debug}/` を 0700 で事前作成し、host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)
-   - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install`)
+   - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Codex settings symlink)
 5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する
 
 ______________________________________________________________________
@@ -53,6 +53,12 @@ ______________________________________________________________________
 5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される (deploy 先 dir は csproj の `<Copy>` が自動 mkdir する)
 
 `just check-gale` は BepInExRenderer 検出時に `Renderer/BepInEx/core/BepInEx.Preloader.dll` の存在で判定する (plugin dir ではなく framework dir に deploy するため。`feedback_bepinex_renderer_as_framework.md` 参照)。
+
+### Camera v2 Renderer plugin (committed prebuilt)
+
+Camera v2 の Renderer 側 plugin (`ResoniteIO.Renderer`、net472 Unity Mono、BepInEx 5) は、ローカル build 時に Renderer.csproj の `DeployRendererPlugin` が `gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer/` へ DLL を deploy する (engine 側 `gale/BepInEx/plugins/ResoniteIO/` とは別系統)。
+
+UnityEngine.CoreModule が非再配布で CI build 不可のため、配布物 (Thunderstore zip) には **committed prebuilt** `mod/prebuilt/renderer/` を同梱する (release-resonite skill §7 参照)。**Renderer のソース (`mod/src/ResoniteIO.Renderer/` ∥ `mod/src/ResoniteIO.RendererShared/`) を変更したら、Resonite のあるローカルで `just renderer-prebuild` を実行し `mod/prebuilt/` の差分を commit する**。忘れると `just run` 末尾の `check-renderer-prebuilt` (および CI の drift guard) が fail する。
 
 ホスト Resonite を Vanilla で起動 (Gale を介さず Steam から直接起動) した場合は mod は読み込まれない。注意: Gale 経由起動後にホスト Resonite ディレクトリへ `hookfxr.ini` (`enable=true`) 等が残る場合がある。Vanilla 復帰時は確認すること。
 

@@ -15,6 +15,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "openai.chatgpt",
         "nefrob.vscode-just-syntax",
         "ms-python.python",
         "ms-python.vscode-pylance",

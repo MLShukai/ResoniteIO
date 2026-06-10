@@ -263,7 +263,7 @@ Resonite は Linux では Steam Proton (Wine) 経由で動く。container ↔ ho
 
 - C# / Python の自動テスト (`just test` 配下) は **すべて container 内で実行**。host 側に .NET / uv を入れない方針
 - manual シナリオ (実 Resonite 必須) は host で Resonite が立ち上がる必要があるので、container から `just resonite-start` で host へ起動指示を出す
-- proto 変更時は `just gen-proto` を container 内で流してから commit する。生成物の diff が必ず同 commit に入ること (CI で再生成 diff を取るチェックを入れる予定)
+- proto 変更時は `just gen-proto` を container 内で流してから commit する。生成物の diff が必ず同 commit に入ること (CI の `proto-check` workflow が再生成 diff を検証する)
 
 ## 参考文献
 

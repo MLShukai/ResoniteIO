@@ -99,7 +99,7 @@ docs deps (`mkdocs` / `mkdocs-material` / `mkdocstrings` / `mike`) は `python/p
 - 描画内容は **ソースの docstring がそのまま** 出る。docstring は英語 + Google スタイル
   (`docstring_style: google` を `mkdocs.yml` で指定)。**ドキュメント品質はソースの docstring に
   宿る** ので、API ページ自体に説明を書き足すより、ソースの docstring を直す方が筋が良い
-  (docstring の新規/polish は `docstring-author` subagent に任せられる →
+  (docstring の新規/polish は `docstring-author` agent に任せられる →
   [`.codex/agents/docstring-author.toml`](../../../.codex/agents/docstring-author.toml))。
 - グローバルな mkdocstrings オプション (`show_source` / `members_order` 等) は `mkdocs.yml` の
   handler 設定で一括管理する。ページ側で個別 override は原則しない。
