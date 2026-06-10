@@ -1,37 +1,34 @@
-# Manipulation (FrooxEngineManipulationBridge) ポジティブ grab 検証
+# Manipulation (FrooxEngineManipulationBridge) 手動検証
 
-`FrooxEngineManipulationBridge` が実機の per-hand `Grabber` に
-**カーソルレイの hit 点中心** の grab をさせ、掴んだ grabbable が
-**実際に手に追従する** ことを目視で確認する手動検証手順。加えて
-VR モードで grab が `FAILED_PRECONDITION` で拒否されることを確認する。
-自動 e2e ではカバーできない部分のみをここに残す。
+`FrooxEngineManipulationBridge` の grab/release のうち、**自動 e2e では
+カバーできない部分のみ** をここに残す手動検証手順:
+
+1. **掴んだ object が手に視覚的に追従すること** (目視判断)
+2. **前後に並べた 2 つの object のうち手前が掴まれること**
+   (raycast の距離順先頭 = 最手前という仮定の実機確認)
+3. **VR モードで grab が `FAILED_PRECONDITION` になること**
+   (VR への切替は人間の HMD 操作が必要)
 
 実装計画上の対応:
 
 - [resonite_io_plan.md](../../../resonite_io_plan.md) Step 6 (Manipulation) の
-  grab/release が **物を実際に掴めること** の目視確認相当
-- RPC 経路 (mod ロード / bridge が実 Grabber に到達 / カーソル照準 → レイ計算 →
-  raycast → grab の呼び出し経路が例外なく回る / レスポンスが well-formed /
-  hand 解決が正しい) の自動検証は
+  grab/release の目視確認相当
+- **ポジティブ grab は自動 e2e 化済み**:
   [python/tests/e2e/manipulation.py](../../../python/tests/e2e/manipulation.py)
-  で `just e2e-test manipulation` 経由
-- 残るマニュアル要素:
-  1. **掴める object にカーソルを重ねた上で `grabbed=True` /
-     `is_holding=True` になり、掴んだ object が手に視覚的に追従すること**。
-     これは本質的に人間しかできない (後述)
-  2. **前後に並べた 2 つの object のうち手前が掴まれること**
-     (raycast の距離順先頭 = 最手前という仮定の実機確認)
-  3. **VR モードで grab が `FAILED_PRECONDITION` になること**
-     (VR への切替は人間の HMD 操作が必要)
+  が `InventoryClient.spawn("/Inventory/Resonite Essentials/Mirror")` で
+  grabbable な Mirror を spawn → cursor 照準 → `grabbed=True` /
+  `object_names` に `Mirror` → release で `is_holding=False` までを
+  自動 assert する (`just e2e-test manipulation` 経由)。RPC 経路
+  (mod ロード / bridge が実 Grabber に到達 / hand 解決 / well-formed
+  レスポンス) も同テストがカバーする
 
-## なぜ手動なのか
+## なぜこの 3 点だけ手動なのか
 
-default の home world は grabbable object を一切公開しておらず、
-grabbable を **決定論的に spawn する API も無い**。そのため自動 e2e では
-`grabbed=False` のまま「呼び出し経路が例外なく回る」ことしか確認できない。
-掴んだ object が手に追従するか否か・手前の object が選ばれるかは目視判断に
-なるため、ポジティブ grab はこの手動手順に分離している。VR モード確認も
-HMD の装着 / モード切替が必要で自動化できない。
+- 「掴んだ object が手に追従して動く」は位置 API が無く、視点・手を
+  動かしながらの目視でしか確認できない
+- 「手前の object が選ばれる」は前後 2 object の配置とカーソル照準の
+  微調整が必要で、目視での照準合わせが前提になる
+- VR モード切替は HMD の装着 / モード切替が必要で自動化できない
 
 ## 前提
 
@@ -45,13 +42,8 @@ HMD の装着 / モード切替が必要で自動化できない。
 - container 内で `cd python && uv sync` 済み
 - Resonite は **デスクトップ (screen) モード** で起動している (VR 確認手順を
   除く)
-- **掴める object を 1 つ用意する**。例:
-  - Dev Tool / インベントリ から box などの grabbable prop を視界内に
-    spawn する、または
-  - 既に grabbable な prop が置いてある world に居る / その prop が見える
-    位置に立つ
 
-## 手順: ポジティブ grab (カーソル照準)
+## 手順: 掴んだ object が手に追従すること (目視)
 
 container 内 shell から deploy + 起動:
 
@@ -60,46 +52,39 @@ just deploy-mod                # build + plugin deploy
 just resonite-start            # host 経由で Gale → Resonite 起動
 ```
 
-Resonite 内で:
-
-1. 掴める object を視界内に spawn / 配置する (座標を控える必要はない)
-2. object が画面に映る位置・向きに立つ
-
-container 内 shell からカーソルを object に重ねる (正規化座標 `<x> <y>` は
-0.0〜1.0。まず中央 `0.5 0.5` に置き、screenshot を見ながら調整する):
+home world ロード後、grabbable を spawn する (`resoio inventory` は
+対話 REPL なので、shell 内で `spawn` を打ってから `exit` する):
 
 ```sh
-uv run --project python resoio cursor set 0.5 0.5
-python3 scripts/resonite_cli.py screenshot --output /tmp/aim.png
-# カーソルが object に重なるまで cursor set の座標を調整して繰り返す
+uv run --project python resoio inventory
+# REPL 内:
+#   resoio:/Inventory$ spawn "/Inventory/Resonite Essentials/Mirror"
+#   resoio:/Inventory$ exit
 ```
 
-カーソルが object に重なったら grab:
+5 秒ほど待って Mirror が定位置に収まったら、カーソルを重ねて掴む
+(e2e と同じ経路):
 
 ```sh
-uv run --project python resoio manipulate grab --hand right --radius 0.3
+uv run --project python resoio cursor set 0.5 0.45
+uv run --project python resoio manipulate grab --radius 0.5
+uv run --project python resoio manipulate state
 ```
 
-CLI 出力が `grabbed=True` であることを確認する。続けて状態を表示:
+`grabbed=True` / `is_holding=True` / `objects=[Mirror]` を確認したら、
+**Resonite の view を動かして、掴んだ Mirror が手に追従する** ことを目視
+確認する (手を動かす / 視点を回す → Mirror が手と一緒に動く)。
 
-```sh
-uv run --project python resoio manipulate state --hand right
-```
-
-`is_holding=True` で `objects=[...]` に掴んだ slot 名が出ていることを確認。
-**Resonite の view を動かして、掴んだ object が手に追従する** ことを目視
-確認する (手を動かす / 視点を回す → object が手と一緒に動く)。
-
-最後にカーソル保持を解放し、release してドロップを確認:
+確認後:
 
 ```sh
 uv run --project python resoio cursor release
-uv run --project python resoio manipulate release --hand right
-uv run --project python resoio manipulate state --hand right
+uv run --project python resoio manipulate release
 ```
 
-`is_holding=False` になり、object がその場に残る (手から離れて落ちる /
-留まる) ことを目視確認する。
+`is_holding=False` になり、Mirror がその場に残ることを目視確認する。
+spawn した Mirror を world から削除する API は無いので放置してよい
+(local home は Resonite 再起動でリセットされる)。
 
 ## 手順: 手前の object が掴まれること (raycast 距離順の確認)
 
@@ -132,21 +117,21 @@ CLI が **`FAILED_PRECONDITION` エラーで失敗** し、エラーメッセー
 
 ## 判定基準
 
-- grab 後 (デスクトップモード・カーソルが grabbable に重なっている):
-  CLI が `grabbed=True`、`state` が `is_holding=True` で
-  `objects=[<掴んだ slot 名>]` を表示
-- 目視: 掴んでいる間、object が手に追従する (手 / 視点を動かすと一緒に動く)
-- 前後 2 object: 手前の slot 名が `objects=[...]` に出る
-- release 後: CLI が `is_holding=False`、`objects=[]`
+- 目視: 掴んでいる間、Mirror が手に追従する (手 / 視点を動かすと一緒に動く)
 - 目視: release 後は object が手から離れ、その場に留まる
+- 前後 2 object: 手前の slot 名が `objects=[...]` に出る
 - VR モード: grab が `FAILED_PRECONDITION` (message に `desktop`) で失敗する
 
 ## 想定される失敗モードと診断
 
 ### `grabbed=False` のまま掴めない
 
+- spawn 直後すぎる (Mirror がまだ定位置に収まっていない)。spawn 後 5 秒程度
+  待ってから照準する。Resonite 起動直後すぎる spawn は想定位置に出ない
+  ことがあるので、home world が完全にロードされてから spawn する
 - カーソルが object に重なっていない (レイ miss、または hit 点が別の面)。
   screenshot でカーソル位置を確認し `cursor set` の座標を調整する
+  (e2e は (0.5,0.45) → (0.45,0.5) → (0.55,0.4) の順で retry している)
 - hit 点から object の Grabbable まで `--radius` 内に入っていない。
   `--radius` を広げる (例 0.5)
 - 対象が grabbable でない (Grabbable component が無い slot)。Inspector で
@@ -176,5 +161,6 @@ Grabber / Mouse が未確定。Userspace でなく Home World 等いずれかの
 
 ```sh
 uv run --project python resoio cursor release   # カーソル保持が残っていれば解放
+uv run --project python resoio manipulate release
 just resonite-stop             # container → host bridge 経由で Resonite を停止
 ```
