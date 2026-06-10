@@ -33,12 +33,11 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
     {
         var bridge = RequireBridge("Grab");
         var hand = ToSelector(request.Hand);
-        var point = ToPoint(request);
         var radius = request.Radius > 0f ? request.Radius : DefaultGrabRadius;
 
         var outcome = await InvokeBridge(
                 "Grab",
-                ct => bridge.GrabAsync(hand, point, radius, ct),
+                ct => bridge.GrabAsync(hand, radius, ct),
                 context.CancellationToken
             )
             .ConfigureAwait(false);
@@ -121,9 +120,6 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             // UNSPECIFIED / PRIMARY / 未知の値はすべて Primary 扱い。
             _ => ManipulationHandSelector.Primary,
         };
-
-    private static ManipulationPoint? ToPoint(V1.ManipulationGrabRequest request) =>
-        request.Point is { } p ? new ManipulationPoint(p.X, p.Y, p.Z) : null;
 
     private static V1.ManipulationHand ToProtoHand(ManipulationHandSelector hand) =>
         hand switch

@@ -12,9 +12,6 @@ public enum ManipulationHandSelector
     Right,
 }
 
-/// <summary>grab 中心となるワールド座標点 (proto <c>WorldPoint</c> から独立した Core 層 POCO)。</summary>
-public readonly record struct ManipulationPoint(float X, float Y, float Z);
-
 /// <summary>操作後の保持状態 snapshot (proto <c>ManipulationGrabState</c> から独立した Core 層 POCO)。</summary>
 /// <remarks>
 /// <paramref name="Hand"/> は解決後の手 (Primary は実際の Left/Right に解決済みで
@@ -30,8 +27,8 @@ public sealed record GrabSnapshot(
 
 /// <summary>Grab 呼び出しの結果 (proto <c>ManipulationGrabResult</c> から独立した Core 層 POCO)。</summary>
 /// <remarks>
-/// <paramref name="Grabbed"/> はこの呼び出しで新たに掴めたか。範囲に grabbable が無い等で
-/// 掴めなくても false を返すだけでエラーにはしない。<paramref name="State"/> は実行後の保持状態。
+/// <paramref name="Grabbed"/> はこの呼び出しで新たに掴めたか。レイ miss / 範囲に grabbable が
+/// 無い場合も false を返すだけでエラーにはしない。<paramref name="State"/> は実行後の保持状態。
 /// </remarks>
 public sealed record GrabOutcome(bool Grabbed, GrabSnapshot State);
 
@@ -42,16 +39,14 @@ public sealed record GrabOutcome(bool Grabbed, GrabSnapshot State);
 public interface IManipulationBridge
 {
     /// <summary>
-    /// 指定 <paramref name="hand"/> で <paramref name="point"/> (null なら手の現在位置) を中心に
-    /// <paramref name="radius"/> 内の grabbable を掴み、掴めたかと実行後の state を返す。
+    /// 指定 <paramref name="hand"/> で、現在のデスクトップカーソルレイの hit 点を中心に
+    /// <paramref name="radius"/> 内の grabbable を掴み、掴めたか (miss は
+    /// <c>Grabbed=false</c>) と実行後の state を返す。
     /// </summary>
-    /// <exception cref="ManipulationNotReadyException">local user / handler がまだ準備できていない。</exception>
-    Task<GrabOutcome> GrabAsync(
-        ManipulationHandSelector hand,
-        ManipulationPoint? point,
-        float radius,
-        CancellationToken ct
-    );
+    /// <exception cref="ManipulationNotReadyException">
+    /// local user / handler が未準備、または desktop (screen) モードが非 active (VR)。
+    /// </exception>
+    Task<GrabOutcome> GrabAsync(ManipulationHandSelector hand, float radius, CancellationToken ct);
 
     /// <summary>指定 <paramref name="hand"/> が保持中の全オブジェクトを離し、実行後の state を返す。</summary>
     /// <exception cref="ManipulationNotReadyException">local user / handler がまだ準備できていない。</exception>
@@ -63,8 +58,9 @@ public interface IManipulationBridge
 }
 
 /// <summary>
-/// Bridge が一時的に grab / release を操作できない状態。Service 層は <c>FailedPrecondition</c>
-/// に翻訳するので Client は時間を置いて retry できる。
+/// Bridge が一時的に grab / release を操作できない状態、または要求が現在の入力モードで
+/// 成立しない状態 (VR active 等)。Service 層は <c>FailedPrecondition</c> に翻訳するので
+/// Client は状態を変えて retry できる。
 /// </summary>
 public sealed class ManipulationNotReadyException : Exception
 {

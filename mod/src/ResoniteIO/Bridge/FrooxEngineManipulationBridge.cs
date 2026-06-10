@@ -30,6 +30,19 @@ namespace ResoniteIO.Bridge;
 /// reparent し、以降は engine が手に自動追従させるため、Locomotion のような per-frame
 /// repeater は不要 (Grab/Release は edge-triggered な one-shot で完結する)。
 /// </para>
+/// <para>
+/// Grab の中心点は **デスクトップカーソルレイ** の hit 点。レイは engine 内カーソル位置
+/// から計算する: 起点 = <c>world.LocalUserViewPosition</c>
+/// (decompiled InteractionHandler.cs:970)、方向 = <c>LocalUserViewRotation *
+/// MathX.UVToPerspectiveCameraDirection(Mouse.NormalizedWindowPosition,
+/// WindowAspectRatio, LocalUserDesktopFOV)</c> (decompiled TargettingControllerBase.cs:114)。
+/// hit 点は自前 raycast (<c>world.Physics.RaycastAll</c>、decompiled RaycastDriver.cs:62
+/// パターン) で求め、自分のアバター / 手のコライダ (<c>IsUnderLocalUser</c>) は除外する。
+/// grab 実行は従来どおり <see cref="Grabber.Grab(float3, float)"/>
+/// (decompiled Grabber.cs:224)。<c>InteractionLaser.LastInteractionTargetPoint</c> は
+/// miss でも値が入る / laser 非 active 時は stale なため採用しない。
+/// VR モード (<c>ScreenActive == false</c>) は <see cref="ManipulationNotReadyException"/>。
+/// </para>
 /// </remarks>
 internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
 {
@@ -48,7 +61,6 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     /// <inheritdoc/>
     public Task<GrabOutcome> GrabAsync(
         ManipulationHandSelector hand,
-        ManipulationPoint? point,
         float radius,
         CancellationToken ct
     )
@@ -61,14 +73,62 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
                     var resolved = ResolveSelector(world, hand);
                     var grabber = ResolveGrabber(world, resolved);
 
-                    // proximity grab の中心。point 未指定なら手 (holder slot) の現在 world 位置。
-                    var center = point is { } p
-                        ? new float3(p.X, p.Y, p.Z)
-                        : ResolveHandPosition(grabber);
+                    var input = world.InputInterface;
+                    if (input is null || !input.ScreenActive)
+                    {
+                        throw new ManipulationNotReadyException(
+                            "Grab requires desktop (screen) mode; VR is active."
+                        );
+                    }
+
+                    var mouse = input.Mouse;
+                    if (mouse is null)
+                    {
+                        throw new ManipulationNotReadyException(
+                            "Mouse device not available yet; engine still initializing."
+                        );
+                    }
+
+                    // デスクトップカーソルレイ: 起点 = view 位置、方向 = view 回転 *
+                    // カーソル UV → カメラ方向 (decompiled TargettingControllerBase.cs:114)。
+                    var origin = world.LocalUserViewPosition;
+                    var dir = (
+                        world.LocalUserViewRotation
+                        * MathX.UVToPerspectiveCameraDirection(
+                            mouse.NormalizedWindowPosition,
+                            input.WindowAspectRatio,
+                            world.LocalUserDesktopFOV
+                        )
+                    ).Normalized;
+
+                    if (!PhysicsManager.IsValidRaycast(in origin, in dir))
+                    {
+                        throw new ManipulationNotReadyException(
+                            "Cursor raycast inputs are not valid yet; engine still initializing."
+                        );
+                    }
+
+                    // 自前 raycast (decompiled RaycastDriver.cs:62 パターン)。自分の
+                    // アバター / 手のコライダは除外。先頭 hit が最手前である前提。
+                    var hits = new List<RaycastHit>();
+                    world.Physics.RaycastAll(
+                        in origin,
+                        in dir,
+                        float.MaxValue,
+                        hits,
+                        c => !c.IsUnderLocalUser,
+                        hitTriggers: false
+                    );
+
+                    if (hits.Count == 0)
+                    {
+                        // レイ miss は grabbed=false の正常結果 (Grab は呼ばない)。
+                        return new GrabOutcome(false, ReadSnapshot(resolved, grabber));
+                    }
 
                     // Grabber.Grab(float3 point, float radius) — proximity grab。
                     // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
-                    var grabbed = grabber.Grab(center, radius);
+                    var grabbed = grabber.Grab(hits[0].Point, radius);
 
                     return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
                 },
@@ -161,23 +221,6 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
             );
         }
         return grabber;
-    }
-
-    /// <summary>
-    /// 手の現在 world 位置を求める。holder slot (掴んだ物の親) を優先し、
-    /// 取得不可なら grabber 自身の slot 位置に fallback する。
-    /// </summary>
-    /// <remarks>engine thread 前提。</remarks>
-    private static float3 ResolveHandPosition(Grabber grabber)
-    {
-        // Grabber.HolderSlot は removed 時に null を返す。
-        // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:63
-        var holder = grabber.HolderSlot;
-        if (holder is not null)
-        {
-            return holder.GlobalPosition;
-        }
-        return grabber.Slot.GlobalPosition;
     }
 
     /// <summary>
