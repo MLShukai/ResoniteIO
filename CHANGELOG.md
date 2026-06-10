@@ -43,9 +43,9 @@ GitHub Release body. The format follows
 - **Grabbed objects no longer fly behind the user's head**: in desktop mode
   the hand moves from its rest pose to a holding pose right after a grab, and
   a far-away grab left a large holder-local offset that got swung around with
-  the hand. The bridge now tweens the grabbed object into the hand (0.1 s,
-  same easing as the engine's own grab alignment), so it is held naturally in
-  front of the chest and follows the hand
+  the hand. The bridge now pins the grabbed object at its grab-time pose (the
+  cursor position) until the hand settles, so it stays where it was grabbed
+  and follows the hand from there
 
 ## [0.3.0] - 2026-06-09
 

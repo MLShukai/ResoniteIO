@@ -9,7 +9,7 @@
     `FAILED_PRECONDITION`.
 
 !!! example "Runnable example"
-    [`python/examples/manipulation_grab.py`](https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/manipulation_grab.py) — a full positive pick-up: spawn a Mirror from the inventory, hold the cursor on it, `grab` at the ray hit point, then `release`. The grabbed object is tweened into the hand and held in front of the chest.
+    [`python/examples/manipulation_grab.py`](https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/manipulation_grab.py) — a full positive pick-up: spawn a Mirror from the inventory, hold the cursor on it, `grab` at the ray hit point, then `release`. The grabbed object stays at the cursor position where it was grabbed and follows the hand from there.
 
 ::: resoio.manipulation.ManipulationClient
 

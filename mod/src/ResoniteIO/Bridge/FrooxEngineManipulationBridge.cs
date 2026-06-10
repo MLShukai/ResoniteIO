@@ -98,7 +98,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
 
                     if (grabbed)
                     {
-                        AlignGrabbedToHolder(grabber, before);
+                        PinGrabbedAtGrabPose(world, grabber, before);
                     }
 
                     return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
@@ -280,71 +280,95 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     }
 
     /// <summary>
-    /// engine thread 上で、今回の grab で新たに掴んだ object を HolderSlot (手) へ寄せる。
+    /// 手の保持ポーズ遷移が落ち着くまで object を grab 時の world pose に
+    /// ピン留めし続ける update 数。実測では遷移は約 30 update で settle する
+    /// (margin 2 倍)。
+    /// </summary>
+    private const int GrabPosePinUpdates = 60;
+
+    /// <summary>
+    /// engine thread 上で、今回の grab で新たに掴んだ object を grab 時の world pose
+    /// (= カーソルレイの hit 位置) にピン留めする。
     /// </summary>
     /// <remarks>
-    /// grab 時、object は world 位置を保ったまま HolderSlot 下に reparent されるため、
-    /// カーソルレイで遠くの object を掴むと holder-local offset が大きく残る。desktop では
-    /// HandSimulator が grab 直後に手を rest pose (腰) から保持ポーズ (胸) へ動かすので、
-    /// その offset が lever arm として振り回され object が頭の後ろへ飛ぶ (実機計測
-    /// 2026-06-10: objLocal ≈ 1m で obj が head 高さ・体の背後 z+0.8 へ移動)。
+    /// <para>
+    /// grab 時、object は world 位置を保ったまま HolderSlot 下に reparent されるが、
+    /// desktop では HandSimulator が grab 直後に手を rest pose (腰) から保持ポーズ (胸)
+    /// へ動かすため、カーソルレイで遠くを掴んだ際の大きな holder-local offset (実測 ≈1m)
+    /// が lever arm として振り回され object が頭の後ろへ飛ぶ (実機計測 2026-06-10)。
     /// HolderSlot の position は InteractionHandler の FieldDrive に駆動されており外部から
-    /// 書けないため (engine の RunGrab laser 経路の「grab 前に holder を laser 点へ移動」は
-    /// 流用不可)、object 側の local offset をゼロへ寄せて手の中に収める。
-    /// 0.1 秒の tween は engine の TryAlignGrabbed (decompiled InteractionHandler.cs:3935)
-    /// と同じ演出。回転・スケールは保持する。
+    /// 書けない (engine の RunGrab laser 経路の「grab 前に holder を laser 点へ移動」は
+    /// 流用不可、実機で確認)。
+    /// </para>
+    /// <para>
+    /// desktop の期待挙動は「object は画面のカーソル位置 (= grab した場所) に留まる」
+    /// なので、手の遷移が settle するまで毎 update grab 時の world pose を書き戻して
+    /// ピン留めする (移動量ゼロ = カーソル位置への最小距離移動)。settle 後は確定した
+    /// holder-local offset のまま手 (= 体) に追従して運べる。
+    /// </para>
+    /// <para>
+    /// なお VR モード対応時は、ピン留めではなく **object を手の中へ寄せる** 方が自然
+    /// (手で直接掴む UX)。その場合は engine の TryAlignGrabbed (decompiled
+    /// InteractionHandler.cs:3935) と同じ 0.1 秒 tween で寄せるのが良い (実機確認済みの
+    /// 良挙動だったため記録):
+    /// <code>
+    /// slot.Position_Field.TweenTo(
+    ///     float3.Zero, 0.1f, CurvePreset.Sine, onlyUnderParent: slot.Parent);
+    /// </code>
+    /// 現状 GrabAsync は VR (ScreenActive=false) を FailedPrecondition で拒否するため
+    /// desktop 経路のみ実装する。
+    /// </para>
     /// </remarks>
-    private static void AlignGrabbedToHolder(Grabber grabber, int previousCount)
+    private static void PinGrabbedAtGrabPose(World world, Grabber grabber, int previousCount)
     {
         var grabbedObjects = grabber.GrabbedObjects;
         for (var i = previousCount; i < grabbedObjects.Count; i++)
         {
-            var slot = grabbedObjects[i]?.Slot;
-            if (slot is null)
+            var grabbable = grabbedObjects[i];
+            var slot = grabbable?.Slot;
+            if (grabbable is null || slot is null)
             {
                 continue;
             }
-            slot.Position_Field.TweenTo(
-                float3.Zero,
-                0.1f,
-                CurvePreset.Sine,
-                onlyUnderParent: slot.Parent
+            PinStep(
+                world,
+                grabber,
+                grabbable,
+                slot,
+                slot.GlobalPosition,
+                slot.GlobalRotation,
+                GrabPosePinUpdates
             );
         }
     }
 
-    // TEMP-DIAG: 「grab した瞬間にオブジェクトが頭上に飛ぶ」問題の調査用。
-    // grab 直後から数フレーム、object / HolderSlot / hand / head の global position を
-    // BepInEx log に出す。原因特定後に削除する。
-    private void LogGrabDiagnostics(World world, Grabber grabber, float3 hit)
+    /// <summary>
+    /// <see cref="PinGrabbedAtGrabPose"/> の 1 update 分。release / 削除 / 他 grabber への
+    /// 移動でピン留めを打ち切る。
+    /// </summary>
+    private static void PinStep(
+        World world,
+        Grabber grabber,
+        IGrabbable grabbable,
+        Slot slot,
+        float3 position,
+        floatQ rotation,
+        int remaining
+    )
     {
-        void Snapshot(string tag)
+        if (slot.IsRemoved || !ReferenceEquals(grabbable.Grabber, grabber))
         {
-            try
-            {
-                var obj = grabber.GrabbedObjects.Count > 0 ? grabber.GrabbedObjects[0] : null;
-                var objPos = obj?.Slot?.GlobalPosition;
-                var objLocal = obj?.Slot?.LocalPosition;
-                var holder = grabber.HolderSlot;
-                var head = world.LocalUserViewPosition;
-                _log.LogInfo(
-                    $"[grab-diag {tag}] hit={hit} obj={objPos} objLocal={objLocal} "
-                        + $"holder={holder?.GlobalPosition} holderLocal={holder?.LocalPosition} "
-                        + $"hand={grabber.Slot?.GlobalPosition} head={head}"
-                );
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning($"[grab-diag {tag}] failed: {ex.Message}");
-            }
+            return;
         }
-
-        Snapshot("t+0");
-        world.RunInUpdates(1, () => Snapshot("t+1"));
-        world.RunInUpdates(3, () => Snapshot("t+3"));
-        world.RunInUpdates(10, () => Snapshot("t+10"));
-        world.RunInUpdates(30, () => Snapshot("t+30"));
-        world.RunInUpdates(90, () => Snapshot("t+90"));
+        slot.GlobalPosition = position;
+        slot.GlobalRotation = rotation;
+        if (remaining > 0)
+        {
+            world.RunInUpdates(
+                1,
+                () => PinStep(world, grabber, grabbable, slot, position, rotation, remaining - 1)
+            );
+        }
     }
 
     /// <summary>

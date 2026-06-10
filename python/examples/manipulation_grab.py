@@ -3,11 +3,11 @@
 Demonstrates a real pick-up against the primary hand: spawn a grabbable
 Mirror from the cloud inventory (Resonite Essentials), hold the desktop
 cursor on it with CursorClient.set_position, grab at the cursor ray hit
-point, then release everything. The grabbed object is tweened into the
-hand and follows it (held in front of the chest in desktop mode). VR mode
-fails with FAILED_PRECONDITION. The spawned Mirror stays in the world
-after release (there is no despawn API); the local home resets on the
-next Resonite restart.
+point, then release everything. The grabbed object stays where it was
+grabbed (at the cursor position) and follows the hand from there while
+held. VR mode fails with FAILED_PRECONDITION. The spawned Mirror stays
+in the world after release (there is no despawn API); the local home
+resets on the next Resonite restart.
 
 Run from inside the dev container:
 
