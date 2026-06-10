@@ -7,6 +7,37 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking — Cursor `SetPosition` now holds the cursor until `Release`**:
+  `SetPosition` was a one-shot warp (the engine cursor reverted to the OS
+  pointer on the next frame, especially under Wine/Proton). It now registers a
+  persistent engine-side cursor lock so the in-engine cursor stays at the set
+  position across RPCs, while a Harmony patch on
+  `InputInterface.CollectOutputState` masks the lock from the renderer so the
+  **real OS mouse pointer is never captured** (no warp, no confine, no
+  center-pin). `InputInterface.SetMousePosition` (OS warp) is no longer called.
+  While held, real mouse movement does not move the in-engine cursor (clicks
+  still fire at the held position); switching world focus deactivates the hold
+- **Breaking — `Manipulation.Grab` is now ray-based**:
+  `ManipulationGrabRequest.point` (`WorldPoint`) was removed (field 2 is
+  reserved). Grab always targets the point where the desktop cursor ray hits
+  the world and grabs grabbables within `radius` of that point. A ray miss
+  returns `grabbed=false` (not an error); VR mode (screen output inactive)
+  returns `FAILED_PRECONDITION`. The Python client's `ManipulationClient.grab`
+  lost its `point` parameter and the CLI lost `--point`. Aim with
+  `resoio cursor set X Y` (held until release), then `resoio manipulate grab`
+
+### Added
+
+- **`Cursor.Release` RPC**: releases the held cursor and returns control to the
+  OS pointer. Idempotent (releasing while not held succeeds and returns the
+  current state). Exposed as `CursorClient.release()` and
+  `resoio cursor release`
+- **`CursorState.held` field**: reports whether the cursor is currently held,
+  returned by `SetPosition` / `GetPosition` / `Release` and shown in the CLI
+  output (`held=True/False`)
+
 ## [0.3.0] - 2026-06-09
 
 Adds a mod/client version-compatibility check and switches distribution to
