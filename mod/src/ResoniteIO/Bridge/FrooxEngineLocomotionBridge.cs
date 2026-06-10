@@ -13,11 +13,16 @@ namespace ResoniteIO.Bridge;
 /// <remarks>
 /// <para>
 /// <see cref="SetState"/> / <see cref="Reset"/> は任意スレッドから内部 state を
-/// 更新するのみ。ExternalInput への書き込みは <see cref="TickStep"/> が
+/// 更新するのみ。engine への適用は <see cref="TickStep"/> が
 /// <c>World.RunInUpdates(0, TickStep)</c> で self-rescheduling し engine update
-/// tick 上で行う (engine 1-frame 寿命 ExternalInput と client 送信レートの
-/// ギャップを吸収)。設計の詳細は
-/// <c>memory/feedback_locomotion_external_input.md</c>。
+/// tick 上で行う。move / jump / crouch は ExternalInput への再注入
+/// (engine 1-frame 寿命 ExternalInput と client 送信レートのギャップを吸収)、
+/// look (yaw / pitch) は <c>FirstPersonTargettingController</c> の
+/// <c>_horizontalAngle</c> / <c>_verticalAngle</c> を <c>rate * Time.Delta</c> で
+/// 直接積分する。look の ExternalInput 経路は
+/// <c>ScreenCameraInputs.Look.Active = InputInterface.IsCursorLocked</c> で gate
+/// され OS window focus 必須のため採らない (直接駆動で focus 非依存に look が
+/// 効く)。設計の詳細は <c>memory/feedback_locomotion_external_input.md</c>。
 /// </para>
 /// <para>
 /// thread safety: 単一の <see cref="_lock"/> が <see cref="_latest"/> /
@@ -36,9 +41,6 @@ namespace ResoniteIO.Bridge;
 /// </remarks>
 internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposable
 {
-    private const float _lookNeutralEpsilon = 0.0001f;
-    private const int _lookCursorLockPriority = -1_000_000;
-
     // typed delegate は static field で 1 度だけ解決 (TickStep が毎 tick 利用)。
     // 引数順は (declaring type, field type)、逆順は silently wrong delegate を
     // 返すため要 review (feedback_locomotion_external_input.md §3)。
@@ -51,12 +53,18 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     >("_normalInput");
 
     private static readonly AccessTools.FieldRef<
-        TargettingControllerBase<ScreenCameraInputs>,
-        ScreenCameraInputs
-    > _firstPersonInputsRef = AccessTools.FieldRefAccess<
-        TargettingControllerBase<ScreenCameraInputs>,
-        ScreenCameraInputs
-    >("_inputs");
+        FirstPersonTargettingController,
+        float
+    > _fpcHorizontalAngleRef = AccessTools.FieldRefAccess<FirstPersonTargettingController, float>(
+        "_horizontalAngle"
+    );
+
+    private static readonly AccessTools.FieldRef<
+        FirstPersonTargettingController,
+        float
+    > _fpcVerticalAngleRef = AccessTools.FieldRefAccess<FirstPersonTargettingController, float>(
+        "_verticalAngle"
+    );
 
     private static readonly AccessTools.FieldRef<HeadSimulator, HeadInputs> _headInputsRef =
         AccessTools.FieldRefAccess<HeadSimulator, HeadInputs>("_inputs");
@@ -71,9 +79,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     private World? _cachedWorld;
     private World? _repeaterWorld;
     private bool _repeaterRunning;
-    private World? _lookLockWorld;
-    private IWorldElement? _lookLockElement;
-    private CursorLock? _lookCursorLock;
 
     private volatile bool _disposed;
 
@@ -194,7 +199,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
 
         _log.LogDebug($"LocomotionBridge: world refocused → {world?.Name ?? "<null>"}");
-        ReleaseLookCursorLock();
 
         if (restartNeeded && world is not null && !world.IsDisposed)
         {
@@ -301,15 +305,11 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         {
             ApplyToEngine(smooth, fpc, head, snapshot, jumpSnapshot);
         }
-        else
+        else if (jumpSnapshot)
         {
-            ReleaseLookCursorLockOnEngine();
-            if (jumpSnapshot)
+            lock (_lock)
             {
-                lock (_lock)
-                {
-                    _jumpPending = true;
-                }
+                _jumpPending = true;
             }
         }
 
@@ -341,7 +341,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         var normalInput = _smoothNormalInputRef(smooth);
         if (normalInput is null || normalInput.Move is null || normalInput.Jump is null)
         {
-            ReleaseLookCursorLockOnEngine();
             return;
         }
 
@@ -381,25 +380,18 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             normalInput.Jump.ExternalInput = true;
         }
 
-        // pitch: Bridge で符号反転しない (decompile の `_verticalAngle -= y` だけ
-        // を見ると反転すべきに見えるが、実機で逆挙動が出るため。詳細は
-        // feedback_locomotion_external_input.md §2)。
-        if (fpc is not null)
+        // look は ExternalInput を使わず _horizontalAngle / _verticalAngle を直接
+        // 積分する。Look ExternalInput 経路は Look.Active = IsCursorLocked
+        // (OS window focus 必須) で gate され、非フォーカス / headless で原理的に
+        // 効かないため gate ごとバイパスする。符号は engine OnBeforeHeadUpdate の
+        // `_horizontalAngle += x` / `_verticalAngle -= y` と同形 (実機検証済みの
+        // UP=見上げを保つ、feedback_locomotion_external_input.md §2)。clamp は
+        // engine が毎 frame MathX.Clamp(±89°) するため不要。rate=0 は no-op。
+        if (fpc is not null && !fpc.IsRemoved)
         {
-            var screenInputs = _firstPersonInputsRef(fpc);
-            if (screenInputs?.Look is not null)
-            {
-                UpdateLookCursorLock(fpc, snapshot);
-                screenInputs.Look.ExternalInput = new float2(snapshot.YawRate, snapshot.PitchRate);
-            }
-            else
-            {
-                ReleaseLookCursorLockOnEngine();
-            }
-        }
-        else
-        {
-            ReleaseLookCursorLockOnEngine();
+            var dt = fpc.Time.Delta;
+            _fpcHorizontalAngleRef(fpc) += snapshot.YawRate * dt;
+            _fpcVerticalAngleRef(fpc) -= snapshot.PitchRate * dt;
         }
 
         // crouch は値 0 でも書く (engine の += 0 は副作用なし、idle 戻し兼用)。
@@ -441,155 +433,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         return (loco, fpc, head);
     }
 
-    private static bool HasLookInput(LocomotionInput snapshot) =>
-        Math.Abs(snapshot.YawRate) > _lookNeutralEpsilon
-        || Math.Abs(snapshot.PitchRate) > _lookNeutralEpsilon;
-
-    private void UpdateLookCursorLock(FirstPersonTargettingController fpc, LocomotionInput snapshot)
-    {
-        if (!HasLookInput(snapshot))
-        {
-            ReleaseLookCursorLockOnEngine();
-            return;
-        }
-
-        var world = fpc.World;
-        if (world is null || world.IsDisposed || fpc.IsRemoved)
-        {
-            ReleaseLookCursorLockOnEngine();
-            return;
-        }
-
-        World? lockWorld;
-        IWorldElement? lockElement;
-        CursorLock? cursorLock;
-        lock (_lock)
-        {
-            lockWorld = _lookLockWorld;
-            lockElement = _lookLockElement;
-            cursorLock = _lookCursorLock;
-        }
-
-        if (cursorLock is not null)
-        {
-            if (
-                ReferenceEquals(lockWorld, world)
-                && lockElement is not null
-                && ReferenceEquals(lockElement, fpc)
-                && !lockElement.IsRemoved
-            )
-            {
-                if (
-                    world.Input.LockCursor is null
-                    || ReferenceEquals(world.Input.LockCursor, cursorLock)
-                )
-                {
-                    return;
-                }
-            }
-
-            ReleaseLookCursorLockOnEngine();
-        }
-
-        if (world.Input.LockCursor is not null || world.InputInterface.Mouse is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var position = (int2)world.InputInterface.Mouse.WindowPosition.Value;
-            world.Input.UnregisterCursorLock(fpc);
-            var registered = world.Input.RegisterCursorLock(fpc, position, _lookCursorLockPriority);
-            registered.priority = _lookCursorLockPriority;
-
-            lock (_lock)
-            {
-                _lookLockWorld = world;
-                _lookLockElement = fpc;
-                _lookCursorLock = registered;
-            }
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning($"LocomotionBridge: failed to acquire look cursor lock: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// 保持中の look cursor lock state を snapshot + clear する (lock 内)。release
-    /// 対象が無い (未取得 / world 破棄済み) なら <c>false</c> を返す。release の
-    /// dispatch 方法 (engine thread 直 or <c>RunSynchronously</c>) は呼び出し側が決める。
-    /// </summary>
-    private bool TryTakeLookCursorLock(out World world, out IWorldElement element)
-    {
-        World? takenWorld;
-        IWorldElement? takenElement;
-        lock (_lock)
-        {
-            takenWorld = _lookLockWorld;
-            takenElement = _lookLockElement;
-            _lookLockWorld = null;
-            _lookLockElement = null;
-            _lookCursorLock = null;
-        }
-
-        if (takenWorld is null || takenElement is null || takenWorld.IsDisposed)
-        {
-            world = null!;
-            element = null!;
-            return false;
-        }
-
-        world = takenWorld;
-        element = takenElement;
-        return true;
-    }
-
-    /// <summary>任意スレッドから呼べる release。unregister を engine thread へ dispatch する。</summary>
-    private void ReleaseLookCursorLock()
-    {
-        if (!TryTakeLookCursorLock(out var world, out var element))
-        {
-            return;
-        }
-
-        try
-        {
-            world.RunSynchronously(
-                () => TryUnregisterLookCursorLock(world, element),
-                immediatellyIfPossible: true
-            );
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning($"LocomotionBridge: failed to release look cursor lock: {ex.Message}");
-        }
-    }
-
-    /// <summary>engine thread 上 (TickStep 内) からの release。直接 unregister する。</summary>
-    private void ReleaseLookCursorLockOnEngine()
-    {
-        if (TryTakeLookCursorLock(out var world, out var element))
-        {
-            TryUnregisterLookCursorLock(world, element);
-        }
-    }
-
-    private void TryUnregisterLookCursorLock(World world, IWorldElement element)
-    {
-        try
-        {
-            world.Input.UnregisterCursorLock(element);
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning(
-                $"LocomotionBridge: UnregisterCursorLock threw: {ex.GetType().Name}: {ex.Message}"
-            );
-        }
-    }
-
     private void MarkRepeaterStopped(World? expected)
     {
         lock (_lock)
@@ -600,7 +443,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
                 _repeaterWorld = null;
             }
         }
-        ReleaseLookCursorLock();
     }
 
     public void Dispose()
@@ -627,7 +469,6 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             _repeaterWorld = null;
             _cachedWorld = null;
         }
-        ReleaseLookCursorLock();
 
         _log.LogInfo("Locomotion Bridge disposed: state cleared, repeater stopped");
     }
