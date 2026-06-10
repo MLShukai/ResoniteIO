@@ -201,26 +201,8 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     }
 
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private async Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct)
-    {
-        var world = ResolveWorld();
-        var tcs = new TaskCompletionSource<T>();
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.SetResult(fn());
-            }
-            catch (Exception e)
-            {
-                tcs.SetException(e);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
-    }
+    private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct) =>
+        ResolveWorld().RunOnEngineAsync(fn, ct);
 
     public void Dispose()
     {

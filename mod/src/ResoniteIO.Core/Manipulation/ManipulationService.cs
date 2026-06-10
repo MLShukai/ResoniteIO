@@ -101,17 +101,16 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             call,
             ct,
             ex =>
-            {
-                if (ex is ManipulationNotReadyException notReady)
-                {
-                    _log.LogInfo($"Manipulation.{rpc}: bridge not ready: {notReady.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.FailedPrecondition, notReady.Message)
-                    );
-                }
-
-                return null;
-            }
+                ex is ManipulationNotReadyException notReady
+                    ? BridgeFault.Translate(
+                        _log,
+                        "Manipulation",
+                        rpc,
+                        StatusCode.FailedPrecondition,
+                        "bridge not ready",
+                        notReady
+                    )
+                    : null
         );
 
     private static ManipulationHandSelector ToSelector(V1.ManipulationHand hand) =>
