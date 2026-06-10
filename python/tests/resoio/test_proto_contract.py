@@ -69,8 +69,7 @@ from resoio._generated.resonite_io.v1 import (
     FocusResponse,
     GetCurrentRequest,
     GetCurrentResponse,
-    GetModVersionRequest,
-    GetModVersionResponse,
+    GetServerInfoRequest,
     InventoryCopyRequest,
     InventoryEntry,
     InventoryEntryKind,
@@ -110,6 +109,8 @@ from resoio._generated.resonite_io.v1 import (
     RecordSort,
     RecordSortDirection,
     RecordSource,
+    ServerInfo,
+    ServerPlatform,
     SessionFilter,
     SpeakerStreamRequest,
     StartWorldRequest,
@@ -415,9 +416,13 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "message": 1,
         "server_unix_nanos": 2,
     },
-    GetModVersionRequest: {},
-    GetModVersionResponse: {
-        "version": 1,
+    # Info
+    GetServerInfoRequest: {},
+    ServerInfo: {
+        "mod_version": 1,
+        "engine_version": 2,
+        "platform": 3,
+        "is_wine": 4,
     },
     # World
     WorldSession: {
@@ -572,6 +577,16 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "PRIMARY": 1,
         "LEFT": 2,
         "RIGHT": 3,
+    },
+    # Info. The C# peer maps FrooxEngine.Platform onto these wire values;
+    # renumbering silently misreports the server platform to old clients.
+    ServerPlatform: {
+        "UNSPECIFIED": 0,
+        "WINDOWS": 1,
+        "OSX": 2,
+        "LINUX": 3,
+        "ANDROID": 4,
+        "OTHER": 5,
     },
     # World wire enums. NOTE: these carry an extra UNSPECIFIED=0 slot that
     # the public resoio enums fold into a default head (see the offset

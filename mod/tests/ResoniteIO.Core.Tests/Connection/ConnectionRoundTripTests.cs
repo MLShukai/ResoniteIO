@@ -24,16 +24,4 @@ public sealed class ConnectionRoundTripTests
         Assert.Equal("hello", response.Message);
         Assert.InRange(response.ServerUnixNanos, beforeNanos, afterNanos);
     }
-
-    [Fact]
-    public async Task GetModVersion_ReturnsInjectedModVersion()
-    {
-        await using var harness = await GrpcHostHarness.StartAsync(modVersion: "1.2.3-test");
-        using var channel = harness.CreateChannel();
-        var client = new V1.Connection.ConnectionClient(channel);
-
-        var response = await client.GetModVersionAsync(new GetModVersionRequest());
-
-        Assert.Equal("1.2.3-test", response.Version);
-    }
 }

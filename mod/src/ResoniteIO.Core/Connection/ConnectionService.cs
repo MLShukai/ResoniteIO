@@ -4,16 +4,15 @@ using ResoniteIO.V1;
 
 namespace ResoniteIO.Core.Connection;
 
-/// <summary><c>resonite_io.v1.Connection</c> サービスの Core 実装。</summary>
+/// <summary><c>resonite_io.v1.Connection</c> サービスの Core 実装 (Ping 専用)。</summary>
+/// <remarks>mod / engine のバージョン照会は <c>Info.GetServerInfo</c> に分離済み。</remarks>
 public sealed class ConnectionService : V1.Connection.ConnectionBase
 {
     private readonly ILogSink _log;
-    private readonly ModInfo _modInfo;
 
-    public ConnectionService(ILogSink log, ModInfo modInfo)
+    public ConnectionService(ILogSink log)
     {
         _log = log;
-        _modInfo = modInfo;
     }
 
     public override Task<PingResponse> Ping(PingRequest request, ServerCallContext context)
@@ -25,14 +24,5 @@ public sealed class ConnectionService : V1.Connection.ConnectionBase
             ServerUnixNanos = UnixNanosClock.Now(),
         };
         return Task.FromResult(response);
-    }
-
-    public override Task<GetModVersionResponse> GetModVersion(
-        GetModVersionRequest request,
-        ServerCallContext context
-    )
-    {
-        _log.LogDebug($"Connection.GetModVersion received; reporting \"{_modInfo.Version}\"");
-        return Task.FromResult(new GetModVersionResponse { Version = _modInfo.Version });
     }
 }

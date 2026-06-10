@@ -1,7 +1,8 @@
-"""Client for the Resonite IO ``Connection`` modality (liveness / version).
+"""Client for the Resonite IO ``Connection`` modality (liveness).
 
-Bidirectional unary RPCs: ``ping`` round-trips a liveness echo and
-``get_mod_version`` reports the running mod build, both over the UDS.
+A single unary RPC: ``ping`` round-trips a liveness echo over the UDS.
+Server metadata (mod/engine version, platform) lives in
+:mod:`resoio.info`.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ from grpclib.client import Channel
 from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     ConnectionStub,
-    GetModVersionRequest,
     PingRequest,
     PingResponse,
 )
@@ -60,10 +60,3 @@ class ConnectionClient(_BaseClient[ConnectionStub]):
         """
         stub = self._require_stub()
         return await stub.ping(PingRequest(message=message))
-
-    async def get_mod_version(self) -> str:
-        """Return the running C# Mod's version string (csproj
-        ``<Version>``)."""
-        stub = self._require_stub()
-        response = await stub.get_mod_version(GetModVersionRequest())
-        return response.version

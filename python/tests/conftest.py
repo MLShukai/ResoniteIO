@@ -25,8 +25,9 @@ if TYPE_CHECKING:
 def _mod_version_probe_done() -> Iterator[None]:
     """Mark the once-per-process mod-version probe as already done per test.
 
-    The probe fires a ``GetModVersion`` RPC on the first client ``__aenter__``
-    per process (see ``resoio._client._maybe_warn_version_mismatch``). Left
+    The probe fires an ``Info.GetServerInfo`` RPC on the first client
+    ``__aenter__`` per process (see
+    ``resoio._client._maybe_warn_version_mismatch``). Left
     unmanaged it would run against whichever fake server connects first and
     couple tests through module state. Defaulting it to "done" keeps unrelated
     connects probe-free; the version-check tests reset it explicitly to

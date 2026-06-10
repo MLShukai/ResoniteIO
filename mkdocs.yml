@@ -97,6 +97,7 @@ nav:
   - CLI: cli.md
   - API Reference:
       - Connection: api/connection.md
+      - Info: api/info.md
       - Camera: api/camera.md
       - Speaker: api/speaker.md
       - Microphone: api/microphone.md

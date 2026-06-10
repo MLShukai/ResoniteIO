@@ -1,0 +1,46 @@
+// Info service: static metadata about the running server (mod + engine).
+//
+// All fields are fixed by the time the mod binds the UDS (the engine resolves
+// its version / platform / Wine flag during initialization), so the response
+// is an immutable snapshot. Clients use `mod_version` to detect mod/client
+// version mismatches, and `platform` / `is_wine` to adapt to runtime
+// constraints (e.g. Wine/Proton-specific input limitations).
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// Operating-system platform the Resonite client runs on (mirrors the
+// FrooxEngine platform enum). UNSPECIFIED is reserved for values the server
+// cannot map.
+enum ServerPlatform {
+  SERVER_PLATFORM_UNSPECIFIED = 0;
+  SERVER_PLATFORM_WINDOWS = 1;
+  SERVER_PLATFORM_OSX = 2;
+  SERVER_PLATFORM_LINUX = 3;
+  SERVER_PLATFORM_ANDROID = 4;
+  SERVER_PLATFORM_OTHER = 5;
+}
+
+// GetServerInfoRequest takes no arguments (queries the static server info).
+message GetServerInfoRequest {}
+
+// ServerInfo is an immutable snapshot of the running mod and engine.
+message ServerInfo {
+  // Mod version derived from the csproj `<Version>` (PluginMetadata.VERSION).
+  string mod_version = 1;
+  // Engine version string (Engine.VersionString).
+  string engine_version = 2;
+  // OS platform the Resonite client runs on.
+  ServerPlatform platform = 3;
+  // True when the client runs under Wine/Proton (Engine.IsWine).
+  bool is_wine = 4;
+}
+
+// Info exposes static, immutable metadata about the running server. Dynamic
+// state (focused world, local user, ...) is out of scope; modality-specific
+// RPCs live in their own services.
+service Info {
+  rpc GetServerInfo(GetServerInfoRequest) returns (ServerInfo);
+}
