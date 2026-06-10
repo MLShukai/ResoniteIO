@@ -63,19 +63,7 @@ RUN set -eux; \
     /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --install-dir /usr/local/dotnet; \
     rm -f /tmp/dotnet-install.sh
 
-# Claude Code は公式 apt リポジトリから入れる (install.sh は $HOME/.local/bin に
-# 落とすため root レイヤで実行すると dev user から見えなくなる)。
-RUN set -eux; \
-    install -d -m 0755 /etc/apt/keyrings; \
-    curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
-      -o /etc/apt/keyrings/claude-code.asc; \
-    echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
-      > /etc/apt/sources.list.d/claude-code.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends claude-code; \
-    rm -rf /var/lib/apt/lists/*
-
-# GitHub CLI (gh) も公式 apt リポジトリから入れる。Claude から `git push` や
+# GitHub CLI (gh) は公式 apt リポジトリから入れる。Claude から `git push` や
 # `gh pr create` を行うため。
 RUN set -eux; \
     install -d -m 0755 /etc/apt/keyrings; \
@@ -112,5 +100,11 @@ RUN groupadd -g ${USER_GID} dev \
 
 USER dev
 WORKDIR /workspace
+
+# Claude Code は公式 install.sh (native installer) で最新版を入れる。apt 版は
+# リリース追従が遅いため使わない。install.sh は $HOME/.local/bin に落とすので
+# dev user 切替後に実行する ($HOME/.local は volume マウント対象外なので image に
+# 焼き込んだバイナリがそのまま残る)。
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 CMD ["sleep", "infinity"]
