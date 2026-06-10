@@ -16,7 +16,7 @@
         <link rel="prev" href="../../cli/">
       
       
-        <link rel="next" href="../camera/">
+        <link rel="next" href="../info/">
       
       
         
@@ -738,6 +738,8 @@
       
         
       
+        
+      
     
     
     
@@ -875,17 +877,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#resoio.connection.ConnectionClient.get_mod_version" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_mod_version
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -917,6 +908,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../info/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Info
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1286,17 +1305,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#resoio.connection.ConnectionClient.get_mod_version" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_mod_version
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1385,21 +1393,21 @@ raise :class:<code>SocketNotFoundError</code> or :class:<code>AmbiguousSocketErr
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/resoio/_client.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-180">180</a></span>
-<span class="normal"><a href="#__codelineno-0-181">181</a></span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-181">181</a></span>
 <span class="normal"><a href="#__codelineno-0-182">182</a></span>
 <span class="normal"><a href="#__codelineno-0-183">183</a></span>
 <span class="normal"><a href="#__codelineno-0-184">184</a></span>
 <span class="normal"><a href="#__codelineno-0-185">185</a></span>
 <span class="normal"><a href="#__codelineno-0-186">186</a></span>
-<span class="normal"><a href="#__codelineno-0-187">187</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
-<a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="c1"># errors surface at the connect site.</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="normal"><a href="#__codelineno-0-187">187</a></span>
+<span class="normal"><a href="#__codelineno-0-188">188</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>    <span class="c1"># errors surface at the connect site.</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div></td></tr></table></div>
                   </details>
 
@@ -1539,46 +1547,6 @@ or server layer (e.g. the mod went away mid-call).</p>
 <a id="__codelineno-0-60" name="__codelineno-0-60"></a><span class="sd">    &quot;&quot;&quot;</span>
 <a id="__codelineno-0-61" name="__codelineno-0-61"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
 <a id="__codelineno-0-62" name="__codelineno-0-62"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">ping</span><span class="p">(</span><span class="n">PingRequest</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">))</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="resoio.connection.ConnectionClient.get_mod_version" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">get_mod_version</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-async"><code>async</code></small>
-  </span>
-
-<a href="#resoio.connection.ConnectionClient.get_mod_version" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">get_mod_version</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return the running C# Mod's version string (csproj
-<code>&lt;Version&gt;</code>).</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>src/resoio/connection.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-64">64</a></span>
-<span class="normal"><a href="#__codelineno-0-65">65</a></span>
-<span class="normal"><a href="#__codelineno-0-66">66</a></span>
-<span class="normal"><a href="#__codelineno-0-67">67</a></span>
-<span class="normal"><a href="#__codelineno-0-68">68</a></span>
-<span class="normal"><a href="#__codelineno-0-69">69</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-64" name="__codelineno-0-64"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_mod_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the running C# Mod&#39;s version string (csproj</span>
-<a id="__codelineno-0-66" name="__codelineno-0-66"></a><span class="sd">    ``&lt;Version&gt;``).&quot;&quot;&quot;</span>
-<a id="__codelineno-0-67" name="__codelineno-0-67"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
-<a id="__codelineno-0-68" name="__codelineno-0-68"></a>    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_mod_version</span><span class="p">(</span><span class="n">GetModVersionRequest</span><span class="p">())</span>
-<a id="__codelineno-0-69" name="__codelineno-0-69"></a>    <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">version</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
