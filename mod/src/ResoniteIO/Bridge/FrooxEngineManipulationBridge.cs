@@ -93,7 +93,13 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
 
                     // Grabber.Grab(float3 point, float radius) — proximity grab。
                     // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
+                    var before = grabber.GrabbedObjects.Count;
                     var grabbed = grabber.Grab(hits[0].Point, radius);
+
+                    if (grabbed)
+                    {
+                        AlignGrabbedToHolder(grabber, before);
+                    }
 
                     return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
                 },
@@ -271,6 +277,74 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
         return side == Chirality.Left
             ? ManipulationHandSelector.Left
             : ManipulationHandSelector.Right;
+    }
+
+    /// <summary>
+    /// engine thread 上で、今回の grab で新たに掴んだ object を HolderSlot (手) へ寄せる。
+    /// </summary>
+    /// <remarks>
+    /// grab 時、object は world 位置を保ったまま HolderSlot 下に reparent されるため、
+    /// カーソルレイで遠くの object を掴むと holder-local offset が大きく残る。desktop では
+    /// HandSimulator が grab 直後に手を rest pose (腰) から保持ポーズ (胸) へ動かすので、
+    /// その offset が lever arm として振り回され object が頭の後ろへ飛ぶ (実機計測
+    /// 2026-06-10: objLocal ≈ 1m で obj が head 高さ・体の背後 z+0.8 へ移動)。
+    /// HolderSlot の position は InteractionHandler の FieldDrive に駆動されており外部から
+    /// 書けないため (engine の RunGrab laser 経路の「grab 前に holder を laser 点へ移動」は
+    /// 流用不可)、object 側の local offset をゼロへ寄せて手の中に収める。
+    /// 0.1 秒の tween は engine の TryAlignGrabbed (decompiled InteractionHandler.cs:3935)
+    /// と同じ演出。回転・スケールは保持する。
+    /// </remarks>
+    private static void AlignGrabbedToHolder(Grabber grabber, int previousCount)
+    {
+        var grabbedObjects = grabber.GrabbedObjects;
+        for (var i = previousCount; i < grabbedObjects.Count; i++)
+        {
+            var slot = grabbedObjects[i]?.Slot;
+            if (slot is null)
+            {
+                continue;
+            }
+            slot.Position_Field.TweenTo(
+                float3.Zero,
+                0.1f,
+                CurvePreset.Sine,
+                onlyUnderParent: slot.Parent
+            );
+        }
+    }
+
+    // TEMP-DIAG: 「grab した瞬間にオブジェクトが頭上に飛ぶ」問題の調査用。
+    // grab 直後から数フレーム、object / HolderSlot / hand / head の global position を
+    // BepInEx log に出す。原因特定後に削除する。
+    private void LogGrabDiagnostics(World world, Grabber grabber, float3 hit)
+    {
+        void Snapshot(string tag)
+        {
+            try
+            {
+                var obj = grabber.GrabbedObjects.Count > 0 ? grabber.GrabbedObjects[0] : null;
+                var objPos = obj?.Slot?.GlobalPosition;
+                var objLocal = obj?.Slot?.LocalPosition;
+                var holder = grabber.HolderSlot;
+                var head = world.LocalUserViewPosition;
+                _log.LogInfo(
+                    $"[grab-diag {tag}] hit={hit} obj={objPos} objLocal={objLocal} "
+                        + $"holder={holder?.GlobalPosition} holderLocal={holder?.LocalPosition} "
+                        + $"hand={grabber.Slot?.GlobalPosition} head={head}"
+                );
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning($"[grab-diag {tag}] failed: {ex.Message}");
+            }
+        }
+
+        Snapshot("t+0");
+        world.RunInUpdates(1, () => Snapshot("t+1"));
+        world.RunInUpdates(3, () => Snapshot("t+3"));
+        world.RunInUpdates(10, () => Snapshot("t+10"));
+        world.RunInUpdates(30, () => Snapshot("t+30"));
+        world.RunInUpdates(90, () => Snapshot("t+90"));
     }
 
     /// <summary>
