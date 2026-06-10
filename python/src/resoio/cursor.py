@@ -7,7 +7,10 @@ coordinates in ``[0, 1]`` (center is ``(0.5, 0.5)``).
 A common use is to center the cursor before opening a context menu: on
 desktop the radial menu opens at the cursor's laser hit point, so
 ``await cursor.set_position(0.5, 0.5)`` followed by ``context_menu.open()``
-yields a centered menu that still auto-closes on view movement.
+aims for a centered menu. Note that ``set_position`` is a one-shot warp
+that does not hold the cursor afterwards; under Wine/Proton the OS pointer
+cannot be moved, so the position may revert before a follow-up call and
+position-dependent flows are only reliable within the same operation.
 """
 
 from __future__ import annotations
@@ -79,7 +82,10 @@ class CursorClient(_BaseClient[CursorStub]):
         ``x`` and ``y`` must be in ``[0, 1]`` (center is ``(0.5, 0.5)``);
         out-of-range values surface as a
         :class:`grpclib.exceptions.GRPCError` (``INVALID_ARGUMENT``). The
-        cursor is held at the requested position until moved again.
+        move is a one-shot warp: the cursor is not held at the requested
+        position and the mouse stays free after the call returns. Under
+        Wine/Proton the OS pointer cannot be moved, so the cursor may
+        revert to the real pointer position on the next frame.
         """
         stub = self._require_stub()
         request = CursorSetPositionRequest(x=x, y=y)
