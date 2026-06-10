@@ -173,7 +173,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private void SafeShutdown()
     {
         // Dispose 順: receiver → camera → display → locomotion → microphone → speaker
-        //   → connection(bridge) → cts → grpcHost → assemblyResolver。
+        //   → cursor → connection(bridge) → cts → grpcHost → assemblyResolver。
         // 上流から順に止めることで、下流が残 input を dead bridge に push する race を防ぐ:
         //   - Receiver を先に止めて残 frame が dead CameraBridge に届かないようにする。
         //   - PushedFrameCameraBridge.Dispose は Channel writer を complete し pending な
@@ -224,8 +224,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // 各 RPC が one-shot で cloud REST / engine marshal するだけなので参照 null 化で足りる。
         _inventoryBridge = null;
 
-        // CursorBridge も跨 RPC 状態を持たない (cursor lock は SetPositionAsync 内で
-        // call-scoped に register → release される) ため、参照 null 化のみで足りる。
+        // CursorBridge は跨 RPC の保持状態 (cursor lock) と Harmony patch を持つため、
+        // GrpcHost を畳む前に Dispose して lock 解除の queue + unpatch を行う。
+        SafeDispose(_cursorBridge, nameof(_cursorBridge));
         _cursorBridge = null;
 
         // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
