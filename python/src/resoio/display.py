@@ -1,5 +1,8 @@
-"""Client for the Resonite IO ``Display`` unary RPCs (window resolution + fps
-cap)."""
+"""Client for the Resonite IO ``Display`` modality (window resolution / fps).
+
+Unary RPCs: ``apply`` sets the window resolution and background fps cap,
+``get`` reads the current display state back.
+"""
 
 from __future__ import annotations
 

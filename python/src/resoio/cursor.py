@@ -1,8 +1,8 @@
-"""Client for the Resonite IO ``Cursor`` unary RPCs (desktop cursor).
+"""Client for the Resonite IO ``Cursor`` modality (Python -> Resonite).
 
-The Cursor service controls the Resonite desktop cursor (mouse pointer).
-Each RPC is a one-shot unary request/response. Positions use normalized
-window coordinates in ``[0, 1]`` (center is ``(0.5, 0.5)``).
+Unary RPCs controlling the Resonite desktop cursor (mouse pointer). Each
+RPC is a one-shot request/response. Positions use normalized window
+coordinates in ``[0, 1]`` (center is ``(0.5, 0.5)``).
 
 A common use is to center the cursor before opening a context menu: on
 desktop the radial menu opens at the cursor's laser hit point, so

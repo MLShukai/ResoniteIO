@@ -1,4 +1,7 @@
-"""Client for the Resonite IO ``Locomotion`` gRPC streaming service.
+"""Client for the Resonite IO ``Locomotion`` modality (Python -> Resonite).
+
+Client-streaming RPC: the client pushes movement / look commands that
+drive the local avatar.
 
 The bridge on the mod side is a **stateful repeater**: it holds the full
 locomotion state and re-injects it into the engine every update tick.

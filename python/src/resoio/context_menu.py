@@ -1,9 +1,9 @@
-"""Client for the Resonite IO ``ContextMenu`` unary RPCs (radial menu).
+"""Client for the Resonite IO ``ContextMenu`` modality (Python -> Resonite).
 
-The ContextMenu service mirrors the desktop ``T`` key radial menu. Each
-RPC is a one-shot unary request/response that operates on a chosen hand
-(``primary`` / ``left`` / ``right``) and returns the resulting
-:class:`ContextMenuState` snapshot.
+Unary RPCs driving the desktop ``T`` key radial menu. Each RPC is a
+one-shot request/response that operates on a chosen hand (``primary`` /
+``left`` / ``right``) and returns the resulting :class:`ContextMenuState`
+snapshot.
 """
 
 from __future__ import annotations

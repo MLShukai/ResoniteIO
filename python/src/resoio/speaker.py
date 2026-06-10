@@ -1,4 +1,9 @@
-"""Client for the Resonite IO ``Speaker`` gRPC streaming service."""
+"""Client for the Resonite IO ``Speaker`` modality (Resonite -> Python).
+
+Server-streaming RPC: the engine pushes its final audio mix and the
+client yields it as :class:`SpeakerChunk` instances. The wire format is
+fixed (:data:`SAMPLE_RATE` / :data:`CHANNELS` / :data:`DTYPE`).
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
-"""Client for the Resonite IO ``Inventory`` unary RPCs (bash-like file ops).
+"""Client for the Resonite IO ``Inventory`` modality (Python -> Resonite).
+
+Unary, bash-like file operations over the user's inventory.
 
 The Inventory service is stateless and path-based: every method takes a
 resolved absolute path (e.g. ``/Inventory/MyFolder``). There is no
@@ -59,7 +61,15 @@ class InventoryEntryKind(enum.Enum):
 
 @dataclass(frozen=True, slots=True)
 class InventoryEntry:
-    """One inventory entry (a folder or an item record)."""
+    """One inventory entry (a folder or an item record).
+
+    Attributes:
+        record_id: Resonite cloud record id, empty for local-only entries.
+        asset_uri: ``resdb:///`` URI of the entry's primary asset, empty
+            for folders.
+        last_modified_unix_nanos: Last-modified time in UTC nanoseconds
+            since the Unix epoch.
+    """
 
     name: str
     path: str

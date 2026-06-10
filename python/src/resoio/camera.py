@@ -1,4 +1,8 @@
-"""Client for the Resonite IO ``Camera`` gRPC streaming service."""
+"""Client for the Resonite IO ``Camera`` modality (Resonite -> Python).
+
+Server-streaming RPC: the engine pushes RGBA8 frames and the client
+yields them as :class:`Frame` instances.
+"""
 
 from __future__ import annotations
 
