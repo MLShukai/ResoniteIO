@@ -88,8 +88,8 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     private CursorLock? _lock;
     private volatile bool _held;
 
-    // reflection / patch が揃い保持機能が使えるか。ctor でのみ書き込む。
-    private bool _holdAvailable;
+    // reflection / patch が揃い保持機能が使えるか。ctor で成功時に true、
+    // Dispose (UnpatchSelf 後) で false に戻す。
     private bool _patched;
 
     private int _disposed;
@@ -134,8 +134,7 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         // cancel は待ちを打ち切るだけで保持は解除しない (client は必要なら Release を呼ぶ)。
         for (var attempt = 0; attempt < _settlePollMaxAttempts; attempt++)
         {
-            var snapshot = await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct)
-                .ConfigureAwait(false);
+            var snapshot = await ReadStateAsync(ct).ConfigureAwait(false);
             if (Matches(snapshot, target))
             {
                 return snapshot;
@@ -145,12 +144,11 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         }
 
         // timeout しても現在の実測 state を返す (best-effort)。保持は継続する。
-        return await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct).ConfigureAwait(false);
+        return await ReadStateAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public Task<CursorStateSnapshot> GetPositionAsync(CancellationToken ct) =>
-        RunOnEngineAsync(() => ReadState(ResolveWorld()), ct);
+    public Task<CursorStateSnapshot> GetPositionAsync(CancellationToken ct) => ReadStateAsync(ct);
 
     /// <inheritdoc/>
     public Task<CursorStateSnapshot> ReleaseAsync(CancellationToken ct)
@@ -200,25 +198,10 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
             return pixel;
         }
 
-        var previousWorld = _lockWorld;
-        if (
-            previousWorld is not null
-            && !ReferenceEquals(previousWorld, world)
-            && !previousWorld.IsDisposed
-        )
+        if (!ReferenceEquals(_lockWorld, world))
         {
             // world 切替後: 旧 world の lock を best-effort 解除 (完了は await しない)。
-            try
-            {
-                previousWorld.RunSynchronously(() => TryUnregister(previousWorld));
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(
-                    "Cursor: failed to queue stale cursor-lock release: "
-                        + $"{ex.GetType().Name}: {ex.Message}"
-                );
-            }
+            QueueUnregister(_lockWorld, "stale cursor-lock release");
         }
 
         // 同一 element の二重登録は RegisterCursorLock が例外を投げるため、念のため先に
@@ -242,6 +225,29 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         var px = MathX.Clamp((int)MathX.Round(x * resolution.x), 0, resolution.x - 1);
         var py = MathX.Clamp((int)MathX.Round(y * resolution.y), 0, resolution.y - 1);
         return new int2(px, py);
+    }
+
+    /// <summary>
+    /// <paramref name="world"/> の engine thread へ保持 lock 解除を best-effort で queue する
+    /// (完了は await しない)。null / disposed なら no-op、queue 失敗は warning に握る。
+    /// </summary>
+    private void QueueUnregister(World? world, string failureContext)
+    {
+        if (world is null || world.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            world.RunSynchronously(() => TryUnregister(world));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(
+                $"Cursor: failed to queue {failureContext}: {ex.GetType().Name}: {ex.Message}"
+            );
+        }
     }
 
     /// <summary>保持 lock を engine thread 上で best-effort に解除する。例外は warning に握る。</summary>
@@ -320,7 +326,7 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     /// </summary>
     private void EnsureHoldAvailable()
     {
-        if (!_holdAvailable)
+        if (!_patched)
         {
             throw new CursorNotReadyException(
                 "cursor hold unavailable: engine internals changed; "
@@ -332,6 +338,10 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
     private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct) =>
         ResolveWorld().RunOnEngineAsync(fn, ct);
+
+    /// <summary>focused world の engine thread 上で <see cref="ReadState"/> を評価する。</summary>
+    private Task<CursorStateSnapshot> ReadStateAsync(CancellationToken ct) =>
+        RunOnEngineAsync(() => ReadState(ResolveWorld()), ct);
 
     private static bool ResolveReflection(ILogSink log)
     {
@@ -386,7 +396,6 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         {
             _harmony.Patch(original, postfix: postfix);
             _patched = true;
-            _holdAvailable = true;
             _log.LogInfo(
                 "Cursor Bridge: HarmonyLib Postfix attached to InputInterface.CollectOutputState"
             );
@@ -486,21 +495,7 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         // Postfix への偽装を先に遮断する。
         _held = false;
 
-        var lockWorld = _lockWorld;
-        if (lockWorld is not null && !lockWorld.IsDisposed)
-        {
-            try
-            {
-                lockWorld.RunSynchronously(() => TryUnregister(lockWorld));
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(
-                    "Cursor: failed to queue cursor-lock release on dispose: "
-                        + $"{ex.GetType().Name}: {ex.Message}"
-                );
-            }
-        }
+        QueueUnregister(_lockWorld, "cursor-lock release on dispose");
 
         if (_patched)
         {

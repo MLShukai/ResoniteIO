@@ -137,12 +137,7 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             IsHolding = snapshot.IsHolding,
             UnixNanos = UnixNanosClock.Now(),
         };
-
-        foreach (var name in snapshot.ObjectNames)
-        {
-            state.ObjectNames.Add(name);
-        }
-
+        state.ObjectNames.AddRange(snapshot.ObjectNames);
         return state;
     }
 }

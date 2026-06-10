@@ -70,43 +70,8 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
                 () =>
                 {
                     var world = ResolveWorld();
-                    var resolved = ResolveSelector(world, hand);
-                    var grabber = ResolveGrabber(world, resolved);
-
-                    var input = world.InputInterface;
-                    if (input is null || !input.ScreenActive)
-                    {
-                        throw new ManipulationNotReadyException(
-                            "Grab requires desktop (screen) mode; VR is active."
-                        );
-                    }
-
-                    var mouse = input.Mouse;
-                    if (mouse is null)
-                    {
-                        throw new ManipulationNotReadyException(
-                            "Mouse device not available yet; engine still initializing."
-                        );
-                    }
-
-                    // デスクトップカーソルレイ: 起点 = view 位置、方向 = view 回転 *
-                    // カーソル UV → カメラ方向 (decompiled TargettingControllerBase.cs:114)。
-                    var origin = world.LocalUserViewPosition;
-                    var dir = (
-                        world.LocalUserViewRotation
-                        * MathX.UVToPerspectiveCameraDirection(
-                            mouse.NormalizedWindowPosition,
-                            input.WindowAspectRatio,
-                            world.LocalUserDesktopFOV
-                        )
-                    ).Normalized;
-
-                    if (!PhysicsManager.IsValidRaycast(in origin, in dir))
-                    {
-                        throw new ManipulationNotReadyException(
-                            "Cursor raycast inputs are not valid yet; engine still initializing."
-                        );
-                    }
+                    var (resolved, grabber) = ResolveHandGrabber(world, hand);
+                    var (origin, dir) = ComputeCursorRay(world);
 
                     // 自前 raycast (decompiled RaycastDriver.cs:62 パターン)。自分の
                     // アバター / 手のコライダは除外。先頭 hit が最手前である前提。
@@ -143,9 +108,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
             .RunOnEngineAsync(
                 () =>
                 {
-                    var world = ResolveWorld();
-                    var resolved = ResolveSelector(world, hand);
-                    var grabber = ResolveGrabber(world, resolved);
+                    var (resolved, grabber) = ResolveHandGrabber(ResolveWorld(), hand);
 
                     // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
                     // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
@@ -164,9 +127,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
             .RunOnEngineAsync(
                 () =>
                 {
-                    var world = ResolveWorld();
-                    var resolved = ResolveSelector(world, hand);
-                    var grabber = ResolveGrabber(world, resolved);
+                    var (resolved, grabber) = ResolveHandGrabber(ResolveWorld(), hand);
                     return ReadSnapshot(resolved, grabber);
                 },
                 ct
@@ -184,6 +145,65 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
             );
         }
         return world;
+    }
+
+    /// <summary>
+    /// engine thread 上で <paramref name="hand"/> を実際の手 (Left/Right) へ解決し、
+    /// 対応する <see cref="Grabber"/> とペアで返す (全 RPC 共通の前段)。
+    /// </summary>
+    /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
+    private (ManipulationHandSelector Resolved, Grabber Grabber) ResolveHandGrabber(
+        World world,
+        ManipulationHandSelector hand
+    )
+    {
+        var resolved = ResolveSelector(world, hand);
+        return (resolved, ResolveGrabber(world, resolved));
+    }
+
+    /// <summary>
+    /// engine thread 上で現在のデスクトップカーソルレイ (起点 / 方向) を計算する。
+    /// desktop (screen) モード非 active・Mouse 未準備・レイ入力不正は
+    /// <see cref="ManipulationNotReadyException"/>。
+    /// </summary>
+    private static (float3 Origin, float3 Direction) ComputeCursorRay(World world)
+    {
+        var input = world.InputInterface;
+        if (input is null || !input.ScreenActive)
+        {
+            throw new ManipulationNotReadyException(
+                "Grab requires desktop (screen) mode; VR is active."
+            );
+        }
+
+        var mouse = input.Mouse;
+        if (mouse is null)
+        {
+            throw new ManipulationNotReadyException(
+                "Mouse device not available yet; engine still initializing."
+            );
+        }
+
+        // デスクトップカーソルレイ: 起点 = view 位置、方向 = view 回転 *
+        // カーソル UV → カメラ方向 (decompiled TargettingControllerBase.cs:114)。
+        var origin = world.LocalUserViewPosition;
+        var dir = (
+            world.LocalUserViewRotation
+            * MathX.UVToPerspectiveCameraDirection(
+                mouse.NormalizedWindowPosition,
+                input.WindowAspectRatio,
+                world.LocalUserDesktopFOV
+            )
+        ).Normalized;
+
+        if (!PhysicsManager.IsValidRaycast(in origin, in dir))
+        {
+            throw new ManipulationNotReadyException(
+                "Cursor raycast inputs are not valid yet; engine still initializing."
+            );
+        }
+
+        return (origin, dir);
     }
 
     /// <summary>
