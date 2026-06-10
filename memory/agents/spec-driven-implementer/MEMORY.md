@@ -1,5 +1,6 @@
 # Agent Memory Index — spec-driven-implementer
 
+- [Engine cursor-lock quirks](engine_cursor_lock_quirks.md) — RegisterCursorLock は priority 引数を無視 / OutputState は class で postfix 直接 mutate / 偽装は lockCursor+position 両 field 必須
 - [ContextMenu modality](project_context_menu_modality.md) — unary modality mirroring Display; reflection-driven Open
 - [FrooxEngine ContextMenu reflection](froox_contextmenu_reflection.md) — private OpenContextMenu/MenuOptions signatures + ContextMenuItem API gotchas
 - [GrpcHost modality wiring](feedback_sessionhost_modality_wiring.md) — the 4-5 edit points to register a new modality in GrpcHost.cs
