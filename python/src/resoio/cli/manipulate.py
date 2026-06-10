@@ -3,8 +3,8 @@
 Flat dispatch via a positional ``action`` (no nested subparsers per
 project convention):
 
-* ``grab`` — try to grab a grabbable near ``--point`` (or the hand's
-  current position) within ``--radius`` metres
+* ``grab`` — try to grab a grabbable within ``--radius`` metres of the
+  cursor ray hit point (desktop mode only)
 * ``release`` — release everything the hand holds
 * ``state`` — print the hand's current hold state
 * ``interactive`` — a key-driven loop (``g`` grab / ``r`` release /
@@ -46,8 +46,9 @@ def register(
         description=(
             "Drive the Resonite IO Manipulation service from the shell. "
             "Pick an action (grab / release / state / interactive); grab "
-            "optionally takes a world --point and --radius. The resulting "
-            "hold state is printed after every action."
+            "takes a --radius around the cursor ray hit point (desktop "
+            "mode only). The resulting hold state is printed after every "
+            "action."
         ),
     )
     parser.add_argument(
@@ -60,14 +61,6 @@ def register(
         choices=["primary", "left", "right"],
         default="primary",
         help="Target hand / interaction handler (default: primary).",
-    )
-    parser.add_argument(
-        "--point",
-        type=float,
-        nargs=3,
-        metavar=("X", "Y", "Z"),
-        default=None,
-        help="World-space grab centre for 'grab' (default: hand position).",
     )
     parser.add_argument(
         "--radius",
@@ -117,7 +110,7 @@ def _print_interactive_help(stream: TextIO) -> None:
     """Print the interactive keymap to ``stream`` once at start."""
     print(
         "resoio manipulate interactive — controls\n"
-        "  g : grab at hand position\n"
+        "  g : grab at cursor ray hit point\n"
         "  r : release\n"
         "  s : print current state\n"
         "  q : quit",
@@ -177,11 +170,7 @@ async def _run(args: argparse.Namespace) -> int:
 
     async with ManipulationClient(args.socket) as client:
         if action == "grab":
-            point: tuple[float, float, float] | None = None
-            if args.point:
-                x, y, z = args.point
-                point = (x, y, z)
-            result = await client.grab(hand=args.hand, point=point, radius=args.radius)
+            result = await client.grab(hand=args.hand, radius=args.radius)
             print(f"grabbed={result.grabbed}")
             print(_format_state(result.state))
             return 0

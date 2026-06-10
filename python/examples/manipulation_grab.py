@@ -1,10 +1,12 @@
 """Minimal Manipulation grab -> get_state -> release example.
 
 Runs the smallest grab/release cycle against the primary hand: probe the
-current hold state, attempt a grab at the hand's position, re-read the
-state, then release. The default home world has nothing grabbable near an
-empty hand, so grab() typically reports grabbed=False without error - the
-RPC path is what this exercises, not a positive pick-up. See
+current hold state, attempt a grab at the desktop cursor ray hit point,
+re-read the state, then release. The default home world has nothing
+grabbable where the cursor happens to point, so grab() typically reports
+grabbed=False without error - the RPC path is what this exercises, not a
+positive pick-up (aim first with resoio.CursorClient.set_position for a
+real pick-up; VR mode fails with FAILED_PRECONDITION). See
 mod/tests/manual/manipulation-verification.md for the visual confirmation.
 
 Run from inside the dev container:
@@ -62,8 +64,8 @@ async def main() -> None:
         initial = await client.get_state(hand=HAND)
         print(f"initial: {format_state(initial)}")
 
-        # grab at the hand's current position (point=None). grabbed=False on
-        # an empty home world is expected, not an error.
+        # grab at the desktop cursor ray hit point. grabbed=False on an
+        # empty home world is expected, not an error.
         result = await client.grab(hand=HAND)
         print(f"grabbed={result.grabbed} state: {format_state(result.state)}")
 
