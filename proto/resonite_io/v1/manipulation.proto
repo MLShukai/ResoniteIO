@@ -6,8 +6,9 @@
 // クリーンな注入経路が無いため (TrackedDevicePositioner が毎 input update で hand
 // slot を上書きし、Locomotion のような ExternalInput フックを持たない) スコープ外。
 //
-// 操作モデル: 各手 (`InteractionHandler`) は `Grabber` を 1 つ持ち、`Grab(point,
-// radius)` で近接した grabbable を掴む。掴んだオブジェクトは Grabber の HolderSlot
+// 操作モデル: 各手 (`InteractionHandler`) は `Grabber` を 1 つ持ち、Grab は
+// デスクトップカーソルレイの hit 点を中心とした proximity grab。VR モードは
+// FAILED_PRECONDITION。掴んだオブジェクトは Grabber の HolderSlot
 // に reparent され **以後は手に自動追従** する。よって Grab / Release は離散の
 // **edge-triggered な one-shot 操作**であり、ContextMenu と同じく unary RPC で表現する
 // (Locomotion のような client-streaming repeater は不要)。
@@ -30,19 +31,18 @@ enum ManipulationHand {
   MANIPULATION_HAND_RIGHT = 3;
 }
 
-// grab を行うワールド座標点。message 不在 (= 未設定) のときはサーバが手の現在
-// ワールド位置を使う。
-message WorldPoint {
-  float x = 1;
-  float y = 2;
-  float z = 3;
-}
-
+// Grab は常に **現在のデスクトップカーソルレイ** (engine 内カーソル位置から計算する
+// 視線レイ) の hit 点を中心に radius 内の grabbable を掴む。VR モード (screen 非
+// active) は FAILED_PRECONDITION。レイが何にも当たらない場合は grabbed=false
+// (エラーではない)。
 message ManipulationGrabRequest {
   ManipulationHand hand = 1;
-  // grab 中心点。未設定なら手の現在位置。
-  WorldPoint point = 2;
-  // grab 判定球の半径 (メートル)。<=0 はサーバ default (0.1m)。
+  // 2 は旧 `WorldPoint point` (world 座標指定の proximity grab)。レイベース化に
+  // 伴い削除 (breaking)。番号・名前とも再利用禁止。
+  reserved 2;
+  reserved "point";
+  // カーソルレイ hit 点を中心とした grab 判定球の半径 (メートル)。<=0 はサーバ
+  // default (0.1m)。
   float radius = 3;
 }
 
@@ -69,15 +69,16 @@ message ManipulationGrabState {
 
 message ManipulationGrabResult {
   // この呼び出しで新たに掴めたか (`Grabber.Grab` の戻り値)。範囲に grabbable が
-  // 無い / 掴めない場合は false。エラーではなく結果として表現する。
+  // 無い / レイ miss の場合は false。エラーではなく結果として表現する。
   bool grabbed = 1;
   // 実行後の保持状態。
   ManipulationGrabState state = 2;
 }
 
 service Manipulation {
-  // 指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
-  // 掴む。掴めたかと実行後の状態を返す。
+  // 指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
+  // grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
+  // と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
   rpc Grab(ManipulationGrabRequest) returns (ManipulationGrabResult);
   // 指定した手が保持している全オブジェクトを離す。
   rpc Release(ManipulationReleaseRequest) returns (ManipulationGrabState);

@@ -117,7 +117,6 @@ __all__ = (
     "StartWorldRequest",
     "StartWorldResponse",
     "WorldBase",
-    "WorldPoint",
     "WorldRecord",
     "WorldSession",
     "WorldStub",
@@ -1857,20 +1856,21 @@ default_message_pool.register_message(
 
 @dataclass(eq=False, repr=False)
 class ManipulationGrabRequest(betterproto2.Message):
+    """
+    Grab は常に **現在のデスクトップカーソルレイ** (engine 内カーソル位置から計算する
+    視線レイ) の hit 点を中心に radius 内の grabbable を掴む。VR モード (screen 非
+    active) は FAILED_PRECONDITION。レイが何にも当たらない場合は grabbed=false
+    (エラーではない)。
+    """
+
     hand: "ManipulationHand" = betterproto2.field(
         1, betterproto2.TYPE_ENUM, default_factory=lambda: ManipulationHand(0)
     )
 
-    point: "WorldPoint | None" = betterproto2.field(
-        2, betterproto2.TYPE_MESSAGE, optional=True
-    )
-    """
-    grab 中心点。未設定なら手の現在位置。
-    """
-
     radius: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
     """
-    grab 判定球の半径 (メートル)。<=0 はサーバ default (0.1m)。
+    カーソルレイ hit 点を中心とした grab 判定球の半径 (メートル)。<=0 はサーバ
+    default (0.1m)。
     """
 
 
@@ -1884,7 +1884,7 @@ class ManipulationGrabResult(betterproto2.Message):
     grabbed: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
     """
     この呼び出しで新たに掴めたか (`Grabber.Grab` の戻り値)。範囲に grabbable が
-    無い / 掴めない場合は false。エラーではなく結果として表現する。
+    無い / レイ miss の場合は false。エラーではなく結果として表現する。
     """
 
     state: "ManipulationGrabState | None" = betterproto2.field(
@@ -2142,23 +2142,6 @@ class StartWorldResponse(betterproto2.Message):
 default_message_pool.register_message(
     "resonite_io.v1", "StartWorldResponse", StartWorldResponse
 )
-
-
-@dataclass(eq=False, repr=False)
-class WorldPoint(betterproto2.Message):
-    """
-    grab を行うワールド座標点。message 不在 (= 未設定) のときはサーバが手の現在
-    ワールド位置を使う。
-    """
-
-    x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
-
-    y: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
-
-    z: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
-
-
-default_message_pool.register_message("resonite_io.v1", "WorldPoint", WorldPoint)
 
 
 @dataclass(eq=False, repr=False)
@@ -2931,8 +2914,9 @@ class ManipulationStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "ManipulationGrabResult":
         """
-        指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
-        掴む。掴めたかと実行後の状態を返す。
+        指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
+        grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
+        と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
         """
 
         return await self._unary_unary(
@@ -3956,8 +3940,9 @@ class ManipulationBase(betterproto2_grpclib.ServiceBase):
         self, message: "ManipulationGrabRequest"
     ) -> "ManipulationGrabResult":
         """
-        指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
-        掴む。掴めたかと実行後の状態を返す。
+        指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
+        grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
+        と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
