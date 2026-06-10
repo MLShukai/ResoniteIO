@@ -5,10 +5,11 @@ A real ``grpclib.server.Server`` hosting an inline fake
 and driven by the real ``ManipulationClient`` over the wire (no mocking of
 grpclib/betterproto2 internals). This verifies that each of the three unary
 RPCs (``grab`` / ``release`` / ``get_state``) reaches the server with the
-correct ``hand`` enum, ``point`` (``WorldPoint`` or absent) and ``radius``,
-and that the returned ``GrabResult`` / ``GrabState`` dataclasses round-trip
-every field — including the ``object_names`` repeated-string ordering and
-the ``hand`` decode path.
+correct ``hand`` enum and ``radius`` (grab is always a proximity grab around
+the desktop cursor-ray hit point, so there is no point argument), and that
+the returned ``GrabResult`` / ``GrabState`` dataclasses round-trip every
+field — including the ``object_names`` repeated-string ordering and the
+``hand`` decode path.
 """
 
 from collections.abc import Awaitable, Callable
@@ -34,10 +35,9 @@ if TYPE_CHECKING:
 
 UdsServer = Callable[["IServable"], Awaitable[str]]
 
-# Coordinates / radius chosen to be exactly representable in float32 so the
-# wire round-trip carries them without precision drift (radius is a proto
+# Radius chosen to be exactly representable in float32 so the wire
+# round-trip carries it without precision drift (radius is a proto
 # `float`, i.e. 32-bit).
-_POINT = (1.0, 2.0, 3.0)
 _RADIUS = 0.25
 
 
@@ -92,39 +92,45 @@ class _EchoManipulation(ManipulationBase):
         )
 
 
-class _FailingManipulation(ManipulationBase):
-    """Fake whose ``grab`` always fails with FAILED_PRECONDITION."""
+class _VrModeManipulation(ManipulationBase):
+    """Fake server in VR mode: ``grab`` fails with FAILED_PRECONDITION.
+
+    Mirrors the C# contract: grab requires desktop (screen) mode, so a VR
+    server rejects it with FAILED_PRECONDITION (it is *not* grabbed=False).
+    """
+
+    _VR_MESSAGE = "Grab requires desktop (screen) mode; VR is active."
 
     async def grab(self, message: ManipulationGrabRequest) -> PbManipulationGrabResult:
-        raise GRPCError(Status.FAILED_PRECONDITION, "no world is focused")
+        raise GRPCError(Status.FAILED_PRECONDITION, self._VR_MESSAGE)
 
     async def release(
         self, message: ManipulationReleaseRequest
     ) -> PbManipulationGrabState:
-        raise GRPCError(Status.FAILED_PRECONDITION, "no world is focused")
+        raise GRPCError(Status.FAILED_PRECONDITION, self._VR_MESSAGE)
 
     async def get_state(
         self, message: ManipulationGetStateRequest
     ) -> PbManipulationGrabState:
-        raise GRPCError(Status.FAILED_PRECONDITION, "no world is focused")
+        raise GRPCError(Status.FAILED_PRECONDITION, self._VR_MESSAGE)
 
 
 class TestManipulationClient:
-    async def test_grab_with_point_sends_world_point_and_radius_on_wire(
+    async def test_grab_sends_hand_and_radius_and_round_trips_result(
         self, uds_server: UdsServer
     ):
+        # Grab carries only hand + radius on the wire (the grab centre is
+        # the desktop cursor-ray hit point, resolved server-side); the
+        # GrabResult / GrabState decode every field.
         fake = _EchoManipulation()
         socket_path = await uds_server(fake)
         async with ManipulationClient() as client:
             assert client.socket_path == socket_path
-            result = await client.grab(point=_POINT, radius=_RADIUS)
+            result = await client.grab(hand="left", radius=_RADIUS)
 
         assert len(fake.grab_requests) == 1
         wire = fake.grab_requests[0]
-        # The point carried distinct x/y/z values, not a collapsed/zeroed
-        # WorldPoint — a dropped component would change one of these.
-        assert wire.point is not None
-        assert (wire.point.x, wire.point.y, wire.point.z) == _POINT
+        assert wire.hand == ManipulationHand.LEFT
         assert wire.radius == _RADIUS
 
         assert isinstance(result, GrabResult)
@@ -133,19 +139,6 @@ class TestManipulationClient:
         assert result.state.is_holding is True
         assert result.state.object_names == ("Cube",)
         assert result.state.unix_nanos == 1234
-
-    async def test_grab_without_point_omits_world_point_on_wire(
-        self, uds_server: UdsServer
-    ):
-        fake = _EchoManipulation()
-        await uds_server(fake)
-        async with ManipulationClient() as client:
-            await client.grab(point=None, radius=_RADIUS)
-
-        assert len(fake.grab_requests) == 1
-        # `point=None` must leave the optional WorldPoint unset on the
-        # wire so the server falls back to the hand's current position.
-        assert fake.grab_requests[0].point is None
 
     async def test_grab_sends_radius_verbatim_including_zero_default(
         self, uds_server: UdsServer
@@ -272,15 +265,19 @@ class TestManipulationClient:
         assert state.object_names == ("Cube", "Sphere", "Cone")
         assert isinstance(state.object_names, tuple)
 
-    async def test_grab_surfaces_server_error_as_grpc_error(
+    async def test_grab_in_vr_mode_surfaces_failed_precondition(
         self, uds_server: UdsServer
     ):
-        await uds_server(_FailingManipulation())
+        # Spec: grab in VR mode (screen not active) is FAILED_PRECONDITION,
+        # not grabbed=False. The message is pinned only by the "desktop"
+        # substring (exact wording is not part of the contract).
+        await uds_server(_VrModeManipulation())
         async with ManipulationClient() as client:
             with pytest.raises(ClientGRPCError) as exc_info:
-                await client.grab(point=_POINT, radius=_RADIUS)
+                await client.grab(radius=_RADIUS)
 
         assert exc_info.value.status is Status.FAILED_PRECONDITION
+        assert "desktop" in (exc_info.value.message or "")
 
     async def test_grab_raises_when_not_connected(self):
         client = ManipulationClient()

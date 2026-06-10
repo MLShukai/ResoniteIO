@@ -7,14 +7,18 @@ are well-formed, and the requested hand resolves correctly
 (``left`` → left, ``right`` → right, ``primary`` → the engine's primary
 hand, which is the right hand per ``InputInterface.PrimaryHand``).
 
-A *positive* grab (an object actually picked up, ``grabbed`` /
-``is_holding`` becoming ``True``, and the object visually following the
-hand) is intentionally NOT asserted here: the default local home world
-exposes no grabbable object near the user's empty hands, and there is no
-API to deterministically spawn one. So a successful ``grab`` against the
-empty home reports ``grabbed=False`` without error — the *call path* is
-what is under test. The positive-grab visual confirmation is a human-only
-check documented in ``mod/tests/manual/manipulation-verification.md``.
+Grab is cursor-ray based: it picks a grabbable within ``radius`` metres of
+the point where the desktop cursor ray hits the world (aim with
+``CursorClient.set_position`` first; VR mode is rejected with
+``FAILED_PRECONDITION``). A *positive* grab (an object actually picked up,
+``grabbed`` / ``is_holding`` becoming ``True``, and the object visually
+following the hand) is intentionally NOT asserted here: the default local
+home world exposes no grabbable object, and there is no API to
+deterministically spawn one. So a ``grab`` against the empty home reports
+``grabbed=False`` without error — the *call path* (cursor aim → ray
+computation → raycast → proximity grab) is what is under test. The
+positive-grab visual confirmation is a human-only check documented in
+``mod/tests/manual/manipulation-verification.md``.
 
 Screenshots are taken purely for the record (the desktop view before and
 after the grab/release calls); the hard assertions are the RPC contract,
@@ -36,6 +40,7 @@ from pathlib import Path
 import grpclib
 from grpclib.const import Status
 
+from resoio.cursor import CursorClient
 from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from tests.helpers import mark_e2e
 
@@ -59,10 +64,12 @@ _HOME_LOAD_SETTLE_S = 20.0
 # screenshots are not torn mid-update.
 _SETTLE_S = 0.4
 
-# A world point + radius for the explicit-point grab branch. The exact value is
-# unimportant — the home world has nothing grabbable here — what is under test
-# is that a WorldPoint travels over the wire to the real engine without error.
-_PROBE_POINT = (0.0, 1.0, 0.5)
+# Aim point (normalized window coordinates) and grab radius for the
+# cursor-aimed grab step. Screen centre is a deterministic aim; the home
+# world has nothing grabbable there, so only the call path (cursor hold →
+# ray → raycast → proximity grab) is asserted, not grabbed=True.
+_AIM_X = 0.5
+_AIM_Y = 0.5
 _PROBE_RADIUS = 0.5
 
 
@@ -173,10 +180,10 @@ class TestManipulation:
                 # echoes "right" for the resolved primary hand.
                 assert primary_state.hand == right_state.hand
 
-                # 2. grab at the hand's current position (point=None). This must
+                # 2. grab at the current cursor ray (default radius). This must
                 #    return a well-formed GrabResult without raising. We do NOT
                 #    assert grabbed is True: the home world has nothing grabbable
-                #    near the empty hand, so grabbed is typically False — the
+                #    where the ray lands, so grabbed is typically False — the
                 #    call path is what is under test.
                 grab_primary = await client.grab(hand="primary")
                 record_result("04_grab_primary", grab_primary)
@@ -185,16 +192,29 @@ class TestManipulation:
                 assert grab_primary.state.unix_nanos > 0
                 await settle_shot("01_after_grab")
 
-                # 3. grab with an explicit world --point + radius: exercises the
-                #    WorldPoint path over the wire to the real engine. Same as
-                #    above, only the call path is asserted (no grabbable here).
-                grab_point = await client.grab(
-                    hand="left", point=_PROBE_POINT, radius=_PROBE_RADIUS
-                )
-                record_result("05_grab_left_point", grab_point)
-                assert isinstance(grab_point, GrabResult)
-                assert isinstance(grab_point.state, GrabState)
-                assert grab_point.state.unix_nanos > 0
+                # 3. cursor aim → grab: hold the in-engine cursor at screen
+                #    centre (Part A hold) so the grab targets a deterministic
+                #    ray, then grab with an explicit radius. This exercises the
+                #    full ray path (cursor position → view ray → raycast →
+                #    proximity grab) on the real engine. Only the call path is
+                #    asserted (no grabbable at screen centre in the home world).
+                async with CursorClient() as cursor:
+                    try:
+                        await cursor.set_position(_AIM_X, _AIM_Y)
+                        grab_aimed = await client.grab(
+                            hand="left", radius=_PROBE_RADIUS
+                        )
+                        record_result("05_grab_left_cursor_aimed", grab_aimed)
+                        assert isinstance(grab_aimed, GrabResult)
+                        assert isinstance(grab_aimed.state, GrabState)
+                        assert grab_aimed.state.unix_nanos > 0
+                    finally:
+                        # Best-effort: never leave a cursor hold behind for
+                        # later steps / other e2e scenarios.
+                        try:
+                            await cursor.release()
+                        except grpclib.exceptions.GRPCError:
+                            pass
 
                 # 4. release both hands: returns a GrabState with is_holding
                 #    False (nothing was held, but release is well-defined).
