@@ -36,6 +36,32 @@ Step 6 (2026-06-06 完了)。Resonite 内オブジェクトの **Grab / Release*
   gRPC `FailedPrecondition` (message に "desktop" を含む)。
 - Cursor モダリティの永続保持 (\[\[feedback-cursor-lock-mechanism\]\]) と連動:
   `cursor.set_position` で照準 → `manipulate grab` の流れが cross-RPC で成立する。
+
+## Hold 位置: grab 直後に object を手へ寄せる (頭上に飛ぶ問題の修正、2026-06-10)
+
+grab 時 object は world 位置を保ったまま HolderSlot 下に reparent されるが、desktop では
+**HandSimulator が grab 直後に手を rest pose (腰 y≈0.76) から保持ポーズ (胸 y≈1.31) へ
+動かす**。レイで遠くを掴むと holder-local offset (実測 ≈1m) が lever arm として手の
+移動・回転に振り回され、object が頭の高さ・体の背後 (z+0.8) へ飛ぶ (実機計測)。
+
+- engine 自身の laser grab は「grab 前に HolderSlot を laser 点へ移動」で回避しているが、
+  **HolderSlot.Position_Field は InteractionHandler の FieldDrive に駆動されており外部から
+  書けない** (`GlobalPosition` への書き込みは読み戻しでは見えるが SetParent の local 計算には
+  効かない — 実機で確認した罠)。
+- 採用した修正: grab 直後に **object 側の `Position_Field.TweenTo(float3.Zero, 0.1s, onlyUnderParent: holder)`** で holder-local offset をゼロへ寄せる (engine の
+  TryAlignGrabbed と同じ演出、decompiled InteractionHandler.cs:3935)。object は手の中に
+  収まり保持ポーズと一緒に胸の前へ移動する (実機で Mirror が視界下部に自然に保持されることを
+  screenshot 確認)。回転・スケールは保持。
+
+## e2e の positive grab は Inventory spawn で自動化可能 (2026-06-10 制約解消)
+
+`InventoryClient.spawn("/Inventory/Resonite Essentials/Mirror")` で grabbable な Mirror を
+決定的に spawn できる (視界正面に出る)。spawn → `cursor.set_position(0.5, 0.45)` →
+`grab(radius=0.5)` で `grabbed=True` + `object_names=("Mirror",)` が実機 green。
+注意: 起動直後すぎる spawn は想定位置に出ないことがある (ready 待ち必須) ため、照準点を
+数点 retry する。world から削除する API は無く release して放置 (local home は再起動で
+リセット)。これにより下記の旧制約は解消済み。
+
 - `Grabber.Release(bool supressEvents = false)`: 保持物を全 release (`Grabber.cs:358`)。
 - `Grabber.IsHoldingObjects` / `GrabbedObjects` (`IReadOnlyList<IGrabbable>`) で状態取得。
   object 名は `grabbable.Slot.Name` (best-effort、null guard)。

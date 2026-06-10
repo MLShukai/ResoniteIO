@@ -1,13 +1,13 @@
-"""Minimal Manipulation grab -> get_state -> release example.
+"""Manipulation positive-grab example: spawn a Mirror, aim, grab, release.
 
-Runs the smallest grab/release cycle against the primary hand: probe the
-current hold state, attempt a grab at the desktop cursor ray hit point,
-re-read the state, then release. The default home world has nothing
-grabbable where the cursor happens to point, so grab() typically reports
-grabbed=False without error - the RPC path is what this exercises, not a
-positive pick-up (aim first with resoio.CursorClient.set_position for a
-real pick-up; VR mode fails with FAILED_PRECONDITION). See
-mod/tests/manual/manipulation-verification.md for the visual confirmation.
+Demonstrates a real pick-up against the primary hand: spawn a grabbable
+Mirror from the cloud inventory (Resonite Essentials), hold the desktop
+cursor on it with CursorClient.set_position, grab at the cursor ray hit
+point, then release everything. The grabbed object is tweened into the
+hand and follows it (held in front of the chest in desktop mode). VR mode
+fails with FAILED_PRECONDITION. The spawned Mirror stays in the world
+after release (there is no despawn API); the local home resets on the
+next Resonite restart.
 
 Run from inside the dev container:
 
@@ -20,10 +20,16 @@ import time
 import grpclib.exceptions
 from grpclib.const import Status
 
-from resoio import GrabState, ManipulationClient
+from resoio import CursorClient, GrabState, InventoryClient, ManipulationClient
 
 SOCKET_PATH: str | None = None
 HAND = "primary"
+MIRROR_PATH = "/Inventory/Resonite Essentials/Mirror"
+# The Mirror spawns in front of the view; these normalized cursor targets
+# cover small spawn-position jitter (retry until one of them hits it).
+AIM_POINTS = ((0.5, 0.45), (0.45, 0.5), (0.55, 0.4))
+GRAB_RADIUS = 0.5
+SPAWN_SETTLE_S = 5.0
 READY_TIMEOUT_S = 120.0
 READY_INTERVAL_S = 2.0
 
@@ -60,17 +66,35 @@ def format_state(state: GrabState) -> str:
 
 async def main() -> None:
     await wait_for_ready()
-    async with ManipulationClient(SOCKET_PATH) as client:
-        initial = await client.get_state(hand=HAND)
-        print(f"initial: {format_state(initial)}")
+    async with (
+        InventoryClient(SOCKET_PATH) as inventory,
+        CursorClient(SOCKET_PATH) as cursor,
+        ManipulationClient(SOCKET_PATH) as client,
+    ):
+        spawned = await inventory.spawn(MIRROR_PATH)
+        print(f"spawned: {spawned.spawned_slot_name} ({spawned.spawned_slot_id})")
+        await asyncio.sleep(SPAWN_SETTLE_S)
 
-        # grab at the desktop cursor ray hit point. grabbed=False on an
-        # empty home world is expected, not an error.
-        result = await client.grab(hand=HAND)
-        print(f"grabbed={result.grabbed} state: {format_state(result.state)}")
-
-        released = await client.release(hand=HAND)
-        print(f"released: {format_state(released)}")
+        try:
+            # Hold the cursor on the Mirror and grab at the ray hit point.
+            # Retry a few aim points to absorb spawn-position jitter.
+            grabbed = False
+            for x, y in AIM_POINTS:
+                await cursor.set_position(x, y)
+                result = await client.grab(hand=HAND, radius=GRAB_RADIUS)
+                print(
+                    f"aim=({x}, {y}) grabbed={result.grabbed} "
+                    f"state: {format_state(result.state)}"
+                )
+                if result.grabbed:
+                    grabbed = True
+                    break
+            if not grabbed:
+                print("Mirror was not hit by the cursor ray; nothing grabbed.")
+        finally:
+            released = await client.release(hand=HAND)
+            print(f"released: {format_state(released)}")
+            await cursor.release()
 
 
 if __name__ == "__main__":

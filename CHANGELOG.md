@@ -38,6 +38,15 @@ GitHub Release body. The format follows
   returned by `SetPosition` / `GetPosition` / `Release` and shown in the CLI
   output (`held=True/False`)
 
+### Fixed
+
+- **Grabbed objects no longer fly behind the user's head**: in desktop mode
+  the hand moves from its rest pose to a holding pose right after a grab, and
+  a far-away grab left a large holder-local offset that got swung around with
+  the hand. The bridge now tweens the grabbed object into the hand (0.1 s,
+  same easing as the engine's own grab alignment), so it is held naturally in
+  front of the chest and follows the hand
+
 ## [0.3.0] - 2026-06-09
 
 Adds a mod/client version-compatibility check and switches distribution to
