@@ -1680,21 +1680,21 @@ gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-254">254</a></span>
-<span class="normal"><a href="#__codelineno-0-255">255</a></span>
-<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-256">256</a></span>
 <span class="normal"><a href="#__codelineno-0-257">257</a></span>
 <span class="normal"><a href="#__codelineno-0-258">258</a></span>
 <span class="normal"><a href="#__codelineno-0-259">259</a></span>
 <span class="normal"><a href="#__codelineno-0-260">260</a></span>
-<span class="normal"><a href="#__codelineno-0-261">261</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-254" name="__codelineno-0-254"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
-<a id="__codelineno-0-255" name="__codelineno-0-255"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open the dash overlay and return the resulting state.</span>
-<a id="__codelineno-0-256" name="__codelineno-0-256"></a>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="sd">    Calling when already open is a no-op that returns the current state.</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashOpenRequest</span><span class="p">()</span>
-<a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">request</span><span class="p">)))</span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open the dash overlay and return the resulting state.</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">    Calling when already open is a no-op that returns the current state.</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashOpenRequest</span><span class="p">()</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">request</span><span class="p">)))</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1723,13 +1723,13 @@ gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-263">263</a></span>
-<span class="normal"><a href="#__codelineno-0-264">264</a></span>
-<span class="normal"><a href="#__codelineno-0-265">265</a></span>
-<span class="normal"><a href="#__codelineno-0-266">266</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
-<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Close the dash overlay and return the resulting state.&quot;&quot;&quot;</span>
-<a id="__codelineno-0-265" name="__codelineno-0-265"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashCloseRequest</span><span class="p">()</span>
-<a id="__codelineno-0-266" name="__codelineno-0-266"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">request</span><span class="p">)))</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Close the dash overlay and return the resulting state.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashCloseRequest</span><span class="p">()</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">request</span><span class="p">)))</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1758,17 +1758,17 @@ gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-268">268</a></span>
-<span class="normal"><a href="#__codelineno-0-269">269</a></span>
-<span class="normal"><a href="#__codelineno-0-270">270</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-270">270</a></span>
 <span class="normal"><a href="#__codelineno-0-271">271</a></span>
 <span class="normal"><a href="#__codelineno-0-272">272</a></span>
-<span class="normal"><a href="#__codelineno-0-273">273</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
-<a id="__codelineno-0-269" name="__codelineno-0-269"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the current dash state without modifying it.&quot;&quot;&quot;</span>
-<a id="__codelineno-0-270" name="__codelineno-0-270"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashGetStateRequest</span><span class="p">()</span>
-<a id="__codelineno-0-271" name="__codelineno-0-271"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-272" name="__codelineno-0-272"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_state</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-273" name="__codelineno-0-273"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-273">273</a></span>
+<span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-270" name="__codelineno-0-270"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashState</span><span class="p">:</span>
+<a id="__codelineno-0-271" name="__codelineno-0-271"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the current dash state without modifying it.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-272" name="__codelineno-0-272"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashGetStateRequest</span><span class="p">()</span>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_state</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1802,9 +1802,7 @@ tree is empty when the dash is closed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-275">275</a></span>
-<span class="normal"><a href="#__codelineno-0-276">276</a></span>
-<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-277">277</a></span>
 <span class="normal"><a href="#__codelineno-0-278">278</a></span>
 <span class="normal"><a href="#__codelineno-0-279">279</a></span>
 <span class="normal"><a href="#__codelineno-0-280">280</a></span>
@@ -1820,25 +1818,27 @@ tree is empty when the dash is closed.</p>
 <span class="normal"><a href="#__codelineno-0-290">290</a></span>
 <span class="normal"><a href="#__codelineno-0-291">291</a></span>
 <span class="normal"><a href="#__codelineno-0-292">292</a></span>
-<span class="normal"><a href="#__codelineno-0-293">293</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_tree</span><span class="p">(</span>
-<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">interactable_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">root_ref_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-<a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashTree</span><span class="p">:</span>
-<a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate the dash UI tree as a :class:`DashTree`.</span>
-<a id="__codelineno-0-279" name="__codelineno-0-279"></a>
-<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    When ``interactable_only`` is ``True`` only interactable elements are</span>
-<a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">    returned. ``root_ref_id`` restricts the result to the subtree rooted</span>
-<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    at that ``ref_id``; an empty string enumerates the whole dash. The</span>
-<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    tree is empty when the dash is closed.</span>
-<a id="__codelineno-0-284" name="__codelineno-0-284"></a>
-<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-287" name="__codelineno-0-287"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashGetTreeRequest</span><span class="p">(</span>
-<a id="__codelineno-0-288" name="__codelineno-0-288"></a>        <span class="n">interactable_only</span><span class="o">=</span><span class="n">interactable_only</span><span class="p">,</span>
-<a id="__codelineno-0-289" name="__codelineno-0-289"></a>        <span class="n">root_ref_id</span><span class="o">=</span><span class="n">root_ref_id</span><span class="p">,</span>
-<a id="__codelineno-0-290" name="__codelineno-0-290"></a>    <span class="p">)</span>
-<a id="__codelineno-0-291" name="__codelineno-0-291"></a>    <span class="k">return</span> <span class="n">_tree_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-292" name="__codelineno-0-292"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_tree</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-293" name="__codelineno-0-293"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_tree</span><span class="p">(</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a>    <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">interactable_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">root_ref_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashTree</span><span class="p">:</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate the dash UI tree as a :class:`DashTree`.</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    When ``interactable_only`` is ``True`` only interactable elements are</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    returned. ``root_ref_id`` restricts the result to the subtree rooted</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a><span class="sd">    at that ``ref_id``; an empty string enumerates the whole dash. The</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    tree is empty when the dash is closed.</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashGetTreeRequest</span><span class="p">(</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a>        <span class="n">interactable_only</span><span class="o">=</span><span class="n">interactable_only</span><span class="p">,</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a>        <span class="n">root_ref_id</span><span class="o">=</span><span class="n">root_ref_id</span><span class="p">,</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a>    <span class="p">)</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a>    <span class="k">return</span> <span class="n">_tree_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_tree</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1871,9 +1871,7 @@ mutate world or dash state. The returned result reports whether the
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-295">295</a></span>
-<span class="normal"><a href="#__codelineno-0-296">296</a></span>
-<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-297">297</a></span>
 <span class="normal"><a href="#__codelineno-0-298">298</a></span>
 <span class="normal"><a href="#__codelineno-0-299">299</a></span>
 <span class="normal"><a href="#__codelineno-0-300">300</a></span>
@@ -1883,19 +1881,21 @@ mutate world or dash state. The returned result reports whether the
 <span class="normal"><a href="#__codelineno-0-304">304</a></span>
 <span class="normal"><a href="#__codelineno-0-305">305</a></span>
 <span class="normal"><a href="#__codelineno-0-306">306</a></span>
-<span class="normal"><a href="#__codelineno-0-307">307</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">invoke</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
-<a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Press the element identified by ``ref_id``.</span>
-<a id="__codelineno-0-297" name="__codelineno-0-297"></a>
-<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">    Fires the element&#39;s interaction (e.g. a button press), which may</span>
-<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">    mutate world or dash state. The returned result reports whether the</span>
-<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">    ``ref_id`` resolved and whether the action was applied.</span>
-<a id="__codelineno-0-301" name="__codelineno-0-301"></a>
-<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-304" name="__codelineno-0-304"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashInvokeRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">)</span>
-<a id="__codelineno-0-305" name="__codelineno-0-305"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-306" name="__codelineno-0-306"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-307" name="__codelineno-0-307"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-307">307</a></span>
+<span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">invoke</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Press the element identified by ``ref_id``.</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">    Fires the element&#39;s interaction (e.g. a button press), which may</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">    mutate world or dash state. The returned result reports whether the</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">    ``ref_id`` resolved and whether the action was applied.</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashInvokeRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">)</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1927,9 +1927,7 @@ element. Use :meth:<code>invoke</code> to act on it.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-309">309</a></span>
-<span class="normal"><a href="#__codelineno-0-310">310</a></span>
-<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-311">311</a></span>
 <span class="normal"><a href="#__codelineno-0-312">312</a></span>
 <span class="normal"><a href="#__codelineno-0-313">313</a></span>
 <span class="normal"><a href="#__codelineno-0-314">314</a></span>
@@ -1938,18 +1936,20 @@ element. Use :meth:<code>invoke</code> to act on it.</p>
 <span class="normal"><a href="#__codelineno-0-317">317</a></span>
 <span class="normal"><a href="#__codelineno-0-318">318</a></span>
 <span class="normal"><a href="#__codelineno-0-319">319</a></span>
-<span class="normal"><a href="#__codelineno-0-320">320</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">highlight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
-<a id="__codelineno-0-310" name="__codelineno-0-310"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Highlight (preview) the element identified by ``ref_id``.</span>
-<a id="__codelineno-0-311" name="__codelineno-0-311"></a>
-<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">    Highlight only moves the visual selection; it does not trigger the</span>
-<a id="__codelineno-0-313" name="__codelineno-0-313"></a><span class="sd">    element. Use :meth:`invoke` to act on it.</span>
-<a id="__codelineno-0-314" name="__codelineno-0-314"></a>
-<a id="__codelineno-0-315" name="__codelineno-0-315"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-316" name="__codelineno-0-316"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-317" name="__codelineno-0-317"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashHighlightRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">)</span>
-<a id="__codelineno-0-318" name="__codelineno-0-318"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-319" name="__codelineno-0-319"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">highlight</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-320" name="__codelineno-0-320"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-320">320</a></span>
+<span class="normal"><a href="#__codelineno-0-321">321</a></span>
+<span class="normal"><a href="#__codelineno-0-322">322</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">highlight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Highlight (preview) the element identified by ``ref_id``.</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a><span class="sd">    Highlight only moves the visual selection; it does not trigger the</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a><span class="sd">    element. Use :meth:`invoke` to act on it.</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashHighlightRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">)</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">highlight</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1982,9 +1982,7 @@ scroll was applied.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-322">322</a></span>
-<span class="normal"><a href="#__codelineno-0-323">323</a></span>
-<span class="normal"><a href="#__codelineno-0-324">324</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-324">324</a></span>
 <span class="normal"><a href="#__codelineno-0-325">325</a></span>
 <span class="normal"><a href="#__codelineno-0-326">326</a></span>
 <span class="normal"><a href="#__codelineno-0-327">327</a></span>
@@ -1996,21 +1994,23 @@ scroll was applied.</p>
 <span class="normal"><a href="#__codelineno-0-333">333</a></span>
 <span class="normal"><a href="#__codelineno-0-334">334</a></span>
 <span class="normal"><a href="#__codelineno-0-335">335</a></span>
-<span class="normal"><a href="#__codelineno-0-336">336</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-322" name="__codelineno-0-322"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">scroll</span><span class="p">(</span>
-<a id="__codelineno-0-323" name="__codelineno-0-323"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">delta_x</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-0-324" name="__codelineno-0-324"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
-<a id="__codelineno-0-325" name="__codelineno-0-325"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Scroll the element identified by ``ref_id`` by ``(delta_x,</span>
-<a id="__codelineno-0-326" name="__codelineno-0-326"></a><span class="sd">    delta_y)``.</span>
-<a id="__codelineno-0-327" name="__codelineno-0-327"></a>
-<a id="__codelineno-0-328" name="__codelineno-0-328"></a><span class="sd">    The result reports whether the ``ref_id`` resolved and whether the</span>
-<a id="__codelineno-0-329" name="__codelineno-0-329"></a><span class="sd">    scroll was applied.</span>
-<a id="__codelineno-0-330" name="__codelineno-0-330"></a>
-<a id="__codelineno-0-331" name="__codelineno-0-331"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-332" name="__codelineno-0-332"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-333" name="__codelineno-0-333"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashScrollRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">,</span> <span class="n">delta_x</span><span class="o">=</span><span class="n">delta_x</span><span class="p">,</span> <span class="n">delta_y</span><span class="o">=</span><span class="n">delta_y</span><span class="p">)</span>
-<a id="__codelineno-0-334" name="__codelineno-0-334"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-335" name="__codelineno-0-335"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">scroll</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-336" name="__codelineno-0-336"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-336">336</a></span>
+<span class="normal"><a href="#__codelineno-0-337">337</a></span>
+<span class="normal"><a href="#__codelineno-0-338">338</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-324" name="__codelineno-0-324"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">scroll</span><span class="p">(</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">delta_x</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Scroll the element identified by ``ref_id`` by ``(delta_x,</span>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a><span class="sd">    delta_y)``.</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a><span class="sd">    The result reports whether the ``ref_id`` resolved and whether the</span>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a><span class="sd">    scroll was applied.</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashScrollRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">,</span> <span class="n">delta_x</span><span class="o">=</span><span class="n">delta_x</span><span class="p">,</span> <span class="n">delta_y</span><span class="o">=</span><span class="n">delta_y</span><span class="p">)</span>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">scroll</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -2043,9 +2043,7 @@ while the dash is closed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-338">338</a></span>
-<span class="normal"><a href="#__codelineno-0-339">339</a></span>
-<span class="normal"><a href="#__codelineno-0-340">340</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-340">340</a></span>
 <span class="normal"><a href="#__codelineno-0-341">341</a></span>
 <span class="normal"><a href="#__codelineno-0-342">342</a></span>
 <span class="normal"><a href="#__codelineno-0-343">343</a></span>
@@ -2054,18 +2052,20 @@ while the dash is closed.</p>
 <span class="normal"><a href="#__codelineno-0-346">346</a></span>
 <span class="normal"><a href="#__codelineno-0-347">347</a></span>
 <span class="normal"><a href="#__codelineno-0-348">348</a></span>
-<span class="normal"><a href="#__codelineno-0-349">349</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-338" name="__codelineno-0-338"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">list_screens</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashScreen</span><span class="p">]:</span>
-<a id="__codelineno-0-339" name="__codelineno-0-339"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate the dash screens (tabs) as a list of :class:`DashScreen`.</span>
-<a id="__codelineno-0-340" name="__codelineno-0-340"></a>
-<a id="__codelineno-0-341" name="__codelineno-0-341"></a><span class="sd">    Each screen carries the language-independent ``key`` and ``ref_id``</span>
-<a id="__codelineno-0-342" name="__codelineno-0-342"></a><span class="sd">    that :meth:`set_screen` addresses. Screens can be enumerated even</span>
-<a id="__codelineno-0-343" name="__codelineno-0-343"></a><span class="sd">    while the dash is closed.</span>
-<a id="__codelineno-0-344" name="__codelineno-0-344"></a>
-<a id="__codelineno-0-345" name="__codelineno-0-345"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-346" name="__codelineno-0-346"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-347" name="__codelineno-0-347"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashListScreensRequest</span><span class="p">()</span>
-<a id="__codelineno-0-348" name="__codelineno-0-348"></a>    <span class="n">screen_list</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">list_screens</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-349" name="__codelineno-0-349"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">_screen_from_proto</span><span class="p">(</span><span class="n">screen</span><span class="p">)</span> <span class="k">for</span> <span class="n">screen</span> <span class="ow">in</span> <span class="n">screen_list</span><span class="o">.</span><span class="n">screens</span><span class="p">]</span>
+<span class="normal"><a href="#__codelineno-0-349">349</a></span>
+<span class="normal"><a href="#__codelineno-0-350">350</a></span>
+<span class="normal"><a href="#__codelineno-0-351">351</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-340" name="__codelineno-0-340"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">list_screens</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashScreen</span><span class="p">]:</span>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate the dash screens (tabs) as a list of :class:`DashScreen`.</span>
+<a id="__codelineno-0-342" name="__codelineno-0-342"></a>
+<a id="__codelineno-0-343" name="__codelineno-0-343"></a><span class="sd">    Each screen carries the language-independent ``key`` and ``ref_id``</span>
+<a id="__codelineno-0-344" name="__codelineno-0-344"></a><span class="sd">    that :meth:`set_screen` addresses. Screens can be enumerated even</span>
+<a id="__codelineno-0-345" name="__codelineno-0-345"></a><span class="sd">    while the dash is closed.</span>
+<a id="__codelineno-0-346" name="__codelineno-0-346"></a>
+<a id="__codelineno-0-347" name="__codelineno-0-347"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-348" name="__codelineno-0-348"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-349" name="__codelineno-0-349"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashListScreensRequest</span><span class="p">()</span>
+<a id="__codelineno-0-350" name="__codelineno-0-350"></a>    <span class="n">screen_list</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">list_screens</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-351" name="__codelineno-0-351"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">_screen_from_proto</span><span class="p">(</span><span class="n">screen</span><span class="p">)</span> <span class="k">for</span> <span class="n">screen</span> <span class="ow">in</span> <span class="n">screen_list</span><span class="o">.</span><span class="n">screens</span><span class="p">]</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -2107,9 +2107,7 @@ screen still navigates with <code>ok == True</code> and <code>detail</code> set 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/dash.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-351">351</a></span>
-<span class="normal"><a href="#__codelineno-0-352">352</a></span>
-<span class="normal"><a href="#__codelineno-0-353">353</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-353">353</a></span>
 <span class="normal"><a href="#__codelineno-0-354">354</a></span>
 <span class="normal"><a href="#__codelineno-0-355">355</a></span>
 <span class="normal"><a href="#__codelineno-0-356">356</a></span>
@@ -2132,32 +2130,34 @@ screen still navigates with <code>ok == True</code> and <code>detail</code> set 
 <span class="normal"><a href="#__codelineno-0-373">373</a></span>
 <span class="normal"><a href="#__codelineno-0-374">374</a></span>
 <span class="normal"><a href="#__codelineno-0-375">375</a></span>
-<span class="normal"><a href="#__codelineno-0-376">376</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-351" name="__codelineno-0-351"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_screen</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
-<a id="__codelineno-0-352" name="__codelineno-0-352"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Navigate to a dash screen identified by ``ref_id`` or ``key``.</span>
-<a id="__codelineno-0-353" name="__codelineno-0-353"></a>
-<a id="__codelineno-0-354" name="__codelineno-0-354"></a><span class="sd">    Navigation does not open or close the dash; it only switches the</span>
-<a id="__codelineno-0-355" name="__codelineno-0-355"></a><span class="sd">    active screen, so the new screen renders on the next ``get_tree``.</span>
-<a id="__codelineno-0-356" name="__codelineno-0-356"></a>
-<a id="__codelineno-0-357" name="__codelineno-0-357"></a><span class="sd">    ``ref_id`` takes precedence: when non-empty it selects the screen by</span>
-<a id="__codelineno-0-358" name="__codelineno-0-358"></a><span class="sd">    its exact engine ``ReferenceID``; otherwise the screen is matched by</span>
-<a id="__codelineno-0-359" name="__codelineno-0-359"></a><span class="sd">    its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``).</span>
-<a id="__codelineno-0-360" name="__codelineno-0-360"></a><span class="sd">    Passing neither raises :class:`ValueError` before any network round</span>
-<a id="__codelineno-0-361" name="__codelineno-0-361"></a><span class="sd">    trip.</span>
-<a id="__codelineno-0-362" name="__codelineno-0-362"></a>
-<a id="__codelineno-0-363" name="__codelineno-0-363"></a><span class="sd">    An unresolved ``ref_id`` / ``key`` is a soft failure</span>
-<a id="__codelineno-0-364" name="__codelineno-0-364"></a><span class="sd">    (``found == ok == False``), not an exception. On success the result&#39;s</span>
-<a id="__codelineno-0-365" name="__codelineno-0-365"></a><span class="sd">    ``ref_id`` echoes the current screen after navigating; a disabled</span>
-<a id="__codelineno-0-366" name="__codelineno-0-366"></a><span class="sd">    screen still navigates with ``ok == True`` and ``detail`` set to</span>
-<a id="__codelineno-0-367" name="__codelineno-0-367"></a><span class="sd">    ``&quot;screen disabled&quot;``.</span>
-<a id="__codelineno-0-368" name="__codelineno-0-368"></a>
-<a id="__codelineno-0-369" name="__codelineno-0-369"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-370" name="__codelineno-0-370"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-371" name="__codelineno-0-371"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">ref_id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">key</span><span class="p">:</span>
-<a id="__codelineno-0-372" name="__codelineno-0-372"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;set_screen requires ref_id or key&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-373" name="__codelineno-0-373"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashSetScreenRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
-<a id="__codelineno-0-374" name="__codelineno-0-374"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
-<a id="__codelineno-0-375" name="__codelineno-0-375"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">set_screen</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-<a id="__codelineno-0-376" name="__codelineno-0-376"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#__codelineno-0-378">378</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-353" name="__codelineno-0-353"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_screen</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DashActionResult</span><span class="p">:</span>
+<a id="__codelineno-0-354" name="__codelineno-0-354"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Navigate to a dash screen identified by ``ref_id`` or ``key``.</span>
+<a id="__codelineno-0-355" name="__codelineno-0-355"></a>
+<a id="__codelineno-0-356" name="__codelineno-0-356"></a><span class="sd">    Navigation does not open or close the dash; it only switches the</span>
+<a id="__codelineno-0-357" name="__codelineno-0-357"></a><span class="sd">    active screen, so the new screen renders on the next ``get_tree``.</span>
+<a id="__codelineno-0-358" name="__codelineno-0-358"></a>
+<a id="__codelineno-0-359" name="__codelineno-0-359"></a><span class="sd">    ``ref_id`` takes precedence: when non-empty it selects the screen by</span>
+<a id="__codelineno-0-360" name="__codelineno-0-360"></a><span class="sd">    its exact engine ``ReferenceID``; otherwise the screen is matched by</span>
+<a id="__codelineno-0-361" name="__codelineno-0-361"></a><span class="sd">    its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``).</span>
+<a id="__codelineno-0-362" name="__codelineno-0-362"></a><span class="sd">    Passing neither raises :class:`ValueError` before any network round</span>
+<a id="__codelineno-0-363" name="__codelineno-0-363"></a><span class="sd">    trip.</span>
+<a id="__codelineno-0-364" name="__codelineno-0-364"></a>
+<a id="__codelineno-0-365" name="__codelineno-0-365"></a><span class="sd">    An unresolved ``ref_id`` / ``key`` is a soft failure</span>
+<a id="__codelineno-0-366" name="__codelineno-0-366"></a><span class="sd">    (``found == ok == False``), not an exception. On success the result&#39;s</span>
+<a id="__codelineno-0-367" name="__codelineno-0-367"></a><span class="sd">    ``ref_id`` echoes the current screen after navigating; a disabled</span>
+<a id="__codelineno-0-368" name="__codelineno-0-368"></a><span class="sd">    screen still navigates with ``ok == True`` and ``detail`` set to</span>
+<a id="__codelineno-0-369" name="__codelineno-0-369"></a><span class="sd">    ``&quot;screen disabled&quot;``.</span>
+<a id="__codelineno-0-370" name="__codelineno-0-370"></a>
+<a id="__codelineno-0-371" name="__codelineno-0-371"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-372" name="__codelineno-0-372"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-373" name="__codelineno-0-373"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">ref_id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">key</span><span class="p">:</span>
+<a id="__codelineno-0-374" name="__codelineno-0-374"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;set_screen requires ref_id or key&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-375" name="__codelineno-0-375"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">DashSetScreenRequest</span><span class="p">(</span><span class="n">ref_id</span><span class="o">=</span><span class="n">ref_id</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
+<a id="__codelineno-0-376" name="__codelineno-0-376"></a>    <span class="k">return</span> <span class="n">_result_from_proto</span><span class="p">(</span>
+<a id="__codelineno-0-377" name="__codelineno-0-377"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">set_screen</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+<a id="__codelineno-0-378" name="__codelineno-0-378"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
