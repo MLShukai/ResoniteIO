@@ -32,19 +32,19 @@ from typing import TYPE_CHECKING, BinaryIO, Literal
 
 import numpy as np
 
-# _suppress_teardown_errors is re-exported here (it is imported by
-# tests/resoio/cli/test_record.py via ``from resoio.cli.record import ...``)
-# in addition to being used by _record_muxed below.
+# suppress_teardown_errors is aliased back to its old module-private name
+# because tests/resoio/cli/test_record.py imports it via
+# ``from resoio.cli.record import _suppress_teardown_errors``.
 from resoio.cli._recording_io import (
-    _fps_to_fraction,
-    _mux_audio_packets,
-    _mux_video_packets,
-    _MuxedState,
-    _suppress_teardown_errors,
-    _video_pts_from_nanos,
-    _WavFloat32Writer,
-    _y4m_write_frame,
-    _y4m_write_header,
+    MuxedState,
+    WavFloat32Writer,
+    fps_to_fraction,
+    mux_audio_packets,
+    mux_video_packets,
+    suppress_teardown_errors as _suppress_teardown_errors,
+    video_pts_from_nanos,
+    y4m_write_frame,
+    y4m_write_header,
 )
 
 if TYPE_CHECKING:
@@ -357,15 +357,15 @@ async def _record_video_y4m(args: argparse.Namespace, out: BinaryIO) -> int:
     from resoio.camera import CameraClient
 
     fps: float = args.fps if args.fps is not None else 30.0
-    fps_num, fps_den = _fps_to_fraction(fps)
+    fps_num, fps_den = fps_to_fraction(fps)
     header_written = False
 
     async with CameraClient(args.socket) as client:
         async for frame in _paced_frames(client, fps, verbose=args.verbose):
             if not header_written:
-                _y4m_write_header(out, frame.width, frame.height, fps_num, fps_den)
+                y4m_write_header(out, frame.width, frame.height, fps_num, fps_den)
                 header_written = True
-            _y4m_write_frame(out, frame.pixels)
+            y4m_write_frame(out, frame.pixels)
             out.flush()
     return 0
 
@@ -407,14 +407,14 @@ async def _record_video_mp4(args: argparse.Namespace, path: str) -> int:
                 # PyAV's strided memcpy into the VideoFrame is well-defined.
                 rgb = np.ascontiguousarray(frame.pixels[..., :3])
                 vf = av.VideoFrame.from_ndarray(rgb, format="rgb24")
-                _mux_video_packets(container, v_stream, vf)
+                mux_video_packets(container, v_stream, vf)
     finally:
         try:
             # Flush the encoder's reorder buffer before close() finalises
             # the moov atom; skipped if no frame ever arrived (header
             # never written → stream dims unset → encode would raise).
             if header_written:
-                _mux_video_packets(container, v_stream, None)
+                mux_video_packets(container, v_stream, None)
         finally:
             container.close()
     return 0
@@ -445,7 +445,7 @@ async def _record_audio_wav(args: argparse.Namespace, path: str) -> int:
     """Stream samples into a ``.wav`` file, patching sizes on close."""
     from resoio.speaker import SpeakerClient
 
-    writer = _WavFloat32Writer()
+    writer = WavFloat32Writer()
     writer.open(path)
     try:
         async with SpeakerClient(args.socket) as client:
@@ -465,7 +465,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
       output can be piped into ``ffmpeg`` or ``ffplay`` live).
     * ``target is not None`` → mp4 file at that path.
 
-    Both pumps share a single :class:`_MuxedState` anchor for ``t0``
+    Both pumps share a single :class:`MuxedState` anchor for ``t0``
     (the earliest Unix-nanos seen by either side) so A/V sync is
     preserved across container formats. The classic flush MUST sequence
     is enforced by nested ``try/finally`` blocks: video encode(None) →
@@ -508,7 +508,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
     a_stream.layout = "stereo"
     a_stream.time_base = Fraction(1, SAMPLE_RATE)
 
-    state = _MuxedState()
+    state = MuxedState()
     video_header_ready = asyncio.Event()
     video_header_written = False
     audio_pts_initialised = False
@@ -530,7 +530,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
                 video_header_written = True
                 video_header_ready.set()
             t0 = state.anchor(frame.unix_nanos)
-            pts = _video_pts_from_nanos(frame.unix_nanos, t0)
+            pts = video_pts_from_nanos(frame.unix_nanos, t0)
             if pts <= state.video_pts_seen:
                 # Container demuxers refuse non-monotonic PTS — nudge by
                 # one tick rather than dropping the frame so we keep the
@@ -540,7 +540,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
             rgb = np.ascontiguousarray(frame.pixels[..., :3])
             vf = av.VideoFrame.from_ndarray(rgb, format="rgb24")
             vf.pts = pts
-            _mux_video_packets(container, v_stream, vf)
+            mux_video_packets(container, v_stream, vf)
 
     async def audio_pump(spk: SpeakerClient) -> None:
         """Pull SpeakerChunks, encode AAC, share ``t0`` with video."""
@@ -570,7 +570,7 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
             af = av.AudioFrame.from_ndarray(planar, format="fltp", layout="stereo")
             af.sample_rate = SAMPLE_RATE
             af.pts = pts
-            _mux_audio_packets(container, a_stream, af)
+            mux_audio_packets(container, a_stream, af)
             sample_offset += chunk.samples.shape[0]
 
     try:
@@ -611,11 +611,11 @@ async def _record_muxed(args: argparse.Namespace, target: str | None) -> int:
         # PyAVCallbackError tracebacks.
         if video_header_written:
             _suppress_teardown_errors(
-                lambda: _mux_video_packets(container, v_stream, None)
+                lambda: mux_video_packets(container, v_stream, None)
             )
         if audio_pts_initialised:
             _suppress_teardown_errors(
-                lambda: _mux_audio_packets(container, a_stream, None)
+                lambda: mux_audio_packets(container, a_stream, None)
             )
         _suppress_teardown_errors(container.close)
     return 0

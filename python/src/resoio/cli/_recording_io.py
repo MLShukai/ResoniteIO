@@ -32,21 +32,19 @@ if TYPE_CHECKING:
 
     from resoio.speaker import SpeakerChunk
 
-# Names re-imported by resoio.cli.record. They keep their ``_`` prefix per the
-# project's private-module convention; listing them here marks the module's
-# exported surface so pyright accepts the cross-module import (mirrors how
-# resoio._client exports ``_BaseClient``).
+# Surface imported by resoio.cli.record. Privacy is carried by this module's
+# ``_`` filename prefix, so cross-imported symbols themselves are unprefixed;
+# ``_`` stays only on helpers used exclusively inside this module.
 __all__ = [
-    "_MuxedState",
-    "_WavFloat32Writer",
-    "_build_placeholder_header",
-    "_fps_to_fraction",
-    "_mux_audio_packets",
-    "_mux_video_packets",
-    "_suppress_teardown_errors",
-    "_video_pts_from_nanos",
-    "_y4m_write_frame",
-    "_y4m_write_header",
+    "MuxedState",
+    "WavFloat32Writer",
+    "fps_to_fraction",
+    "mux_audio_packets",
+    "mux_video_packets",
+    "suppress_teardown_errors",
+    "video_pts_from_nanos",
+    "y4m_write_frame",
+    "y4m_write_header",
 ]
 
 
@@ -55,20 +53,20 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-def _fps_to_fraction(fps: float) -> tuple[int, int]:
+def fps_to_fraction(fps: float) -> tuple[int, int]:
     """Return ``(numerator, denominator)`` for the Y4M ``F`` header field.
 
     The fraction is bounded to a denominator of at most ``1000``; integer
     rates like ``30.0`` collapse to ``(30, 1)``.
 
-    >>> _fps_to_fraction(30.0)
+    >>> fps_to_fraction(30.0)
     (30, 1)
     """
     frac = Fraction(fps).limit_denominator(1000)
     return frac.numerator, frac.denominator
 
 
-def _y4m_write_header(
+def y4m_write_header(
     out: BinaryIO, width: int, height: int, fps_num: int, fps_den: int
 ) -> None:
     """Write a Y4M stream header (C444, square pixels, progressive)."""
@@ -78,7 +76,7 @@ def _y4m_write_header(
     out.write(header)
 
 
-def _y4m_write_frame(out: BinaryIO, rgba: NDArray[np.uint8]) -> None:
+def y4m_write_frame(out: BinaryIO, rgba: NDArray[np.uint8]) -> None:
     """Write one Y4M frame (``FRAME`` marker plus Y/U/V planes, C444)."""
     y, u, v = _rgba_to_yuv444(rgba)
     out.write(b"FRAME\n")
@@ -137,7 +135,7 @@ def _build_placeholder_header() -> bytes:
     """Build the 44-byte WAV header with placeholder size fields (zeros).
 
     Size fields at offsets 4 and 40 are written as ``0`` and patched in
-    :meth:`_WavFloat32Writer.close` once the streamed byte count is known.
+    :meth:`WavFloat32Writer.close` once the streamed byte count is known.
     """
     return struct.pack(
         "<4sI4s4sIHHIIHH4sI",
@@ -157,7 +155,7 @@ def _build_placeholder_header() -> bytes:
     )
 
 
-class _WavFloat32Writer:
+class WavFloat32Writer:
     """Streaming WAV writer for 48 kHz / Stereo / float32 LE samples.
 
     Standard library only (``struct`` + raw file I/O): the stdlib
@@ -175,7 +173,7 @@ class _WavFloat32Writer:
     def open(self, path: str | Path) -> None:
         """Open ``path`` for binary write and emit the placeholder header."""
         if self._fp is not None:
-            raise RuntimeError("_WavFloat32Writer.open called twice without close")
+            raise RuntimeError("WavFloat32Writer.open called twice without close")
         fp = open(path, "wb")
         fp.write(_build_placeholder_header())
         self._fp = fp
@@ -190,7 +188,7 @@ class _WavFloat32Writer:
         """
         fp = self._fp
         if fp is None:
-            raise RuntimeError("_WavFloat32Writer.write called before open")
+            raise RuntimeError("WavFloat32Writer.write called before open")
         payload = chunk.samples.tobytes()
         fp.write(payload)
         self._bytes_written += len(payload)
@@ -222,7 +220,7 @@ class _WavFloat32Writer:
 # ---------------------------------------------------------------------------
 
 
-def _mux_video_packets(
+def mux_video_packets(
     container: OutputContainer,
     v_stream: VideoStream,
     frame: av.VideoFrame | None,
@@ -237,14 +235,14 @@ def _mux_video_packets(
         container.mux(packet)  # pyright: ignore[reportUnknownMemberType]
 
 
-def _mux_audio_packets(
+def mux_audio_packets(
     container: OutputContainer,
     a_stream: AudioStream,
     frame: av.AudioFrame | None,
 ) -> None:
     """Encode ``frame`` (or flush on ``None``) and mux every audio packet.
 
-    Symmetric to :func:`_mux_video_packets`: PyAV's AAC encoder accepts
+    Symmetric to :func:`mux_video_packets`: PyAV's AAC encoder accepts
     arbitrary input ``AudioFrame`` sizes (it FIFOs internally into 1024-
     sample AAC frames) so callers do not need an explicit
     ``av.AudioFifo``. The ``pyright: ignore`` is confined to the two
@@ -254,7 +252,7 @@ def _mux_audio_packets(
         container.mux(packet)  # pyright: ignore[reportUnknownMemberType]
 
 
-def _suppress_teardown_errors(fn: Callable[[], None]) -> None:
+def suppress_teardown_errors(fn: Callable[[], None]) -> None:
     """Run ``fn`` and silently swallow broken-pipe / PyAV I/O errors.
 
     Used by ``_record_muxed`` to flush + close cleanly when stdout
@@ -281,7 +279,7 @@ def _suppress_teardown_errors(fn: Callable[[], None]) -> None:
 # ---------------------------------------------------------------------------
 
 
-class _MuxedState:
+class MuxedState:
     """Mutable bookkeeping shared between the muxed video and audio pumps.
 
     ``t0_nanos`` is the **shared** Unix-nanos timestamp of the earliest
@@ -307,7 +305,7 @@ class _MuxedState:
         return self.t0_nanos
 
 
-def _video_pts_from_nanos(unix_nanos: int, t0_nanos: int) -> int:
+def video_pts_from_nanos(unix_nanos: int, t0_nanos: int) -> int:
     """Convert a Camera ``unix_nanos`` to a 1/90000-Hz PTS, clamped to ≥0.
 
     The spec (§7.1) fixes the video stream ``time_base`` to ``1/90000``
@@ -316,11 +314,11 @@ def _video_pts_from_nanos(unix_nanos: int, t0_nanos: int) -> int:
     PTS is rounded to the nearest tick and clamped at zero so the first
     frame (whose nanos == ``t0_nanos``) lands exactly at PTS 0.
 
-    >>> _video_pts_from_nanos(0, 0)
+    >>> video_pts_from_nanos(0, 0)
     0
-    >>> _video_pts_from_nanos(33_333_333, 0)
+    >>> video_pts_from_nanos(33_333_333, 0)
     3000
-    >>> _video_pts_from_nanos(0, 100)
+    >>> video_pts_from_nanos(0, 100)
     0
     """
     delta = max(0, unix_nanos - t0_nanos)
