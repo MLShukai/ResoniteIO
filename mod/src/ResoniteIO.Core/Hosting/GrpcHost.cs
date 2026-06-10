@@ -10,6 +10,7 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -89,7 +90,8 @@ public sealed class GrpcHost : IAsyncDisposable
         IWorldBridge? worldBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        IInfoBridge? infoBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -114,54 +116,37 @@ public sealed class GrpcHost : IAsyncDisposable
             o.MaxSendMessageSize = int.MaxValue;
         });
         builder.Services.AddSingleton(log);
-        if (bridge is not null)
+
+        // 注入された Bridge だけを DI 登録し、未注入のモダリティ名を listen 成功後の
+        // WARN 用に控える。登録順 = WARN 出力順なので呼び出し順を変えない。
+        var missing = new List<string>();
+        void Register<T>(T? b, string modality)
+            where T : class
         {
-            builder.Services.AddSingleton(bridge);
+            if (b is not null)
+            {
+                builder.Services.AddSingleton(b);
+            }
+            else
+            {
+                missing.Add(modality);
+            }
         }
-        if (cameraBridge is not null)
-        {
-            builder.Services.AddSingleton(cameraBridge);
-        }
-        if (displayBridge is not null)
-        {
-            builder.Services.AddSingleton(displayBridge);
-        }
-        if (locomotionBridge is not null)
-        {
-            builder.Services.AddSingleton(locomotionBridge);
-        }
-        if (speakerBridge is not null)
-        {
-            builder.Services.AddSingleton(speakerBridge);
-        }
-        if (microphoneBridge is not null)
-        {
-            builder.Services.AddSingleton(microphoneBridge);
-        }
-        if (contextMenuBridge is not null)
-        {
-            builder.Services.AddSingleton(contextMenuBridge);
-        }
-        if (dashBridge is not null)
-        {
-            builder.Services.AddSingleton(dashBridge);
-        }
-        if (worldBridge is not null)
-        {
-            builder.Services.AddSingleton(worldBridge);
-        }
-        if (manipulationBridge is not null)
-        {
-            builder.Services.AddSingleton(manipulationBridge);
-        }
-        if (inventoryBridge is not null)
-        {
-            builder.Services.AddSingleton(inventoryBridge);
-        }
-        if (cursorBridge is not null)
-        {
-            builder.Services.AddSingleton(cursorBridge);
-        }
+
+        Register(bridge, "Connection");
+        Register(infoBridge, "Info");
+        Register(cameraBridge, "Camera");
+        Register(displayBridge, "Display");
+        Register(locomotionBridge, "Locomotion");
+        Register(speakerBridge, "Speaker");
+        Register(microphoneBridge, "Microphone");
+        Register(contextMenuBridge, "ContextMenu");
+        Register(dashBridge, "Dash");
+        Register(worldBridge, "World");
+        Register(manipulationBridge, "Manipulation");
+        Register(inventoryBridge, "Inventory");
+        Register(cursorBridge, "Cursor");
+
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(
@@ -172,6 +157,7 @@ public sealed class GrpcHost : IAsyncDisposable
 
         var app = builder.Build();
         app.MapGrpcService<ConnectionService>();
+        app.MapGrpcService<InfoService>();
         app.MapGrpcService<CameraService>();
         app.MapGrpcService<DisplayService>();
         app.MapGrpcService<LocomotionService>();
@@ -201,53 +187,9 @@ public sealed class GrpcHost : IAsyncDisposable
 
         log.LogInfo($"GrpcHost listening on {socketPath}");
 
-        if (bridge is null)
+        foreach (var modality in missing)
         {
-            log.LogWarning("Connection modality is not configured.");
-        }
-        if (cameraBridge is null)
-        {
-            log.LogWarning("Camera modality is not configured.");
-        }
-        if (displayBridge is null)
-        {
-            log.LogWarning("Display modality is not configured.");
-        }
-        if (locomotionBridge is null)
-        {
-            log.LogWarning("Locomotion modality is not configured.");
-        }
-        if (speakerBridge is null)
-        {
-            log.LogWarning("Speaker modality is not configured.");
-        }
-        if (microphoneBridge is null)
-        {
-            log.LogWarning("Microphone modality is not configured.");
-        }
-        if (contextMenuBridge is null)
-        {
-            log.LogWarning("ContextMenu modality is not configured.");
-        }
-        if (dashBridge is null)
-        {
-            log.LogWarning("Dash modality is not configured.");
-        }
-        if (worldBridge is null)
-        {
-            log.LogWarning("World modality is not configured.");
-        }
-        if (manipulationBridge is null)
-        {
-            log.LogWarning("Manipulation modality is not configured.");
-        }
-        if (inventoryBridge is null)
-        {
-            log.LogWarning("Inventory modality is not configured.");
-        }
-        if (cursorBridge is null)
-        {
-            log.LogWarning("Cursor modality is not configured.");
+            log.LogWarning($"{modality} modality is not configured.");
         }
 
         var runTask = Task.Run(

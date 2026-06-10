@@ -21,11 +21,6 @@ from resoio import CameraClient, Frame
 
 SOCKET_PATH: str | None = None
 DURATION_S = 5.0
-WIDTH = 640
-HEIGHT = 480
-# fps_limit caps server emission so this demo does not burn CPU
-# rendering at the engine's native framerate.
-FPS_LIMIT = 30.0
 READY_TIMEOUT_S = 120.0
 READY_INTERVAL_S = 2.0
 
@@ -40,7 +35,7 @@ async def wait_for_ready() -> None:
     while True:
         try:
             async with CameraClient(SOCKET_PATH) as cam:
-                async for _ in cam.stream(1, 1, 1.0):
+                async for _ in cam.stream():
                     return
         except grpclib.exceptions.GRPCError as e:
             if e.status != Status.FAILED_PRECONDITION:
@@ -59,7 +54,7 @@ async def main() -> None:
     t0 = 0.0
     elapsed = 0.0
     async with CameraClient(SOCKET_PATH) as client:
-        async for frame in client.stream(WIDTH, HEIGHT, FPS_LIMIT):
+        async for frame in client.stream():
             if count == 0:
                 t0 = time.monotonic()
             last = frame

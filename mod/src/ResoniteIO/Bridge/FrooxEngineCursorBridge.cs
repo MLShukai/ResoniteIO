@@ -15,24 +15,27 @@ namespace ResoniteIO.Bridge;
 /// one-shot で marshal する (<see cref="RunOnEngineAsync{T}"/>)。
 /// </para>
 /// <para>
-/// 位置の設定は <see cref="InputBindingManager.RegisterCursorLock"/> による
-/// <b>cursor lock</b> で行う。<c>Mouse.Update</c> は <c>CursorLockPosition</c> が
-/// セットされていると毎フレーム <c>WindowPosition</c> をそこへ強制する
-/// (decompiled/.../Mouse.cs:67-71)。OS レベルのマウス injection
-/// (<c>InputInterface.SetMousePosition</c>) は Wine/Proton で反映されるか不確実なため使わず、
-/// engine 内で完結する cursor lock を採用する。lock は「カーソルをその位置に保持する」
-/// 副作用を持つが、これは desktop で context menu を開いたまま視点移動で自動クローズ
-/// させる (exit-lerp の arming) ために必要な性質でもある。
+/// 位置の設定は「<b>warp → settle → 即 release</b>」の one-shot で行い、RPC を跨いだ
+/// 状態は一切保持しない。engine thread 上で目標ピクセルを解決した後、
+/// (a) <see cref="InputInterface.SetMousePosition"/> で OS カーソルを warp し
+/// (native では実カーソルが移動、Wine/Proton では injection 非対応のため no-op)、
+/// (b) <see cref="InputBindingManager.RegisterCursorLock"/> による一時 lock で
+/// <c>Mouse.WindowPosition</c> を強制する (<c>Mouse.Update</c> は
+/// <c>CursorLockPosition</c> がセットされていると毎フレーム <c>WindowPosition</c> を
+/// そこへ上書きする。decompiled/.../Mouse.cs:67-71)。settle (反映) を確認したら、
+/// cancel 経路を含むあらゆる経路で <b>呼び出しが戻る前に必ず
+/// <c>UnregisterCursorLock</c> で lock を解放する</b> (register と cancel の競合は
+/// <see cref="WarpAndLockAsync"/> の engine action 側 rollback が塞ぐ)。旧実装は lock を
+/// 永続保持していたため Resonite フォーカス中はマウスが掴まれ他アプリを操作できな
+/// かったが、現実装では呼び出し終了後にマウスは自由になる。
 /// </para>
 /// <para>
-/// lock は world ごとに 1 つ、<see cref="World.RootSlot"/> を element key として登録し、
-/// 以降の <see cref="SetPositionAsync"/> では <see cref="CursorLock.position"/> を
-/// 上書きする。world 切替時は旧 lock を unregister して新 world に張り直す。
-/// <see cref="Dispose"/> で best-effort に unregister する (engine 終了時は world ごと
-/// 破棄されるため leak は無害)。
+/// 帰結として位置は保持されない: Wine では OS warp が no-op のため、lock 解放後の
+/// 次フレームで <c>WindowPosition</c> は実 OS カーソル位置へ戻る。menu-at-cursor の
+/// ような位置依存の後続操作は、warp が効いている同一操作内でのみ成立する。
 /// </para>
 /// </remarks>
-internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
+internal sealed class FrooxEngineCursorBridge : ICursorBridge
 {
     // 他の locker (mouse-look 等) に勝てるよう高い priority を使う。
     // LockCursor getter は priority 最大の locker の position を採用する。
@@ -44,12 +47,6 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
 
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
-
-    private readonly object _lock = new();
-    private World? _lockedWorld;
-    private IWorldElement? _lockElement;
-    private CursorLock? _cursorLock;
-    private bool _disposed;
 
     public FrooxEngineCursorBridge(Engine engine, ILogSink log)
     {
@@ -63,40 +60,98 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     /// <inheritdoc/>
     public async Task<CursorStateSnapshot> SetPositionAsync(float x, float y, CancellationToken ct)
     {
-        // engine thread 上で目標ピクセルを解決し cursor lock を張る / 更新する。
-        var target = await RunOnEngineAsync(
-                () =>
-                {
-                    var world = ResolveWorld();
-                    var resolution = ResolveResolution(world);
-                    var pixel = ToPixel(x, y, resolution);
-                    ApplyLock(world, pixel);
-                    return pixel;
-                },
-                ct
-            )
-            .ConfigureAwait(false);
+        var (world, element, target) = await WarpAndLockAsync(x, y, ct).ConfigureAwait(false);
 
-        // lock の WindowPosition 強制は次の Mouse.Update まで効かないため、反映を待つ。
-        for (var attempt = 0; attempt < _settlePollMaxAttempts; attempt++)
+        try
         {
-            var snapshot = await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct)
-                .ConfigureAwait(false);
-            if (Matches(snapshot, target))
+            // lock の WindowPosition 強制は次の Mouse.Update まで効かないため、反映を待つ。
+            for (var attempt = 0; attempt < _settlePollMaxAttempts; attempt++)
             {
-                return snapshot;
+                var snapshot = await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct)
+                    .ConfigureAwait(false);
+                if (Matches(snapshot, target))
+                {
+                    return snapshot;
+                }
+
+                await Task.Delay(_settlePollInterval, ct).ConfigureAwait(false);
             }
 
-            await Task.Delay(_settlePollInterval, ct).ConfigureAwait(false);
+            // timeout しても現在の実測 state を返す (best-effort)。
+            return await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct)
+                .ConfigureAwait(false);
         }
-
-        // timeout しても現在の実測 state を返す (best-effort)。
-        return await RunOnEngineAsync(() => ReadState(ResolveWorld()), ct).ConfigureAwait(false);
+        finally
+        {
+            // settle 確認後 / timeout / cancel のいずれの経路でも、戻る前に必ず lock を
+            // 解放してマウスを返す。
+            ReleaseLock(world, element);
+        }
     }
 
     /// <inheritdoc/>
     public Task<CursorStateSnapshot> GetPositionAsync(CancellationToken ct) =>
         RunOnEngineAsync(() => ReadState(ResolveWorld()), ct);
+
+    /// <summary>
+    /// engine thread 上で目標ピクセルを解決し、OS warp + call-scoped な一時 cursor lock を張る。
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EngineDispatch.RunOnEngineAsync{T}(World, Func{T}, CancellationToken)"/> を
+    /// 使わず手で dispatch する: 汎用ヘルパでは <paramref name="ct"/> の cancel が register と
+    /// 競合した場合 (queue 済みの engine action は cancel 後もそのまま実行される)、awaiter は
+    /// 結果を観測せず <see cref="SetPositionAsync"/> の finally にも入らないため lock が
+    /// leak する。ここでは <c>TrySetResult</c> の失敗 (= awaiter が既に cancel 済み) を
+    /// engine action 自身が検知し、同一 tick 内で lock を巻き戻すことで「呼び出しが戻る際に
+    /// lock が残らない」保証を cancel 経路でも成立させる。TCS の生成 option と
+    /// <c>TrySet*</c> を使う理由は <see cref="EngineDispatch"/> の remarks と同じ。
+    /// </remarks>
+    private async Task<(World World, IWorldElement Element, int2 Target)> WarpAndLockAsync(
+        float x,
+        float y,
+        CancellationToken ct
+    )
+    {
+        var tcs = new TaskCompletionSource<(World, IWorldElement, int2)>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        ResolveWorld()
+            .RunSynchronously(() =>
+            {
+                try
+                {
+                    var world = ResolveWorld();
+                    var resolution = ResolveResolution(world);
+                    var pixel = ToPixel(x, y, resolution);
+
+                    // (a) OS カーソル warp。native では実カーソルが動くので呼び出し後も
+                    //     位置が残る。Wine/Proton では injection 非対応で no-op。
+                    world.InputInterface.SetMousePosition(in pixel);
+
+                    // (b) 反映確認まで WindowPosition を強制する一時 lock。同一 element の
+                    //     二重登録は RegisterCursorLock が例外を投げるため、念のため先に外す
+                    //     (UnregisterCursorLock は Dictionary.Remove 相当で未登録でも安全)。
+                    IWorldElement element = world.RootSlot;
+                    world.Input.UnregisterCursorLock(element);
+                    world.Input.RegisterCursorLock(element, pixel, _lockPriority);
+
+                    if (!tcs.TrySetResult((world, element, pixel)))
+                    {
+                        // awaiter は cancel 済みで SetPositionAsync の finally は走らない。
+                        // engine action 自身が同一 tick 内で lock を巻き戻す。
+                        TryUnregister(world, element);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+        {
+            return await tcs.Task.ConfigureAwait(false);
+        }
+    }
 
     /// <summary>正規化 [0,1] 座標を window ピクセル座標へ変換し、範囲内へクランプする。</summary>
     private static int2 ToPixel(float x, float y, int2 resolution)
@@ -106,46 +161,29 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
         return new int2(px, py);
     }
 
-    /// <summary>engine thread 上で world の cursor lock を張る / 位置を更新する。</summary>
-    private void ApplyLock(World world, int2 pixel)
+    /// <summary>call-scoped な一時 cursor lock を engine thread 上で best-effort に解放する。</summary>
+    /// <remarks>
+    /// cancel 経路でも必ず解放するため CancellationToken には依存しない。
+    /// <see cref="World.RunSynchronously(System.Action)"/> で次の engine update に queue する
+    /// だけで完了は await しない (engine 終了済みで action が実行されない場合も world ごと
+    /// 破棄されるため leak は無害)。
+    /// </remarks>
+    private void ReleaseLock(World world, IWorldElement element)
     {
-        lock (_lock)
+        try
         {
-            if (_disposed)
-            {
-                return;
-            }
-
-            // world が切り替わっていたら旧 lock を畳む。
-            if (_lockedWorld is not null && !ReferenceEquals(_lockedWorld, world))
-            {
-                TryUnregister(_lockedWorld, _lockElement);
-                _lockedWorld = null;
-                _lockElement = null;
-                _cursorLock = null;
-            }
-
-            if (_cursorLock is not null && ReferenceEquals(_lockedWorld, world))
-            {
-                _cursorLock.position = pixel;
-                return;
-            }
-
-            var element = world.RootSlot;
-            // 同一 element の二重登録は RegisterCursorLock が例外を投げるため、念のため先に外す。
-            world.Input.UnregisterCursorLock(element);
-            _cursorLock = world.Input.RegisterCursorLock(element, pixel, _lockPriority);
-            _lockedWorld = world;
-            _lockElement = element;
+            world.RunSynchronously(() => TryUnregister(world, element));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(
+                $"Cursor: failed to queue cursor-lock release: {ex.GetType().Name}: {ex.Message}"
+            );
         }
     }
 
-    private void TryUnregister(World world, IWorldElement? element)
+    private void TryUnregister(World world, IWorldElement element)
     {
-        if (element is null)
-        {
-            return;
-        }
         try
         {
             world.Input.UnregisterCursorLock(element);
@@ -201,68 +239,6 @@ internal sealed class FrooxEngineCursorBridge : ICursorBridge, IDisposable
     }
 
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private async Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct)
-    {
-        var world = ResolveWorld();
-        var tcs = new TaskCompletionSource<T>();
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.SetResult(fn());
-            }
-            catch (Exception e)
-            {
-                tcs.SetException(e);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
-    }
-
-    public void Dispose()
-    {
-        World? world;
-        IWorldElement? element;
-        lock (_lock)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-            _disposed = true;
-            world = _lockedWorld;
-            element = _lockElement;
-            _lockedWorld = null;
-            _lockElement = null;
-            _cursorLock = null;
-        }
-
-        if (world is null || element is null || world.IsDisposed)
-        {
-            return;
-        }
-
-        // dictionary 変更は engine thread 上で行う (Update の読みと race させない)。
-        // engine 終了済みなら action は実行されないが world ごと破棄されるため leak は無害。
-        try
-        {
-            world.RunSynchronously(() => TryUnregister(world, element));
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                _log.LogWarning(
-                    $"Cursor.Dispose: RunSynchronously threw: {ex.GetType().Name}: {ex.Message}"
-                );
-            }
-            catch
-            {
-                // log path may be dead during ProcessExit
-            }
-        }
-    }
+    private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct) =>
+        ResolveWorld().RunOnEngineAsync(fn, ct);
 }

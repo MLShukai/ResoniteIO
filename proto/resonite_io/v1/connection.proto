@@ -1,8 +1,9 @@
 // Connection service: 制御プレーンの最小 RPC を定義する。
 //
 // `Ping` は両言語間のコード生成パイプラインと UDS gRPC 疎通を確認するための
-// スモーク RPC。Step 1 (Skeleton) では本 RPC のみを提供し、モダリティごとの
-// streaming RPC は別ファイル (camera.proto, audio.proto, ...) で順次追加する。
+// スモーク RPC。モダリティごとの streaming RPC は別ファイル (camera.proto,
+// speaker.proto, ...) で提供する。mod / engine のバージョン照会は info.proto の
+// `Info.GetServerInfo` を参照。
 syntax = "proto3";
 
 package resonite_io.v1;
@@ -23,8 +24,7 @@ message PingResponse {
 }
 
 // Connection は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
-// 分割するため、本 service は接続確認と将来的な capability negotiation のみを
-// 担当する。
+// 分割するため、本 service は接続確認 (Ping) のみを担当する。
 service Connection {
   rpc Ping(PingRequest) returns (PingResponse);
 }

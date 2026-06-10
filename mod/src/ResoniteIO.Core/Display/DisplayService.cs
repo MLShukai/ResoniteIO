@@ -75,16 +75,17 @@ public sealed class DisplayService : V1.Display.DisplayBase
         return ToProto(snapshot);
     }
 
-    private RpcException? TranslateNotReady(string rpc, Exception ex)
-    {
-        if (ex is DisplayNotReadyException notReady)
-        {
-            _log.LogInfo($"Display.{rpc}: bridge not ready: {notReady.Message}");
-            return new RpcException(new Status(StatusCode.FailedPrecondition, notReady.Message));
-        }
-
-        return null;
-    }
+    private RpcException? TranslateNotReady(string rpc, Exception ex) =>
+        ex is DisplayNotReadyException notReady
+            ? BridgeFault.Translate(
+                _log,
+                "Display",
+                rpc,
+                StatusCode.FailedPrecondition,
+                "bridge not ready",
+                notReady
+            )
+            : null;
 
     private static V1.DisplayState ToProto(DisplayConfigSnapshot snapshot) =>
         new()

@@ -1,12 +1,21 @@
 """E2E: drive the Cursor modality against a live Resonite and screenshot.
 
-The desktop cursor itself is not reliably visible in a screenshot, so we
-verify cursor movement *indirectly* through the radial context menu: on
-desktop the menu opens at the cursor's laser hit point, so opening the
-menu after ``set_position`` shows the menu at the requested screen
-location. Centering the cursor (0.5, 0.5) then a corner-ish position
-(0.25, 0.25) and screenshotting the resulting menu position proves the
-cursor actually moved in-engine. ``get_position`` is also round-tripped.
+``set_position`` is a *one-shot warp*: the bridge warps the cursor,
+confirms via settle-poll that the engine observed the target, then
+releases the short-lived cursor lock before returning. The returned
+snapshot is the settle-confirmed measured position, so asserting it
+against the target is the platform-independent contract this test pins.
+
+The position is **not held** after the RPC returns. On Wine/Proton (the
+standard environment for this project) OS pointer injection does not
+work, so once the lock is released the engine cursor reverts to the real
+OS pointer position on the next frame. Consequently no cross-RPC
+observation is guaranteed to reflect the set value: a follow-up
+``get_position`` is logged as reference output only (not asserted), and
+the radial-menu screenshots — the menu opens at the cursor's laser hit
+point, via a separate ContextMenu RPC — are best-effort visual evidence
+(they demonstrate the move on native platforms; on Wine the menu may
+open at the reverted OS cursor position instead).
 
 Like every file under ``tests/e2e/`` this requires the host-side
 ``just host-agent`` daemon plus a live Resonite client; the
@@ -38,9 +47,10 @@ _READY_RETRY_INTERVAL_S = 2.0
 _HOME_LOAD_SETTLE_S = 20.0
 _SETTLE_S = 0.4
 
-# Cursor positions are pixel-quantized, so the normalized read-back differs
-# from the request by at most ~1px / window-dimension. 0.01 comfortably
-# covers that rounding for any realistic resolution.
+# Cursor positions are pixel-quantized, so the normalized position in the
+# snapshot returned by set_position differs from the request by at most
+# ~1px / window-dimension. 0.01 comfortably covers that rounding for any
+# realistic resolution.
 _POS_TOL = 0.01
 
 
@@ -60,7 +70,7 @@ def _screenshot(out_dir: Path, name: str) -> None:
 
 class TestCursor:
     @mark_e2e
-    def test_set_position_moves_cursor_and_menu_follows(
+    def test_set_position_returns_settled_snapshot_at_target(
         self, resonite_session: Path
     ) -> None:
         del resonite_session  # fixture only manages Resonite lifecycle
@@ -101,24 +111,34 @@ class TestCursor:
             )
 
             async with CursorClient() as cur:
-                # 1. center the cursor.
+                # 1. center the cursor. The returned snapshot is the
+                # settle-confirmed measured position — the spec contract.
                 centered = await cur.set_position(0.5, 0.5)
                 assert centered.x == pytest.approx(0.5, abs=_POS_TOL)
                 assert centered.y == pytest.approx(0.5, abs=_POS_TOL)
-            # the menu opens at the (centered) cursor.
+            # best-effort visual evidence: on native the menu opens at the
+            # (centered) cursor; on Wine the one-shot warp has already been
+            # released, so the menu may open at the reverted OS position.
             await open_menu_shot("00_center.png")
 
             async with CursorClient() as cur:
-                # 2. move the cursor to an off-center position.
+                # 2. move the cursor to an off-center position. Again only the
+                # set_position return snapshot is asserted (one-shot warp).
                 moved = await cur.set_position(0.25, 0.25)
                 assert moved.x == pytest.approx(0.25, abs=_POS_TOL)
                 assert moved.y == pytest.approx(0.25, abs=_POS_TOL)
-                # read-back via get_position reflects the same position.
+                # Cross-RPC read-back is NOT asserted: set_position releases
+                # the cursor lock before returning, so on Wine the engine
+                # cursor reverts to the OS pointer on the next frame and
+                # get_position may no longer return the set value. Reference
+                # output only.
                 read = await cur.get_position()
-                assert read.x == pytest.approx(0.25, abs=_POS_TOL)
-                assert read.y == pytest.approx(0.25, abs=_POS_TOL)
-            # the menu now opens at the off-center cursor — the two screenshots
-            # showing the menu at different positions prove the cursor moved.
+                print(
+                    "get_position after one-shot warp (reference, not asserted): "
+                    f"x={read.x} y={read.y}"
+                )
+            # best-effort visual evidence (see module docstring): on native
+            # the two screenshots show the menu at different positions.
             await open_menu_shot("01_off_center.png")
 
         try:

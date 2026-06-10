@@ -20,7 +20,7 @@ namespace ResoniteIO.Bridge;
 /// <para>
 /// 全操作は <see cref="World.RunSynchronously(System.Action)"/> で engine thread に
 /// one-shot で marshal し、<see cref="TaskCompletionSource{T}"/> で結果を待つ
-/// (<see cref="RunOnEngineAsync{T}"/>)。<see cref="WorldManager.FocusedWorld"/> /
+/// (<see cref="EngineDispatch.RunOnEngineAsync{T}"/>)。<see cref="WorldManager.FocusedWorld"/> /
 /// <c>LocalUser</c> / <see cref="InteractionHandler"/> が未準備なら
 /// <see cref="ContextMenuNotReadyException"/> を投げ Service 層で FailedPrecondition に翻訳する。
 /// </para>
@@ -73,8 +73,8 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
     )
     {
         // open のトリガは engine thread で 1 回行い、既に開いていれば no-op。
-        await RunOnEngineAsync(
-                ResolveWorld(),
+        await ResolveWorld()
+            .RunOnEngineAsync(
                 () =>
                 {
                     var handler = ResolveHandler(hand);
@@ -86,7 +86,6 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
                             new object?[] { _menuOptionsDefault, null }
                         );
                     }
-                    return true;
                 },
                 ct
             )
@@ -98,7 +97,8 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         // 開いた時点の state を返す。メニューの配置 (desktop では laser のヒット点 =
         // 現カーソル位置) と視点移動時の自動クローズ (exit-lerp) は engine に委ねる。
         // 中央に出したい場合は Cursor モダリティで事前にカーソルを中央へ寄せる。
-        return await RunOnEngineAsync(ResolveWorld(), () => ReadState(ResolveHandler(hand)), ct)
+        return await ResolveWorld()
+            .RunOnEngineAsync(() => ReadState(ResolveHandler(hand)), ct)
             .ConfigureAwait(false);
     }
 
@@ -108,16 +108,16 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         CancellationToken ct
     )
     {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var handler = ResolveHandler(hand);
-                handler.CloseContextMenu();
-                return ReadState(handler);
-            },
-            ct
-        );
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var handler = ResolveHandler(hand);
+                    handler.CloseContextMenu();
+                    return ReadState(handler);
+                },
+                ct
+            );
     }
 
     /// <inheritdoc/>
@@ -126,7 +126,7 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         CancellationToken ct
     )
     {
-        return RunOnEngineAsync(ResolveWorld(), () => ReadState(ResolveHandler(hand)), ct);
+        return ResolveWorld().RunOnEngineAsync(() => ReadState(ResolveHandler(hand)), ct);
     }
 
     /// <inheritdoc/>
@@ -136,30 +136,30 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         CancellationToken ct
     )
     {
-        return RunOnEngineAsync(
-            ResolveWorld(),
-            () =>
-            {
-                var handler = ResolveHandler(hand);
-                var items = ResolveOpenItems(handler);
-                ThrowIfIndexOutOfRange(index, items.Count);
-
-                for (var i = 0; i < items.Count; i++)
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
                 {
-                    if (i == index)
-                    {
-                        items[i].SetHighlighted();
-                    }
-                    else
-                    {
-                        items[i].ClearHighlighted();
-                    }
-                }
+                    var handler = ResolveHandler(hand);
+                    var items = ResolveOpenItems(handler);
+                    ThrowIfIndexOutOfRange(index, items.Count);
 
-                return ReadState(handler);
-            },
-            ct
-        );
+                    for (var i = 0; i < items.Count; i++)
+                    {
+                        if (i == index)
+                        {
+                            items[i].SetHighlighted();
+                        }
+                        else
+                        {
+                            items[i].ClearHighlighted();
+                        }
+                    }
+
+                    return ReadState(handler);
+                },
+                ct
+            );
     }
 
     /// <inheritdoc/>
@@ -169,8 +169,8 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         CancellationToken ct
     )
     {
-        await RunOnEngineAsync(
-                ResolveWorld(),
+        await ResolveWorld()
+            .RunOnEngineAsync(
                 () =>
                 {
                     var handler = ResolveHandler(hand);
@@ -195,7 +195,6 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
                         0.1f,
                         new ButtonEventData(menu, in globalPoint, in localPress, in localPress)
                     );
-                    return true;
                 },
                 ct
             )
@@ -206,7 +205,8 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         // なら timeout 後 closed を返す。配置・自動クローズは engine に委ねる。
         await Task.Delay(_postInvokeDelay, ct).ConfigureAwait(false);
         await WaitForOpenedAsync(hand, ct).ConfigureAwait(false);
-        return await RunOnEngineAsync(ResolveWorld(), () => ReadState(ResolveHandler(hand)), ct)
+        return await ResolveWorld()
+            .RunOnEngineAsync(() => ReadState(ResolveHandler(hand)), ct)
             .ConfigureAwait(false);
     }
 
@@ -219,8 +219,8 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
     {
         for (var attempt = 0; attempt < _openPollMaxAttempts; attempt++)
         {
-            var opened = await RunOnEngineAsync(
-                    ResolveWorld(),
+            var opened = await ResolveWorld()
+                .RunOnEngineAsync(
                     () =>
                     {
                         var handler = ResolveHandler(hand);
@@ -242,27 +242,6 @@ internal sealed class FrooxEngineContextMenuBridge : IContextMenuBridge
         }
 
         return false;
-    }
-
-    /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private static async Task<T> RunOnEngineAsync<T>(World world, Func<T> fn, CancellationToken ct)
-    {
-        var tcs = new TaskCompletionSource<T>();
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.SetResult(fn());
-            }
-            catch (Exception e)
-            {
-                tcs.SetException(e);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
     }
 
     /// <summary>現在 focus されている world を取得する。未準備なら <see cref="ContextMenuNotReadyException"/>。</summary>

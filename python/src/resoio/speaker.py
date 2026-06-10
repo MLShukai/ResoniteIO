@@ -1,4 +1,9 @@
-"""Client for the Resonite IO ``Speaker`` gRPC streaming service."""
+"""Client for the Resonite IO ``Speaker`` modality (Resonite -> Python).
+
+Server-streaming RPC: the engine pushes its final audio mix and the
+client yields it as :class:`SpeakerChunk` instances. The wire format is
+fixed (:data:`SAMPLE_RATE` / :data:`CHANNELS` / :data:`DTYPE`).
+"""
 
 from __future__ import annotations
 
@@ -18,11 +23,11 @@ __all__ = [
     "CHANNELS",
     "DTYPE",
     "SAMPLE_RATE",
-    "AudioChunk",
+    "SpeakerChunk",
     "SpeakerClient",
 ]
 
-_logger = logging.getLogger("resoio.speaker")
+_logger = logging.getLogger(__name__)
 
 # Fixed wire format: the Resonite final audio mix is always emitted as
 # 48 kHz / stereo (L,R interleaved) / float32 little-endian. proto does not
@@ -33,7 +38,7 @@ DTYPE: Final[np.dtype[np.float32]] = np.dtype(np.float32)
 
 
 @dataclass(frozen=True, slots=True)
-class AudioChunk:
+class SpeakerChunk:
     """One decoded audio chunk from the speaker stream.
 
     ``samples`` is an ``(N, 2)`` float32 view over the protobuf payload
@@ -66,17 +71,17 @@ class SpeakerClient(_BaseClient[SpeakerStub]):
     def _make_stub(self, channel: Channel) -> SpeakerStub:
         return SpeakerStub(channel)
 
-    async def stream(self) -> AsyncIterator[AudioChunk]:
+    async def stream(self) -> AsyncIterator[SpeakerChunk]:
         """Stream the Resonite final audio mix from the server.
 
-        Yields one :class:`AudioChunk` per server-emitted ``AudioFrame``.
+        Yields one :class:`SpeakerChunk` per server-emitted ``AudioFrame``.
         Raises :class:`RuntimeError` if called outside ``async with``.
         """
         stub = self._require_stub()
         request = SpeakerStreamRequest()
         async for raw in stub.stream_audio(request):
             samples = np.frombuffer(raw.samples, dtype=np.float32).reshape(-1, CHANNELS)
-            yield AudioChunk(
+            yield SpeakerChunk(
                 samples=samples,
                 unix_nanos=raw.unix_nanos,
                 frame_id=raw.frame_id,

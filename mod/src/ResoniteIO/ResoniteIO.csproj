@@ -39,7 +39,7 @@
     <AssemblyName>ResoniteIO</AssemblyName>
 
     <!-- PluginMetadata 生成元 (BepInEx.ResonitePluginInfoProps が読み取る) -->
-    <Version>0.1.1</Version>
+    <Version>0.3.0</Version>
     <Authors>mlshukai</Authors>
     <PackageId>net.mlshukai.resonite-io</PackageId>
     <Product>ResoniteIO</Product>
@@ -175,58 +175,84 @@
   </ItemGroup>
 
   <!--
-    Plugin folder に同梱する DLL の制御。
+    Plugin folder に同梱する ASP.NET Core / Extensions ランタイム DLL の **allow-list**。
 
-    Resonite (Renderite.Host) は .NET 10 共有フレームワーク相当の DLL を一部
-    自前で同梱しており、その中で **version skew があるもの** だけが衝突する。
-    実機で確認した skew リスト (Resonite 同梱 → SDK 10.0.x):
-      - Microsoft.AspNetCore.Http.Features.dll                 v5.0 → v10
-      - Microsoft.Extensions.Configuration.dll                 v9.0 → v10
-      - Microsoft.Extensions.Configuration.Abstractions.dll    v9.0 → v10
-      - Microsoft.Extensions.Configuration.Binder.dll          v9.0 → v10
-    その他の Resonite 同梱 DLL (SignalR.* / Connections.Abstractions /
-    Http.Connections.Common / Extensions.{DependencyInjection,Logging,Options,
-    Primitives,Features,ObjectPool}) は **すべて v10 で SDK と完全一致**するため
-    plugin folder へ同梱しても overshadow の効果が無く、不要に Default ALC の
-    解決順序を入れ替えるだけ。
+    旧方式は shared framework から `Microsoft.AspNetCore*` / `Microsoft.Extensions.*`
+    を丸ごと持ち込み deny-list で削る方式だったが、Kestrel + gRPC が実際に使うのは
+    一部だけで、Blazor / MVC / Razor / Identity / SignalR まで同梱され配布物が
+    131 files / 24MB に膨張、Thunderstore で「別 mod のファイル混入」に見え
+    モデレーション reject (Invalid submission) を受けた。
 
-    方針:
-      1. SDK の ASP.NET Core shared framework から *.dll をすべて持ち込む
-         (Kestrel / Routing / Hosting / gRPC が依存する transitive を網羅)
-      2. Resonite が **同名で v10 を同梱している** DLL は明示的に除外する
-         (overshadow しても無意味かつ ALC の resolution 順を変えると Resonite
-         側のロード戦略を阻害する可能性がある)
-      3. v5 / v9 の skew DLL (Http.Features / Configuration trio) は除外しない
-         (= 同梱して v10 で overshadow する)。これらは v5/v9 → v10 が backward
-         compatible で、Kestrel/Hosting は v10 で追加された API を要求するため。
-      4. 用途上明らかに不要な Windows-only ランタイム (Server.HttpSys, IIS,
-         IISIntegration) と UDS では使わない transport (Quic, NamedPipes) は
-         scan ノイズを減らすため明示除外。
+    そこで GrpcHost (WebApplication.CreateSlimBuilder + AddGrpc + Kestrel + UDS) の
+    **実依存閉包** だけを明示列挙する。閉包は ResoniteIO.dll / ResoniteIO.Core.dll /
+    ResoniteIO.RendererShared.dll を root に、各 DLL の AssemblyReference を辿って
+    staged plugin dir 内で到達可能なものを算出した結果 (= 59 → 内 framework 52)。
+    依存パッケージや GrpcHost の構成を増減したらこの一覧を見直すこと。
+
+    overshadow 戦略は据え置き:
+      - Resonite が v10 で同梱する DLL (Extensions.{DependencyInjection,Logging,
+        Options,Primitives,Features,ObjectPool} / Connections.Abstractions /
+        SignalR.* 等) は閉包に出てこない (= Resonite 提供の v10 を使う) ので
+        そもそも列挙しない。
+      - skew DLL (Http.Features v5 / Configuration trio v9) は閉包に含まれるため
+        列挙し、v10 を同梱して overshadow する (v5/v9 → v10 は backward compatible)。
+    gRPC ランタイム (Google.* / Grpc.*) は名前空間が別なので `_AllowedGrpcDll` で別途。
   -->
   <ItemGroup>
-    <!-- Resonite が v10 (= SDK と同一) で同梱しているため、plugin folder には
-         同梱しない (overshadow 不要 + Resonite 側ロード戦略を尊重する)。 -->
-    <_ResoniteBundledV10Dll Include="Microsoft.AspNetCore.Connections.Abstractions.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.AspNetCore.Http.Connections.Common.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.AspNetCore.SignalR.Common.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.AspNetCore.SignalR.Protocols.Json.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.DependencyInjection.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.DependencyInjection.Abstractions.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.Features.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.Logging.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.Logging.Abstractions.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.ObjectPool.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.Options.dll" />
-    <_ResoniteBundledV10Dll Include="Microsoft.Extensions.Primitives.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <!-- Windows-only / 未使用 transport。Linux + UDS では到達不可能なので
-         同梱しても害は無いが、BepInEx の plugin scan ノイズを減らすため除外。 -->
-    <_UnusedRuntimeDll Include="Microsoft.AspNetCore.Server.HttpSys.dll" />
-    <_UnusedRuntimeDll Include="Microsoft.AspNetCore.Server.IIS.dll" />
-    <_UnusedRuntimeDll Include="Microsoft.AspNetCore.Server.IISIntegration.dll" />
-    <_UnusedRuntimeDll Include="Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.dll" />
-    <_UnusedRuntimeDll Include="Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Authentication.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Authentication.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Authentication.Core.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Authorization.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Authorization.Policy.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Cryptography.Internal.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.DataProtection.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.DataProtection.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Diagnostics.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Diagnostics.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.HostFiltering.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Hosting.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Hosting.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Hosting.Server.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Http.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Http.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Http.Extensions.dll" />
+    <!-- skew (Resonite v5 / mod v10): 列挙して overshadow -->
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Http.Features.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.HttpOverrides.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Metadata.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Routing.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Routing.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Server.Kestrel.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Server.Kestrel.Core.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.AspNetCore.WebUtilities.dll" />
+    <!-- skew (Resonite v9 / mod v10): Configuration trio を含む。列挙して overshadow -->
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.Binder.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.CommandLine.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.EnvironmentVariables.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.FileExtensions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.Json.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Configuration.UserSecrets.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Diagnostics.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Diagnostics.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.FileProviders.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.FileProviders.Composite.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.FileProviders.Physical.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.FileSystemGlobbing.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Hosting.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Hosting.Abstractions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Logging.Configuration.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Logging.Console.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Logging.Debug.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Logging.EventLog.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Logging.EventSource.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Options.ConfigurationExtensions.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.Validation.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Extensions.WebEncoders.dll" />
+    <_BundledAspNetCoreDll Include="Microsoft.Net.Http.Headers.dll" />
   </ItemGroup>
   <ItemGroup>
     <!-- gRPC / Protobuf ランタイムは `Microsoft.AspNetCore*` / `Microsoft.Extensions.*`
@@ -248,12 +274,11 @@
     .NET SDK の shared framework (`$(NetCoreRoot)shared/Microsoft.AspNetCore.App/<version>/`)
     から TargetDir にコピーする。
 
-    Resonite 同梱と version 一致 (v10 ↔ v10) の DLL は plugin folder に置いても
-    overshadow の効果が無いだけでなく、Default ALC の resolution 順序を変えて
-    Resonite 側のロード戦略を阻害しうる。よって `_ResoniteBundledV10Dll` で
-    除外する。skew のある DLL (Http.Features v5 / Configuration trio v9) は
-    あえて含めて v10 で overshadow し、Kestrel/Hosting が要求する v10 API を
-    満たす (v5/v9 → v10 は backward compatible なので Resonite 側は無事)。
+    同梱対象は `_BundledAspNetCoreDll` の allow-list (Kestrel + gRPC の実依存閉包)
+    のみ。Resonite 同梱と version 一致 (v10 ↔ v10) の DLL は閉包に出ず列挙しない
+    (Resonite 提供の v10 を使う)。skew のある DLL (Http.Features v5 / Configuration
+    trio v9) は閉包に含まれるため列挙し、v10 を同梱して overshadow する
+    (v5/v9 → v10 は backward compatible なので Resonite 側は無事)。
   -->
   <Target
     Name="CopyAspNetCoreSharedFrameworkRuntime"
@@ -265,12 +290,10 @@
       <_AspNetCoreSharedFrameworkDir>$(NetCoreRoot)shared\Microsoft.AspNetCore.App\$(BundledNETCoreAppPackageVersion)\</_AspNetCoreSharedFrameworkDir>
     </PropertyGroup>
     <ItemGroup>
-      <_AspNetCoreSharedFrameworkFiles Include="$(_AspNetCoreSharedFrameworkDir)*.dll" />
-      <_AspNetCoreSharedFrameworkFiles Remove="@(_ResoniteBundledV10Dll -> '$(_AspNetCoreSharedFrameworkDir)%(Identity)')" />
-      <_AspNetCoreSharedFrameworkFiles Remove="@(_UnusedRuntimeDll -> '$(_AspNetCoreSharedFrameworkDir)%(Identity)')" />
+      <_AspNetCoreSharedFrameworkFiles Include="@(_BundledAspNetCoreDll -> '$(_AspNetCoreSharedFrameworkDir)%(Identity)')" />
     </ItemGroup>
     <Message
-      Text="Importing ASP.NET Core shared framework from $(_AspNetCoreSharedFrameworkDir) (@(_AspNetCoreSharedFrameworkFiles->Count()) files after deny-list filter)"
+      Text="Importing @(_AspNetCoreSharedFrameworkFiles->Count()) ASP.NET Core DLLs (allow-list closure) from $(_AspNetCoreSharedFrameworkDir)"
       Importance="high"
     />
     <Copy
@@ -284,21 +307,17 @@
        Gale deploy (PostBuild) と Thunderstore staging (StageThunderstorePlugin) が
        同じ集合を共有するため、ここに集約して重複を避ける。target 内で生成した
        item はビルド全体に持続し、後続 target から参照できる。CopyAspNetCoreShared-
-       FrameworkRuntime が TargetDir に ASP.NET ランタイム DLL を展開し終えてから
-       ワイルドカードを評価する必要があるため DependsOnTargets で順序を保証する。
+       FrameworkRuntime が TargetDir に allow-list の ASP.NET ランタイム DLL を
+       展開し終えてから参照する必要があるため DependsOnTargets で順序を保証する。
 
        Core/Mod 二層構成のため、mod 本体 (ResoniteIO.dll/pdb) に加えて
        ProjectReference 先の ResoniteIO.Core.dll/pdb / RendererShared も含める
        (Plugin ロード時の type 解決に必要)。
-       ASP.NET Core / Microsoft.Extensions ランタイム DLL は
-       `Microsoft.AspNetCore*.dll` と `Microsoft.Extensions.*.dll` のワイルドカードで
-       拾い、`_ResoniteBundledV10Dll` / `_UnusedRuntimeDll` の deny-list で
-       Resonite と version 一致のもの (overshadow 無意味) と Windows-only / 不要
-       transport を除外する。Configuration trio (v9 / mod v10) と
-       Http.Features (v5 / mod v10) は除外しない (= v10 を overshadow する)。
-       gRPC ランタイム (Google.Protobuf / Grpc.*) は `_AllowedGrpcDll` で明示。
-       BepInExResoniteShim / BepisResoniteWrapper / 0Harmony は Gale プロファイル
-       および BepInEx 本体が canonical 版を install するため除外。 -->
+       ASP.NET Core / Microsoft.Extensions ランタイム DLL は `_BundledAspNetCoreDll`
+       の allow-list (Kestrel + gRPC の実依存閉包) だけを同梱する。gRPC ランタイム
+       (Google.Protobuf / Grpc.*) は `_AllowedGrpcDll` で明示。
+       BepInExResoniteShim / BepisResoniteWrapper / 0Harmony は allow-list に
+       含めないため自然に除外される (Gale / BepInEx 本体が canonical 版を提供)。 -->
   <Target Name="ComputePluginFiles" DependsOnTargets="CopyAspNetCoreSharedFrameworkRuntime">
     <ItemGroup>
       <!-- mod 本体 -->
@@ -320,26 +339,14 @@
         Include="$(TargetDir)ResoniteIO.RendererShared.pdb"
         Condition="Exists('$(TargetDir)ResoniteIO.RendererShared.pdb')"
       />
-      <!-- ASP.NET Core / Extensions transitive ランタイム DLL は
-           `Microsoft.AspNetCore*.dll` / `Microsoft.Extensions.*.dll` のワイルドカードで
-           広く include した後、`_ResoniteBundledV10Dll` / `_UnusedRuntimeDll` の
-           deny-list で取り除く (順序: Include → Remove)。
-           `Microsoft.Net.Http.Headers.dll` は shared framework 内にあるが上記
-           ワイルドカードに引っかからない命名 (Net.* prefix) なので個別 include。 -->
-      <PluginFiles Include="$(TargetDir)Microsoft.AspNetCore*.dll" />
-      <PluginFiles Include="$(TargetDir)Microsoft.Extensions.*.dll" />
-      <PluginFiles Include="$(TargetDir)Microsoft.Net.Http.Headers.dll" />
-      <PluginFiles Remove="@(_ResoniteBundledV10Dll -> '$(TargetDir)%(Identity)')" />
-      <PluginFiles Remove="@(_UnusedRuntimeDll -> '$(TargetDir)%(Identity)')" />
-      <!-- gRPC ランタイムは個別 include。 -->
+      <!-- ASP.NET Core / Extensions ランタイムは `_BundledAspNetCoreDll` の
+           allow-list (Kestrel + gRPC の実依存閉包) のみ同梱する。広い wildcard +
+           deny-list は廃止 (配布物肥大による Thunderstore reject 対策)。
+           BepInExResoniteShim / BepisResoniteWrapper / 0Harmony は allow-list に
+           入らないため明示 Remove なしで除外される。 -->
+      <PluginFiles Include="@(_BundledAspNetCoreDll -> '$(TargetDir)%(Identity)')" />
+      <!-- gRPC ランタイム (Google.* / Grpc.*) は名前空間が別なので個別 include。 -->
       <PluginFiles Include="@(_AllowedGrpcDll -> '$(TargetDir)%(Identity)')" />
-      <!-- Gale プロファイル / BepInEx 本体側が canonical 版を提供する DLL は除外。
-           上の `_ResoniteBundledV10Dll` は SDK shared framework 由来の deny だが、
-           こちらは NuGet 由来 (CopyLocalLockFileAssemblies で TargetDir に出る) の
-           deny。同じ "Remove" でも除外理由と参照元が異なる点に注意。 -->
-      <PluginFiles Remove="$(TargetDir)BepInExResoniteShim.dll" />
-      <PluginFiles Remove="$(TargetDir)BepisResoniteWrapper.dll" />
-      <PluginFiles Remove="$(TargetDir)0Harmony.dll" />
     </ItemGroup>
   </Target>
 

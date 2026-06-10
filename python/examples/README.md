@@ -40,6 +40,7 @@
 
 ```bash
 uv run python python/examples/connection_ping.py
+uv run python python/examples/server_info.py
 uv run python python/examples/camera_view.py
 uv run python python/examples/speaker_record.py
 uv run python python/examples/microphone_send.py
@@ -58,6 +59,7 @@ uv run python python/examples/cursor_move.py
 | File                       | やること                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------- |
 | `connection_ping.py`       | `Connection.Ping` を 1 回呼んで RTT と server timestamp を print                            |
+| `server_info.py`           | `Info.GetServerInfo` を 1 回呼んで mod/engine version・platform・Wine 判定を print          |
 | `camera_view.py`           | 5 秒 streaming して fps と最終フレームの輝度統計を print                                    |
 | `speaker_record.py`        | 5 秒 streaming して peak amplitude を print + `speaker_output.raw` に raw float32 LE で保存 |
 | `microphone_send.py`       | 440 Hz / 3 秒 mono sine wave を生成し virtual mic に送信                                    |
@@ -106,6 +108,7 @@ examples では「最短コード」を優先しているため、以下は意�
 | Example                    | CLI                                                         | E2E                                                                     |
 | -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `connection_ping.py`       | [`cli/ping.py`](../src/resoio/cli/ping.py)                  | [`tests/e2e/connection.py`](../tests/e2e/connection.py)                 |
+| `server_info.py`           | [`cli/info.py`](../src/resoio/cli/info.py)                  | -                                                                       |
 | `camera_view.py`           | [`cli/record.py`](../src/resoio/cli/record.py) (video 経路) | [`tests/e2e/camera_stream.py`](../tests/e2e/camera_stream.py)           |
 | `speaker_record.py`        | [`cli/record.py`](../src/resoio/cli/record.py) (audio 経路) | [`tests/e2e/speaker_record.py`](../tests/e2e/speaker_record.py)         |
 | `microphone_send.py`       | [`cli/mic.py`](../src/resoio/cli/mic.py)                    | [`tests/e2e/mic_send.py`](../tests/e2e/mic_send.py)                     |

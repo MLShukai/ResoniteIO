@@ -7,6 +7,7 @@ using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Hosting;
+using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Manipulation;
@@ -55,7 +56,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        IInfoBridge? infoBridge = null
     ) =>
         StartAsync(
             Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock"),
@@ -69,7 +71,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
             dashBridge,
             manipulationBridge,
             inventoryBridge,
-            cursorBridge
+            cursorBridge,
+            infoBridge
         );
 
     public static async Task<GrpcHostHarness> StartAsync(
@@ -84,7 +87,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IDashBridge? dashBridge = null,
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
-        ICursorBridge? cursorBridge = null
+        ICursorBridge? cursorBridge = null,
+        IInfoBridge? infoBridge = null
     )
     {
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -107,7 +111,8 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
                 dashBridge,
                 manipulationBridge: manipulationBridge,
                 inventoryBridge: inventoryBridge,
-                cursorBridge: cursorBridge
+                cursorBridge: cursorBridge,
+                infoBridge: infoBridge
             );
         }
         catch

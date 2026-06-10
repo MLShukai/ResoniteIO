@@ -1,4 +1,7 @@
-"""Client for the Resonite IO ``Microphone`` gRPC streaming service.
+"""Client for the Resonite IO ``Microphone`` modality (Python -> Resonite).
+
+Client-streaming RPC: the client pushes mono float32 chunks that become
+the local user's voice in Resonite.
 
 The bridge on the mod side registers a virtual ``AudioInput`` device
 with Resonite; samples pushed through :meth:`MicrophoneClient.stream`
@@ -31,13 +34,12 @@ __all__ = [
     "CHANNELS",
     "DTYPE",
     "SAMPLE_RATE",
-    "MicrophoneAudioChunk",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
     "paced",
 ]
 
-_logger = logging.getLogger("resoio.microphone")
+_logger = logging.getLogger(__name__)
 
 # Fixed wire format: voice broadcast on the Resonite side flows through
 # ``UserAudioStream<MonoSample>``; sending stereo would force a down-mix
@@ -46,23 +48,6 @@ _logger = logging.getLogger("resoio.microphone")
 SAMPLE_RATE: Final[int] = 48000
 CHANNELS: Final[int] = 1
 DTYPE: Final[np.dtype[np.float32]] = np.dtype(np.float32)
-
-
-@dataclass(frozen=True, slots=True)
-class MicrophoneAudioChunk:
-    """One outgoing audio chunk for the microphone stream.
-
-    ``samples`` is a 1-D ``(N,)`` float32 array of mono samples in
-    ``[-1.0, 1.0]``. ``frame_id`` flows through verbatim — the client
-    never rewrites it. Leave ``unix_nanos`` at ``0`` and
-    :meth:`MicrophoneClient.stream` stamps :func:`time.time_ns` at
-    wire-encode time; pass a nonzero value to replay pre-recorded
-    timestamps unchanged.
-    """
-
-    samples: NDArray[np.float32]
-    frame_id: int
-    unix_nanos: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,29 +80,29 @@ class MicrophoneClient(_BaseClient[MicrophoneStub]):
         return MicrophoneStub(channel)
 
     async def stream(
-        self, chunks: AsyncIterable[MicrophoneAudioChunk]
+        self, chunks: AsyncIterable[NDArray[np.float32]]
     ) -> MicrophoneStreamSummary:
         """Stream microphone chunks to the server and await the summary.
 
-        ``chunks`` is consumed lazily. Callers must hand in 1-D float32
-        ``samples`` (no dtype coercion happens here — ``tobytes`` blindly
-        serialises whatever buffer it gets). Raises :class:`RuntimeError`
+        ``chunks`` is consumed lazily. Callers hand in plain 1-D float32
+        ``samples`` arrays (no dtype coercion happens here — ``tobytes``
+        blindly serialises whatever buffer it gets). The client owns
+        ``frame_id`` (auto-incremented from 0) and stamps
+        :func:`time.time_ns` on every chunk. Raises :class:`RuntimeError`
         if called outside ``async with``.
         """
         stub = self._require_stub()
 
         async def _wire() -> AsyncIterator[MicrophoneAudioFrame]:
-            async for chunk in chunks:
-                samples = chunk.samples
-                unix_nanos = (
-                    chunk.unix_nanos if chunk.unix_nanos != 0 else time.time_ns()
-                )
+            frame_id = 0
+            async for samples in chunks:
                 yield MicrophoneAudioFrame(
-                    frame_id=chunk.frame_id,
-                    unix_nanos=unix_nanos,
+                    frame_id=frame_id,
+                    unix_nanos=time.time_ns(),
                     sample_count=int(samples.shape[0]),
                     samples=samples.tobytes(),
                 )
+                frame_id += 1
 
         summary: _WireSummary = await stub.stream_audio(_wire())
         return MicrophoneStreamSummary(
@@ -129,26 +114,21 @@ class MicrophoneClient(_BaseClient[MicrophoneStub]):
 
 
 async def paced(
-    chunks: AsyncIterable[MicrophoneAudioChunk],
+    chunks: AsyncIterable[NDArray[np.float32]],
     sample_rate: int = SAMPLE_RATE,
-) -> AsyncIterator[MicrophoneAudioChunk]:
+) -> AsyncIterator[NDArray[np.float32]]:
     """Yield chunks at wall-clock pace for replaying a pre-loaded buffer.
 
-    Opt-in helper for sources that hand over their whole payload at
-    once (e.g. a WAV file): yields each chunk, then sleeps for its
-    natural duration before pulling the next one, so the downstream
-    Bridge ring buffer never overflows on long inputs.
+    Opt-in helper for sources that hand over their whole payload at once
+    (e.g. a WAV file): yields each ndarray, then sleeps for its natural
+    duration before pulling the next one, so the downstream Bridge ring
+    buffer never overflows on long inputs.
 
-    Do **not** wrap real-time producers (live mic, TTS streams) —
-    they pace themselves; the extra sleep would compound into latency.
-
-    Because the sleep happens after yield, downstream auto-stamping in
-    :meth:`MicrophoneClient.stream` reflects *emit* time, not original
-    capture time. Set ``unix_nanos`` explicitly on each chunk to keep
-    pre-recorded timestamps intact.
+    Do **not** wrap real-time producers (live mic, TTS streams) — they
+    pace themselves; the extra sleep would compound into latency.
     """
-    async for chunk in chunks:
-        yield chunk
-        n_samples = int(chunk.samples.shape[0])
+    async for samples in chunks:
+        yield samples
+        n_samples = int(samples.shape[0])
         if n_samples > 0:
             await asyncio.sleep(n_samples / sample_rate)

@@ -1,4 +1,6 @@
-"""Client for the Resonite IO ``Manipulation`` unary RPCs (grab / release).
+"""Client for the Resonite IO ``Manipulation`` modality (Python -> Resonite).
+
+Unary RPCs (grab / release / get-state) controlling what a hand holds.
 
 The Manipulation service lets a Python client grab and release grabbable
 objects in Resonite via a chosen hand (``primary`` / ``left`` /
@@ -18,7 +20,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, TypeVar, override
+from typing import Literal, override
 
 from grpclib.client import Channel
 
@@ -40,12 +42,9 @@ __all__ = [
     "ManipulationClient",
 ]
 
-_logger = logging.getLogger("resoio.manipulation")
+_logger = logging.getLogger(__name__)
 
 ManipulationHandArg = Literal["primary", "left", "right"]
-
-_T = TypeVar("_T")
-_R = TypeVar("_R")
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,11 +125,11 @@ class ManipulationClient(_BaseClient[ManipulationStub]):
     def _make_stub(self, channel: Channel) -> ManipulationStub:
         return ManipulationStub(channel)
 
-    async def _dispatch(
+    async def _dispatch[T, R](
         self,
-        rpc: Callable[[ManipulationStub], Awaitable[_T]],
-        decode: Callable[[_T], _R],
-    ) -> _R:
+        rpc: Callable[[ManipulationStub], Awaitable[T]],
+        decode: Callable[[T], R],
+    ) -> R:
         """Run a unary RPC against the connected stub and decode the result.
 
         Centralises the not-connected guard shared by every RPC. ``rpc``

@@ -26,7 +26,6 @@ from grpclib.const import Status
 from resoio.microphone import (
     DTYPE,
     SAMPLE_RATE,
-    MicrophoneAudioChunk,
     MicrophoneClient,
     MicrophoneStreamSummary,
 )
@@ -76,7 +75,7 @@ async def _wait_for_microphone_ready() -> None:
         try:
             async with MicrophoneClient() as client:
 
-                async def _empty() -> AsyncIterator[MicrophoneAudioChunk]:
+                async def _empty() -> AsyncIterator[np.ndarray]:
                     return
                     yield  # pragma: no cover — marks this a generator
 
@@ -94,19 +93,20 @@ async def _wait_for_microphone_ready() -> None:
             await asyncio.sleep(_BRIDGE_READY_RETRY_INTERVAL_S)
 
 
-def _iter_chunks(samples: np.ndarray) -> AsyncIterator[MicrophoneAudioChunk]:
+def _iter_chunks(samples: np.ndarray) -> AsyncIterator[np.ndarray]:
     """Slice ``samples`` into 1024-sample frames; trailing remainder is
-    dropped."""
+    dropped.
+
+    The client owns frame_id / unix_nanos, so each chunk is a plain
+    float32 ndarray.
+    """
     full_chunks = samples.shape[0] // _CHUNK_SAMPLES
 
-    async def _gen() -> AsyncIterator[MicrophoneAudioChunk]:
+    async def _gen() -> AsyncIterator[np.ndarray]:
         for i in range(full_chunks):
             start = i * _CHUNK_SAMPLES
             end = start + _CHUNK_SAMPLES
-            yield MicrophoneAudioChunk(
-                samples=samples[start:end].astype(DTYPE, copy=False),
-                frame_id=i,
-            )
+            yield samples[start:end].astype(DTYPE, copy=False)
 
     return _gen()
 

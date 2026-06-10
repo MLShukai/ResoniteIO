@@ -267,31 +267,8 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct)
-    {
-        return RunOnEngineAsync(ResolveWorld(), fn, ct);
-    }
-
-    /// <summary>engine thread に <paramref name="fn"/> を marshal し結果を await する one-shot ヘルパ。</summary>
-    private static async Task<T> RunOnEngineAsync<T>(World world, Func<T> fn, CancellationToken ct)
-    {
-        var tcs = new TaskCompletionSource<T>();
-        world.RunSynchronously(() =>
-        {
-            try
-            {
-                tcs.SetResult(fn());
-            }
-            catch (Exception e)
-            {
-                tcs.SetException(e);
-            }
-        });
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
-    }
+    private Task<T> RunOnEngineAsync<T>(Func<T> fn, CancellationToken ct) =>
+        ResolveWorld().RunOnEngineAsync(fn, ct);
 
     /// <summary>userspace overlay world を取得する。未準備なら <see cref="DashNotReadyException"/>。</summary>
     private static World ResolveWorld()

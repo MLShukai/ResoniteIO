@@ -1,11 +1,17 @@
 name: publish
 
 # Tag-driven release pipeline. Pushing a `v*` tag publishes a DUAL artifact:
-#   - C# Thunderstore mod (installable via the Gale mod manager) to the
-#     `mlshukai` Thunderstore team, and
+#   - the C# mod zip, attached to the GitHub Release (installed via Gale's
+#     `Import > Local mod...`), and
 #   - the Python package (distribution `resonite-io`, imported as `resoio`)
 #     to PyPI via Trusted Publishing.
 # Full auto-publish on tag push (no manual approval gate).
+#
+# NOTE: Thunderstore upload is currently paused (the package was not approved and
+# its layout did not fit the store). The `publish-thunderstore` job below is kept
+# commented out so it can be restored if/when store distribution resumes. The mod
+# is still BUILT here (the `build` job's PackTS step) and shipped via GitHub
+# Releases instead.
 
 on:
   push:
@@ -59,6 +65,18 @@ jobs:
             exit 1
           fi
 
+      - name: Renderer prebuilt drift guard (committed DLL must match renderer sources)
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="$(cat mod/prebuilt/renderer.sha256)"
+          ACTUAL="$(bash scripts/renderer-prebuilt-hash.sh)"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Renderer prebuilt is stale. Run 'just renderer-prebuild' locally (with Resonite) and commit mod/prebuilt/renderer/."
+            echo "expected=$EXPECTED actual=$ACTUAL"
+            exit 1
+          fi
+
       - name: Provision InterprocessLib (Camera v2 build dependency)
         shell: bash
         run: ./.github/scripts/fetch-interprocesslib.sh
@@ -74,7 +92,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/mod artifacts/python
-          cp mod/build/*.zip artifacts/mod/
+          ZIP="$(ls mod/build/*.zip)"
+          cp "$ZIP" artifacts/mod/
+          # Stable-named copy so users can fetch the newest build from a fixed URL:
+          #   https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
+          cp "$ZIP" artifacts/mod/ResoniteIO.zip
           cp python/dist/* artifacts/python/
 
       - uses: actions/upload-artifact@v4
@@ -82,28 +104,31 @@ jobs:
           name: dist
           path: artifacts/
 
-  publish-thunderstore:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore dotnet tools
-        run: dotnet tool restore
-
-      - name: Provision InterprocessLib (Camera v2 build dependency)
-        shell: bash
-        run: ./.github/scripts/fetch-interprocesslib.sh
-
-      - name: Publish to Thunderstore
-        env:
-          TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
-        run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS -p:PublishTS=true -p:TcliToken=$TCLI_AUTH_TOKEN
+  # Thunderstore upload is paused — see the header note. Kept commented out so it
+  # can be restored when store distribution resumes (the mod is still built in the
+  # `build` job and shipped via the GitHub Release below).
+  # publish-thunderstore:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-dotnet@v4
+  #       with:
+  #         dotnet-version: ${{ env.DOTNET_VERSION }}
+  #
+  #     - name: Restore dotnet tools
+  #       run: dotnet tool restore
+  #
+  #     - name: Provision InterprocessLib (Camera v2 build dependency)
+  #       shell: bash
+  #       run: ./.github/scripts/fetch-interprocesslib.sh
+  #
+  #     - name: Publish to Thunderstore
+  #       env:
+  #         TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+  #       run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS -p:PublishTS=true -p:TcliToken=$TCLI_AUTH_TOKEN
 
   publish-pypi:
     needs: build
@@ -132,7 +157,7 @@ jobs:
           packages-dir: dist/
 
   github-release:
-    needs: [publish-thunderstore, publish-pypi]
+    needs: [publish-pypi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

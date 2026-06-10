@@ -6,13 +6,18 @@ version: 0.1.0
 
 # Release ResoniteIO (tag-driven dual publish)
 
-`ResoniteIO` を **1 つの tag で Thunderstore mod (`mlshukai-ResoniteIO`) と PyPI パッケージ (`resoio`) を同時公開** する
+`ResoniteIO` を **1 つの tag で mod zip (GitHub Release に添付) と PyPI パッケージ (`resoio`) を同時公開** する
 ための手順 skill。正規の runbook は [`RELEASE.md`](../../../RELEASE.md)。本 skill はそれを行動可能な要約にしたもの。
+
+> **配布経路 (重要)**: Thunderstore upload は **停止中** (パッケージ非承認 + layout 不一致のため)。配布は
+> **GitHub Release のみ**。mod は `Import > Local mod...` で Gale に入れる。`publish.yml` の
+> `publish-thunderstore` ジョブは将来再開用に **コメントアウト残置**。mod zip は `PackTS` (tcli) で
+> **ビルド** し続け GitHub Release に添付する (tcli / thunderstore.toml はこの zip 生成に必要)。
 
 - **正規バージョン = csproj `<Version>`** (`mod/src/ResoniteIO/ResoniteIO.csproj`)。`python/pyproject.toml` は lockstep。
 - リリースは **`v*` tag の push** で `.github/workflows/publish.yml` を発火させる。
 - リリースノートのソースは **`CHANGELOG.md`** ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 形式)。
-- Thunderstore namespace = **`mlshukai`** (MLShukai チーム)。
+- mod zip namespace (zip 名 `mlshukai-ResoniteIO-X.Y.Z.zip`) = **`mlshukai`** (`thunderstore.toml`)。
 
 ______________________________________________________________________
 
@@ -30,7 +35,10 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
    **末尾の link reference definitions も忘れず追加する** (`[X.Y.Z]: https://github.com/MLShukai/ResoniteIO/releases/tag/vX.Y.Z` と `[unreleased]: ...compare/vX.Y.Z...HEAD`)。
    これが無いと `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、§2-4 の changelog 抽出 (`## \[X.Y.Z\]` regex) が失敗して Release ノートが generic な "Release X.Y.Z" にフォールバックする。Keep a Changelog 慣習どおり全 version 分の `[version]: url` を揃える
 4. `python/` で `uv lock` を回す
-5. `just run` (`format`→`gen-proto`→`build`→`test`→`type`) が green になるまで回す
+5. `just run` (`format`→`gen-proto`→`build`→`test`→`type`→`check-renderer-prebuilt`) が green になるまで回す。
+   末尾の `check-renderer-prebuilt` が落ちたら Camera v2 Renderer prebuilt が stale。**Resonite のあるローカルで**
+   `just renderer-prebuild` → `mod/prebuilt/` の差分を commit する (§7 の prebuilt note 参照)。CI では rebuild できないので
+   ここで揃えておかないと publish.yml の build job が drift guard で fail する
 6. PR を出す (`github-ops` skill の `gh pr create` HEREDOC)。**main へのマージはユーザーが実行**
 
 ### 1-2. release ブランチ + tag
@@ -47,38 +55,39 @@ git push origin vX.Y.Z
 
 ______________________________________________________________________
 
-## 2. `publish.yml` の 4 ジョブ
+## 2. `publish.yml` のジョブ
 
-依存グラフ: `build` → (`publish-thunderstore` ∥ `publish-pypi`) → `github-release`。
-publish 2 ジョブは **`build` にのみ依存し互いに並列**。`build` が唯一の publish 前ゲートで、
-通ると Thunderstore / PyPI が独立に publish される (片側だけ壊れると partial publish。§3 参照)。
+依存グラフ: `build` → `publish-pypi` → `github-release` (Thunderstore upload 停止中)。
+`build` が唯一の publish 前ゲート。`publish-thunderstore` ジョブはコメントアウト残置で実行されない。
 
 1. **build** — version guard (tag `X.Y.Z` == csproj `<Version>` == `pyproject.toml` version を検証)
+   → **Renderer prebuilt drift guard** (`mod/prebuilt/renderer.sha256` == `scripts/renderer-prebuilt-hash.sh` の再計算値を検証。
+   Camera v2 Renderer plugin は UnityEngine.CoreModule 非再配布で CI build 不可のため、committed prebuilt
+   `mod/prebuilt/renderer/` をそのまま zip 同梱する。乖離していたら stale として fail)
    → `.github/scripts/fetch-interprocesslib.sh` で InterprocessLib を Thunderstore から取得 (CI には
    Gale プロファイルが無く NuGet fallback も無いため、PackTS の mod compile に必須)
-   → `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS` で Thunderstore zip、`uv build` で python sdist/wheel
-2. **publish-thunderstore** — fetch-interprocesslib.sh + `tcli publish` (secret `TCLI_AUTH_TOKEN`、`-p:PublishTS=true -p:TcliToken=...`)
+   → `dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS` で mod zip、`uv build` で python sdist/wheel。
+   Collect artifacts で zip を固定名 `ResoniteIO.zip` にもコピー (latest URL 用)
+2. **publish-thunderstore** (停止中・コメントアウト残置) — 再開時は fetch-interprocesslib.sh + `tcli publish`
+   (secret `TCLI_AUTH_TOKEN`、`-p:PublishTS=true -p:TcliToken=...`)
 3. **publish-pypi** — PyPI Trusted Publishing (OIDC)、GitHub environment `pypi`、**token なし**
-4. **github-release** — `CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、mod zip + python dists を添付 (prerelease 判定は §3 参照)
+4. **github-release** — `CHANGELOG.md` の `## [X.Y.Z]` を抽出して Release ノート化、mod zip (versioned + 固定名 `ResoniteIO.zip`) + python dists を添付
 
 ______________________________________________________________________
 
-## 3. プレリリース版 (alpha / beta / rc) は打てない
+## 3. プレリリース版 (alpha / beta / rc)
 
-**Thunderstore が prerelease version を受け付けないため、`v0.2.0rc1` のような prerelease tag での
-dual publish はできない。** 3 者を同時に満たす文字列が存在しない:
+**Thunderstore upload 停止中の現状では prerelease を切れる**。GitHub Release / PyPI は prerelease を
+受け付けるため、`<Version>` を `0.1.0-rc1` (hyphen 付き、.NET 有効、tag/csproj/pyproject の 3 箇所で完全一致)
+にして `v0.1.0-rc1` tag を push すれば、`github-release` の `(a|b|rc)[0-9]+$` → `--prerelease` 判定が発火する。
 
-- **Thunderstore (`tcli`)**: `Major.Minor.Patch` 整数のみ。`0.1.0-rc1` は
-  `Invalid package version number ... must follow the Major.Minor.Patch format` で拒否。
-- **.NET (`<Version>`)**: `0.1.0rc1` (hyphen 無し) は `not a valid version string`。受け付けるのは `0.1.0-rc1`。
-- **version guard**: tag / csproj / pyproject の完全一致を要求 → 上 2 つが両立しない。
+> store 配布を再開すると、Thunderstore (`tcli`) が `Major.Minor.Patch` 整数のみ (`0.1.0-rc1` 拒否) で
+> .NET は hyphen 付き semver を要求するため、両立する prerelease 文字列が無くなり prerelease は再び不可になる。
+> 詳細は [`RELEASE.md`](../../../RELEASE.md) §5。
 
-`publish.yml` に残る `(a|b|rc)[0-9]+$` → `--prerelease` 判定は dual publish 経路では到達不能 (害は無い)。
-
-**リリース前検証は prerelease 抜きで行う**: ① `just run` ② `dotnet build ... -t:PackTS` のローカル
-zip 生成確認 (publish しない) ③ `build` が通れば Thunderstore / PyPI は並列・独立に publish されるので、
-tag を打つ前に §4 の `TCLI_AUTH_TOKEN` と PyPI Trusted Publisher が **両方** 有効か確認 (片方欠けると
-PyPI の不可逆な version を片側 publish で消費しうる)。詳細は [`RELEASE.md`](../../../RELEASE.md) §5。
+**リリース前検証**: ① `just run` ② `dotnet build ... -t:PackTS` のローカル zip 生成確認 (publish しない)
+③ `build` が通れば PyPI → GitHub Release が走るので、tag を打つ前に PyPI Trusted Publisher が有効か確認
+(PyPI の version は不可逆)。
 
 ______________________________________________________________________
 
@@ -88,7 +97,9 @@ ______________________________________________________________________
 
 0. リポジトリを `Geson-anko/ResoniteIO` → `MLShukai/ResoniteIO` に移管。**最初の publish tag は移管後に push**
    (CI の非 publish ワークフローは移管前でも回せる)
-1. Thunderstore team `MLShukai` (namespace `mlshukai`) を作成 → service account token を GitHub secret **`TCLI_AUTH_TOKEN`** に登録
+1. (現在不要 — Thunderstore upload 停止中) store 再開時のみ: Thunderstore team `MLShukai` (namespace `mlshukai`)
+   を作成 → service account token を GitHub secret **`TCLI_AUTH_TOKEN`** に登録 → `publish-thunderstore` の
+   コメントアウトを解除
 2. PyPI Trusted Publisher を設定 (owner `MLShukai` / repo `ResoniteIO` / workflow `publish.yml` / environment `pypi`) +
    GitHub `pypi` environment を作成。test.pypi は任意
 
@@ -101,10 +112,14 @@ ______________________________________________________________________
 - **version-guard mismatch で build job が fail**: tag の `X.Y.Z` と csproj `<Version>` と `pyproject.toml` version の
   どれかがズレている。3 箇所を一致させ、`uv lock` の追従も確認してから tag を打ち直す
   (誤 tag は `git push origin :refs/tags/vX.Y.Z` で remote から消してから再 push)。
-- **`publish-thunderstore` が認証エラー**: secret `TCLI_AUTH_TOKEN` 未登録 / 期限切れ / 移管後の repo に未設定。§4-1 を確認。
-- **Thunderstore namespace 不一致**: `mod/thunderstore.toml` の `namespace` が `mlshukai` (MLShukai team) であること。team 未作成だと publish できない。
+- **Renderer prebuilt drift guard で build job が fail** (`Renderer prebuilt is stale`): Renderer ソース
+  (`mod/src/ResoniteIO.Renderer/` ∥ `mod/src/ResoniteIO.RendererShared/` の `.cs` / `.csproj`) を変更したのに
+  committed prebuilt `mod/prebuilt/renderer/` を更新していない。**Resonite のあるローカルで** `just renderer-prebuild`
+  を実行し `mod/prebuilt/` (DLL/PDB + `renderer.sha256`) の差分を commit してから tag を打ち直す。CI 側では
+  UnityEngine.CoreModule が無く rebuild できないため、この修正はローカルでしか行えない (§7 prebuilt note)。
 - **`publish-pypi` が OIDC で弾かれる**: PyPI Trusted Publisher の owner/repo/workflow/environment が移管後の値と一致しているか、GitHub `pypi` environment が存在するかを確認 (§4-2)。
-- **Gale から入らない / load されない**: §6 の検証で `Loading Plugin ResoniteIO` が出るか確認。Gale プロファイル / Steam Launch Options は [`setup-resonite-env`](../setup-resonite-env/SKILL.md) §2 / §3。
+- **mod zip が GitHub Release に出ない**: `build` ジョブの PackTS が `mod/build/*.zip` を生成し Collect artifacts が `ResoniteIO.zip` を作るかを確認。InterprocessLib fetch (§2-1) が失敗していると PackTS が compile できない。
+- **Gale の local import から入らない / load されない**: supporting plugins (BepisLoader 等) を事前に profile へ入れたか確認 (local import は依存を自動解決しない)。§6 の検証で `Loading Plugin ResoniteIO` が出るか確認。Gale プロファイル / Steam Launch Options は [`setup-resonite-env`](../setup-resonite-env/SKILL.md) §2 / §3。
 - **Release ノートが "Release X.Y.Z" のまま (CHANGELOG が反映されない)**: `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、`github-release` の抽出 regex (`## \[X.Y.Z\]`) にマッチしていない。CHANGELOG 末尾に該当 version の link reference definition (`[X.Y.Z]: url`) を追加すると見出しが reference link として扱われ mdformat がエスケープしなくなる (§1-1 step 3)。`publish.yml` の regex は変更しない。
 
 ______________________________________________________________________
@@ -112,13 +127,31 @@ ______________________________________________________________________
 ## 6. リリース後検証
 
 - PyPI ページ (distribution `resonite-io`) に新版が出て `uv add resonite-io==X.Y.Z` が通る
-- GitHub Release に mod zip + python sdist/wheel が添付され、本文が CHANGELOG と一致 (rc は Pre-release バッジ)
-- Thunderstore (`mlshukai/ResoniteIO`) に反映
-- **Gale install 検証**: Gale で Thunderstore を検索 → `ResoniteIO` を install → Resonite 起動 → `just log` で `Loading Plugin ResoniteIO` を確認
+- GitHub Release に mod zip (versioned + 固定名 `ResoniteIO.zip`) + python sdist/wheel が添付され、本文が CHANGELOG と一致 (rc は Pre-release バッジ)
+- **固定名 latest URL** が機能: `curl -L https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip -o /tmp/ResoniteIO.zip` で最新が落ちる
+- **Gale install 検証**: 最新 zip を DL → Gale `Import > Local mod...` で import (supporting plugins は事前導入) → Resonite 起動 → `just log` で `Loading Plugin ResoniteIO` を確認
 
 ______________________________________________________________________
 
-## 7. 関連参照
+## 7. Camera v2 Renderer prebuilt note
+
+Camera v2 の Renderer 側 plugin (`ResoniteIO.Renderer`、net472 Unity Mono) は **UnityEngine.CoreModule が
+非再配布** なため CI でも Remora SDK でも build できない。そのため Resonite のあるローカルで build した成果物を
+**committed prebuilt** として repo に commit し、pack/CI はそれを build せずそのまま mod zip に同梱する。
+
+- 成果物: `mod/prebuilt/renderer/{ResoniteIO.Renderer.dll, ResoniteIO.RendererShared.dll, ResoniteIO.Renderer.pdb}`
+  (`.gitignore` の `*.dll`/`*.pdb` ignore を negate して追跡)。source hash は兄弟パス `mod/prebuilt/renderer.sha256`
+  (hash file は zip に入れない方針で dir 外に分離)
+- 更新: `just renderer-prebuild` (Resonite 必須) が Release build → file-set を `mod/prebuilt/renderer/` に copy →
+  `scripts/renderer-prebuilt-hash.sh` で source hash を `renderer.sha256` に書く。実行後 `mod/prebuilt/` を commit
+- drift guard: `just check-renderer-prebuilt` (`just run` 末尾に含む) と CI (`publish.yml` build / `dotnet.yml`) が
+  committed hash と再計算 hash を照合。Renderer ソースを触って prebuilt 更新を忘れると fail する (§5 troubleshoot)
+- thunderstore.toml の `[[build.copy]]` (`./prebuilt/renderer` → `Renderer/ResoniteIO.Renderer/`) で zip 同梱。
+  Gale BepisLoader installer が package top-level `Renderer/` を `Renderer/BepInEx/plugins/<FullName>/` へ routing する
+
+______________________________________________________________________
+
+## 8. 関連参照
 
 - [`RELEASE.md`](../../../RELEASE.md) — 正規の end-to-end リリース runbook
 - [`github-ops`](../github-ops/SKILL.md) — push / PR / `gh` の基本と安全規約

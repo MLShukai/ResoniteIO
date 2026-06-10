@@ -1,4 +1,9 @@
-"""Client for the Resonite IO ``Connection`` gRPC service over a UDS."""
+"""Client for the Resonite IO ``Connection`` modality (liveness).
+
+A single unary RPC: ``ping`` round-trips a liveness echo over the UDS.
+Server metadata (mod/engine version, platform) lives in
+:mod:`resoio.info`.
+"""
 
 from __future__ import annotations
 
@@ -8,21 +13,17 @@ from typing import override
 from grpclib.client import Channel
 
 from resoio._client import _BaseClient
-from resoio._generated.resonite_io.v1 import ConnectionStub, PingRequest, PingResponse
-from resoio._socket import (
-    AmbiguousSocketError,
-    SocketNotFoundError,
+from resoio._generated.resonite_io.v1 import (
+    ConnectionStub,
+    PingRequest,
+    PingResponse,
 )
 
-# Re-exported for backwards compatibility: the exception types historically
-# lived in this module and are documented in ``ConnectionClient`` docstring.
 __all__ = [
-    "AmbiguousSocketError",
     "ConnectionClient",
-    "SocketNotFoundError",
 ]
 
-_logger = logging.getLogger("resoio.connection")
+_logger = logging.getLogger(__name__)
 
 
 class ConnectionClient(_BaseClient[ConnectionStub]):
@@ -43,5 +44,19 @@ class ConnectionClient(_BaseClient[ConnectionStub]):
         return ConnectionStub(channel)
 
     async def ping(self, message: str) -> PingResponse:
+        """Round-trip a liveness check and return the server's echo.
+
+        A healthy mod echoes ``message`` back unchanged, so callers can use
+        the round trip as a connectivity probe before opening other
+        modality streams.
+
+        Returns:
+            The :class:`PingResponse` carrying the echoed ``message`` and
+            the server-side response timestamp.
+
+        Raises:
+            grpclib.exceptions.GRPCError: The RPC failed at the transport
+                or server layer (e.g. the mod went away mid-call).
+        """
         stub = self._require_stub()
         return await stub.ping(PingRequest(message=message))

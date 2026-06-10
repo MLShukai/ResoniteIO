@@ -1,9 +1,15 @@
 """Minimal Locomotion drive + reset example.
 
-Runs a 6 s scripted scenario (forward -> strafe -> yaw -> jump ->
-neutral) at 30 Hz, then opens a SECOND LocomotionClient to call
-reset() and clear the bridge state. Assumes a walk-capable world is
-loaded in Resonite.
+Runs a short scripted scenario (forward -> strafe -> yaw -> jump ->
+neutral), then opens a SECOND LocomotionClient to call reset() and clear
+the bridge state. Assumes a walk-capable world is loaded in Resonite.
+
+The mod-side bridge is a stateful repeater: it holds the last command
+and re-injects it every engine tick, so a phase only needs ONE send().
+``send()`` is a partial update — unset (``None``) fields keep their prior
+value on the bridge, so each phase sends just the axes it changes (and
+explicitly zeroes the axis the previous phase set). ``velocity`` defaults
+to 1.0 inside the bridge, so plain forward motion needs no velocity arg.
 
 Run from inside the dev container:
 
@@ -12,50 +18,15 @@ Run from inside the dev container:
 
 import asyncio
 import time
-from collections.abc import AsyncIterator
 
 import grpclib.exceptions
 from grpclib.const import Status
 
-from resoio import LocomotionClient, LocomotionCmd
+from resoio import LocomotionClient
 
 SOCKET_PATH: str | None = None
-TICK_HZ = 30
-TICK_INTERVAL_S = 1.0 / TICK_HZ
-SCENARIO_DURATION_S = 6.0
 READY_TIMEOUT_S = 120.0
 READY_INTERVAL_S = 2.0
-
-
-def scenario_command(elapsed: float) -> LocomotionCmd:
-    """Return the LocomotionCmd to send at ``elapsed`` seconds in.
-
-    LocomotionCmd.velocity defaults to 1.0 - proto3 wire default 0 would
-    stop the avatar; the dataclass wrapper exists to avoid that pitfall.
-    """
-    if elapsed < 2.0:
-        return LocomotionCmd(move_forward=1.0)
-    if elapsed < 3.0:
-        return LocomotionCmd(move_right=1.0)
-    if elapsed < 4.0:
-        return LocomotionCmd(yaw_rate=0.5)
-    if elapsed < 5.0:
-        return LocomotionCmd(jump=True)
-    # Final neutral LocomotionCmd() required: bridge holds the last
-    # command; sending nothing would let move_forward=1.0 survive on the
-    # stateful repeater.
-    return LocomotionCmd()
-
-
-async def commands() -> AsyncIterator[LocomotionCmd]:
-    """Yield scenario commands at TICK_HZ until SCENARIO_DURATION_S."""
-    t0 = time.monotonic()
-    while True:
-        elapsed = time.monotonic() - t0
-        if elapsed >= SCENARIO_DURATION_S:
-            return
-        yield scenario_command(elapsed)
-        await asyncio.sleep(TICK_INTERVAL_S)
 
 
 async def wait_for_ready() -> None:
@@ -68,11 +39,7 @@ async def wait_for_ready() -> None:
     while True:
         try:
             async with LocomotionClient(SOCKET_PATH) as client:
-
-                async def one_neutral() -> AsyncIterator[LocomotionCmd]:
-                    yield LocomotionCmd()
-
-                await client.drive(one_neutral())
+                await client.send()  # neutral probe
             return
         except grpclib.exceptions.GRPCError as e:
             if e.status != Status.FAILED_PRECONDITION:
@@ -87,17 +54,29 @@ async def wait_for_ready() -> None:
 async def main() -> None:
     await wait_for_ready()
     async with LocomotionClient(SOCKET_PATH) as client:
-        summary = await client.drive(commands())
-    print(
-        f"received_count={summary.received_count} "
-        f"dropped_count={summary.dropped_count} "
-        f"unix_nanos={summary.unix_nanos}"
-    )
+        await client.send(move_forward=1.0)
+        await asyncio.sleep(2.0)
+        await client.send(move_forward=0.0, move_right=1.0)
+        await asyncio.sleep(1.0)
+        await client.send(move_right=0.0, yaw_rate=0.5)
+        await asyncio.sleep(1.0)
+        await client.send(yaw_rate=0.0, jump=True)
+        await asyncio.sleep(1.0)
+        # Final neutral: the stateful repeater would otherwise keep the
+        # last command alive after the stream closes gracefully.
+        await client.send(move_forward=0.0, move_right=0.0, move_up=0.0, crouch=0.0)
 
-    # reset() goes on a SECOND client because the primary client is
-    # still inside drive() (client-streaming blocks until the request
-    # iterator returns). Bridge auto-resets on ungraceful disconnect;
-    # graceful CompleteAsync leaves state, so we call reset() explicitly.
+    summary = client.drive_summary
+    if summary is not None:
+        print(
+            f"received_count={summary.received_count} "
+            f"dropped_count={summary.dropped_count} "
+            f"unix_nanos={summary.unix_nanos}"
+        )
+
+    # reset() goes on a SECOND client: graceful CompleteAsync leaves the
+    # bridge state in place, so we clear it explicitly. (An ungraceful
+    # disconnect would auto-reset bridge-side instead.)
     async with LocomotionClient(SOCKET_PATH) as reset_client:
         reset = await reset_client.reset()
     print(

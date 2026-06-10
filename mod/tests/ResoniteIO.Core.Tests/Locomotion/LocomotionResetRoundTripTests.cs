@@ -125,10 +125,10 @@ public sealed class LocomotionResetRoundTripTests
     [Fact]
     public async Task Drive_FollowedByReset_ClearsState()
     {
-        // graceful close は state を維持する規約と、後続の Reset(All) が
-        // Bridge.Resets に積まれることをまとめて押さえる (derived state は
-        // LocomotionInput.ApplyReset の単体テストで担保するため、ここでは
-        // append-only な timeline を直接 assert する)。
+        // graceful close は held-state を維持する規約と、後続の Reset(All) が
+        // Bridge.Resets に積まれることをまとめて押さえる。held-state は
+        // FakeLocomotionBridge が Neutral 起点に delta を畳み込んだ MergedState
+        // で観測する (derived reset state は LocomotionInputTests で担保)。
         var bridge = new FakeLocomotionBridge();
         await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
@@ -154,9 +154,11 @@ public sealed class LocomotionResetRoundTripTests
         }
 
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
-        var lastSetState = bridge.SetStates[^1];
-        Assert.Equal(sent.MoveForward, lastSetState.MoveForward);
-        Assert.Equal(sent.MoveUp, lastSetState.MoveUp);
+        // graceful close 後も held-state は最後に送った全 field を保持する。
+        var held = bridge.MergedState;
+        Assert.Equal(sent.MoveForward, held.MoveForward);
+        Assert.Equal(sent.MoveUp, held.MoveUp);
+        Assert.Equal(sent.Velocity, held.Velocity);
 
         var summary = await client.ResetAsync(new V1.LocomotionResetRequest());
 
@@ -165,12 +167,12 @@ public sealed class LocomotionResetRoundTripTests
         Assert.True(summary.Crouch);
         Assert.True(summary.Jump);
 
-        // Reset(All) は最後の SetState を ApplyReset(All) した値と一致するはず。
-        // proto velocity 単位元 1.0 を含む semantics は LocomotionInputTests 参照。
+        // Reset(All) が Bridge.Resets に積まれる。held-state を ApplyReset(All)
+        // した値が Neutral 相当になる semantics は LocomotionInputTests 参照。
         Assert.Single(bridge.Resets);
         Assert.Equal(LocomotionResetFlags.All, bridge.Resets[0]);
 
-        var expectedFinal = lastSetState.ApplyReset(bridge.Resets[0]);
+        var expectedFinal = held.ApplyReset(bridge.Resets[0]);
         Assert.Equal(0f, expectedFinal.MoveForward);
         Assert.Equal(0f, expectedFinal.MoveRight);
         Assert.Equal(0f, expectedFinal.MoveUp);
@@ -205,7 +207,7 @@ public sealed class LocomotionResetRoundTripTests
         var driveSummary = await call.ResponseAsync;
         Assert.Equal(2L, driveSummary.ReceivedCount);
 
-        Assert.Equal(2, bridge.SetStates.Count);
+        Assert.Equal(2, bridge.Deltas.Count);
         Assert.Single(bridge.Resets);
         Assert.Equal(LocomotionResetFlags.Move, bridge.Resets[0]);
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
@@ -214,10 +216,10 @@ public sealed class LocomotionResetRoundTripTests
     [Fact]
     public async Task Reset_OrderingWithSetState_LatestSetStatePrevails()
     {
-        // Reset(Move) を先に発火し、後続の SetState(MoveForward=1) が "後勝ち" で
-        // bridge.SetStates の末尾に記録されることを timeline で示す。
-        // (Bridge 側は append-only な list なので derived state ではなく
-        //  SetStates[^1] と Resets を直接 assert する)。
+        // Reset(Move) を先に発火し、後続の delta(MoveForward=1) が held-state の
+        // 末尾に反映されることを timeline で示す。(Bridge 側は append-only な
+        //  delta list なので derived reset state ではなく Deltas[^1] と Resets を
+        //  直接 assert する)。
         var bridge = new FakeLocomotionBridge();
         await using var harness = await GrpcHostHarness.StartAsync(locomotionBridge: bridge);
         using var channel = harness.CreateChannel();
@@ -234,8 +236,8 @@ public sealed class LocomotionResetRoundTripTests
 
         Assert.Single(bridge.Resets);
         Assert.Equal(LocomotionResetFlags.Move, bridge.Resets[0]);
-        Assert.Single(bridge.SetStates);
-        Assert.Equal(1.0f, bridge.SetStates[^1].MoveForward);
+        Assert.Single(bridge.Deltas);
+        Assert.Equal(1.0f, bridge.Deltas[^1].MoveForward!.Value);
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
     }
 
@@ -244,7 +246,7 @@ public sealed class LocomotionResetRoundTripTests
     {
         // 1st Drive を client cancel すると Bridge.NotifyDisconnect(Cancelled)
         // が積まれる (Bridge 側で safety reset)。直後に新しい Drive を張り、
-        // 最初の SetState が独立した event (Resets count が増えず、Bridge が
+        // 最初の delta が独立した event (Resets count が増えず、Bridge が
         // 「前回 cancel → 今回 1 件目」の 2 event 構造として観測される) と
         // なることを timeline 上で確認する。
         var bridge = new FakeLocomotionBridge();
@@ -273,7 +275,7 @@ public sealed class LocomotionResetRoundTripTests
         }
         Assert.Equal(LocomotionDisconnectReason.Cancelled, bridge.Disconnects[^1]);
 
-        var setStatesBeforeReconnect = bridge.SetStates.Count;
+        var deltasBeforeReconnect = bridge.Deltas.Count;
 
         using (var call2 = client.Drive())
         {
@@ -282,10 +284,10 @@ public sealed class LocomotionResetRoundTripTests
             _ = await call2.ResponseAsync;
         }
 
-        // 2nd Drive の SetState は 1st とは独立した append。Disconnects は
+        // 2nd Drive の delta は 1st とは独立した append。Disconnects は
         // Cancelled (1st) + Graceful (2nd) の 2 件、最後は Graceful。
-        Assert.Equal(setStatesBeforeReconnect + 1, bridge.SetStates.Count);
-        Assert.Equal(1.0f, bridge.SetStates[^1].MoveForward);
+        Assert.Equal(deltasBeforeReconnect + 1, bridge.Deltas.Count);
+        Assert.Equal(1.0f, bridge.Deltas[^1].MoveForward!.Value);
         Assert.Equal(2, bridge.Disconnects.Count);
         Assert.Equal(LocomotionDisconnectReason.Graceful, bridge.Disconnects[^1]);
     }

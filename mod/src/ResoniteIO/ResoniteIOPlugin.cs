@@ -47,6 +47,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private CancellationTokenSource? _hostCts;
     private GrpcHost? _grpcHost;
     private FrooxEngineConnectionBridge? _connectionBridge;
+    private FrooxEngineInfoBridge? _infoBridge;
 
     private ICameraBridge? _cameraBridge;
     private RendererFrameInterprocessReceiver? _frameReceiver;
@@ -105,6 +106,12 @@ public sealed class ResoniteIOPlugin : BasePlugin
             _logSink = new BepInExLogSink(Log);
             _connectionBridge = new FrooxEngineConnectionBridge(Engine.Current, _logSink);
 
+            _infoBridge = new FrooxEngineInfoBridge(
+                Engine.Current,
+                PluginMetadata.VERSION,
+                _logSink
+            );
+
             var pushedBridge = new PushedFrameCameraBridge();
             _cameraBridge = pushedBridge;
             _frameReceiver = new RendererFrameInterprocessReceiver(pushedBridge, _logSink);
@@ -144,7 +151,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 worldBridge: _worldBridge,
                 manipulationBridge: _manipulationBridge,
                 inventoryBridge: _inventoryBridge,
-                cursorBridge: _cursorBridge
+                cursorBridge: _cursorBridge,
+                infoBridge: _infoBridge
             );
             Log.LogInfo($"GrpcHost bound at: {_grpcHost.SocketPath}");
         }
@@ -216,10 +224,13 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // 各 RPC が one-shot で cloud REST / engine marshal するだけなので参照 null 化で足りる。
         _inventoryBridge = null;
 
-        // CursorBridge は engine 側に cursor lock を保持するため IDisposable。
-        // Dispose で lock を best-effort に unregister し、カーソル固定を解除する。
-        SafeDispose(_cursorBridge, nameof(_cursorBridge));
+        // CursorBridge も跨 RPC 状態を持たない (cursor lock は SetPositionAsync 内で
+        // call-scoped に register → release される) ため、参照 null 化のみで足りる。
         _cursorBridge = null;
+
+        // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
+        // IDisposable でもない) ため、参照 null 化のみで足りる。
+        _infoBridge = null;
 
         SafeDispose(_connectionBridge, nameof(_connectionBridge));
         _connectionBridge = null;

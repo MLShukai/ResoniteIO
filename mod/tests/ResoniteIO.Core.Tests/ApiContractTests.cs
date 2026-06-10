@@ -6,6 +6,7 @@ using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Hosting;
+using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -96,6 +97,10 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Display.DisplayService",
             "ResoniteIO.Core.Display.IDisplayBridge",
             "ResoniteIO.Core.Hosting.GrpcHost",
+            "ResoniteIO.Core.Info.IInfoBridge",
+            "ResoniteIO.Core.Info.InfoService",
+            "ResoniteIO.Core.Info.ServerInfoSnapshot",
+            "ResoniteIO.Core.Info.ServerPlatform",
             "ResoniteIO.Core.Inventory.IInventoryBridge",
             "ResoniteIO.Core.Inventory.InventoryCloudException",
             "ResoniteIO.Core.Inventory.InventoryConflictException",
@@ -111,6 +116,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Locomotion.ILocomotionBridge",
             "ResoniteIO.Core.Locomotion.LocomotionDisconnectReason",
             "ResoniteIO.Core.Locomotion.LocomotionInput",
+            "ResoniteIO.Core.Locomotion.LocomotionPartialInput",
             "ResoniteIO.Core.Locomotion.LocomotionResetFlags",
             "ResoniteIO.Core.Locomotion.LocomotionService",
             "ResoniteIO.Core.Logging.ILogSink",
@@ -236,6 +242,10 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.FocusResponse",
             "ResoniteIO.V1.GetCurrentRequest",
             "ResoniteIO.V1.GetCurrentResponse",
+            "ResoniteIO.V1.GetServerInfoRequest",
+            "ResoniteIO.V1.Info",
+            "ResoniteIO.V1.Info+InfoBase",
+            "ResoniteIO.V1.InfoReflection",
             "ResoniteIO.V1.Inventory",
             "ResoniteIO.V1.Inventory+InventoryBase",
             "ResoniteIO.V1.InventoryCopyRequest",
@@ -287,6 +297,8 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.RecordSort",
             "ResoniteIO.V1.RecordSortDirection",
             "ResoniteIO.V1.RecordSource",
+            "ResoniteIO.V1.ServerInfo",
+            "ResoniteIO.V1.ServerPlatform",
             "ResoniteIO.V1.SessionFilter",
             "ResoniteIO.V1.Speaker",
             "ResoniteIO.V1.Speaker+SpeakerBase",
@@ -433,6 +445,16 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// <see cref="IInfoBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IInfoBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(typeof(IInfoBridge), ("ReadServerInfo", Type.EmptyTypes));
+    }
+
+    /// <summary>
     /// <see cref="ICameraBridge"/> の method signature を固定する。
     /// </summary>
     [Fact]
@@ -486,7 +508,7 @@ public sealed class ApiContractTests
             typeof(ILocomotionBridge),
             ("NotifyDisconnect", new[] { typeof(LocomotionDisconnectReason) }),
             ("Reset", new[] { typeof(LocomotionResetFlags) }),
-            ("SetState", new[] { typeof(LocomotionInput) })
+            ("SetState", new[] { typeof(LocomotionPartialInput) })
         );
     }
 

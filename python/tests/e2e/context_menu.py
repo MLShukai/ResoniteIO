@@ -124,8 +124,11 @@ class TestContextMenu:
             # Center the cursor so the menu opens at screen center. The engine
             # positions the radial menu at the cursor's laser hit point, so
             # without this it would open wherever the cursor sits (bottom-left
-            # right after startup). The cursor lock holds it at center for the
-            # rest of the scenario.
+            # right after startup). Best-effort: set_position is a one-shot
+            # warp (position is not held after the RPC returns), so on Wine
+            # the cursor may revert to the OS pointer before the menu opens —
+            # menu placement in the screenshots is reference-only, and none of
+            # the asserts below depend on it.
             async with CursorClient() as cur:
                 await cur.set_position(0.5, 0.5)
 

@@ -107,38 +107,55 @@
     </Reference>
   </ItemGroup>
 
-  <!-- PostBuild: Gale Renderer profile の plugins/ResoniteIO.Renderer/ に
-       本 plugin DLL + RendererShared DLL + System.Memory polyfill を deploy する。
-       Gale 未セットアップ環境 (CI 等) では skip。 -->
-  <Target
-    Name="DeployRendererPlugin"
-    AfterTargets="Build"
-    Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
-  >
+  <!-- Renderer plugin として配る file 集合 (@(RendererPluginFiles)) を 1 箇所で算出する。
+       Gale deploy (DeployRendererPlugin) と prebuild recipe (just renderer-prebuild)
+       が同じ集合を共有するため、ここに集約して重複・drift を避ける (engine 側 csproj の
+       ComputePluginFiles と同じパターン)。
+       同梱物: 本 plugin DLL + PDB + RendererShared DLL + System.Memory polyfill。
+       System.Memory は RendererShared (netstandard2.0) が Span/BinaryPrimitives 用に
+       transitive で要求するが、CopyLocalLockFileAssemblies=false のため bin に出ない
+       ことがある。出ていれば同梱する (Exists 条件)。 -->
+  <Target Name="ComputeRendererPluginFiles">
     <ItemGroup>
-      <_RendererPluginFiles Include="$(TargetPath)" />
-      <_RendererPluginFiles
+      <RendererPluginFiles Include="$(TargetPath)" />
+      <RendererPluginFiles
         Include="$(TargetDir)$(TargetName).pdb"
         Condition="Exists('$(TargetDir)$(TargetName).pdb')"
       />
-      <_RendererPluginFiles
+      <RendererPluginFiles
         Include="$(TargetDir)ResoniteIO.RendererShared.dll"
         Condition="Exists('$(TargetDir)ResoniteIO.RendererShared.dll')"
       />
-      <_RendererPluginFiles
+      <RendererPluginFiles
         Include="$(TargetDir)System.Memory.dll"
         Condition="Exists('$(TargetDir)System.Memory.dll')"
       />
     </ItemGroup>
-    <MakeDir Directories="$(RendererPluginTargetDir)" />
+  </Target>
+
+  <!-- PostBuild: Gale Renderer profile の plugins/ResoniteIO.Renderer/ に
+       @(RendererPluginFiles) を deploy する。Gale 未セットアップ環境 (CI 等) では
+       Copy タスクを skip する (target の Condition ではなくタスク側に置くことで、
+       ComputeRendererPluginFiles は常に走らせる; engine 側 PostBuild と同じ作法)。 -->
+  <Target
+    Name="DeployRendererPlugin"
+    AfterTargets="Build"
+    DependsOnTargets="ComputeRendererPluginFiles"
+  >
+    <MakeDir
+      Directories="$(RendererPluginTargetDir)"
+      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
+    />
     <Copy
-      SourceFiles="@(_RendererPluginFiles)"
+      SourceFiles="@(RendererPluginFiles)"
       DestinationFolder="$(RendererPluginTargetDir)"
       SkipUnchangedFiles="true"
+      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
     />
     <Message
-      Text="Copied @(_RendererPluginFiles->Count()) renderer plugin file(s) to $(RendererPluginTargetDir)"
+      Text="Copied @(RendererPluginFiles->Count()) renderer plugin file(s) to $(RendererPluginTargetDir)"
       Importance="high"
+      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
     />
   </Target>
 </Project>

@@ -16,7 +16,6 @@ from resoio._generated.resonite_io.v1 import (
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
-    LocomotionCmd,
     ResetSummary,
 )
 
@@ -75,73 +74,141 @@ class _EchoLocomotion(LocomotionBase):
         )
 
 
-async def _cmds(
-    items: list[LocomotionCmd],
-) -> AsyncIterator[LocomotionCmd]:
-    for cmd in items:
-        yield cmd
-
-
-class TestLocomotionClient:
-    async def test_round_trip_over_uds(self, uds_server: UdsServer):
+class TestLocomotionSend:
+    async def test_partial_sends_only_set_fields_reach_the_wire(
+        self, uds_server: UdsServer
+    ):
+        # Partial-update contract: each send() enqueues exactly one
+        # LocomotionCommand carrying only the fields the caller named.
+        # Unset optional fields must read back as None on the server so
+        # the stateful bridge can hold the previous value.
         fake = _EchoLocomotion()
         socket_path = await uds_server(fake)
-        # Move 3 軸 (forward / right / up) を別々の値で送り、特に視点独立の
-        # 絶対ワールド上下軸 move_up が独立フィールドとして wire を通ることを
-        # 確認する (取り違えで right や forward に紛れ込まないこと)。
-        scenario = [
-            LocomotionCmd(move_forward=1.0),
-            LocomotionCmd(move_right=1.0, velocity=2.5),
-            LocomotionCmd(move_up=1.0),
-            LocomotionCmd(move_forward=0.25, move_right=-0.5, move_up=-0.75),
-            LocomotionCmd(yaw_rate=0.5, pitch_rate=-0.25, crouch=1.0, jump=True),
-        ]
+
         async with LocomotionClient() as client:
             assert client.socket_path == socket_path
-            summary = await client.drive(_cmds(scenario))
+            await client.send(move_forward=1.0)
+            await client.send(yaw_rate=0.5)
 
+        assert len(fake.received) == 2
+
+        first = fake.received[0]
+        assert first.move_forward == 1.0
+        # Every field the caller did not name is omitted on the wire and
+        # reads back as None (proto3 optional presence).
+        assert first.move_right is None
+        assert first.move_up is None
+        assert first.yaw_rate is None
+        assert first.pitch_rate is None
+        assert first.jump is None
+        assert first.velocity is None
+        assert first.crouch is None
+
+        second = fake.received[1]
+        assert second.yaw_rate == 0.5
+        # move_forward set on the *previous* send must not leak into this
+        # command — the bridge, not the client, holds prior state.
+        assert second.move_forward is None
+        assert second.move_right is None
+        assert second.move_up is None
+        assert second.pitch_rate is None
+        assert second.jump is None
+        assert second.velocity is None
+        assert second.crouch is None
+
+    async def test_drive_summary_reflects_received_count_after_exit(
+        self, uds_server: UdsServer
+    ):
+        # drive_summary is None until the persistent Drive stream is
+        # closed on __aexit__; afterwards it carries the server summary.
+        fake = _EchoLocomotion()
+        await uds_server(fake)
+
+        client = LocomotionClient()
+        async with client:
+            assert client.drive_summary is None
+            await client.send(move_forward=1.0)
+            await client.send(yaw_rate=0.5)
+
+        summary = client.drive_summary
         assert isinstance(summary, DriveSummary)
-        assert summary.received_count == len(scenario)
+        assert summary.received_count == 2
         assert summary.dropped_count == 0
         assert summary.unix_nanos > 0
 
-        assert len(fake.received) == len(scenario)
-        for sent, got in zip(scenario, fake.received, strict=True):
-            assert got.move_forward == sent.move_forward
-            assert got.move_right == sent.move_right
-            assert got.move_up == sent.move_up
-            assert got.yaw_rate == sent.yaw_rate
-            assert got.pitch_rate == sent.pitch_rate
-            assert got.jump == sent.jump
-            assert got.velocity == sent.velocity
-            assert got.crouch == sent.crouch
-            # Client stamps unix_nanos at send time, so the server
-            # must always see a positive value (proof of the wire
-            # stamping, independent of the user-facing LocomotionCmd).
-            assert got.unix_nanos > 0
+    async def test_unix_nanos_is_auto_stamped(self, uds_server: UdsServer):
+        # The client stamps unix_nanos at send time; callers never set it,
+        # so every command must reach the server with a positive value.
+        fake = _EchoLocomotion()
+        await uds_server(fake)
+
+        async with LocomotionClient() as client:
+            await client.send(move_forward=1.0)
+
+        assert len(fake.received) == 1
+        assert fake.received[0].unix_nanos > 0
+
+    async def test_each_move_axis_is_independent(self, uds_server: UdsServer):
+        # The three move axes (forward / right / up) map to distinct wire
+        # fields; sending one must not bleed into the others. move_up is
+        # the view-independent absolute world-up axis.
+        fake = _EchoLocomotion()
+        await uds_server(fake)
+
+        async with LocomotionClient() as client:
+            await client.send(move_forward=1.0)
+            await client.send(move_right=-0.5)
+            await client.send(move_up=0.25)
+
+        forward, right, up = fake.received
+        assert forward.move_forward == 1.0
+        assert forward.move_right is None
+        assert forward.move_up is None
+        assert right.move_right == -0.5
+        assert right.move_forward is None
+        assert right.move_up is None
+        assert up.move_up == 0.25
+        assert up.move_forward is None
+        assert up.move_right is None
+
+    async def test_no_send_means_no_commands_and_zero_summary(
+        self, uds_server: UdsServer
+    ):
+        # A context with no send() still opens/closes cleanly. The Drive
+        # stream is opened lazily, so an unused client produces no
+        # commands; drive_summary may be None (stream never opened) — the
+        # contract is only that no commands reached the server.
+        fake = _EchoLocomotion()
+        await uds_server(fake)
+
+        async with LocomotionClient():
+            pass
+
+        assert fake.received == []
 
     async def test_failed_precondition_surfaces_as_grpcerror(
         self, uds_server: UdsServer
     ):
         # Server accepts one command then raises FAILED_PRECONDITION on
         # the second (mirrors a mid-stream engine-not-ready transition).
+        # The error must surface to the caller (on send or on exit).
         fake = _EchoLocomotion(fail_on_index=1)
         await uds_server(fake)
-        scenario = [
-            LocomotionCmd(move_forward=1.0),
-            LocomotionCmd(move_forward=1.0),
-            LocomotionCmd(move_forward=1.0),
-        ]
-        async with LocomotionClient() as client:
-            with pytest.raises(grpclib.GRPCError) as excinfo:
-                await client.drive(_cmds(scenario))
+
+        with pytest.raises(grpclib.GRPCError) as excinfo:
+            async with LocomotionClient() as client:
+                await client.send(move_forward=1.0)
+                await client.send(move_forward=1.0)
+                await client.send(move_forward=1.0)
         assert excinfo.value.status == Status.FAILED_PRECONDITION
 
-    async def test_raises_when_not_connected(self):
+    async def test_send_raises_when_not_connected(self):
         client = LocomotionClient()
         with pytest.raises(RuntimeError, match="not connected"):
-            await client.drive(_cmds([LocomotionCmd()]))
+            await client.send(move_forward=1.0)
 
+
+class TestLocomotionReset:
     async def test_reset_round_trip(self, uds_server: UdsServer):
         fake = _EchoLocomotion()
         await uds_server(fake)

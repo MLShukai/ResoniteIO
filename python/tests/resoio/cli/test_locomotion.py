@@ -39,6 +39,38 @@ def _apply(state: _DriveState, key: str, look_rate: float = 1.0) -> bool:
     return _apply_key(state, key, look_rate, asyncio.Event())
 
 
+class _CapturingClient:
+    """Narrow fake of ``LocomotionClient.send`` that records each call's
+    kwargs.
+
+    ``_DriveState.emit`` only ever calls ``client.send(**fields)``, so this
+    captures the per-axis kwargs the CLI hands to its own client — the
+    surface under test is our own (no 3rd-party / grpclib mock). The full
+    wire round-trip is exercised separately by the real-UDS server tests
+    further down.
+    """
+
+    def __init__(self) -> None:
+        self.sends: list[dict[str, float | bool | None]] = []
+
+    async def send(self, **kwargs: float | bool | None) -> None:
+        self.sends.append(kwargs)
+
+    @property
+    def last(self) -> dict[str, float | bool | None]:
+        return self.sends[-1]
+
+
+async def _emit_once(
+    state: _DriveState, sprint_velocity: float, *, consume_jump: bool = False
+) -> dict[str, float | bool | None]:
+    """Run ``state.emit`` against a capturing client; return the sent
+    kwargs."""
+    client = _CapturingClient()
+    await state.emit(client, sprint_velocity, consume_jump=consume_jump)  # type: ignore[arg-type]
+    return client.last
+
+
 # ---------------------------------------------------------------------------
 # Move toggles (w/s forward, a/d right) — direction-named axes
 # ---------------------------------------------------------------------------
@@ -145,7 +177,7 @@ def test_left_and_right_arrows_are_exclusive_on_yaw():
 
 
 # ---------------------------------------------------------------------------
-# Sprint (t) and the velocity field on to_cmd()
+# Sprint (t) and the velocity kwarg emit() sends
 # ---------------------------------------------------------------------------
 
 
@@ -157,28 +189,56 @@ def test_t_toggles_sprint_flag():
     assert state.sprint_on is False
 
 
-def test_to_cmd_velocity_reflects_sprint_state():
+async def test_emit_velocity_reflects_sprint_state():
+    # Sprint off -> velocity 1.0; sprint on -> the sprint magnitude.
     state = _DriveState()
-    assert state.to_cmd(2.0).velocity == 1.0
+    assert (await _emit_once(state, 2.0))["velocity"] == 1.0
     state.sprint_on = True
-    assert state.to_cmd(2.0).velocity == 2.0
-    # Custom sprint magnitude propagates through to the cmd.
-    assert state.to_cmd(3.5).velocity == 3.5
+    assert (await _emit_once(state, 2.0))["velocity"] == 2.0
+    # Custom sprint magnitude propagates through to the send kwargs.
+    assert (await _emit_once(state, 3.5))["velocity"] == 3.5
 
 
 # ---------------------------------------------------------------------------
-# to_cmd carries all three direction-named move axes
+# emit carries all three direction-named move axes
 # ---------------------------------------------------------------------------
 
 
-def test_to_cmd_carries_forward_right_and_up():
-    # to_cmd must map the held vertical axis onto LocomotionCmd.move_up, and
-    # the horizontal axes onto move_forward / move_right, with no cross-talk.
+async def test_emit_carries_forward_right_and_up():
+    # emit must map the held vertical axis onto send(move_up=...), and the
+    # horizontal axes onto move_forward / move_right, with no cross-talk.
     state = _DriveState(forward=1.0, right=-1.0, up=1.0)
-    cmd = state.to_cmd(2.0)
-    assert cmd.move_forward == 1.0
-    assert cmd.move_right == -1.0
-    assert cmd.move_up == 1.0
+    sent = await _emit_once(state, 2.0)
+    assert sent["move_forward"] == 1.0
+    assert sent["move_right"] == -1.0
+    assert sent["move_up"] == 1.0
+
+
+async def test_emit_passes_all_eight_control_fields():
+    # The CLI holds full state, so every emit sends all 8 control fields
+    # (never None) — equivalent to the previous full-command producer.
+    state = _DriveState(
+        forward=1.0,
+        right=-1.0,
+        up=1.0,
+        yaw_rate=0.5,
+        pitch_rate=-0.5,
+        sprint_on=True,
+        crouch_on=True,
+        jump_pending=True,
+    )
+    sent = await _emit_once(state, 2.0)
+    assert set(sent) == {
+        "move_forward",
+        "move_right",
+        "move_up",
+        "yaw_rate",
+        "pitch_rate",
+        "jump",
+        "velocity",
+        "crouch",
+    }
+    assert all(value is not None for value in sent.values())
 
 
 # ---------------------------------------------------------------------------
@@ -186,47 +246,47 @@ def test_to_cmd_carries_forward_right_and_up():
 # ---------------------------------------------------------------------------
 
 
-def test_c_toggles_crouch_flag_and_cmd_crouch_field():
+async def test_c_toggles_crouch_flag_and_emitted_crouch_field():
     state = _DriveState()
     _apply(state, "c")
     assert state.crouch_on is True
-    assert state.to_cmd(2.0).crouch == 1.0
+    assert (await _emit_once(state, 2.0))["crouch"] == 1.0
     _apply(state, "c")
     assert state.crouch_on is False
-    assert state.to_cmd(2.0).crouch == 0.0
+    assert (await _emit_once(state, 2.0))["crouch"] == 0.0
 
 
 # ---------------------------------------------------------------------------
-# Jump pulse (Space) — bridge-side consume-once; to_cmd is now a pure read
+# Jump pulse (Space) — bridge-side consume-once; emit() drains the latch only
+# when the wire producer asks (consume_jump=True)
 # ---------------------------------------------------------------------------
 
 
-def test_space_sets_jump_pending_for_next_to_cmd():
-    """Space pressed -> ``jump_pending`` latches True, the next ``to_cmd`` sees
-    it set on the wire.
+async def test_space_sets_jump_pending_and_emit_sends_it():
+    """Space pressed -> ``jump_pending`` latches True, the next ``emit`` sends
+    ``jump=True`` on the wire.
 
     With the consume-once responsibility moved to the bridge (the engine
-    fires jump on exactly one tick from a single ``SetState`` carrying
-    ``jump=True``), ``to_cmd`` no longer drains the latch on its own.
-    The producer in ``_run_drive`` clears ``jump_pending`` right after
-    each emit so subsequent commands do not redundantly re-send the
-    pulse — but ``to_cmd`` itself is a pure read.
+    fires jump on exactly one tick from a single ``send`` carrying
+    ``jump=True``), a default ``emit`` (``consume_jump=False``) does not
+    drain the latch on its own — only the wire producer's
+    ``consume_jump=True`` call drains it.
     """
     state = _DriveState()
     _apply(state, " ")
     assert state.jump_pending is True
-    first = state.to_cmd(2.0)
-    assert first.jump is True
-    # ``to_cmd`` does NOT mutate state any more: re-reading without an
-    # external drain still observes the latch.
+    first = await _emit_once(state, 2.0)
+    assert first["jump"] is True
+    # Default emit does NOT mutate state: re-reading without an external
+    # drain still observes the latch, and the next emit re-sends jump=True.
     assert state.jump_pending is True
-    second = state.to_cmd(2.0)
-    assert second.jump is True
+    second = await _emit_once(state, 2.0)
+    assert second["jump"] is True
 
 
-def test_to_cmd_is_pure_read_no_mutation():
-    """A second invariant check: ``to_cmd`` (default ``consume_jump=False``)
-    must not mutate any field.
+async def test_emit_default_is_pure_read_no_mutation():
+    """``emit`` with the default ``consume_jump=False`` must not mutate any
+    field.
 
     The producer relies on the snapshot being side-effect-free by
     default so introspection call sites (debug status renderers, tests,
@@ -252,11 +312,11 @@ def test_to_cmd_is_pure_read_no_mutation():
         crouch_on=state.crouch_on,
         jump_pending=state.jump_pending,
     )
-    state.to_cmd(2.0)
+    await _emit_once(state, 2.0)
     assert state == before
 
 
-def test_to_cmd_consume_jump_drains_pending_latch_only():
+async def test_emit_consume_jump_drains_pending_latch_only():
     """``consume_jump=True`` drains ``jump_pending`` (the single drain site
     used by the wire producer) and leaves every other field untouched."""
     state = _DriveState(
@@ -270,8 +330,8 @@ def test_to_cmd_consume_jump_drains_pending_latch_only():
         jump_pending=True,
     )
 
-    first = state.to_cmd(2.0, consume_jump=True)
-    assert first.jump is True
+    first = await _emit_once(state, 2.0, consume_jump=True)
+    assert first["jump"] is True
     assert state.jump_pending is False
     # Non-jump axes survive the drain unchanged.
     assert state.forward == 1.0
@@ -281,8 +341,8 @@ def test_to_cmd_consume_jump_drains_pending_latch_only():
     assert state.crouch_on is True
 
     # Second emit without an intervening Space sees jump=False.
-    second = state.to_cmd(2.0, consume_jump=True)
-    assert second.jump is False
+    second = await _emit_once(state, 2.0, consume_jump=True)
+    assert second["jump"] is False
     assert state.jump_pending is False
 
 
@@ -685,8 +745,8 @@ async def test_drive_round_trip_via_cli(
 
     The ``r`` keystroke is included so the new vertical axis is exercised
     end-to-end: a fake-server-received command must carry
-    ``move_up == 1.0``, proving the axis traverses _DriveState -> to_cmd
-    -> LocomotionCmd -> wire intact.
+    ``move_up == 1.0``, proving the axis traverses _DriveState -> emit
+    -> client.send -> wire intact.
     """
     socket_path = tmp_path / "rio-loco.sock"
     fake = _RecordingLocomotion()
@@ -907,23 +967,22 @@ async def test_default_path_sends_neutral_probe_on_wire(
         f"default path should send a neutral readiness probe before the "
         f"main drive stream; got {fake.drive_call_count} Drive RPCs"
     )
-    # The neutral probe is the first command on the wire: all motion
-    # axes at 0 (including the new vertical move_up) and jump cleared.
-    # ``velocity`` rides ``LocomotionCmd``'s 1.0 default (the wrapper
-    # documents why — bridge multiplies Move by velocity, so 0 would
-    # freeze the avatar on the next real cmd). That default is part of
-    # the public contract, not noise — pin it explicitly so a
-    # default-flip would surface here.
+    # The neutral probe is the first command on the wire. It is a bare
+    # ``client.send()`` with no kwargs, so under the partial-update wire
+    # every control field is omitted and reads back as None — the bridge
+    # holds its initial neutral state (velocity unit element 1.0) on its
+    # own. ``unix_nanos`` is still stamped by the client.
     assert len(fake.received) >= 1
     probe = fake.received[0]
-    assert probe.move_forward == 0.0
-    assert probe.move_right == 0.0
-    assert probe.move_up == 0.0
-    assert probe.yaw_rate == 0.0
-    assert probe.pitch_rate == 0.0
-    assert probe.velocity == 1.0
-    assert probe.crouch == 0.0
-    assert probe.jump is False
+    assert probe.move_forward is None
+    assert probe.move_right is None
+    assert probe.move_up is None
+    assert probe.yaw_rate is None
+    assert probe.pitch_rate is None
+    assert probe.velocity is None
+    assert probe.crouch is None
+    assert probe.jump is None
+    assert probe.unix_nanos > 0
 
 
 async def test_wait_for_bridge_ready_returns_on_success(
@@ -942,9 +1001,11 @@ async def test_wait_for_bridge_ready_returns_on_success(
             _wait_for_bridge_ready(None, timeout_s=2.0, interval_s=0.05),
             timeout=2.0,
         )
-        # One neutral probe was sent and recorded.
+        # One neutral probe was sent and recorded. It is a bare send()
+        # with no kwargs, so every control field is omitted on the
+        # partial-update wire and reads back as None.
         assert len(fake.received) == 1
-        assert fake.received[0].move_forward == 0.0
+        assert fake.received[0].move_forward is None
     finally:
         server.close()
         await server.wait_closed()

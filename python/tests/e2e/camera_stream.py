@@ -31,9 +31,9 @@ from tests.helpers import mark_e2e
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # 公称 10 s × 30 fps = 300 frames。重 world で fps を割る可能性を見込み下限を
-# 実効 20fps 相当 (200 frames) に緩める。
-_CAPTURE_WIDTH = 640
-_CAPTURE_HEIGHT = 480
+# 実効 20fps 相当 (200 frames) に緩める。解像度は Display modality 側が決める
+# (cam.stream() は size 引数を取らない) ため、VideoWriter は最初の frame の
+# 実寸から遅延生成する。
 _CAPTURE_FPS = 30.0
 _CAPTURE_SECONDS = 10.0
 _MIN_FRAMES = 200
@@ -57,23 +57,21 @@ class TestCameraStream:
         first_png = out_dir / "frame_0000.png"
         last_png = out_dir / "frame_last.png"
 
-        # ``mp4v`` is the codec most broadly available in pip-shipped headless
-        # opencv. If unavailable the writer silently fails open and ``out_path``
-        # stays zero-bytes (asserted below).
+        # The capture resolution is now engine-owned (Display modality);
+        # cam.stream() carries no size, so the writer is opened lazily from
+        # the first frame's actual dimensions. ``mp4v`` is the codec most
+        # broadly available in pip-shipped headless opencv. If unavailable the
+        # writer silently fails open and ``out_path`` stays zero-bytes
+        # (asserted below).
         fourcc = cv2.VideoWriter.fourcc(*"mp4v")
-        writer = cv2.VideoWriter(
-            str(out_path),
-            fourcc,
-            _CAPTURE_FPS,
-            (_CAPTURE_WIDTH, _CAPTURE_HEIGHT),
-        )
+        writer: cv2.VideoWriter | None = None
 
         async def wait_for_camera_ready() -> None:
             ready_deadline = time.monotonic() + _CAMERA_READY_TIMEOUT_S
             while True:
                 try:
                     async with CameraClient() as cam:
-                        async for _ in cam.stream(width=1, height=1, fps_limit=1.0):
+                        async for _ in cam.stream():
                             return
                 except grpclib.exceptions.GRPCError as e:
                     if e.status != Status.FAILED_PRECONDITION:
@@ -87,19 +85,25 @@ class TestCameraStream:
                     await asyncio.sleep(_CAMERA_READY_RETRY_INTERVAL_S)
 
         async def capture() -> int:
+            nonlocal writer
             await wait_for_camera_ready()
             count = 0
             last_bgr: NDArray[np.uint8] | None = None
             deadline = time.monotonic() + _CAPTURE_SECONDS
             async with CameraClient() as cam:
-                async for frame in cam.stream(
-                    width=_CAPTURE_WIDTH,
-                    height=_CAPTURE_HEIGHT,
-                    fps_limit=_CAPTURE_FPS,
-                ):
+                async for frame in cam.stream():
                     # cvtColor copies into a fresh writable BGR buffer that
                     # VideoWriter / imwrite accept.
                     bgr = cv2.cvtColor(frame.pixels, cv2.COLOR_RGBA2BGR)
+                    if writer is None:
+                        # Frame dimensions are engine-owned; size the writer
+                        # from the first frame so every frame is accepted.
+                        writer = cv2.VideoWriter(
+                            str(out_path),
+                            fourcc,
+                            _CAPTURE_FPS,
+                            (frame.width, frame.height),
+                        )
                     writer.write(bgr)
                     if count == 0:
                         cv2.imwrite(str(first_png), bgr)
@@ -114,7 +118,8 @@ class TestCameraStream:
         try:
             n = asyncio.run(capture())
         finally:
-            writer.release()
+            if writer is not None:
+                writer.release()
 
         # Surface the artifact path even on green CI runs.
         print(f"E2E artifact dir: {out_dir}")

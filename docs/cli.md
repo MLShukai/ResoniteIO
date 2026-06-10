@@ -13,6 +13,7 @@ resoio --help
 | Command | Modality | Direction | Notes |
 | --- | --- | --- | --- |
 | `resoio ping` | Connection | unary | Liveness check. |
+| `resoio info` | Info | unary | Print mod/engine version, OS platform, and Wine flag. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio locomotion` | Locomotion | Python → Resonite | Send movement commands. |

@@ -4,7 +4,8 @@ using ResoniteIO.V1;
 
 namespace ResoniteIO.Core.Connection;
 
-/// <summary><c>resonite_io.v1.Connection</c> サービスの Core 実装。</summary>
+/// <summary><c>resonite_io.v1.Connection</c> サービスの Core 実装 (Ping 専用)。</summary>
+/// <remarks>mod / engine のバージョン照会は <c>Info.GetServerInfo</c> に分離済み。</remarks>
 public sealed class ConnectionService : V1.Connection.ConnectionBase
 {
     private readonly ILogSink _log;

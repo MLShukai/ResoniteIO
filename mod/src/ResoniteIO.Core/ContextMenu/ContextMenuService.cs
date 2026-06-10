@@ -114,14 +114,22 @@ public sealed class ContextMenuService : V1.ContextMenu.ContextMenuBase
             switch (ex)
             {
                 case ContextMenuNotReadyException notReady:
-                    _log.LogInfo($"ContextMenu.{rpc}: bridge not ready: {notReady.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "ContextMenu",
+                        rpc,
+                        StatusCode.FailedPrecondition,
+                        "bridge not ready",
+                        notReady
                     );
                 case ArgumentOutOfRangeException invalid:
-                    _log.LogInfo($"ContextMenu.{rpc}: invalid index: {invalid.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "ContextMenu",
+                        rpc,
+                        StatusCode.InvalidArgument,
+                        "invalid index",
+                        invalid
                     );
                 default:
                     return null;

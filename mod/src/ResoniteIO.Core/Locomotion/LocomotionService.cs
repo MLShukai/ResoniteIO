@@ -42,8 +42,7 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         {
             while (await requestStream.MoveNext(ct).ConfigureAwait(false))
             {
-                var cmd = MapFromProto(requestStream.Current);
-                bridge.SetState(cmd);
+                bridge.SetState(MapFromProto(requestStream.Current));
                 received++;
             }
         }
@@ -149,16 +148,16 @@ public sealed class LocomotionService : V1.Locomotion.LocomotionBase
         return flags;
     }
 
-    private static LocomotionInput MapFromProto(V1.LocomotionCommand proto) =>
+    private static LocomotionPartialInput MapFromProto(V1.LocomotionCommand proto) =>
         new(
-            MoveForward: proto.MoveForward,
-            MoveRight: proto.MoveRight,
-            MoveUp: proto.MoveUp,
-            YawRate: proto.YawRate,
-            PitchRate: proto.PitchRate,
-            Jump: proto.Jump,
-            Velocity: proto.Velocity,
-            Crouch: proto.Crouch,
+            MoveForward: proto.HasMoveForward ? proto.MoveForward : (float?)null,
+            MoveRight: proto.HasMoveRight ? proto.MoveRight : (float?)null,
+            MoveUp: proto.HasMoveUp ? proto.MoveUp : (float?)null,
+            YawRate: proto.HasYawRate ? proto.YawRate : (float?)null,
+            PitchRate: proto.HasPitchRate ? proto.PitchRate : (float?)null,
+            Jump: proto.HasJump ? proto.Jump : (bool?)null,
+            Velocity: proto.HasVelocity ? proto.Velocity : (float?)null,
+            Crouch: proto.HasCrouch ? proto.Crouch : (float?)null,
             UnixNanos: proto.UnixNanos
         );
 }

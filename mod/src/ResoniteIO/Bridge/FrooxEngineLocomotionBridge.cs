@@ -13,11 +13,16 @@ namespace ResoniteIO.Bridge;
 /// <remarks>
 /// <para>
 /// <see cref="SetState"/> / <see cref="Reset"/> は任意スレッドから内部 state を
-/// 更新するのみ。ExternalInput への書き込みは <see cref="TickStep"/> が
+/// 更新するのみ。engine への適用は <see cref="TickStep"/> が
 /// <c>World.RunInUpdates(0, TickStep)</c> で self-rescheduling し engine update
-/// tick 上で行う (engine 1-frame 寿命 ExternalInput と client 送信レートの
-/// ギャップを吸収)。設計の詳細は
-/// <c>memory/feedback_locomotion_external_input.md</c>。
+/// tick 上で行う。move / jump / crouch は ExternalInput への再注入
+/// (engine 1-frame 寿命 ExternalInput と client 送信レートのギャップを吸収)、
+/// look (yaw / pitch) は <c>FirstPersonTargettingController</c> の
+/// <c>_horizontalAngle</c> / <c>_verticalAngle</c> を <c>rate * Time.Delta</c> で
+/// 直接積分する。look の ExternalInput 経路は
+/// <c>ScreenCameraInputs.Look.Active = InputInterface.IsCursorLocked</c> で gate
+/// され OS window focus 必須のため採らない (直接駆動で focus 非依存に look が
+/// 効く)。設計の詳細は <c>memory/feedback_locomotion_external_input.md</c>。
 /// </para>
 /// <para>
 /// thread safety: 単一の <see cref="_lock"/> が <see cref="_latest"/> /
@@ -48,12 +53,18 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     >("_normalInput");
 
     private static readonly AccessTools.FieldRef<
-        TargettingControllerBase<ScreenCameraInputs>,
-        ScreenCameraInputs
-    > _firstPersonInputsRef = AccessTools.FieldRefAccess<
-        TargettingControllerBase<ScreenCameraInputs>,
-        ScreenCameraInputs
-    >("_inputs");
+        FirstPersonTargettingController,
+        float
+    > _fpcHorizontalAngleRef = AccessTools.FieldRefAccess<FirstPersonTargettingController, float>(
+        "_horizontalAngle"
+    );
+
+    private static readonly AccessTools.FieldRef<
+        FirstPersonTargettingController,
+        float
+    > _fpcVerticalAngleRef = AccessTools.FieldRefAccess<FirstPersonTargettingController, float>(
+        "_verticalAngle"
+    );
 
     private static readonly AccessTools.FieldRef<HeadSimulator, HeadInputs> _headInputsRef =
         AccessTools.FieldRefAccess<HeadSimulator, HeadInputs>("_inputs");
@@ -93,7 +104,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
     }
 
     /// <inheritdoc/>
-    public void SetState(LocomotionInput command)
+    public void SetState(LocomotionPartialInput delta)
     {
         if (_disposed)
         {
@@ -105,10 +116,12 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         World? worldToStart;
         lock (_lock)
         {
-            _latest = command;
-            // jump=true の rising edge だけが latch を立てる (false SetState は
-            // 既存 pending を取り消さない)。consume-once 化は TickStep 側で行う。
-            if (command.Jump)
+            // present field のみを保持 state にマージ (未設定は前回値を保持)。
+            _latest = delta.MergeInto(_latest);
+            // jump が present かつ true の rising edge だけが latch を立てる
+            // (None/false は既存 pending を取り消さない)。consume-once 化は
+            // TickStep 側で行う。
+            if (delta.Jump == true)
             {
                 _jumpPending = true;
             }
@@ -317,7 +330,7 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
         }
     }
 
-    private static void ApplyToEngine(
+    private void ApplyToEngine(
         SmoothLocomotionBase smooth,
         FirstPersonTargettingController? fpc,
         HeadSimulator? head,
@@ -367,16 +380,18 @@ internal sealed class FrooxEngineLocomotionBridge : ILocomotionBridge, IDisposab
             normalInput.Jump.ExternalInput = true;
         }
 
-        // pitch: Bridge で符号反転しない (decompile の `_verticalAngle -= y` だけ
-        // を見ると反転すべきに見えるが、実機で逆挙動が出るため。詳細は
-        // feedback_locomotion_external_input.md §2)。
-        if (fpc is not null)
+        // look は ExternalInput を使わず _horizontalAngle / _verticalAngle を直接
+        // 積分する。Look ExternalInput 経路は Look.Active = IsCursorLocked
+        // (OS window focus 必須) で gate され、非フォーカス / headless で原理的に
+        // 効かないため gate ごとバイパスする。符号は engine OnBeforeHeadUpdate の
+        // `_horizontalAngle += x` / `_verticalAngle -= y` と同形 (実機検証済みの
+        // UP=見上げを保つ、feedback_locomotion_external_input.md §2)。clamp は
+        // engine が毎 frame MathX.Clamp(±89°) するため不要。rate=0 は no-op。
+        if (fpc is not null && !fpc.IsRemoved)
         {
-            var screenInputs = _firstPersonInputsRef(fpc);
-            if (screenInputs?.Look is not null)
-            {
-                screenInputs.Look.ExternalInput = new float2(snapshot.YawRate, snapshot.PitchRate);
-            }
+            var dt = fpc.Time.Delta;
+            _fpcHorizontalAngleRef(fpc) += snapshot.YawRate * dt;
+            _fpcVerticalAngleRef(fpc) -= snapshot.PitchRate * dt;
         }
 
         // crouch は値 0 でも書く (engine の += 0 は副作用なし、idle 戻し兼用)。

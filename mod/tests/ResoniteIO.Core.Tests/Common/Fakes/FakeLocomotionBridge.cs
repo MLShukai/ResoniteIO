@@ -8,15 +8,21 @@ namespace ResoniteIO.Core.Tests.Common.Fakes;
 /// <c>lock</c> 付き append-only list に記録する no-op 実装。
 /// </summary>
 /// <remarks>
-/// 派生 "LatestState" のような Bridge 挙動シミュレーションは行わない
-/// (テスト側で SetStates[^1] / Resets / Disconnects を直接 assert する規約)。
+/// 実 Bridge と同じく stateful repeater 規約を最小限再現する: 受信した各
+/// <see cref="LocomotionPartialInput"/> delta を <see cref="Deltas"/> に
+/// append しつつ、<see cref="LocomotionInput.Neutral"/> を起点に
+/// <see cref="LocomotionPartialInput.MergeInto"/> で畳み込んだ held-state を
+/// <see cref="MergedState"/> として公開する。delta の生 sequence を見たい
+/// テストは <see cref="Deltas"/>、保持 state の累積を見たいテストは
+/// <see cref="MergedState"/> を直接 assert する。
 /// </remarks>
 internal sealed class FakeLocomotionBridge : ILocomotionBridge
 {
-    private readonly List<LocomotionInput> _setStates = new();
+    private readonly List<LocomotionPartialInput> _deltas = new();
     private readonly List<LocomotionResetFlags> _resets = new();
     private readonly List<LocomotionDisconnectReason> _disconnects = new();
     private readonly object _gate = new();
+    private LocomotionInput _merged = LocomotionInput.Neutral;
 
     /// <summary>
     /// 非 null のとき <see cref="Reset"/> 呼び出し時に与えられた例外を投げる。
@@ -24,13 +30,29 @@ internal sealed class FakeLocomotionBridge : ILocomotionBridge
     /// </summary>
     public Exception? ResetThrows { get; set; }
 
-    public IReadOnlyList<LocomotionInput> SetStates
+    /// <summary>SetState で受信した差分 delta の append-only 履歴。</summary>
+    public IReadOnlyList<LocomotionPartialInput> Deltas
     {
         get
         {
             lock (_gate)
             {
-                return _setStates.ToArray();
+                return _deltas.ToArray();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Neutral を起点に受信 delta を順次 <see cref="LocomotionPartialInput.MergeInto"/>
+    /// で畳み込んだ現在の held-state。未送信 field が前回値を保持することの検証用。
+    /// </summary>
+    public LocomotionInput MergedState
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _merged;
             }
         }
     }
@@ -57,11 +79,12 @@ internal sealed class FakeLocomotionBridge : ILocomotionBridge
         }
     }
 
-    public void SetState(LocomotionInput command)
+    public void SetState(LocomotionPartialInput delta)
     {
         lock (_gate)
         {
-            _setStates.Add(command);
+            _deltas.Add(delta);
+            _merged = delta.MergeInto(_merged);
         }
     }
 

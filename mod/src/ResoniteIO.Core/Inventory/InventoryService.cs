@@ -139,25 +139,52 @@ public sealed class InventoryService : V1.Inventory.InventoryBase
         switch (ex)
         {
             case InventoryNotReadyException notReady:
-                _log.LogInfo($"Inventory.{rpc}: bridge not ready: {notReady.Message}");
-                return new RpcException(
-                    new Status(StatusCode.FailedPrecondition, notReady.Message)
+                return BridgeFault.Translate(
+                    _log,
+                    "Inventory",
+                    rpc,
+                    StatusCode.FailedPrecondition,
+                    "bridge not ready",
+                    notReady
                 );
             case InventoryRecursionRequiredException recursion:
-                _log.LogInfo($"Inventory.{rpc}: recursion required: {recursion.Message}");
-                return new RpcException(
-                    new Status(StatusCode.FailedPrecondition, recursion.Message)
+                return BridgeFault.Translate(
+                    _log,
+                    "Inventory",
+                    rpc,
+                    StatusCode.FailedPrecondition,
+                    "recursion required",
+                    recursion
                 );
             case InventoryNotFoundException notFound:
-                _log.LogInfo($"Inventory.{rpc}: not found: {notFound.Message}");
-                return new RpcException(new Status(StatusCode.NotFound, notFound.Message));
+                return BridgeFault.Translate(
+                    _log,
+                    "Inventory",
+                    rpc,
+                    StatusCode.NotFound,
+                    "not found",
+                    notFound
+                );
             case InventoryConflictException conflict:
-                _log.LogInfo($"Inventory.{rpc}: conflict: {conflict.Message}");
-                return new RpcException(new Status(StatusCode.AlreadyExists, conflict.Message));
+                return BridgeFault.Translate(
+                    _log,
+                    "Inventory",
+                    rpc,
+                    StatusCode.AlreadyExists,
+                    "conflict",
+                    conflict
+                );
             case ArgumentException invalid:
-                _log.LogInfo($"Inventory.{rpc}: invalid argument: {invalid.Message}");
-                return new RpcException(new Status(StatusCode.InvalidArgument, invalid.Message));
+                return BridgeFault.Translate(
+                    _log,
+                    "Inventory",
+                    rpc,
+                    StatusCode.InvalidArgument,
+                    "invalid argument",
+                    invalid
+                );
             case InventoryCloudException cloud:
+                // Cloud failure だけは LogError + 全例外ダンプ ({cloud}) で原因追跡したいので手書き維持。
                 _log.LogError($"Inventory.{rpc}: cloud failure: {cloud}");
                 return new RpcException(new Status(StatusCode.Unavailable, cloud.Message));
             default:

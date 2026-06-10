@@ -86,14 +86,22 @@ public sealed class CursorService : V1.Cursor.CursorBase
             switch (ex)
             {
                 case CursorNotReadyException notReady:
-                    _log.LogInfo($"Cursor.{rpc}: bridge not ready: {notReady.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.FailedPrecondition, notReady.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "Cursor",
+                        rpc,
+                        StatusCode.FailedPrecondition,
+                        "bridge not ready",
+                        notReady
                     );
                 case ArgumentOutOfRangeException invalid:
-                    _log.LogInfo($"Cursor.{rpc}: invalid argument: {invalid.Message}");
-                    return new RpcException(
-                        new Status(StatusCode.InvalidArgument, invalid.Message)
+                    return BridgeFault.Translate(
+                        _log,
+                        "Cursor",
+                        rpc,
+                        StatusCode.InvalidArgument,
+                        "invalid argument",
+                        invalid
                     );
                 default:
                     return null;
