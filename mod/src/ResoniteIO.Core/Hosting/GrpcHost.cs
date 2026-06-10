@@ -10,6 +10,7 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
@@ -90,7 +91,7 @@ public sealed class GrpcHost : IAsyncDisposable
         IManipulationBridge? manipulationBridge = null,
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
-        string modVersion = "0.0.0-dev"
+        IInfoBridge? infoBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -115,7 +116,6 @@ public sealed class GrpcHost : IAsyncDisposable
             o.MaxSendMessageSize = int.MaxValue;
         });
         builder.Services.AddSingleton(log);
-        builder.Services.AddSingleton(new ModInfo(modVersion));
 
         // 注入された Bridge だけを DI 登録し、未注入のモダリティ名を listen 成功後の
         // WARN 用に控える。登録順 = WARN 出力順なので呼び出し順を変えない。
@@ -134,6 +134,7 @@ public sealed class GrpcHost : IAsyncDisposable
         }
 
         Register(bridge, "Connection");
+        Register(infoBridge, "Info");
         Register(cameraBridge, "Camera");
         Register(displayBridge, "Display");
         Register(locomotionBridge, "Locomotion");
@@ -156,6 +157,7 @@ public sealed class GrpcHost : IAsyncDisposable
 
         var app = builder.Build();
         app.MapGrpcService<ConnectionService>();
+        app.MapGrpcService<InfoService>();
         app.MapGrpcService<CameraService>();
         app.MapGrpcService<DisplayService>();
         app.MapGrpcService<LocomotionService>();
