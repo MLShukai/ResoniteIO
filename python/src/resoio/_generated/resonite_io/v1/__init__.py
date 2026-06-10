@@ -24,6 +24,7 @@ __all__ = (
     "ContextMenuStub",
     "CursorBase",
     "CursorGetPositionRequest",
+    "CursorReleaseRequest",
     "CursorSetPositionRequest",
     "CursorState",
     "CursorStub",
@@ -689,6 +690,20 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class CursorReleaseRequest(betterproto2.Message):
+    """
+    Release は引数を取らない (保持は client 単位ではなく server 全体で高々 1 つ)。
+    """
+
+    pass
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "CursorReleaseRequest", CursorReleaseRequest
+)
+
+
+@dataclass(eq=False, repr=False)
 class CursorSetPositionRequest(betterproto2.Message):
     x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
     """
@@ -728,6 +743,12 @@ class CursorState(betterproto2.Message):
     """
 
     window_height: "int" = betterproto2.field(4, betterproto2.TYPE_INT32)
+
+    held: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    SetPosition による保持がこの応答時点で有効か。Release 後 / world focus 切替後 /
+    未保持なら false。
+    """
 
 
 default_message_pool.register_message("resonite_io.v1", "CursorState", CursorState)
@@ -2391,7 +2412,9 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "CursorState":
         """
-        カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+        カーソルを指定した正規化位置へ移動して **保持** し、反映後の状態 (held=true) を返す。
+        保持は Release まで有効。保持中の再呼び出しは保持位置を更新する。OS のマウス
+        ポインタは奪わない。
         """
 
         return await self._unary_unary(
@@ -2412,7 +2435,7 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "CursorState":
         """
-        現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+        現在のカーソル位置・ウィンドウ解像度・保持状態を読む (副作用なし)。
         """
 
         if message is None:
@@ -2420,6 +2443,31 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
 
         return await self._unary_unary(
             "/resonite_io.v1.Cursor/GetPosition",
+            message,
+            CursorState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def release(
+        self,
+        message: "CursorReleaseRequest | None" = None,
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "CursorState":
+        """
+        SetPosition による保持を解除し、解除後の状態 (held=false) を返す。**冪等**: 保持して
+        いなくても成功し現在の状態を返す。
+        """
+
+        if message is None:
+            message = CursorReleaseRequest()
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Cursor/Release",
             message,
             CursorState,
             timeout=timeout,
@@ -3375,14 +3423,24 @@ class ContextMenuBase(betterproto2_grpclib.ServiceBase):
 class CursorBase(betterproto2_grpclib.ServiceBase):
     async def set_position(self, message: "CursorSetPositionRequest") -> "CursorState":
         """
-        カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+        カーソルを指定した正規化位置へ移動して **保持** し、反映後の状態 (held=true) を返す。
+        保持は Release まで有効。保持中の再呼び出しは保持位置を更新する。OS のマウス
+        ポインタは奪わない。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def get_position(self, message: "CursorGetPositionRequest") -> "CursorState":
         """
-        現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+        現在のカーソル位置・ウィンドウ解像度・保持状態を読む (副作用なし)。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def release(self, message: "CursorReleaseRequest") -> "CursorState":
+        """
+        SetPosition による保持を解除し、解除後の状態 (held=false) を返す。**冪等**: 保持して
+        いなくても成功し現在の状態を返す。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
@@ -3403,6 +3461,14 @@ class CursorBase(betterproto2_grpclib.ServiceBase):
         response = await self.get_position(request)
         await stream.send_message(response)
 
+    async def __rpc_release(
+        self, stream: "grpclib.server.Stream[CursorReleaseRequest, CursorState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.release(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Cursor/SetPosition": grpclib.const.Handler(
@@ -3415,6 +3481,12 @@ class CursorBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_get_position,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 CursorGetPositionRequest,
+                CursorState,
+            ),
+            "/resonite_io.v1.Cursor/Release": grpclib.const.Handler(
+                self.__rpc_release,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                CursorReleaseRequest,
                 CursorState,
             ),
         }
