@@ -29,6 +29,7 @@ __all__ = [
     "SocketNotFoundError",
     "_BaseClient",
     "_reset_version_check",
+    "resolve_socket_path",
 ]
 
 _SOCKET_GLOB = "resonite-*.sock"
@@ -67,11 +68,12 @@ async def _maybe_warn_version_mismatch(
     if _version_checked:
         return
 
-    # Local imports keep the import graph acyclic (connection stub <-> _client).
+    # Local imports keep the import graph acyclic (resoio.info imports
+    # resolve_socket_path from this module at module level).
     from grpclib.const import Status
     from grpclib.exceptions import GRPCError
 
-    from resoio._generated.resonite_io.v1 import ConnectionStub, GetModVersionRequest
+    from resoio.info import fetch_server_info
 
     try:
         client_version = metadata.version(_DISTRIBUTION_NAME)
@@ -80,8 +82,7 @@ async def _maybe_warn_version_mismatch(
         return
 
     try:
-        stub = ConnectionStub(channel)
-        mod_version = (await stub.get_mod_version(GetModVersionRequest())).version
+        mod_version = (await fetch_server_info(channel)).mod_version
     except GRPCError as exc:
         if exc.status is Status.UNIMPLEMENTED:
             _version_checked = True

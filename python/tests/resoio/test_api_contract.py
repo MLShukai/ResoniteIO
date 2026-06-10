@@ -81,6 +81,8 @@ _EXPECTED_PUBLIC_NAMES = (
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
+    "ServerInfo",
+    "ServerPlatform",
     "SessionFilter",
     "SocketNotFoundError",
     "SpeakerChunk",
@@ -89,6 +91,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "WorldRecord",
     "WorldSession",
     "__version__",
+    "get_server_info",
 )
 
 
@@ -275,6 +278,49 @@ def test_fetch_thumbnail_returns_fetch_thumbnail_response():
     removed; the method now returns the proto type directly)."""
     sig = inspect.signature(resoio.WorldClient.fetch_thumbnail)
     assert sig.return_annotation == "FetchThumbnailResponse"
+
+
+# ---------------------------------------------------------------------------
+# Public Info surface: ServerInfo dataclass + get_server_info entry point
+#
+# These pin the public shape of the server-info API a downstream caller
+# writes against: the frozen ``ServerInfo`` value object and the
+# BaseClient-independent ``get_server_info(socket_path=None)`` module
+# function. ``fetch_server_info`` (the channel-level helper the version
+# probe shares) is deliberately NOT in ``__all__`` — the exact-membership
+# pin above already enforces that. Contract pins, not behaviour tests —
+# round-trip behaviour lives in test_info.py.
+# ---------------------------------------------------------------------------
+
+
+def test_server_info_is_a_frozen_dataclass():
+    """``ServerInfo`` is promised immutable; downstream code may rely on it
+    being hashable-by-value / safe to share across tasks."""
+    assert dataclasses.is_dataclass(resoio.ServerInfo)
+    info = resoio.ServerInfo(
+        mod_version="1.0.0",
+        engine_version="2025.1.1.1",
+        platform=resoio.ServerPlatform.LINUX,
+        is_wine=False,
+    )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        info.mod_version = "2.0.0"  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_server_info_field_names_match_snapshot():
+    """Pin the four public payload fields in declaration order."""
+    names = tuple(f.name for f in dataclasses.fields(resoio.ServerInfo))
+    assert names == ("mod_version", "engine_version", "platform", "is_wine")
+
+
+def test_get_server_info_is_a_coroutine_with_optional_socket_path():
+    """Pin ``get_server_info`` as an async module function whose sole parameter
+    is ``socket_path`` defaulting to ``None`` (env resolution)."""
+    assert inspect.iscoroutinefunction(resoio.get_server_info)
+    sig = inspect.signature(resoio.get_server_info)
+    params = list(sig.parameters.values())
+    assert [p.name for p in params] == ["socket_path"]
+    assert params[0].default is None
 
 
 # ---------------------------------------------------------------------------

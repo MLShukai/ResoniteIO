@@ -1,15 +1,17 @@
 """Tests for the once-per-process mod/client version mismatch warning.
 
-Per testing-strategy: a real ``grpclib.server.Server`` on a real UDS with a
-self-owned ``ConnectionBase`` fake; no mocking of grpclib / asyncio /
-betterproto internals. The probe runs inside ``_BaseClient.__aenter__``; its
-process-global guard is re-armed per test here (the package-level autouse
-fixture in ``conftest.py`` otherwise marks it done so unrelated tests stay
-probe-free).
+Per testing-strategy: a real ``grpclib.server.Server`` on a real UDS with
+self-owned generated-base fakes; no mocking of grpclib / asyncio /
+betterproto internals. The probe runs inside ``_BaseClient.__aenter__`` and
+now reaches the server via the Info service (``fetch_server_info`` /
+``Info.GetServerInfo``); a mod that predates the Info modality answers
+``UNIMPLEMENTED``, which the probe reports as a "mod too old" warning (the
+pre-Info behaviour and wording are unchanged). The probe's process-global
+guard is re-armed per test here (the package-level autouse fixture in
+``conftest.py`` otherwise marks it done so unrelated tests stay probe-free).
 """
 
 import logging
-import time
 from collections.abc import Awaitable, Callable, Iterator
 from importlib import metadata
 from typing import TYPE_CHECKING
@@ -18,11 +20,10 @@ import pytest
 
 from resoio import _client
 from resoio._generated.resonite_io.v1 import (
-    ConnectionBase,
-    GetModVersionRequest,
-    GetModVersionResponse,
-    PingRequest,
-    PingResponse,
+    GetServerInfoRequest,
+    InfoBase,
+    ServerInfo as PbServerInfo,
+    ServerPlatform as PbServerPlatform,
 )
 from resoio.connection import ConnectionClient
 
@@ -37,27 +38,34 @@ _INSTALLED_VERSION = metadata.version("resonite-io")
 _MISMATCHED_VERSION = f"{_INSTALLED_VERSION}-mismatch-sentinel"
 
 
-class _VersionConnection(ConnectionBase):
-    """Connection fake that reports a configurable mod version."""
+class _VersionInfo(InfoBase):
+    """Info fake reporting a configurable mod version (other fields dummy).
+
+    The probe only consumes ``mod_version``; engine/platform/wine are filled
+    with placeholders so the message stays wire-valid.
+    """
 
     def __init__(self, version: str) -> None:
         self._version = version
 
-    async def ping(self, message: PingRequest) -> PingResponse:
-        return PingResponse(message=message.message, server_unix_nanos=time.time_ns())
+    async def get_server_info(self, message: GetServerInfoRequest) -> PbServerInfo:
+        return PbServerInfo(
+            mod_version=self._version,
+            engine_version="0.0.0-engine",
+            platform=PbServerPlatform.OTHER,
+            is_wine=False,
+        )
 
-    async def get_mod_version(
-        self, message: GetModVersionRequest
-    ) -> GetModVersionResponse:
-        return GetModVersionResponse(version=self._version)
 
+class _PreInfoMod(InfoBase):
+    """A pre-Info mod: the probe's ``Info.GetServerInfo`` call answers
+    ``UNIMPLEMENTED`` via the un-overridden generated base.
 
-class _OldConnection(ConnectionBase):
-    """A pre-version-API mod: only ``ping`` is implemented, so ``get_mod_version``
-    falls through to the generated base and raises ``UNIMPLEMENTED``."""
-
-    async def ping(self, message: PingRequest) -> PingResponse:
-        return PingResponse(message=message.message, server_unix_nanos=time.time_ns())
+    Hosted (rather than omitting Info from the grpclib server) because
+    grpclib's unknown-service answer drops the content-type header and the
+    grpclib client then reports ``UNKNOWN`` — a fake-server quirk the real
+    C# Kestrel server does not share.
+    """
 
 
 @pytest.fixture(autouse=True)
@@ -79,16 +87,11 @@ def _warnings_containing(
 
 
 class TestModVersionProbe:
-    async def test_get_mod_version_returns_server_version(self, uds_server: UdsServer):
-        await uds_server(_VersionConnection("9.9.9-server"))
-        async with ConnectionClient() as client:
-            assert await client.get_mod_version() == "9.9.9-server"
-
     async def test_warns_once_on_mismatch(
         self, uds_server: UdsServer, caplog: pytest.LogCaptureFixture
     ):
-        await uds_server(_VersionConnection(_MISMATCHED_VERSION))
-        with caplog.at_level(logging.WARNING, logger="resoio.connection"):
+        await uds_server(_VersionInfo(_MISMATCHED_VERSION))
+        with caplog.at_level(logging.WARNING):
             async with ConnectionClient():
                 pass
             warnings = _warnings_containing(caplog, "version mismatch")
@@ -104,8 +107,8 @@ class TestModVersionProbe:
     async def test_no_warning_when_versions_match(
         self, uds_server: UdsServer, caplog: pytest.LogCaptureFixture
     ):
-        await uds_server(_VersionConnection(_INSTALLED_VERSION))
-        with caplog.at_level(logging.WARNING, logger="resoio.connection"):
+        await uds_server(_VersionInfo(_INSTALLED_VERSION))
+        with caplog.at_level(logging.WARNING):
             async with ConnectionClient():
                 pass
         assert _warnings_containing(caplog, "version mismatch") == []
@@ -113,8 +116,8 @@ class TestModVersionProbe:
     async def test_warns_when_mod_too_old(
         self, uds_server: UdsServer, caplog: pytest.LogCaptureFixture
     ):
-        await uds_server(_OldConnection())
-        with caplog.at_level(logging.WARNING, logger="resoio.connection"):
+        await uds_server(_PreInfoMod())
+        with caplog.at_level(logging.WARNING):
             async with ConnectionClient():
                 pass
         assert len(_warnings_containing(caplog, "too old")) == 1

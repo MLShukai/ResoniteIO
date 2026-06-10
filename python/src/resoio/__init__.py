@@ -21,6 +21,7 @@ from resoio.dash import (
     DashTree,
 )
 from resoio.display import DisplayClient, DisplayInfo
+from resoio.info import ServerInfo, ServerPlatform, get_server_info
 from resoio.inventory import (
     InventoryClient,
     InventoryEntry,
@@ -97,6 +98,8 @@ __all__ = [
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
+    "ServerInfo",
+    "ServerPlatform",
     "SessionFilter",
     "SocketNotFoundError",
     "SpeakerChunk",
@@ -105,4 +108,5 @@ __all__ = [
     "WorldRecord",
     "WorldSession",
     "__version__",
+    "get_server_info",
 ]

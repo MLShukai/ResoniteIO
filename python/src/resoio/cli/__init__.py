@@ -25,6 +25,7 @@ from resoio.cli import (
     cursor,
     dash,
     display,
+    info,
     inventory,
     locomotion,
     manipulate,
@@ -38,6 +39,7 @@ __all__ = ["main"]
 
 _COMMAND_MODULES: list[ModuleType] = [
     ping,
+    info,
     display,
     context_menu,
     cursor,
