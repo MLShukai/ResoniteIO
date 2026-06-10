@@ -16,7 +16,7 @@
     "skipDangerousModePermissionPrompt": true
   },
   "model": "claude-fable-5[1m]",
-  "effortLevel": "xhigh",
+  "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "agentPushNotifEnabled": true,
