@@ -15,12 +15,13 @@
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
   },
+  "model": "claude-fable-5[1m]",
+  "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "agentPushNotifEnabled": true,
   "allow": [
     "Read",
     "Bash"
-  ],
-  "effortLevel": "xhigh"
+  ]
 }
