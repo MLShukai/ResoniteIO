@@ -1,7 +1,7 @@
 """CLI tests for ``resoio manipulate``.
 
 The CLI register/_run path is driven against a real ``grpclib.server.Server``
-hosting an inline fake :class:`ManipulationBase` over a real UDS (no mocking
+hosting an inline fake :class:`GrabberBase` over a real UDS (no mocking
 of grpclib/betterproto2). Each test asserts that the chosen action invokes
 the correct RPC with the correct ``hand`` (and ``radius`` for ``grab`` —
 grab always targets the desktop cursor-ray hit point, there is no
@@ -18,13 +18,13 @@ import pytest
 from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
-    ManipulationBase,
-    ManipulationGetStateRequest,
-    ManipulationGrabRequest,
-    ManipulationGrabResult as PbManipulationGrabResult,
-    ManipulationGrabState as PbManipulationGrabState,
-    ManipulationHand,
-    ManipulationReleaseRequest,
+    GrabberBase,
+    GrabberGetStateRequest,
+    GrabberGrabRequest,
+    GrabberGrabResult as PbGrabberGrabResult,
+    GrabberGrabState as PbGrabberGrabState,
+    GrabberHand,
+    GrabberReleaseRequest,
 )
 from resoio.cli import _amain, _build_parser
 
@@ -33,19 +33,19 @@ from resoio.cli import _amain, _build_parser
 _RADIUS = 0.5
 
 
-class _EchoManipulation(ManipulationBase):
+class _EchoGrabber(GrabberBase):
     """In-process fake recording each request and echoing it into the reply."""
 
     def __init__(self) -> None:
-        self.grab_requests: list[ManipulationGrabRequest] = []
-        self.release_requests: list[ManipulationReleaseRequest] = []
-        self.get_state_requests: list[ManipulationGetStateRequest] = []
+        self.grab_requests: list[GrabberGrabRequest] = []
+        self.release_requests: list[GrabberReleaseRequest] = []
+        self.get_state_requests: list[GrabberGetStateRequest] = []
 
-    async def grab(self, message: ManipulationGrabRequest) -> PbManipulationGrabResult:
+    async def grab(self, message: GrabberGrabRequest) -> PbGrabberGrabResult:
         self.grab_requests.append(message)
-        return PbManipulationGrabResult(
+        return PbGrabberGrabResult(
             grabbed=True,
-            state=PbManipulationGrabState(
+            state=PbGrabberGrabState(
                 hand=message.hand,
                 is_holding=True,
                 object_names=["Cube"],
@@ -53,22 +53,18 @@ class _EchoManipulation(ManipulationBase):
             ),
         )
 
-    async def release(
-        self, message: ManipulationReleaseRequest
-    ) -> PbManipulationGrabState:
+    async def release(self, message: GrabberReleaseRequest) -> PbGrabberGrabState:
         self.release_requests.append(message)
-        return PbManipulationGrabState(
+        return PbGrabberGrabState(
             hand=message.hand,
             is_holding=False,
             object_names=[],
             unix_nanos=5678,
         )
 
-    async def get_state(
-        self, message: ManipulationGetStateRequest
-    ) -> PbManipulationGrabState:
+    async def get_state(self, message: GrabberGetStateRequest) -> PbGrabberGrabState:
         self.get_state_requests.append(message)
-        return PbManipulationGrabState(
+        return PbGrabberGrabState(
             hand=message.hand,
             is_holding=True,
             object_names=["Cube", "Sphere"],
@@ -81,8 +77,8 @@ async def test_grab_forwards_radius_and_hand(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    socket_path = tmp_path / "rio-manipulation.sock"
-    fake = _EchoManipulation()
+    socket_path = tmp_path / "rio-grabber.sock"
+    fake = _EchoGrabber()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
@@ -95,7 +91,7 @@ async def test_grab_forwards_radius_and_hand(
 
         assert len(fake.grab_requests) == 1
         wire = fake.grab_requests[0]
-        assert wire.hand == ManipulationHand.LEFT
+        assert wire.hand == GrabberHand.LEFT
         assert wire.radius == _RADIUS
 
         out = capsys.readouterr().out
@@ -112,8 +108,8 @@ async def test_grab_defaults_to_primary_hand_and_zero_radius(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    socket_path = tmp_path / "rio-manipulation.sock"
-    fake = _EchoManipulation()
+    socket_path = tmp_path / "rio-grabber.sock"
+    fake = _EchoGrabber()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
@@ -124,7 +120,7 @@ async def test_grab_defaults_to_primary_hand_and_zero_radius(
 
         assert len(fake.grab_requests) == 1
         # No --hand given -> default primary.
-        assert fake.grab_requests[0].hand == ManipulationHand.PRIMARY
+        assert fake.grab_requests[0].hand == GrabberHand.PRIMARY
         # No --radius given -> 0.0 travels verbatim; resolving <=0 to the
         # server default (0.1m) is a C#-Core concern.
         assert fake.grab_requests[0].radius == 0.0
@@ -150,8 +146,8 @@ async def test_release_invokes_release_rpc_with_hand(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    socket_path = tmp_path / "rio-manipulation.sock"
-    fake = _EchoManipulation()
+    socket_path = tmp_path / "rio-grabber.sock"
+    fake = _EchoGrabber()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
@@ -161,7 +157,7 @@ async def test_release_invokes_release_rpc_with_hand(
         assert rc == 0
 
         assert len(fake.release_requests) == 1
-        assert fake.release_requests[0].hand == ManipulationHand.RIGHT
+        assert fake.release_requests[0].hand == GrabberHand.RIGHT
         # release must not grab or read state.
         assert fake.grab_requests == []
         assert fake.get_state_requests == []
@@ -178,8 +174,8 @@ async def test_state_invokes_get_state_rpc(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    socket_path = tmp_path / "rio-manipulation.sock"
-    fake = _EchoManipulation()
+    socket_path = tmp_path / "rio-grabber.sock"
+    fake = _EchoGrabber()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:
@@ -189,7 +185,7 @@ async def test_state_invokes_get_state_rpc(
         assert rc == 0
 
         assert len(fake.get_state_requests) == 1
-        assert fake.get_state_requests[0].hand == ManipulationHand.PRIMARY
+        assert fake.get_state_requests[0].hand == GrabberHand.PRIMARY
         # state must be read-only.
         assert fake.grab_requests == []
         assert fake.release_requests == []
@@ -207,8 +203,8 @@ async def test_socket_flag_routes_to_get_state(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """``-s SOCK`` is the sole socket route (env var would mask intent)."""
-    socket_path = tmp_path / "rio-manipulation.sock"
-    fake = _EchoManipulation()
+    socket_path = tmp_path / "rio-grabber.sock"
+    fake = _EchoGrabber()
     server = Server([fake])
     await server.start(path=str(socket_path))
     try:

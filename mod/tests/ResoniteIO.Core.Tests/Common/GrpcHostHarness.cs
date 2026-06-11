@@ -6,11 +6,11 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Hosting;
 using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
-using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 
@@ -54,7 +54,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
         IDashBridge? dashBridge = null,
-        IManipulationBridge? manipulationBridge = null,
+        IGrabberBridge? grabberBridge = null,
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null
@@ -69,7 +69,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
             microphoneBridge,
             contextMenuBridge,
             dashBridge,
-            manipulationBridge,
+            grabberBridge,
             inventoryBridge,
             cursorBridge,
             infoBridge
@@ -85,7 +85,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IMicrophoneBridge? microphoneBridge = null,
         IContextMenuBridge? contextMenuBridge = null,
         IDashBridge? dashBridge = null,
-        IManipulationBridge? manipulationBridge = null,
+        IGrabberBridge? grabberBridge = null,
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null
@@ -109,7 +109,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
                 microphoneBridge,
                 contextMenuBridge,
                 dashBridge,
-                manipulationBridge: manipulationBridge,
+                grabberBridge: grabberBridge,
                 inventoryBridge: inventoryBridge,
                 cursorBridge: cursorBridge,
                 infoBridge: infoBridge

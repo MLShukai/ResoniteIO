@@ -2,32 +2,32 @@ using Grpc.Core;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Rpc;
 
-namespace ResoniteIO.Core.Manipulation;
+namespace ResoniteIO.Core.Grabber;
 
-/// <summary><c>resonite_io.v1.Manipulation</c> サービスの Core 実装。</summary>
+/// <summary><c>resonite_io.v1.Grabber</c> サービスの Core 実装。</summary>
 /// <remarks>
-/// <see cref="IManipulationBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
-/// Core 単体テストや manipulation 非対応 engine 構成も成立させる (ContextMenuService と同 pattern)。
-/// 例外翻訳は <see cref="ManipulationNotReadyException"/> → <c>FailedPrecondition</c>、その他 → <c>Internal</c>。
+/// <see cref="IGrabberBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
+/// Core 単体テストや grabber 非対応 engine 構成も成立させる (ContextMenuService と同 pattern)。
+/// 例外翻訳は <see cref="GrabberNotReadyException"/> → <c>FailedPrecondition</c>、その他 → <c>Internal</c>。
 /// radius の default 解決 (&lt;=0 → 0.1m) は Core 層で行い、解決後の値を Bridge へ渡す。
-/// 各 RPC のセマンティクスは <c>proto/resonite_io/v1/manipulation.proto</c> 参照。
+/// 各 RPC のセマンティクスは <c>proto/resonite_io/v1/grabber.proto</c> 参照。
 /// </remarks>
-public sealed class ManipulationService : V1.Manipulation.ManipulationBase
+public sealed class GrabberService : V1.Grabber.GrabberBase
 {
     /// <summary>radius が &lt;=0 のときに使うサーバ default の grab 判定球半径 (メートル)。</summary>
     private const float DefaultGrabRadius = 0.1f;
 
-    private readonly IManipulationBridge? _bridge;
+    private readonly IGrabberBridge? _bridge;
     private readonly ILogSink _log;
 
-    public ManipulationService(ILogSink log, IManipulationBridge? bridge = null)
+    public GrabberService(ILogSink log, IGrabberBridge? bridge = null)
     {
         _log = log;
         _bridge = bridge;
     }
 
-    public override async Task<V1.ManipulationGrabResult> Grab(
-        V1.ManipulationGrabRequest request,
+    public override async Task<V1.GrabberGrabResult> Grab(
+        V1.GrabberGrabRequest request,
         ServerCallContext context
     )
     {
@@ -42,15 +42,15 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             )
             .ConfigureAwait(false);
 
-        return new V1.ManipulationGrabResult
+        return new V1.GrabberGrabResult
         {
             Grabbed = outcome.Grabbed,
             State = MapToProtoState(outcome.State),
         };
     }
 
-    public override async Task<V1.ManipulationGrabState> Release(
-        V1.ManipulationReleaseRequest request,
+    public override async Task<V1.GrabberGrabState> Release(
+        V1.GrabberReleaseRequest request,
         ServerCallContext context
     )
     {
@@ -67,8 +67,8 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
         return MapToProtoState(snapshot);
     }
 
-    public override async Task<V1.ManipulationGrabState> GetState(
-        V1.ManipulationGetStateRequest request,
+    public override async Task<V1.GrabberGrabState> GetState(
+        V1.GrabberGetStateRequest request,
         ServerCallContext context
     )
     {
@@ -85,8 +85,8 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
         return MapToProtoState(snapshot);
     }
 
-    private IManipulationBridge RequireBridge(string rpc) =>
-        BridgeGuard.Require(_bridge, _log, "Manipulation", "IManipulationBridge", rpc);
+    private IGrabberBridge RequireBridge(string rpc) =>
+        BridgeGuard.Require(_bridge, _log, "Grabber", "IGrabberBridge", rpc);
 
     private Task<T> InvokeBridge<T>(
         string rpc,
@@ -95,15 +95,15 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
     ) =>
         BridgeFault.InvokeAsync(
             _log,
-            "Manipulation",
+            "Grabber",
             rpc,
             call,
             ct,
             ex =>
-                ex is ManipulationNotReadyException notReady
+                ex is GrabberNotReadyException notReady
                     ? BridgeFault.Translate(
                         _log,
-                        "Manipulation",
+                        "Grabber",
                         rpc,
                         StatusCode.FailedPrecondition,
                         "bridge not ready",
@@ -112,26 +112,26 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
                     : null
         );
 
-    private static ManipulationHandSelector ToSelector(V1.ManipulationHand hand) =>
+    private static GrabberHandSelector ToSelector(V1.GrabberHand hand) =>
         hand switch
         {
-            V1.ManipulationHand.Left => ManipulationHandSelector.Left,
-            V1.ManipulationHand.Right => ManipulationHandSelector.Right,
+            V1.GrabberHand.Left => GrabberHandSelector.Left,
+            V1.GrabberHand.Right => GrabberHandSelector.Right,
             // UNSPECIFIED / PRIMARY / 未知の値はすべて Primary 扱い。
-            _ => ManipulationHandSelector.Primary,
+            _ => GrabberHandSelector.Primary,
         };
 
-    private static V1.ManipulationHand ToProtoHand(ManipulationHandSelector hand) =>
+    private static V1.GrabberHand ToProtoHand(GrabberHandSelector hand) =>
         hand switch
         {
-            ManipulationHandSelector.Left => V1.ManipulationHand.Left,
-            ManipulationHandSelector.Right => V1.ManipulationHand.Right,
-            _ => V1.ManipulationHand.Primary,
+            GrabberHandSelector.Left => V1.GrabberHand.Left,
+            GrabberHandSelector.Right => V1.GrabberHand.Right,
+            _ => V1.GrabberHand.Primary,
         };
 
-    private static V1.ManipulationGrabState MapToProtoState(GrabSnapshot snapshot)
+    private static V1.GrabberGrabState MapToProtoState(GrabSnapshot snapshot)
     {
-        var state = new V1.ManipulationGrabState
+        var state = new V1.GrabberGrabState
         {
             Hand = ToProtoHand(snapshot.Hand),
             IsHolding = snapshot.IsHolding,

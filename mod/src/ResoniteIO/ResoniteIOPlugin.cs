@@ -12,8 +12,8 @@ using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Hosting;
-using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
@@ -57,7 +57,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineSpeakerBridge? _speakerBridge;
     private FrooxEngineContextMenuBridge? _contextMenuBridge;
     private FrooxEngineDashBridge? _dashBridge;
-    private FrooxEngineManipulationBridge? _manipulationBridge;
+    private FrooxEngineGrabberBridge? _grabberBridge;
     private FrooxEngineWorldBridge? _worldBridge;
     private FrooxEngineInventoryBridge? _inventoryBridge;
     private FrooxEngineCursorBridge? _cursorBridge;
@@ -129,7 +129,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _dashBridge = new FrooxEngineDashBridge(Engine.Current, _logSink);
 
-            _manipulationBridge = new FrooxEngineManipulationBridge(Engine.Current, _logSink);
+            _grabberBridge = new FrooxEngineGrabberBridge(Engine.Current, _logSink);
 
             _worldBridge = new FrooxEngineWorldBridge(Engine.Current, _logSink);
 
@@ -149,7 +149,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 contextMenuBridge: _contextMenuBridge,
                 dashBridge: _dashBridge,
                 worldBridge: _worldBridge,
-                manipulationBridge: _manipulationBridge,
+                grabberBridge: _grabberBridge,
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge,
                 infoBridge: _infoBridge
@@ -212,8 +212,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // DashBridge も engine 状態を保持せず IDisposable でもないため、参照 null 化のみで足りる。
         _dashBridge = null;
 
-        // ManipulationBridge も engine 状態を保持せず IDisposable でもないため参照 null 化のみ。
-        _manipulationBridge = null;
+        // GrabberBridge も engine 状態を保持せず IDisposable でもないため参照 null 化のみ。
+        _grabberBridge = null;
 
         // WorldBridge も engine 状態を保持せず (manager 参照を読むだけ、event 購読
         // 無し、dispatch は world.RunSynchronously の one-shot) IDisposable でもないため

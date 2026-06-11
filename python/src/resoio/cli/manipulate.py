@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, TextIO
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from resoio.manipulation import GrabState
+    from resoio.grabber import GrabState
 
 
 def register(
@@ -120,9 +120,9 @@ def _print_interactive_help(stream: TextIO) -> None:
 
 async def _run_interactive(args: argparse.Namespace) -> int:
     """Key-driven grab/release loop over the Manipulation UDS."""
-    from resoio.manipulation import ManipulationClient, ManipulationHandArg
+    from resoio.grabber import GrabberClient, GrabberHandArg
 
-    hand: ManipulationHandArg = args.hand
+    hand: GrabberHandArg = args.hand
 
     _print_interactive_help(sys.stderr)
 
@@ -132,7 +132,7 @@ async def _run_interactive(args: argparse.Namespace) -> int:
         print("resoio manipulate interactive: stdin has no fd", file=sys.stderr)
         return 1
 
-    async with ManipulationClient(args.socket) as client:
+    async with GrabberClient(args.socket) as client:
         with _raw_tty(sys.stdin):
             while True:
                 data = os.read(stdin_fd, 64)
@@ -166,9 +166,9 @@ async def _run(args: argparse.Namespace) -> int:
         return await _run_interactive(args)
 
     # Deferred to keep `resoio --help` and shell completion fast.
-    from resoio.manipulation import ManipulationClient
+    from resoio.grabber import GrabberClient
 
-    async with ManipulationClient(args.socket) as client:
+    async with GrabberClient(args.socket) as client:
         if action == "grab":
             result = await client.grab(hand=args.hand, radius=args.radius)
             print(f"grabbed={result.grabbed}")

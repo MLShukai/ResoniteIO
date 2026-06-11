@@ -20,7 +20,7 @@ import time
 import grpclib.exceptions
 from grpclib.const import Status
 
-from resoio import CursorClient, GrabState, InventoryClient, ManipulationClient
+from resoio import CursorClient, GrabberClient, GrabState, InventoryClient
 
 SOCKET_PATH: str | None = None
 HAND = "primary"
@@ -43,7 +43,7 @@ async def wait_for_ready() -> None:
     deadline = time.monotonic() + READY_TIMEOUT_S
     while True:
         try:
-            async with ManipulationClient(SOCKET_PATH) as client:
+            async with GrabberClient(SOCKET_PATH) as client:
                 await client.get_state(hand=HAND)
             return
         except grpclib.exceptions.GRPCError as e:
@@ -69,7 +69,7 @@ async def main() -> None:
     async with (
         InventoryClient(SOCKET_PATH) as inventory,
         CursorClient(SOCKET_PATH) as cursor,
-        ManipulationClient(SOCKET_PATH) as client,
+        GrabberClient(SOCKET_PATH) as client,
     ):
         spawned = await inventory.spawn(MIRROR_PATH)
         print(f"spawned: {spawned.spawned_slot_name} ({spawned.spawned_slot_id})")

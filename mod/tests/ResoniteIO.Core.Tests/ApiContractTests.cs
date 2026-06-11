@@ -5,12 +5,12 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Hosting;
 using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
-using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
@@ -96,6 +96,12 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Display.DisplayNotReadyException",
             "ResoniteIO.Core.Display.DisplayService",
             "ResoniteIO.Core.Display.IDisplayBridge",
+            "ResoniteIO.Core.Grabber.GrabOutcome",
+            "ResoniteIO.Core.Grabber.GrabSnapshot",
+            "ResoniteIO.Core.Grabber.GrabberHandSelector",
+            "ResoniteIO.Core.Grabber.GrabberNotReadyException",
+            "ResoniteIO.Core.Grabber.GrabberService",
+            "ResoniteIO.Core.Grabber.IGrabberBridge",
             "ResoniteIO.Core.Hosting.GrpcHost",
             "ResoniteIO.Core.Info.IInfoBridge",
             "ResoniteIO.Core.Info.InfoService",
@@ -120,12 +126,6 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Locomotion.LocomotionResetFlags",
             "ResoniteIO.Core.Locomotion.LocomotionService",
             "ResoniteIO.Core.Logging.ILogSink",
-            "ResoniteIO.Core.Manipulation.GrabOutcome",
-            "ResoniteIO.Core.Manipulation.GrabSnapshot",
-            "ResoniteIO.Core.Manipulation.IManipulationBridge",
-            "ResoniteIO.Core.Manipulation.ManipulationHandSelector",
-            "ResoniteIO.Core.Manipulation.ManipulationNotReadyException",
-            "ResoniteIO.Core.Manipulation.ManipulationService",
             "ResoniteIO.Core.Microphone.IMicrophoneBridge",
             "ResoniteIO.Core.Microphone.MicrophoneDisconnectReason",
             "ResoniteIO.Core.Microphone.MicrophoneFrame",
@@ -243,6 +243,15 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.GetCurrentRequest",
             "ResoniteIO.V1.GetCurrentResponse",
             "ResoniteIO.V1.GetServerInfoRequest",
+            "ResoniteIO.V1.Grabber",
+            "ResoniteIO.V1.Grabber+GrabberBase",
+            "ResoniteIO.V1.GrabberGetStateRequest",
+            "ResoniteIO.V1.GrabberGrabRequest",
+            "ResoniteIO.V1.GrabberGrabResult",
+            "ResoniteIO.V1.GrabberGrabState",
+            "ResoniteIO.V1.GrabberHand",
+            "ResoniteIO.V1.GrabberReflection",
+            "ResoniteIO.V1.GrabberReleaseRequest",
             "ResoniteIO.V1.Info",
             "ResoniteIO.V1.Info+InfoBase",
             "ResoniteIO.V1.InfoReflection",
@@ -277,15 +286,6 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.LocomotionReflection",
             "ResoniteIO.V1.LocomotionResetRequest",
             "ResoniteIO.V1.LocomotionResetSummary",
-            "ResoniteIO.V1.Manipulation",
-            "ResoniteIO.V1.Manipulation+ManipulationBase",
-            "ResoniteIO.V1.ManipulationGetStateRequest",
-            "ResoniteIO.V1.ManipulationGrabRequest",
-            "ResoniteIO.V1.ManipulationGrabResult",
-            "ResoniteIO.V1.ManipulationGrabState",
-            "ResoniteIO.V1.ManipulationHand",
-            "ResoniteIO.V1.ManipulationReflection",
-            "ResoniteIO.V1.ManipulationReleaseRequest",
             "ResoniteIO.V1.Microphone",
             "ResoniteIO.V1.Microphone+MicrophoneBase",
             "ResoniteIO.V1.MicrophoneAudioFrame",
@@ -398,7 +398,7 @@ public sealed class ApiContractTests
     [InlineData(typeof(CursorNotReadyException))]
     [InlineData(typeof(DashNotReadyException))]
     [InlineData(typeof(InventoryNotReadyException))]
-    [InlineData(typeof(ManipulationNotReadyException))]
+    [InlineData(typeof(GrabberNotReadyException))]
     [InlineData(typeof(WorldNotReadyException))]
     [InlineData(typeof(WorldNotFoundException))]
     [Trait("Category", "ApiContract")]
@@ -588,22 +588,22 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
-    /// <see cref="IManipulationBridge"/> の method signature を固定する。
+    /// <see cref="IGrabberBridge"/> の method signature を固定する。
     /// </summary>
     [Fact]
     [Trait("Category", "ApiContract")]
-    public void IManipulationBridge_MethodSignatures_MatchSnapshot()
+    public void IGrabberBridge_MethodSignatures_MatchSnapshot()
     {
         AssertMethodSignatures(
-            typeof(IManipulationBridge),
+            typeof(IGrabberBridge),
             // Grab はカーソルレイの hit 点中心の proximity grab — point 引数は存在しない
-            // (旧 ManipulationPoint? は Part B で削除済み。復活はこの pin で検出する)。
+            // (旧 point 指定は 2026-06-10 に削除済み。復活はこの pin で検出する)。
             (
                 "GrabAsync",
-                new[] { typeof(ManipulationHandSelector), typeof(float), typeof(CancellationToken) }
+                new[] { typeof(GrabberHandSelector), typeof(float), typeof(CancellationToken) }
             ),
-            ("ReleaseAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) }),
-            ("GetStateAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) })
+            ("ReleaseAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) }),
+            ("GetStateAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) })
         );
     }
 

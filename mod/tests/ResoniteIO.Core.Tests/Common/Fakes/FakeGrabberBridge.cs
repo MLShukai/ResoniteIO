@@ -1,9 +1,9 @@
-using ResoniteIO.Core.Manipulation;
+using ResoniteIO.Core.Grabber;
 
 namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
-/// テスト用 <see cref="IManipulationBridge"/>。Grab / Release / GetState の各呼び出しを
+/// テスト用 <see cref="IGrabberBridge"/>。Grab / Release / GetState の各呼び出しを
 /// (hand / radius まで) <c>lock</c> 付き append-only list に記録し、手ごとに簡単な
 /// 保持状態をシミュレートする。Grab で <see cref="GrabbedObjectNames"/> を保持し
 /// <c>IsHolding=true</c> に、Release で空にして <c>IsHolding=false</c> に遷移するため、
@@ -18,16 +18,16 @@ namespace ResoniteIO.Core.Tests.Common.Fakes;
 /// カーソルレイの計算 / raycast は engine 表面なので fake には持ち込まない —
 /// hit / miss の結果だけを <see cref="GrabSucceeds"/> で script する。
 /// </remarks>
-internal sealed class FakeManipulationBridge : IManipulationBridge
+internal sealed class FakeGrabberBridge : IGrabberBridge
 {
     /// <summary>記録された 1 回の RPC 呼び出し。<paramref name="Radius"/> は
     /// Grab のみ意味を持ち、Release / GetState では <c>0</c>。</summary>
-    public sealed record Call(string Method, ManipulationHandSelector Hand, float Radius);
+    public sealed record Call(string Method, GrabberHandSelector Hand, float Radius);
 
     private readonly List<Call> _calls = new();
 
     // 手ごとの保持中オブジェクト名 (空 = 何も持っていない)。
-    private readonly Dictionary<ManipulationHandSelector, IReadOnlyList<string>> _held = new();
+    private readonly Dictionary<GrabberHandSelector, IReadOnlyList<string>> _held = new();
     private readonly object _gate = new();
 
     /// <summary>Grab が成功する (レイが grabbable に hit する) か。<c>false</c> なら
@@ -51,11 +51,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         }
     }
 
-    public Task<GrabOutcome> GrabAsync(
-        ManipulationHandSelector hand,
-        float radius,
-        CancellationToken ct
-    )
+    public Task<GrabOutcome> GrabAsync(GrabberHandSelector hand, float radius, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
@@ -77,7 +73,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         }
     }
 
-    public Task<GrabSnapshot> ReleaseAsync(ManipulationHandSelector hand, CancellationToken ct)
+    public Task<GrabSnapshot> ReleaseAsync(GrabberHandSelector hand, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
@@ -94,7 +90,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         }
     }
 
-    public Task<GrabSnapshot> GetStateAsync(ManipulationHandSelector hand, CancellationToken ct)
+    public Task<GrabSnapshot> GetStateAsync(GrabberHandSelector hand, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
@@ -111,7 +107,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
     }
 
     /// <summary>テスト前提条件として、指定した手に保持状態を直接仕込む (GetState 検証の Arrange)。</summary>
-    public void SeedHeld(ManipulationHandSelector hand, IReadOnlyList<string> objectNames)
+    public void SeedHeld(GrabberHandSelector hand, IReadOnlyList<string> objectNames)
     {
         lock (_gate)
         {
@@ -119,7 +115,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         }
     }
 
-    private GrabSnapshot SnapshotLocked(ManipulationHandSelector hand)
+    private GrabSnapshot SnapshotLocked(GrabberHandSelector hand)
     {
         var names = _held.TryGetValue(hand, out var held) ? held : Array.Empty<string>();
         return new GrabSnapshot(hand, IsHolding: names.Count > 0, ObjectNames: names);

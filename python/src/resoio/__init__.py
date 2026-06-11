@@ -21,6 +21,7 @@ from resoio.dash import (
     DashTree,
 )
 from resoio.display import DisplayClient, DisplayInfo
+from resoio.grabber import GrabberClient, GrabResult, GrabState
 from resoio.info import ServerInfo, ServerPlatform, get_server_info
 from resoio.inventory import (
     InventoryClient,
@@ -35,7 +36,6 @@ from resoio.locomotion import (
     LocomotionClient,
     ResetSummary,
 )
-from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from resoio.microphone import (
     MicrophoneClient,
     MicrophoneStreamSummary,
@@ -81,6 +81,7 @@ __all__ = [
     "Frame",
     "GrabResult",
     "GrabState",
+    "GrabberClient",
     "InventoryClient",
     "InventoryEntry",
     "InventoryEntryKind",
@@ -90,7 +91,6 @@ __all__ = [
     "ListRecordsResponse",
     "ListSessionsResponse",
     "LocomotionClient",
-    "ManipulationClient",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
     "OpenWorld",

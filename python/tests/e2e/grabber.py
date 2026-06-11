@@ -1,6 +1,6 @@
-"""E2E: drive the Manipulation modality against a live Resonite.
+"""E2E: drive the Grabber modality against a live Resonite.
 
-This verifies the Manipulation RPC path (``get_state`` / ``grab`` /
+This verifies the Grabber RPC path (``get_state`` / ``grab`` /
 ``release``) end-to-end against a live Resonite: the mod loads, the
 bridge reaches the real per-hand ``Grabber`` without throwing, responses
 are well-formed, and the requested hand resolves correctly
@@ -21,7 +21,7 @@ with ``"Mirror"`` in ``object_names``. ``release`` then must report
 slightly run to run, so the grab retries a few nearby aim points before
 failing. The only remaining human-only checks (the object visually
 following the hand, and the VR ``FAILED_PRECONDITION`` rejection) live in
-``mod/tests/manual/manipulation-verification.md``.
+``mod/tests/manual/grabber-verification.md``.
 
 There is no API to delete the spawned Mirror from the world, so the test
 releases it and leaves it in place; the local home world resets on the
@@ -49,8 +49,8 @@ import grpclib
 from grpclib.const import Status
 
 from resoio.cursor import CursorClient
+from resoio.grabber import GrabberClient, GrabResult, GrabState
 from resoio.inventory import InventoryClient
-from resoio.manipulation import GrabResult, GrabState, ManipulationClient
 from tests.helpers import mark_e2e
 
 # parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
@@ -58,7 +58,7 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # UDS bind and Grabber/LocalUser readiness race: while the engine is still
-# booting, the Manipulation bridge raises FAILED_PRECONDITION until the focused
+# booting, the Grabber bridge raises FAILED_PRECONDITION until the focused
 # world and its per-hand Grabbers exist. Mirror context_menu.py's readiness poll.
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
@@ -118,7 +118,7 @@ def _format_state(state: GrabState) -> str:
     )
 
 
-class TestManipulation:
+class TestGrabber:
     @mark_e2e
     def test_spawned_mirror_positive_grab_and_release(
         self, resonite_session: Path
@@ -126,7 +126,7 @@ class TestManipulation:
         del resonite_session  # fixture only manages Resonite lifecycle
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = ARTIFACT_ROOT / f"manipulation_{timestamp}"
+        out_dir = ARTIFACT_ROOT / f"grabber_{timestamp}"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_path = out_dir / "states.txt"
         log_lines: list[str] = []
@@ -148,14 +148,14 @@ class TestManipulation:
             deadline = time.monotonic() + _READY_TIMEOUT_S
             while True:
                 try:
-                    async with ManipulationClient() as client:
+                    async with GrabberClient() as client:
                         return await client.get_state()
                 except grpclib.exceptions.GRPCError as e:
                     if e.status != Status.FAILED_PRECONDITION:
                         raise
                     if time.monotonic() >= deadline:
                         raise AssertionError(
-                            "Manipulation bridge never became ready "
+                            "Grabber bridge never became ready "
                             f"within {_READY_TIMEOUT_S:.0f}s"
                         ) from e
                     await asyncio.sleep(_READY_RETRY_INTERVAL_S)
@@ -165,7 +165,7 @@ class TestManipulation:
             _screenshot(out_dir, f"{name}.png")
 
         async def grab_with_aim_retries(
-            client: ManipulationClient, cursor: CursorClient
+            client: GrabberClient, cursor: CursorClient
         ) -> GrabResult:
             """Aim at each candidate point in turn and grab; return the first
             successful result (or the last attempt's result if all miss).
@@ -197,7 +197,7 @@ class TestManipulation:
             assert not initial.is_holding, "hands should start empty"
             assert initial.hand in ("primary", "left", "right")
 
-            async with ManipulationClient() as client:
+            async with GrabberClient() as client:
                 # 1. per-hand get_state: each hand resolves correctly and stamps
                 #    a real unix_nanos. left → "left", right → "right", and
                 #    primary resolves to the same concrete hand as right
@@ -278,10 +278,10 @@ class TestManipulation:
             Resonite start.
             """
             try:
-                async with ManipulationClient() as client:
+                async with GrabberClient() as client:
                     await client.release()
             except Exception as e:  # noqa: BLE001 - teardown must not mask the test
-                print(f"best-effort manipulation release failed (ignored): {e!r}")
+                print(f"best-effort grabber release failed (ignored): {e!r}")
             try:
                 async with CursorClient() as cursor:
                     await cursor.release()
