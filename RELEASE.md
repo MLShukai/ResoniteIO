@@ -65,7 +65,9 @@ ______________________________________________________________________
 3. `python/pyproject.toml` の `version`
 
 `<Version>` を上げたら必ず `pyproject.toml` も同じ値に上げ、`python/` で `uv lock` を回して
-lockfile を追従させる。Thunderstore zip の `versionNumber` は `Directory.Build.targets` の `PackTS` が
+lockfile を追従させる。この 3 ファイルの bump は **`just bump-version X.Y.Z`**
+(`scripts/bump-version.sh`、container 内で実行) が 1 コマンドで行う。
+Thunderstore zip の `versionNumber` は `Directory.Build.targets` の `PackTS` が
 `--package-version $(Version)` で csproj から渡すので、csproj が single source of truth になる。
 
 ______________________________________________________________________
@@ -126,15 +128,14 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 
 このブランチで以下を **1 まとめ** に行う:
 
-1. `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Version>` を `X.Y.Z` に bump
-2. `python/pyproject.toml` の `version` を **同じ** `X.Y.Z` に bump
-3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加
+1. `just bump-version X.Y.Z` (container 内) — csproj `<Version>` / `pyproject.toml` の `version` /
+   `uv.lock` の 3 ファイルを lockstep で bump する (§2)
+2. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加
    (`## [Unreleased]` の内容を確定版セクションに移し替える。Added / Changed / Fixed 等の見出しは Keep a Changelog に従う)
-4. `python/` で `uv lock` を回して lockfile を追従させる
-5. **Renderer ソース (`mod/src/ResoniteIO.Renderer/` / `mod/src/ResoniteIO.RendererShared/`) を変更した release のみ**:
+3. **Renderer ソース (`mod/src/ResoniteIO.Renderer/` / `mod/src/ResoniteIO.RendererShared/`) を変更した release のみ**:
    Resonite のあるローカル環境で `just renderer-prebuild` を実行し、`mod/prebuilt/renderer/` の差分を commit する
    (committed prebuilt が古いと `build` ジョブの drift guard で fail する)
-6. `just run` (`format` → `gen-proto` → `build` → `test` → `type` → `check-renderer-prebuilt`) が green になるまで回す
+4. `just run` (`format` → `gen-proto` → `build` → `test` → `type` → `check-renderer-prebuilt`) が green になるまで回す
 
 ```bash
 gh pr create --base main \
