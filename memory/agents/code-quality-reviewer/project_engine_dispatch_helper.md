@@ -18,7 +18,7 @@ metadata:
   (Try なし) は ct cancel で `TrySetCanceled` 成立後に deferred engine action が走ると
   engine thread 上で `InvalidOperationException` を投げる latent race を持つ。
 
-**移行済み:** ContextMenu / Manipulation (static helper 削除 → `ResolveWorld().RunOnEngineAsync(...)`)、
+**移行済み:** ContextMenu / Grabber (static helper 削除 → `ResolveWorld().RunOnEngineAsync(...)`)、
 Dash / Cursor / World (instance wrapper を `=> ResolveWorld().RunOnEngineAsync(fn, ct)` 1 行へ)。
 Action 版を使うと engine ブロックのダミー `return true;` を除去できる
 (`FocusWorld` のような void engine API)。

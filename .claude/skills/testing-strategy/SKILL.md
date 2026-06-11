@@ -256,7 +256,7 @@ Resonite は Linux では Steam Proton (Wine) 経由で動く。container ↔ ho
 ### Resonite engine thread / SafeShutdown
 
 - `FrooxEngine.World` を触る Bridge メソッドは engine update thread でしか呼べない。`World.RunSynchronously` でマーシャルする
-- `OnEngineReady` で GrpcHost を bind し、`SafeShutdown` (BepInEx ProcessExit / 通常の Quit) で確実に Stop されるシーケンスは contract。Manipulation などの新規モダリティを追加する際にも、partial-failure を SafeShutdown が拾えるかを必ず確認する
+- `OnEngineReady` で GrpcHost を bind し、`SafeShutdown` (BepInEx ProcessExit / 通常の Quit) で確実に Stop されるシーケンスは contract。Grabber などの新規モダリティを追加する際にも、partial-failure を SafeShutdown が拾えるかを必ず確認する
 - gRPC handler 側で engine thread 必要な操作を sync 待ちすると engine が止まる。`EngineCompletionSource` (= TaskCompletionSource を engine thread から SetResult する) パターンで書く
 
 ### container ↔ host のテスト実行

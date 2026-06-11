@@ -18,7 +18,7 @@ from resoio._generated.resonite_io.v1 import (
     LocomotionResetSummary,
 )
 from resoio.cli import _amain, _build_parser
-from resoio.cli.locomotion import (
+from resoio.cli.drive import (
     _apply_key,
     _DriveState,
     _format_status,
@@ -554,10 +554,15 @@ def test_format_status_velocity_reflects_sprint_state():
 # ---------------------------------------------------------------------------
 
 
-def test_locomotion_without_subcommand_is_rejected():
+def test_legacy_locomotion_command_is_rejected():
+    """The ``locomotion`` subgroup was flattened away: ``resoio drive`` is the
+    top-level command and ``resoio locomotion ...`` no longer exists.
+
+    argparse exits 2 on an unknown command, pinning the removal.
+    """
     parser = _build_parser()
     with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["locomotion"])
+        parser.parse_args(["locomotion", "drive"])
     assert excinfo.value.code == 2
 
 
@@ -570,15 +575,15 @@ def test_drive_rejects_legacy_rate_flag():
     """
     parser = _build_parser()
     with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["locomotion", "drive", "--rate", "30"])
+        parser.parse_args(["drive", "--rate", "30"])
     assert excinfo.value.code == 2
 
 
 def test_socket_flag_accepted_on_drive(tmp_path: Path):
-    """`-s/--socket` must work on the leaf, mirroring `display`'s nesting."""
+    """`-s/--socket` must work on the top-level `drive` command."""
     parser = _build_parser()
     sock = str(tmp_path / "x.sock")
-    args = parser.parse_args(["locomotion", "drive", "-s", sock, "--no-wait"])
+    args = parser.parse_args(["drive", "-s", sock, "--no-wait"])
     assert args.socket == sock
     assert args.no_wait is True
     # Defaults for the optional knobs flow through. ``--rate`` is gone.
@@ -788,7 +793,6 @@ async def test_drive_round_trip_via_cli(
             try:
                 args = _build_parser().parse_args(
                     [
-                        "locomotion",
                         "drive",
                         "--no-wait",
                         "--sprint",
@@ -889,7 +893,7 @@ async def _run_drive_with_immediate_quit(
         fake_stdin = os.fdopen(read_fd, "rb", buffering=0)
         monkeypatch.setattr("sys.stdin", fake_stdin)
         monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-        argv = ["locomotion", "drive"]
+        argv = ["drive"]
         if no_wait:
             argv.append("--no-wait")
         try:

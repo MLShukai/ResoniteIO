@@ -14,10 +14,10 @@
 - **Speaker**: Resonite が鳴らしている final mix (world audio + 他人 voice + UI sound) を Python に配信 (Resonite → Python)
 - **Microphone**: Python が生成した音声を Resonite ユーザー voice として送り込む (Python → Resonite)
 - **Locomotion**: 移動・姿勢制御 (Python → Resonite)
-- **Manipulation**: Hand pose / Grab / Release (Python → Resonite)
+- **Grabber** (旧称 Manipulation、2026-06-11 に rename): Hand pose / Grab / Release (Python → Resonite)
 - (将来: 視線・proprioception・触覚など)
 
-各モダリティは **独立した非同期ストリーム** として動作し、**1 service = 1 方向** を原則とする。Camera / Speaker は server-streaming で受信、Locomotion / Manipulation / Microphone は client-streaming で送信。技術的にはすべて gRPC streaming。
+各モダリティは **独立した非同期ストリーム** として動作し、**1 service = 1 方向** を原則とする。Camera / Speaker は server-streaming で受信、Locomotion / Grabber / Microphone は client-streaming で送信。技術的にはすべて gRPC streaming。
 
 ### スコープ外
 
@@ -54,7 +54,7 @@ ______________________________________________________________________
    │   ├ Speaker client         │    │   ├ FrooxEngineSpeakerBridge            │
    │   ├ Microphone client       │   │   ├ FrooxEngineMicrophoneBridge       │
    │   ├ Locomotion client      │    │   ├ FrooxEngineLocomotionBridge         │
-   │   ├ Manipulation client    │    │   ├ FrooxEngineManipulationBridge       │
+   │   ├ Grabber client         │    │   ├ FrooxEngineGrabberBridge            │
    │   └ Connection (gRPC base) │    │   └ FrooxEngineConnectionBridge         │
    │            ▲               │    │            │  (DI: IConnectionBridge 等)│
    │            │               │    │            ▼                            │
@@ -63,7 +63,7 @@ ______________________________________________________________________
    │            │               │UDS │   ├ SpeakerService                      │
    │            │               │gRPC│   ├ MicrophoneService                   │
    │            │               │    │   ├ LocomotionService                   │
-   │            │               │    │   ├ ManipulationService                 │
+   │            │               │    │   ├ GrabberService                      │
    │            │               │    │   └ ConnectionService / GrpcHost        │
    └────────────┘               │    └─────────in-process─────────────────────┘
                                                     │
@@ -81,18 +81,18 @@ ______________________________________________________________________
 - C# 側のモジュール構造と Python 側のモジュール構造を **モダリティ単位でミラーリング**
 - **コア機能は Resonite 非依存** (`ResoniteIO.Core`)。BepInEx / FrooxEngine / Renderite に依存するコードは `ResoniteIO` (mod) に局所化する
 - **mod 層は engine bridging のみ**: コアが要求する Bridge インターフェイスを FrooxEngine API で実装し、`OnEngineReady` でコアを起動・shutdown で停止する純粋なアダプタ
-- **Bridge インターフェイスはモダリティ単位で分割**: `IConnectionBridge` / `ICameraBridge` / `ISpeakerBridge` / `ILocomotionBridge` / `IManipulationBridge` `IMicrophoneBridge` のように独立 IF を保ち、肥大化を防ぐ。**音声系は双方向を 1 IF にまとめず、方向別に分離** (Speaker / Microphone)
+- **Bridge インターフェイスはモダリティ単位で分割**: `IConnectionBridge` / `ICameraBridge` / `ISpeakerBridge` / `ILocomotionBridge` / `IGrabberBridge` `IMicrophoneBridge` のように独立 IF を保ち、肥大化を防ぐ。**音声系は双方向を 1 IF にまとめず、方向別に分離** (Speaker / Microphone)
 
 ### モダリティ別の実装方針
 
-| モダリティ   | Core 側 Service                  | Mod 側 Bridge 実装                                                                               | 通信パターン  |
-| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------ | ------------- |
-| Connection   | `ConnectionService` / `GrpcHost` | `FrooxEngineConnectionBridge` (`FocusedWorld` / `LocalUser` を露出)                              | unary         |
-| Camera       | `CameraService`                  | `FrooxEngineCameraBridge` (`Camera` 生成 + `RenderTextureProvider` 読出)                         | server-stream |
-| Speaker      | `SpeakerService`                 | `FrooxEngineSpeakerBridge` (HarmonyLib Postfix で `AudioOutputDriver.AudioFrameRendered` を tap) | server-stream |
-| Microphone   | `MicrophoneService`              | `FrooxEngineMicrophoneBridge` (`AudioInput` 派生 + `AudioSystem.RegisterAudioInput`)             | client-stream |
-| Locomotion   | `LocomotionService`              | `FrooxEngineLocomotionBridge` (`LocalUser.Root` 直接駆動)                                        | client-stream |
-| Manipulation | `ManipulationService`            | `FrooxEngineManipulationBridge` (Hand Slot Pose + `Grabber`)                                     | client-stream |
+| モダリティ | Core 側 Service                  | Mod 側 Bridge 実装                                                                               | 通信パターン  |
+| ---------- | -------------------------------- | ------------------------------------------------------------------------------------------------ | ------------- |
+| Connection | `ConnectionService` / `GrpcHost` | `FrooxEngineConnectionBridge` (`FocusedWorld` / `LocalUser` を露出)                              | unary         |
+| Camera     | `CameraService`                  | `FrooxEngineCameraBridge` (`Camera` 生成 + `RenderTextureProvider` 読出)                         | server-stream |
+| Speaker    | `SpeakerService`                 | `FrooxEngineSpeakerBridge` (HarmonyLib Postfix で `AudioOutputDriver.AudioFrameRendered` を tap) | server-stream |
+| Microphone | `MicrophoneService`              | `FrooxEngineMicrophoneBridge` (`AudioInput` 派生 + `AudioSystem.RegisterAudioInput`)             | client-stream |
+| Locomotion | `LocomotionService`              | `FrooxEngineLocomotionBridge` (`LocalUser.Root` 直接駆動)                                        | client-stream |
+| Grabber    | `GrabberService`                 | `FrooxEngineGrabberBridge` (Hand Slot Pose + `Grabber`)                                          | client-stream |
 
 ### 同期戦略
 
@@ -100,7 +100,7 @@ ______________________________________________________________________
 
 - Camera は描画フレームが出来次第 push
 - Speaker は WASAPI audio callback が final mix を渡してきた段階で push (48 kHz / Stereo / float32 LE 固定)
-- Locomotion / Manipulation / Microphone は Python 側のタイミングで送信
+- Locomotion / Grabber / Microphone は Python 側のタイミングで送信
 - グローバルな clock や barrier は持たない
 
 各ストリームに **タイムスタンプ** を付与し、必要な同期は受信側 (Python) で行う。
@@ -312,7 +312,7 @@ ______________________________________________________________________
   - Core 単体: Kestrel ラウンドトリップ含む統合テストを xunit で (Resonite 不要)
   - Mod adapter: BepInEx 依存があるため smoke test のみ
   - Python: in-process server + UDS round-trip で contract を検証
-- ✅ **Bridge インターフェイスはモダリティ単位で分割**: `IConnectionBridge` / `ICameraBridge` / `ISpeakerBridge` / `ILocomotionBridge` / `IManipulationBridge` `IMicrophoneBridge` のように独立 IF とし、肥大化を防ぐ
+- ✅ **Bridge インターフェイスはモダリティ単位で分割**: `IConnectionBridge` / `ICameraBridge` / `ISpeakerBridge` / `ILocomotionBridge` / `IGrabberBridge` `IMicrophoneBridge` のように独立 IF とし、肥大化を防ぐ
 - ✅ **音声系は方向別に modality を分割**: 双方向 `Audio` service は採用せず、**Speaker** (Resonite → Python、Step 5 で実装) と **Microphone** (Python → Resonite、Step 7 で実装) を別 proto service として独立させる。理由: (1) 各方向で sample format / device 選択 / latency 要件が独立、(2) 双方向 bidi-stream にすると client 実装複雑度が跳ね上がる、(3) 将来 mic を実装しない選択肢を残せる。Speaker は stereo / Microphone は mono と format も独立に進化させた
 - ✅ **Speaker tap 経路は Engine 側 Harmony Postfix で完結**: Step 5 で `AudioOutputDriver.AudioFrameRendered(float[] buffer, double dspTime)` (protected) を HarmonyLib Postfix で patch する経路を実装。Renderer plugin (Camera v2 と同等) は **不要**。サンプル format は **48 kHz / Stereo / float32 LE 固定** で proto に negotiation を持たない (将来別 format が必要になれば別 service として追加)。Patch は WASAPI audio thread から呼ばれるため Bridge 側は thread-safe な Channel (`PushedAudioFrameSpeakerBridge`、capacity 32 / DropWrite) で受ける。詳細: [memory/feedback_speaker_engine_tap.md](memory/feedback_speaker_engine_tap.md)
 
@@ -366,20 +366,22 @@ ______________________________________________________________________
 - [x] **CLI** (`resoio record`): `python/src/resoio/cli/record.py` で `resoio record -o OUTPUT [--duration SEC]` flat command を追加 (既存 `resoio capture` と並ぶ action 名 flat 哲学)。`.wav` 拡張子で WAV file 書き出し (stdlib `struct` で `WAVE_FORMAT_IEEE_FLOAT` header を手書き、close 時に size field を seek-back で更新)、`-o -` で raw float32 LE PCM stdout (ffmpeg pipe 用)。BrokenPipeError は rc=0 で正常終了 (capture と同パターン)
 - [x] **e2e** (`python/tests/e2e/speaker_record.py`): 実機 Resonite から `SpeakerClient.stream()` で audio を受信し WAV へ書き出して `ffprobe` で format 検証 (sample rate 48000 / channels 2 / float / 期待秒数)
 
-### Step 6: Manipulation モジュール — **完了**
+### Step 6: Grabber モジュール (旧称 Manipulation) — **完了**
 
+> **rename (2026-06-11、ユーザー判断)**: モダリティ名を Manipulation から **Grabber** へ全層 rename (proto `grabber.proto` / service `Grabber` / C# `GrabberService`・`IGrabberBridge`・`FrooxEngineGrabberBridge` / Python `resoio.grabber`・`GrabberClient`。dataclass `GrabResult` / `GrabState` は据え置き)。以下のチェックリストの名称は rename 後の現行名に更新済み。
+>
 > Step 6 (Manipulation) と Step 7 (Microphone) の実装順は **ユーザー判断で Step 7 を先行** (2026-05-20)。Speaker 完了直後に音声系を完結させたいニーズが優先された。Manipulation はその後に着手し完了 (2026-06-06)。
 >
 > **スコープ変更 (2026-06-06、実機調査に基づくユーザー判断)**: 当初計画の **Hand Pose 制御は除外**。`TrackedDevicePositioner.BeforeInputUpdate` が `[DefaultUpdateOrder(-1000000)]` で毎 input update に hand slot を tracked-device pose で上書きし、Locomotion のような `ExternalInput` フックも無いため engine 的にクリーンな注入経路が無い (desktop は laser/IK 駆動)。よって **Grab / Release のみ**を実装。また pose を外したことで操作は離散の edge-triggered となり、当初の client-streaming ではなく **ContextMenu と同じ unary RPC** を採用した。
 >
-> **仕様変更 (2026-06-10、breaking change、ユーザー判断)**: `Grab` を **レイベース化**。`ManipulationGrabRequest.point` (`WorldPoint`) を削除 (field 2 は reserved) し、grab は常に **デスクトップカーソルレイの hit 点** (`LocalUserViewPosition` 起点、`UVToPerspectiveCameraDirection(Mouse.NormalizedWindowPosition, aspect, FOV)` 方向の `Physics.RaycastAll` 先頭 hit) を中心に radius 内の grabbable を掴む。レイ miss は `grabbed=false` (エラーではない)、VR モード (`ScreenActive=false`) は `FailedPrecondition`。同時に Cursor モダリティを永続保持化 (`SetPosition` は `Release` まで engine 内カーソルを保持、Harmony で renderer への lock 伝播を偽装し OS ポインタは奪わない) し、「`cursor set` で照準 → `grab`」が cross-RPC で成立する。詳細: [memory/feedback_manipulation_grabber.md](memory/feedback_manipulation_grabber.md) / [memory/feedback_cursor_lock_mechanism.md](memory/feedback_cursor_lock_mechanism.md)。
+> **仕様変更 (2026-06-10、breaking change、ユーザー判断)**: `Grab` を **レイベース化**。`GrabberGrabRequest.point` (`WorldPoint`、当時の名称は `ManipulationGrabRequest.point`) を削除 (field 2 は reserved) し、grab は常に **デスクトップカーソルレイの hit 点** (`LocalUserViewPosition` 起点、`UVToPerspectiveCameraDirection(Mouse.NormalizedWindowPosition, aspect, FOV)` 方向の `Physics.RaycastAll` 先頭 hit) を中心に radius 内の grabbable を掴む。レイ miss は `grabbed=false` (エラーではない)、VR モード (`ScreenActive=false`) は `FailedPrecondition`。同時に Cursor モダリティを永続保持化 (`SetPosition` は `Release` まで engine 内カーソルを保持、Harmony で renderer への lock 伝播を偽装し OS ポインタは奪わない) し、「`cursor set` で照準 → `grab`」が cross-RPC で成立する。詳細: [memory/feedback_grabber_engine_api.md](memory/feedback_grabber_engine_api.md) / [memory/feedback_cursor_lock_mechanism.md](memory/feedback_cursor_lock_mechanism.md)。
 
-- [x] **proto** (`proto/resonite_io/v1/manipulation.proto`): unary 3 RPC `Grab(ManipulationGrabRequest) returns (ManipulationGrabResult)` / `Release(ManipulationReleaseRequest) returns (ManipulationGrabState)` / `GetState(ManipulationGetStateRequest) returns (ManipulationGrabState)`。`ManipulationHand` enum (UNSPECIFIED/PRIMARY/LEFT/RIGHT、ContextMenuHand と同規約) + `WorldPoint` (message 不在 = 手の現在位置)。grab は world point + radius (radius\<=0 は Service 側で 0.1m default)
-- [x] **Core** (`ResoniteIO.Core.Manipulation`): `ManipulationService` + `IManipulationBridge` + Core POCO (`ManipulationHandSelector` / `ManipulationPoint` / `GrabSnapshot` / `GrabOutcome`) + `ManipulationNotReadyException`。ContextMenuService と同形 (optional DI、bridge=null → `Unavailable`、NotReady → `FailedPrecondition`)。`GrpcHost` に mount。Kestrel ラウンドトリップ + Fake bridge で xunit 済 (Core 185 tests green)
-- [x] **Mod** (`ResoniteIO.Bridge`): `FrooxEngineManipulationBridge` で `world.LocalUser.GetInteractionHandler(side).Grabber` に到達し `Grabber.Grab(float3 point, float radius)` / `Release()` / `IsHoldingObjects` + `GrabbedObjects` を呼ぶ。ContextMenu bridge と同じ one-shot `RunOnEngineAsync` (engine thread dispatch)。掴んだ object は `HolderSlot` に reparent され手に自動追従するため **per-frame repeater 不要** (Locomotion と対照的)。engine 状態を持たず **非 IDisposable**
-- [x] **Python** (`resoio.manipulation`): `ManipulationClient` を async ctx mgr として実装、`grab(*, hand, point, radius)` / `release(*, hand)` / `get_state(*, hand)`。dataclass `GrabResult` / `GrabState`、hand は `Literal["primary","left","right"]` (ContextMenu と同様 enum を避ける)。in-process grpclib + 実 UDS で round-trip 単体テスト済
-- [x] **CLI** (`resoio manipulate`): `python/src/resoio/cli/manipulate.py` で flat positional action `{grab,release,state,interactive}` + `--hand` / `--point X Y Z` / `--radius` (ContextMenu 流)。`interactive` は locomotion 流 raw-tty キー操作 (g=grab / r=release / s=state / q=quit)
-- [x] **e2e** (`python/tests/e2e/manipulation.py`): 実機 Resonite に対し get_state/grab/release の RPC 経路を検証 (mod ロード・Bridge が実 `Grabber` に到達・例外なし・hand 解決・release で is_holding False)。実機 green (1 passed / 55s)。default home に grabbable が無く API で決定的に spawn もできないため **positive grab (`grabbed=True` + object が手に追従する目視確認) は `mod/tests/manual/manipulation-verification.md` の人手手順**に残した
+- [x] **proto** (`proto/resonite_io/v1/grabber.proto`): unary 3 RPC `Grab(GrabberGrabRequest) returns (GrabberGrabResult)` / `Release(GrabberReleaseRequest) returns (GrabberGrabState)` / `GetState(GrabberGetStateRequest) returns (GrabberGrabState)`。`GrabberHand` enum (UNSPECIFIED/PRIMARY/LEFT/RIGHT、ContextMenuHand と同規約) + `WorldPoint` (message 不在 = 手の現在位置)。grab は world point + radius (radius\<=0 は Service 側で 0.1m default)
+- [x] **Core** (`ResoniteIO.Core.Grabber`): `GrabberService` + `IGrabberBridge` + Core POCO (`GrabberHandSelector` / `GrabberPoint` / `GrabSnapshot` / `GrabOutcome`) + `GrabberNotReadyException`。ContextMenuService と同形 (optional DI、bridge=null → `Unavailable`、NotReady → `FailedPrecondition`)。`GrpcHost` に mount。Kestrel ラウンドトリップ + Fake bridge で xunit 済 (Core 185 tests green)
+- [x] **Mod** (`ResoniteIO.Bridge`): `FrooxEngineGrabberBridge` で `world.LocalUser.GetInteractionHandler(side).Grabber` に到達し `Grabber.Grab(float3 point, float radius)` / `Release()` / `IsHoldingObjects` + `GrabbedObjects` を呼ぶ。ContextMenu bridge と同じ one-shot `RunOnEngineAsync` (engine thread dispatch)。掴んだ object は `HolderSlot` に reparent され手に自動追従するため **per-frame repeater 不要** (Locomotion と対照的)。engine 状態を持たず **非 IDisposable**
+- [x] **Python** (`resoio.grabber`): `GrabberClient` を async ctx mgr として実装、`grab(*, hand, point, radius)` / `release(*, hand)` / `get_state(*, hand)`。dataclass `GrabResult` / `GrabState`、hand は `Literal["primary","left","right"]` (ContextMenu と同様 enum を避ける)。in-process grpclib + 実 UDS で round-trip 単体テスト済
+- [x] **CLI** (`resoio manipulate`、現 `resoio grab` / `python/src/resoio/cli/grab.py` に rename 済み): `python/src/resoio/cli/manipulate.py` で flat positional action `{grab,release,state,interactive}` + `--hand` / `--point X Y Z` / `--radius` (ContextMenu 流)。`interactive` は locomotion 流 raw-tty キー操作 (g=grab / r=release / s=state / q=quit)。その後 `--point` は ray-based grab 化で廃止
+- [x] **e2e** (`python/tests/e2e/grabber.py`): 実機 Resonite に対し get_state/grab/release の RPC 経路を検証 (mod ロード・Bridge が実 `Grabber` に到達・例外なし・hand 解決・release で is_holding False)。実機 green (1 passed / 55s)。その後 2026-06-10 に Mirror の Inventory spawn による positive grab へ更新済み。目視確認手順は `mod/tests/manual/grabber-verification.md`
 
 ### Step 7: Microphone モジュール — **完了**
 

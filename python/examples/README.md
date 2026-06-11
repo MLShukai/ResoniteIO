@@ -46,7 +46,7 @@ uv run python python/examples/speaker_record.py
 uv run python python/examples/microphone_send.py
 uv run python python/examples/locomotion_drive.py
 uv run python python/examples/display_config.py
-uv run python python/examples/manipulation_grab.py
+uv run python python/examples/grabber_grab.py
 uv run python python/examples/world_browse.py
 uv run python python/examples/context_menu_interact.py
 uv run python python/examples/dash_navigate.py
@@ -65,7 +65,7 @@ uv run python python/examples/cursor_move.py
 | `microphone_send.py`       | 440 Hz / 3 秒 mono sine wave を生成し virtual mic に送信                                    |
 | `locomotion_drive.py`      | 6 秒 scripted シナリオで forward → strafe → yaw → jump → neutral を流し、reset() で締める   |
 | `display_config.py`        | 現在解像度 → 1024x768 apply → 元解像度に restore                                            |
-| `manipulation_grab.py`     | primary hand で get_state → grab → release の最小サイクル (空き home では grabbed=False)    |
+| `grabber_grab.py`          | Mirror を inventory spawn → cursor 照準 → grab → release の positive pick-up サイクル       |
 | `world_browse.py`          | session list → join → list_open_worlds → focus → leave (空 cloud は notice して終了)        |
 | `context_menu_interact.py` | T-key radial を open → get_state → highlight(0) → invoke(first enabled) → close             |
 | `dash_navigate.py`         | Esc dash を open → list_screens → set_screen(key) → get_tree → invoke(first) → close        |
@@ -112,9 +112,9 @@ examples では「最短コード」を優先しているため、以下は意�
 | `camera_view.py`           | [`cli/record.py`](../src/resoio/cli/record.py) (video 経路) | [`tests/e2e/camera_stream.py`](../tests/e2e/camera_stream.py)           |
 | `speaker_record.py`        | [`cli/record.py`](../src/resoio/cli/record.py) (audio 経路) | [`tests/e2e/speaker_record.py`](../tests/e2e/speaker_record.py)         |
 | `microphone_send.py`       | [`cli/mic.py`](../src/resoio/cli/mic.py)                    | [`tests/e2e/mic_send.py`](../tests/e2e/mic_send.py)                     |
-| `locomotion_drive.py`      | [`cli/locomotion.py`](../src/resoio/cli/locomotion.py)      | [`tests/e2e/locomotion.py`](../tests/e2e/locomotion.py)                 |
+| `locomotion_drive.py`      | [`cli/drive.py`](../src/resoio/cli/drive.py)                | [`tests/e2e/locomotion.py`](../tests/e2e/locomotion.py)                 |
 | `display_config.py`        | [`cli/display.py`](../src/resoio/cli/display.py)            | [`tests/e2e/display_resolution.py`](../tests/e2e/display_resolution.py) |
-| `manipulation_grab.py`     | [`cli/manipulate.py`](../src/resoio/cli/manipulate.py)      | [`tests/e2e/manipulation.py`](../tests/e2e/manipulation.py)             |
+| `grabber_grab.py`          | [`cli/grab.py`](../src/resoio/cli/grab.py)                  | [`tests/e2e/grabber.py`](../tests/e2e/grabber.py)                       |
 | `world_browse.py`          | [`cli/world.py`](../src/resoio/cli/world.py)                | [`tests/e2e/world.py`](../tests/e2e/world.py)                           |
 | `context_menu_interact.py` | [`cli/context_menu.py`](../src/resoio/cli/context_menu.py)  | [`tests/e2e/context_menu.py`](../tests/e2e/context_menu.py)             |
 | `dash_navigate.py`         | [`cli/dash.py`](../src/resoio/cli/dash.py)                  | [`tests/e2e/dash.py`](../tests/e2e/dash.py)                             |

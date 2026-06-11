@@ -10,11 +10,11 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
 using ResoniteIO.Core.Display;
+using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
-using ResoniteIO.Core.Manipulation;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
@@ -88,7 +88,7 @@ public sealed class GrpcHost : IAsyncDisposable
         IContextMenuBridge? contextMenuBridge = null,
         IDashBridge? dashBridge = null,
         IWorldBridge? worldBridge = null,
-        IManipulationBridge? manipulationBridge = null,
+        IGrabberBridge? grabberBridge = null,
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null
@@ -143,7 +143,7 @@ public sealed class GrpcHost : IAsyncDisposable
         Register(contextMenuBridge, "ContextMenu");
         Register(dashBridge, "Dash");
         Register(worldBridge, "World");
-        Register(manipulationBridge, "Manipulation");
+        Register(grabberBridge, "Grabber");
         Register(inventoryBridge, "Inventory");
         Register(cursorBridge, "Cursor");
 
@@ -166,7 +166,7 @@ public sealed class GrpcHost : IAsyncDisposable
         app.MapGrpcService<ContextMenuService>();
         app.MapGrpcService<DashService>();
         app.MapGrpcService<WorldService>();
-        app.MapGrpcService<ManipulationService>();
+        app.MapGrpcService<GrabberService>();
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();
 

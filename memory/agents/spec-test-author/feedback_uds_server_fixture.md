@@ -40,7 +40,7 @@ fake construction. Factory also supports >1 server per test if ever needed.
 
 **Migrated to uds_server (B-2, 2026-06-06):** test_connection (1 of 3),
 test_camera, test_speaker, test_microphone, test_locomotion, test_display,
-test_inventory, test_manipulation, test_world, test_context_menu, test_dash.
+test_inventory, test_grabber, test_world, test_context_menu, test_dash.
 **Left alone:** cli/test_record.py (B-3) — its server interleaves with a
 running CLI record loop (concurrency) and uses `type[CameraBase]` factory
 funcs, so the simple `async with client` teardown timing does not match;

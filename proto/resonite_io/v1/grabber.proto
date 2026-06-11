@@ -1,4 +1,4 @@
-// Manipulation service: Resonite 内のオブジェクトを engine 経由で **掴む / 離す**
+// Grabber service: Resonite 内のオブジェクトを engine 経由で **掴む / 離す**
 // (Grab / Release) modality。AI エージェントから「指定した手で近接 grab する」
 // 「離す」「現在の保持状態を取得する」を行う。
 //
@@ -14,7 +14,7 @@
 // (Locomotion のような client-streaming repeater は不要)。
 //
 // engine への dispatch は同期マーシャル (`RunSynchronously` + `TaskCompletionSource`)
-// で行い、各 RPC は操作適用後の `ManipulationGrabState` を engine thread 上で読み取って返す。
+// で行い、各 RPC は操作適用後の `GrabberGrabState` を engine thread 上で読み取って返す。
 syntax = "proto3";
 
 package resonite_io.v1;
@@ -22,21 +22,21 @@ package resonite_io.v1;
 option csharp_namespace = "ResoniteIO.V1";
 
 // 操作対象の手 (InteractionHandler) を指定する。ContextMenuHand と同じ規約。
-enum ManipulationHand {
+enum GrabberHand {
   // 未指定。サーバは desktop の primary hand (`InputInterface.PrimaryHand`) として扱う。
-  MANIPULATION_HAND_UNSPECIFIED = 0;
+  GRABBER_HAND_UNSPECIFIED = 0;
   // primary hand 明示 (UNSPECIFIED と同じ)。
-  MANIPULATION_HAND_PRIMARY = 1;
-  MANIPULATION_HAND_LEFT = 2;
-  MANIPULATION_HAND_RIGHT = 3;
+  GRABBER_HAND_PRIMARY = 1;
+  GRABBER_HAND_LEFT = 2;
+  GRABBER_HAND_RIGHT = 3;
 }
 
 // Grab は常に **現在のデスクトップカーソルレイ** (engine 内カーソル位置から計算する
 // 視線レイ) の hit 点を中心に radius 内の grabbable を掴む。VR モード (screen 非
 // active) は FAILED_PRECONDITION。レイが何にも当たらない場合は grabbed=false
 // (エラーではない)。
-message ManipulationGrabRequest {
-  ManipulationHand hand = 1;
+message GrabberGrabRequest {
+  GrabberHand hand = 1;
   // 2 は旧 `WorldPoint point` (world 座標指定の proximity grab)。レイベース化に
   // 伴い削除 (breaking)。番号・名前とも再利用禁止。
   reserved 2;
@@ -46,19 +46,19 @@ message ManipulationGrabRequest {
   float radius = 3;
 }
 
-message ManipulationReleaseRequest {
-  ManipulationHand hand = 1;
+message GrabberReleaseRequest {
+  GrabberHand hand = 1;
 }
 
-message ManipulationGetStateRequest {
-  ManipulationHand hand = 1;
+message GrabberGetStateRequest {
+  GrabberHand hand = 1;
 }
 
 // 操作後の保持状態スナップショット。
-message ManipulationGrabState {
+message GrabberGrabState {
   // 解決後の手 (UNSPECIFIED にはならない)。UNSPECIFIED/PRIMARY を渡したとき
   // サーバがどちらの手に解決したかを client に返すためのエコー。
-  ManipulationHand hand = 1;
+  GrabberHand hand = 1;
   // 何かを保持しているか (`Grabber.IsHoldingObjects`)。
   bool is_holding = 2;
   // 保持中 grabbable の slot 名 (best-effort、空のことがある)。
@@ -67,21 +67,21 @@ message ManipulationGrabState {
   int64 unix_nanos = 4;
 }
 
-message ManipulationGrabResult {
+message GrabberGrabResult {
   // この呼び出しで新たに掴めたか (`Grabber.Grab` の戻り値)。範囲に grabbable が
   // 無い / レイ miss の場合は false。エラーではなく結果として表現する。
   bool grabbed = 1;
   // 実行後の保持状態。
-  ManipulationGrabState state = 2;
+  GrabberGrabState state = 2;
 }
 
-service Manipulation {
+service Grabber {
   // 指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
   // grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
   // と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
-  rpc Grab(ManipulationGrabRequest) returns (ManipulationGrabResult);
+  rpc Grab(GrabberGrabRequest) returns (GrabberGrabResult);
   // 指定した手が保持している全オブジェクトを離す。
-  rpc Release(ManipulationReleaseRequest) returns (ManipulationGrabState);
+  rpc Release(GrabberReleaseRequest) returns (GrabberGrabState);
   // 指定した手の現在の保持状態を取得する。
-  rpc GetState(ManipulationGetStateRequest) returns (ManipulationGrabState);
+  rpc GetState(GrabberGetStateRequest) returns (GrabberGrabState);
 }

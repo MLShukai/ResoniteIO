@@ -1,4 +1,4 @@
-"""``resoio locomotion drive`` subcommand: interactive WASD drive.
+"""``resoio drive`` subcommand: interactive WASD drive.
 
 The mod-side bridge is a **stateful repeater** — it holds the most
 recent command and re-injects it into the engine every update tick — so
@@ -230,29 +230,8 @@ def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
-    """Register the ``locomotion`` subparser with nested ``drive``.
-
-    ``common`` is re-attached on the leaf (not just the ``locomotion``
-    node) because argparse does not inherit shared flags from a parent
-    subparser to its children; ``resoio locomotion drive -s SOCK`` would
-    otherwise drop ``-s`` on the leaf's namespace.
-
-    The nesting (``locomotion drive`` rather than just ``locomotion``)
-    leaves room for future ``send`` / ``play`` one-shot subcommands
-    without breaking the published CLI surface.
-    """
-    parser = subparsers.add_parser(
-        "locomotion",
-        parents=[common],
-        help="Drive avatar locomotion (move / look / jump / sprint / crouch).",
-        description=(
-            "Drive the Resonite IO Locomotion service. Subcommands group "
-            "interactive (drive) and (future) scripted entry points."
-        ),
-    )
-    locomotion_subs = parser.add_subparsers(dest="locomotion_command", required=True)
-
-    drive_parser = locomotion_subs.add_parser(
+    """Register the top-level ``drive`` subparser."""
+    drive_parser = subparsers.add_parser(
         "drive",
         parents=[common],
         help="Interactive WASD drive over the Resonite IO UDS.",
@@ -374,7 +353,7 @@ def _print_help(stream: TextIO, *, sprint: float, look_rate: float) -> None:
     where the final ``DriveSummary`` is emitted (the latter is scriptable).
     """
     print(
-        "resoio locomotion drive — interactive controls\n"
+        "resoio drive — interactive controls\n"
         "  w / s : forward / back toggle (mutually exclusive)\n"
         "  a / d : strafe left / right toggle (mutually exclusive)\n"
         "  r / f : 上昇 / 下降 (fly/noclip 中のみ有効)\n"
@@ -438,7 +417,7 @@ async def _run_drive(args: argparse.Namespace) -> int:
     try:
         stdin_fd = sys.stdin.fileno()
     except (OSError, ValueError):
-        print("resoio locomotion drive: stdin has no fd", file=sys.stderr)
+        print("resoio drive: stdin has no fd", file=sys.stderr)
         return 1
 
     def on_stdin() -> None:
@@ -483,7 +462,7 @@ async def _run_drive(args: argparse.Namespace) -> int:
                         _write_status(sys.stderr, state, sprint)
                 except grpclib.exceptions.GRPCError as exc:
                     print(
-                        f"\nlocomotion drive failed: {exc.status.name} {exc.message}",
+                        f"\ndrive failed: {exc.status.name} {exc.message}",
                         file=sys.stderr,
                     )
                     return 1
@@ -511,7 +490,7 @@ async def _run_drive(args: argparse.Namespace) -> int:
             print("", file=sys.stderr)
 
     if summary is None:
-        print("locomotion drive: no summary produced", file=sys.stderr)
+        print("drive: no summary produced", file=sys.stderr)
         return 1
 
     print(

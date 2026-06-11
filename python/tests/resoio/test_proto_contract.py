@@ -71,6 +71,12 @@ from resoio._generated.resonite_io.v1 import (
     GetCurrentRequest,
     GetCurrentResponse,
     GetServerInfoRequest,
+    GrabberGetStateRequest,
+    GrabberGrabRequest,
+    GrabberGrabResult,
+    GrabberGrabState,
+    GrabberHand,
+    GrabberReleaseRequest,
     InventoryCopyRequest,
     InventoryEntry,
     InventoryEntryKind,
@@ -96,12 +102,6 @@ from resoio._generated.resonite_io.v1 import (
     LocomotionDriveSummary,
     LocomotionResetRequest,
     LocomotionResetSummary,
-    ManipulationGetStateRequest,
-    ManipulationGrabRequest,
-    ManipulationGrabResult,
-    ManipulationGrabState,
-    ManipulationHand,
-    ManipulationReleaseRequest,
     MicrophoneAudioFrame,
     MicrophoneStreamSummary,
     OpenWorld,
@@ -383,27 +383,27 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "ref_id": 1,
         "key": 2,
     },
-    # Manipulation
+    # Grabber
     # Field 2 was the former `WorldPoint point` (explicit world-coordinate
     # proximity grab), removed when grab became cursor-ray based. The proto
     # reserves number 2 and name "point"; neither may ever be reused.
-    ManipulationGrabRequest: {
+    GrabberGrabRequest: {
         "hand": 1,
         "radius": 3,
     },
-    ManipulationReleaseRequest: {
+    GrabberReleaseRequest: {
         "hand": 1,
     },
-    ManipulationGetStateRequest: {
+    GrabberGetStateRequest: {
         "hand": 1,
     },
-    ManipulationGrabState: {
+    GrabberGrabState: {
         "hand": 1,
         "is_holding": 2,
         "object_names": 3,
         "unix_nanos": 4,
     },
-    ManipulationGrabResult: {
+    GrabberGrabResult: {
         "grabbed": 1,
         "state": 2,
     },
@@ -571,7 +571,7 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "LINK": 4,
         "UNKNOWN": 5,
     },
-    ManipulationHand: {
+    GrabberHand: {
         "UNSPECIFIED": 0,
         "PRIMARY": 1,
         "LEFT": 2,

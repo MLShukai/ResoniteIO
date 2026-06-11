@@ -1,19 +1,19 @@
-"""Client for the Resonite IO ``Manipulation`` modality (Python -> Resonite).
+"""Client for the Resonite IO ``Grabber`` modality (Python -> Resonite).
 
 Unary RPCs (grab / release / get-state) controlling what a hand holds.
 
-The Manipulation service lets a Python client grab and release grabbable
+The Grabber service lets a Python client grab and release grabbable
 objects in Resonite via a chosen hand (``primary`` / ``left`` /
 ``right``). Each RPC is a one-shot unary request/response. Step 6 covers
 grab/release only — there is no hand-pose / fine-articulation control.
 
-* :meth:`ManipulationClient.grab` tries to grab a grabbable within a
+* :meth:`GrabberClient.grab` tries to grab a grabbable within a
   radius of the current desktop cursor ray's hit point and returns a
   :class:`GrabResult` (whether something was newly grabbed plus the
   resulting :class:`GrabState`). VR mode is rejected with
   ``FAILED_PRECONDITION``.
-* :meth:`ManipulationClient.release` releases everything the hand holds.
-* :meth:`ManipulationClient.get_state` returns the current hold state.
+* :meth:`GrabberClient.release` releases everything the hand holds.
+* :meth:`GrabberClient.get_state` returns the current hold state.
 """
 
 from __future__ import annotations
@@ -27,24 +27,24 @@ from grpclib.client import Channel
 
 from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
-    ManipulationGetStateRequest,
-    ManipulationGrabRequest,
-    ManipulationGrabResult as _PbManipulationGrabResult,
-    ManipulationGrabState as _PbManipulationGrabState,
-    ManipulationHand,
-    ManipulationReleaseRequest,
-    ManipulationStub,
+    GrabberGetStateRequest,
+    GrabberGrabRequest,
+    GrabberGrabResult as _PbGrabberGrabResult,
+    GrabberGrabState as _PbGrabberGrabState,
+    GrabberHand,
+    GrabberReleaseRequest,
+    GrabberStub,
 )
 
 __all__ = [
     "GrabResult",
     "GrabState",
-    "ManipulationClient",
+    "GrabberClient",
 ]
 
 _logger = logging.getLogger(__name__)
 
-ManipulationHandArg = Literal["primary", "left", "right"]
+GrabberHandArg = Literal["primary", "left", "right"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +59,7 @@ class GrabState:
     ``True``.
     """
 
-    hand: ManipulationHandArg
+    hand: GrabberHandArg
     is_holding: bool
     object_names: tuple[str, ...]
     unix_nanos: int
@@ -67,7 +67,7 @@ class GrabState:
 
 @dataclass(frozen=True, slots=True)
 class GrabResult:
-    """Result of a :meth:`ManipulationClient.grab` call.
+    """Result of a :meth:`GrabberClient.grab` call.
 
     ``grabbed`` is ``True`` only when this call newly grabbed something;
     a ray miss or nothing grabbable in range is reported as
@@ -79,24 +79,24 @@ class GrabResult:
     state: GrabState
 
 
-def _hand_to_proto(hand: ManipulationHandArg) -> ManipulationHand:
+def _hand_to_proto(hand: GrabberHandArg) -> GrabberHand:
     if hand == "primary":
-        return ManipulationHand.PRIMARY
+        return GrabberHand.PRIMARY
     if hand == "left":
-        return ManipulationHand.LEFT
-    return ManipulationHand.RIGHT
+        return GrabberHand.LEFT
+    return GrabberHand.RIGHT
 
 
-def _hand_from_proto(hand: ManipulationHand) -> ManipulationHandArg:
-    if hand == ManipulationHand.LEFT:
+def _hand_from_proto(hand: GrabberHand) -> GrabberHandArg:
+    if hand == GrabberHand.LEFT:
         return "left"
-    if hand == ManipulationHand.RIGHT:
+    if hand == GrabberHand.RIGHT:
         return "right"
     # PRIMARY and UNSPECIFIED both map to "primary".
     return "primary"
 
 
-def _state_from_proto(pb: _PbManipulationGrabState) -> GrabState:
+def _state_from_proto(pb: _PbGrabberGrabState) -> GrabState:
     return GrabState(
         hand=_hand_from_proto(pb.hand),
         is_holding=pb.is_holding,
@@ -105,13 +105,13 @@ def _state_from_proto(pb: _PbManipulationGrabState) -> GrabState:
     )
 
 
-def _result_from_proto(pb: _PbManipulationGrabResult) -> GrabResult:
-    state = pb.state if pb.state is not None else _PbManipulationGrabState()
+def _result_from_proto(pb: _PbGrabberGrabResult) -> GrabResult:
+    state = pb.state if pb.state is not None else _PbGrabberGrabState()
     return GrabResult(grabbed=pb.grabbed, state=_state_from_proto(state))
 
 
-class ManipulationClient(_BaseClient[ManipulationStub]):
-    """Async client for the Resonite IO ``Manipulation`` service over a UDS.
+class GrabberClient(_BaseClient[GrabberStub]):
+    """Async client for the Resonite IO ``Grabber`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
     deterministically. Socket resolution mirrors
@@ -119,15 +119,15 @@ class ManipulationClient(_BaseClient[ManipulationStub]):
     """
 
     _logger = _logger
-    _log_label = "Manipulation"
+    _log_label = "Grabber"
 
     @override
-    def _make_stub(self, channel: Channel) -> ManipulationStub:
-        return ManipulationStub(channel)
+    def _make_stub(self, channel: Channel) -> GrabberStub:
+        return GrabberStub(channel)
 
     async def _dispatch[T, R](
         self,
-        rpc: Callable[[ManipulationStub], Awaitable[T]],
+        rpc: Callable[[GrabberStub], Awaitable[T]],
         decode: Callable[[T], R],
     ) -> R:
         """Run a unary RPC against the connected stub and decode the result.
@@ -143,7 +143,7 @@ class ManipulationClient(_BaseClient[ManipulationStub]):
     async def grab(
         self,
         *,
-        hand: ManipulationHandArg = "primary",
+        hand: GrabberHandArg = "primary",
         radius: float = 0.0,
     ) -> GrabResult:
         """Grab a grabbable near the cursor ray hit point.
@@ -159,25 +159,25 @@ class ManipulationClient(_BaseClient[ManipulationStub]):
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        request = ManipulationGrabRequest(hand=_hand_to_proto(hand), radius=radius)
+        request = GrabberGrabRequest(hand=_hand_to_proto(hand), radius=radius)
         return await self._dispatch(lambda stub: stub.grab(request), _result_from_proto)
 
-    async def release(self, *, hand: ManipulationHandArg = "primary") -> GrabState:
+    async def release(self, *, hand: GrabberHandArg = "primary") -> GrabState:
         """Release everything the hand is holding and return the new state.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        request = ManipulationReleaseRequest(hand=_hand_to_proto(hand))
+        request = GrabberReleaseRequest(hand=_hand_to_proto(hand))
         return await self._dispatch(
             lambda stub: stub.release(request), _state_from_proto
         )
 
-    async def get_state(self, *, hand: ManipulationHandArg = "primary") -> GrabState:
+    async def get_state(self, *, hand: GrabberHandArg = "primary") -> GrabState:
         """Return the hand's current hold state without modifying it.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        request = ManipulationGetStateRequest(hand=_hand_to_proto(hand))
+        request = GrabberGetStateRequest(hand=_hand_to_proto(hand))
         return await self._dispatch(
             lambda stub: stub.get_state(request), _state_from_proto
         )

@@ -4,8 +4,14 @@ The CLI register/_run path is driven against a real ``grpclib.server.Server``
 hosting an inline fake :class:`DashBase` over a real UDS (no mocking of
 grpclib/betterproto2). Each test asserts that the chosen action invokes the
 correct RPC with the correct arguments and that the result is printed in the
-documented format. Argparse-level errors (missing ref_id for invoke) are
-checked for exit code / stderr.
+documented format.
+
+Per the subparser contract, ``dash invoke`` takes a required ``ref_id``
+positional: omitting it, omitting the subcommand, or passing an unknown
+subcommand is an argparse usage error (SystemExit with code 2 at
+``parse_args`` time). ``set-screen`` requires either the positional key or
+``--ref-id``; omitting both is pinned by exit code only (``_run_cli``
+normalizes parse-time SystemExit and runtime return codes).
 """
 
 from pathlib import Path
@@ -33,6 +39,30 @@ from resoio._generated.resonite_io.v1 import (
     DashTree as PbDashTree,
 )
 from resoio.cli import _amain, _build_parser
+
+
+async def _run_cli(argv: list[str]) -> int:
+    """Run the CLI and return its exit code.
+
+    Normalizes the two contractual error loci: an argparse usage error
+    (SystemExit raised by ``parse_args``) and a runtime return code from
+    ``_amain``. The contract pins the exit code, not the locus.
+    """
+    try:
+        args = _build_parser().parse_args(argv)
+    except SystemExit as exc:
+        assert isinstance(exc.code, int)
+        return exc.code
+    return await _amain(args)
+
+
+def _parse_error_code(argv: list[str]) -> int:
+    """Return the SystemExit code raised by ``parse_args`` for ``argv``."""
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(argv)
+    assert isinstance(excinfo.value.code, int)
+    return excinfo.value.code
+
 
 _ELEMENT = PbDashElement(
     ref_id="s-1",
@@ -297,14 +327,20 @@ async def test_socket_flag_routes_to_state(
         await server.wait_closed()
 
 
-async def test_invoke_without_ref_id_errors(
-    capsys: pytest.CaptureFixture[str],
-):
-    """``invoke`` requires a ref_id; missing it is a usage error."""
-    args = _build_parser().parse_args(["dash", "invoke"])
-    rc = await _amain(args)
-    assert rc == 2
-    assert "ref_id" in capsys.readouterr().err
+def test_invoke_without_ref_id_is_a_parse_error():
+    """``invoke`` requires a ref_id positional; omitting it exits 2 at
+    parse."""
+    assert _parse_error_code(["dash", "invoke"]) == 2
+
+
+def test_missing_subcommand_is_a_parse_error():
+    """``dash`` without a subcommand is a usage error (exit 2)."""
+    assert _parse_error_code(["dash"]) == 2
+
+
+def test_unknown_subcommand_is_a_parse_error():
+    """An unknown ``dash`` subcommand is a usage error (exit 2)."""
+    assert _parse_error_code(["dash", "toggle"]) == 2
 
 
 async def test_screens_invokes_list_screens_rpc_and_prints_one_line_per_screen(
@@ -397,13 +433,6 @@ async def test_set_screen_with_ref_id_option_forwards_ref_id(
         await server.wait_closed()
 
 
-async def test_set_screen_without_key_or_ref_id_errors(
-    capsys: pytest.CaptureFixture[str],
-):
-    """``set-screen`` requires a key or --ref-id; missing both is a usage error
-    (exit code 2), mirroring the ``invoke`` missing-ref_id path."""
-    args = _build_parser().parse_args(["dash", "set-screen"])
-    rc = await _amain(args)
-    assert rc == 2
-    err = capsys.readouterr().err
-    assert "key" in err or "ref-id" in err
+async def test_set_screen_without_key_or_ref_id_exits_2():
+    """``set-screen`` requires a key or --ref-id; omitting both exits 2."""
+    assert await _run_cli(["dash", "set-screen"]) == 2

@@ -1,6 +1,6 @@
 ---
 name: load-bearing-whys
-description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 6 Manipulation + Step 7 Microphone surface)
+description: Non-obvious WHY comments under mod/ + python/ and Core tests that must survive future docstring trim passes (Step 2 + Step 3 + Camera v2 + Step 4 Locomotion + Step 5 Speaker + Step 6 Grabber + Step 7 Microphone surface)
 metadata:
   type: reference
 ---
@@ -31,7 +31,7 @@ are load-bearing and must NOT be cut.
 - Items 30–32 originate from Step 7 polish wave 2 (`paced()` helper,
   CLI WAV warmup constant, 5 s sine fixture sized to exceed bridge
   ring buffer).
-- Items 33–36 originate from Step 6 (Manipulation: grab auto-follow =
+- Items 33–36 originate from Step 6 (Grabber、旧称 Manipulation: grab auto-follow =
   no per-frame repeater, no-IDisposable bridge rationale, hand-pose
   scope exclusion, default grab radius location).
 
@@ -344,8 +344,8 @@ are load-bearing and must NOT be cut.
     pacing regression detector, or (b) rename the file and churn
     every reference for cosmetic reasons.
 
-33. **Grab auto-follow ⇒ no per-frame repeater** (Manipulation proto
-    header `manipulation.proto` + `FrooxEngineManipulationBridge` class
+33. **Grab auto-follow ⇒ no per-frame repeater** (Grabber proto
+    header `grabber.proto` + `FrooxEngineGrabberBridge` class
     XML remarks): `Grabber.Grab` reparents the grabbed object under the
     hand's `HolderSlot`, after which the engine moves it automatically.
     This is why Grab/Release are **edge-triggered unary RPCs** (like
@@ -355,7 +355,7 @@ are load-bearing and must NOT be cut.
     streaming hold-pose channel for consistency with Locomotion" would
     be reintroducing per-frame work the engine already does for free.
 
-34. **Manipulation Bridge is NOT IDisposable** (`FrooxEngineManipulationBridge`
+34. **Grabber Bridge is NOT IDisposable** (`FrooxEngineGrabberBridge`
     class XML remarks): it holds no per-instance engine state (reads
     manager refs only, no event subscriptions, dispatch is one-shot
     `world.RunSynchronously`), mirroring the ContextMenu bridge. The
@@ -363,17 +363,17 @@ are load-bearing and must NOT be cut.
     refactor copying the Speaker/Microphone bridges may add a spurious
     `IDisposable` + SafeShutdown entry for a bridge that owns nothing.
 
-35. **Hand-pose is out of Step 6 scope** (Manipulation proto header
-    `manipulation.proto`, "scope:" paragraph): hand-pose/articulation
+35. **Hand-pose is out of Step 6 scope** (Grabber proto header
+    `grabber.proto`, "scope:" paragraph): hand-pose/articulation
     control has no clean engine injection path —
     `TrackedDevicePositioner` overwrites the hand slot every input
     update and there is no `ExternalInput` hook like Locomotion. The
     scope paragraph is the canonical record of why grab/release is the
-    only manipulation surface; keep it so a future PR doesn't try to
+    only grabbing surface; keep it so a future PR doesn't try to
     write the hand slot directly and get silently overwritten.
 
 36. **Default grab radius = 0.1 m resolved in the Service**
-    (`ManipulationService.DefaultGrabRadius` const + its XML doc, and
+    (`GrabberService.DefaultGrabRadius` const + its XML doc, and
     the proto `radius` field comment "\<=0 はサーバ default (0.1m)"):
     the `<= 0 → 0.1m` resolution lives in the **Core Service**, not the
     Bridge — the Bridge always receives a resolved positive radius. The

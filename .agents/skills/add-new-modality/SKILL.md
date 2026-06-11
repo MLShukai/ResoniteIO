@@ -1,14 +1,14 @@
 ---
 name: add-new-modality
-description: "Use when adding a new modality to resonite-io — proto, C# Core Service + Bridge IF, C# Mod FrooxEngine bridge, Python client, CLI, tests. Next planned modality is Step 6 Manipulation. Triggers: '新規モダリティ', 'Manipulation', 'IManipulationBridge', 'ManipulationService', 'モダリティを追加', 'add new modality'."
+description: "Use when adding a new modality to resonite-io — proto, C# Core Service + Bridge IF, C# Mod FrooxEngine bridge, Python client, CLI, tests. Triggers: '新規モダリティ', 'Grabber', 'IGrabberBridge', 'GrabberService', 'モダリティを追加', 'add new modality'."
 version: 0.1.0
 ---
 
 # Add a New Modality
 
-resonite-io は **モダリティ単位** (`Camera` / `Speaker` / `Microphone` / `Locomotion` / `Manipulation` / `Display`) で独立した非同期ストリームを提供する。C# 側と Python 側の構造は **モダリティ単位でミラーリング** する。
+resonite-io は **モダリティ単位** (`Camera` / `Speaker` / `Microphone` / `Locomotion` / `Grabber` / `Display`) で独立した非同期ストリームを提供する。C# 側と Python 側の構造は **モダリティ単位でミラーリング** する。
 
-このスキルは Step 6 (Manipulation) のように **新しいモダリティを最初から追加する** 流れと規約を集約する。
+このスキルは Step 6 (Grabber、旧称 Manipulation) のように **新しいモダリティを最初から追加する** 流れと規約を集約する。
 
 ______________________________________________________________________
 

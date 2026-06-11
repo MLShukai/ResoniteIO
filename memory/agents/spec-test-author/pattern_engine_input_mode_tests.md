@@ -1,6 +1,6 @@
 ---
 name: pattern-engine-input-mode-tests
-description: Engine 入力 (レイ / raycast / ScreenActive 等) に依存する RPC のテスト変換パターン (Manipulation Grab レイベース化で確立)
+description: Engine 入力 (レイ / raycast / ScreenActive 等) に依存する RPC のテスト変換パターン (Manipulation (現 Grabber) の Grab レイベース化で確立)
 type: feedback
 ---
 

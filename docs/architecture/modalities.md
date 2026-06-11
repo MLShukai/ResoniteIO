@@ -14,7 +14,7 @@ any subset.
 | Speaker | Resonite → Python | server-streaming | [`SpeakerClient`](../api/speaker.md) | Audio rendered by Resonite (engine output tap). |
 | Microphone | Python → Resonite | client-streaming | [`MicrophoneClient`](../api/microphone.md) | Push audio into Resonite as a virtual mic. |
 | Locomotion | Python → Resonite | client-streaming | [`LocomotionClient`](../api/locomotion.md) | Drive movement commands; reset. |
-| Manipulation | request/response | unary | [`ManipulationClient`](../api/manipulation.md) | Grab at the desktop cursor ray hit point / release (desktop mode only). |
+| Grabber | request/response | unary | [`GrabberClient`](../api/grabber.md) | Grab at the desktop cursor ray hit point / release (desktop mode only). |
 | Display | request/response | unary | [`DisplayClient`](../api/display.md) | Read display info. |
 | World | request/response | unary | [`WorldClient`](../api/world.md) | List/open worlds, sessions, and records. |
 | ContextMenu | request/response | unary | [`ContextMenuClient`](../api/context_menu.md) | Open/select the radial context menu. |

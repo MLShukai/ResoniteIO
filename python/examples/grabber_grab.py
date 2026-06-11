@@ -1,4 +1,4 @@
-"""Manipulation positive-grab example: spawn a Mirror, aim, grab, release.
+"""Grabber positive-grab example: spawn a Mirror, aim, grab, release.
 
 Demonstrates a real pick-up against the primary hand: spawn a grabbable
 Mirror from the cloud inventory (Resonite Essentials), hold the desktop
@@ -11,7 +11,7 @@ resets on the next Resonite restart.
 
 Run from inside the dev container:
 
-    uv run python python/examples/manipulation_grab.py
+    uv run python python/examples/grabber_grab.py
 """
 
 import asyncio
@@ -20,7 +20,7 @@ import time
 import grpclib.exceptions
 from grpclib.const import Status
 
-from resoio import CursorClient, GrabState, InventoryClient, ManipulationClient
+from resoio import CursorClient, GrabberClient, GrabState, InventoryClient
 
 SOCKET_PATH: str | None = None
 HAND = "primary"
@@ -35,7 +35,7 @@ READY_INTERVAL_S = 2.0
 
 
 async def wait_for_ready() -> None:
-    """Block until Manipulation.GetState stops returning FAILED_PRECONDITION.
+    """Block until Grabber.GetState stops returning FAILED_PRECONDITION.
 
     During cold boot the per-hand Grabber / LocalUser are not yet wired
     up and the bridge replies FAILED_PRECONDITION. Retry until ready.
@@ -43,7 +43,7 @@ async def wait_for_ready() -> None:
     deadline = time.monotonic() + READY_TIMEOUT_S
     while True:
         try:
-            async with ManipulationClient(SOCKET_PATH) as client:
+            async with GrabberClient(SOCKET_PATH) as client:
                 await client.get_state(hand=HAND)
             return
         except grpclib.exceptions.GRPCError as e:
@@ -51,7 +51,7 @@ async def wait_for_ready() -> None:
                 raise
             if time.monotonic() > deadline:
                 raise TimeoutError(
-                    f"Manipulation did not become ready in {READY_TIMEOUT_S:.0f}s"
+                    f"Grabber did not become ready in {READY_TIMEOUT_S:.0f}s"
                 ) from e
             await asyncio.sleep(READY_INTERVAL_S)
 
@@ -69,7 +69,7 @@ async def main() -> None:
     async with (
         InventoryClient(SOCKET_PATH) as inventory,
         CursorClient(SOCKET_PATH) as cursor,
-        ManipulationClient(SOCKET_PATH) as client,
+        GrabberClient(SOCKET_PATH) as client,
     ):
         spawned = await inventory.spawn(MIRROR_PATH)
         print(f"spawned: {spawned.spawned_slot_name} ({spawned.spawned_slot_id})")

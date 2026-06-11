@@ -5,14 +5,14 @@ using System.Threading.Tasks;
 using Elements.Core;
 using FrooxEngine;
 using Renderite.Shared;
+using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Logging;
-using ResoniteIO.Core.Manipulation;
 
 namespace ResoniteIO.Bridge;
 
 /// <summary>
 /// FrooxEngine の手 (<see cref="Grabber"/>) を介した掴み/離しを操作する
-/// <see cref="IManipulationBridge"/> 実装。
+/// <see cref="IGrabberBridge"/> 実装。
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,7 +20,7 @@ namespace ResoniteIO.Bridge;
 /// one-shot で marshal し、<see cref="TaskCompletionSource{T}"/> で結果を待つ
 /// (<see cref="EngineDispatch.RunOnEngineAsync{T}"/>)。<see cref="WorldManager.FocusedWorld"/> /
 /// <c>LocalUser</c> / <see cref="InteractionHandler"/> / <see cref="Grabber"/> が
-/// 未準備なら <see cref="ManipulationNotReadyException"/> を投げ、Service 層で
+/// 未準備なら <see cref="GrabberNotReadyException"/> を投げ、Service 層で
 /// FailedPrecondition に翻訳する。
 /// </para>
 /// <para>
@@ -41,15 +41,15 @@ namespace ResoniteIO.Bridge;
 /// grab 実行は従来どおり <see cref="Grabber.Grab(float3, float)"/>
 /// (decompiled Grabber.cs:224)。<c>InteractionLaser.LastInteractionTargetPoint</c> は
 /// miss でも値が入る / laser 非 active 時は stale なため採用しない。
-/// VR モード (<c>ScreenActive == false</c>) は <see cref="ManipulationNotReadyException"/>。
+/// VR モード (<c>ScreenActive == false</c>) は <see cref="GrabberNotReadyException"/>。
 /// </para>
 /// </remarks>
-internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
+internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
 {
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
 
-    public FrooxEngineManipulationBridge(Engine engine, ILogSink log)
+    public FrooxEngineGrabberBridge(Engine engine, ILogSink log)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(log);
@@ -59,11 +59,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     }
 
     /// <inheritdoc/>
-    public Task<GrabOutcome> GrabAsync(
-        ManipulationHandSelector hand,
-        float radius,
-        CancellationToken ct
-    )
+    public Task<GrabOutcome> GrabAsync(GrabberHandSelector hand, float radius, CancellationToken ct)
     {
         return ResolveWorld()
             .RunOnEngineAsync(
@@ -108,7 +104,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     }
 
     /// <inheritdoc/>
-    public Task<GrabSnapshot> ReleaseAsync(ManipulationHandSelector hand, CancellationToken ct)
+    public Task<GrabSnapshot> ReleaseAsync(GrabberHandSelector hand, CancellationToken ct)
     {
         return ResolveWorld()
             .RunOnEngineAsync(
@@ -127,7 +123,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     }
 
     /// <inheritdoc/>
-    public Task<GrabSnapshot> GetStateAsync(ManipulationHandSelector hand, CancellationToken ct)
+    public Task<GrabSnapshot> GetStateAsync(GrabberHandSelector hand, CancellationToken ct)
     {
         return ResolveWorld()
             .RunOnEngineAsync(
@@ -140,13 +136,13 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
             );
     }
 
-    /// <summary>現在 focus されている world を取得する。未準備なら <see cref="ManipulationNotReadyException"/>。</summary>
+    /// <summary>現在 focus されている world を取得する。未準備なら <see cref="GrabberNotReadyException"/>。</summary>
     private World ResolveWorld()
     {
         var world = _worldManager.FocusedWorld;
         if (world is null || world.IsDisposed)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 "No focused world is available yet; engine still initializing."
             );
         }
@@ -158,9 +154,9 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     /// 対応する <see cref="Grabber"/> とペアで返す (全 RPC 共通の前段)。
     /// </summary>
     /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private (ManipulationHandSelector Resolved, Grabber Grabber) ResolveHandGrabber(
+    private (GrabberHandSelector Resolved, Grabber Grabber) ResolveHandGrabber(
         World world,
-        ManipulationHandSelector hand
+        GrabberHandSelector hand
     )
     {
         var resolved = ResolveSelector(world, hand);
@@ -170,14 +166,14 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     /// <summary>
     /// engine thread 上で現在のデスクトップカーソルレイ (起点 / 方向) を計算する。
     /// desktop (screen) モード非 active・Mouse 未準備・レイ入力不正は
-    /// <see cref="ManipulationNotReadyException"/>。
+    /// <see cref="GrabberNotReadyException"/>。
     /// </summary>
     private static (float3 Origin, float3 Direction) ComputeCursorRay(World world)
     {
         var input = world.InputInterface;
         if (input is null || !input.ScreenActive)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 "Grab requires desktop (screen) mode; VR is active."
             );
         }
@@ -185,7 +181,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
         var mouse = input.Mouse;
         if (mouse is null)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 "Mouse device not available yet; engine still initializing."
             );
         }
@@ -204,7 +200,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
 
         if (!PhysicsManager.IsValidRaycast(in origin, in dir))
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 "Cursor raycast inputs are not valid yet; engine still initializing."
             );
         }
@@ -216,12 +212,12 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     /// engine thread 上で <paramref name="resolved"/> に対応する <see cref="Grabber"/> を解決する。
     /// </summary>
     /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private Grabber ResolveGrabber(World world, ManipulationHandSelector resolved)
+    private Grabber ResolveGrabber(World world, GrabberHandSelector resolved)
     {
         var localUser = world.LocalUser;
         if (localUser is null)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 "No local user in the focused world yet; engine still initializing."
             );
         }
@@ -232,7 +228,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
         var handler = localUser.GetInteractionHandler(side);
         if (handler is null)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 $"No InteractionHandler for side {side}; engine still initializing."
             );
         }
@@ -242,7 +238,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
         var grabber = handler.Grabber;
         if (grabber is null)
         {
-            throw new ManipulationNotReadyException(
+            throw new GrabberNotReadyException(
                 $"No Grabber for side {side}; engine still initializing."
             );
         }
@@ -250,33 +246,28 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     }
 
     /// <summary>
-    /// <see cref="ManipulationHandSelector.Primary"/> を実際の手 (Left/Right) へ解決する。
+    /// <see cref="GrabberHandSelector.Primary"/> を実際の手 (Left/Right) へ解決する。
     /// Left/Right はそのまま返す。
     /// </summary>
-    private static ManipulationHandSelector ResolveSelector(
-        World world,
-        ManipulationHandSelector hand
-    )
+    private static GrabberHandSelector ResolveSelector(World world, GrabberHandSelector hand)
     {
         return hand switch
         {
-            ManipulationHandSelector.Left => ManipulationHandSelector.Left,
-            ManipulationHandSelector.Right => ManipulationHandSelector.Right,
+            GrabberHandSelector.Left => GrabberHandSelector.Left,
+            GrabberHandSelector.Right => GrabberHandSelector.Right,
             // Primary: desktop の主手。InputInterface 未準備なら Right に fallback。
             _ => FromChirality(world.InputInterface?.PrimaryHand ?? Chirality.Right),
         };
     }
 
-    private static Chirality ToChirality(ManipulationHandSelector resolved)
+    private static Chirality ToChirality(GrabberHandSelector resolved)
     {
-        return resolved == ManipulationHandSelector.Left ? Chirality.Left : Chirality.Right;
+        return resolved == GrabberHandSelector.Left ? Chirality.Left : Chirality.Right;
     }
 
-    private static ManipulationHandSelector FromChirality(Chirality side)
+    private static GrabberHandSelector FromChirality(Chirality side)
     {
-        return side == Chirality.Left
-            ? ManipulationHandSelector.Left
-            : ManipulationHandSelector.Right;
+        return side == Chirality.Left ? GrabberHandSelector.Left : GrabberHandSelector.Right;
     }
 
     /// <summary>
@@ -375,7 +366,7 @@ internal sealed class FrooxEngineManipulationBridge : IManipulationBridge
     /// engine thread 上で現在の掴み状態の snapshot を構築する。
     /// <paramref name="resolved"/> は Primary 解決後の実際の手 (Left/Right)。
     /// </summary>
-    private static GrabSnapshot ReadSnapshot(ManipulationHandSelector resolved, Grabber grabber)
+    private static GrabSnapshot ReadSnapshot(GrabberHandSelector resolved, Grabber grabber)
     {
         // Grabber.IsHoldingObjects / GrabbedObjects。
         // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:91,95

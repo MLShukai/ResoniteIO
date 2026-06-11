@@ -1,18 +1,23 @@
-"""``resoio manipulate`` subcommand: grab / release objects in Resonite.
+"""``resoio grab`` subcommand: grab / release objects in Resonite.
 
-Flat dispatch via a positional ``action`` (no nested subparsers per
-project convention):
+A single parser with an optional positional ``action`` (default
+``grab``), so flags resolve naturally whether placed before or after
+the action:
 
-* ``grab`` — try to grab a grabbable within ``--radius`` metres of the
-  cursor ray hit point (desktop mode only)
-* ``release`` — release everything the hand holds
-* ``state`` — print the hand's current hold state
-* ``interactive`` — a key-driven loop (``g`` grab / ``r`` release /
-  ``s`` state / ``q`` quit)
+* ``resoio grab`` / ``resoio grab grab`` — try to grab a grabbable
+  within ``--radius`` metres of the cursor ray hit point (desktop mode
+  only)
+* ``resoio grab release`` — release everything the hand holds
+* ``resoio grab state`` — print the hand's current hold state
+* ``resoio grab interactive`` — a key-driven loop (``g`` grab /
+  ``r`` release / ``s`` state / ``q`` quit)
 
 ``--hand {primary,left,right}`` selects the target hand (default
-``primary``). The shared ``-s/--socket`` flag comes from the common
-parent parser. After every action the resulting state is printed.
+``primary``); ``--radius`` only affects the grab action. The shared
+``-s/--socket`` flag comes from the common parent parser. All flags
+work both before and after the action (e.g. ``resoio grab --hand left
+release`` and ``resoio grab release --hand left``). After every action
+the resulting state is printed.
 """
 
 from __future__ import annotations
@@ -28,33 +33,36 @@ from typing import TYPE_CHECKING, TextIO
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from resoio.manipulation import GrabState
+    from resoio.grabber import GrabState
 
 
 def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
-    """Register the flat ``manipulate`` subparser.
+    """Register the ``grab`` subparser.
 
-    Dispatch rules (no nested subcommands) live in the module docstring.
+    One flat parser: the positional ``action`` is optional
+    (``nargs="?"``, default ``grab``) and dispatch happens on
+    ``args.action`` inside :func:`_run`.
     """
     parser = subparsers.add_parser(
-        "manipulate",
+        "grab",
         parents=[common],
         help="Grab / release objects (grab/release/state/interactive).",
         description=(
-            "Drive the Resonite IO Manipulation service from the shell. "
-            "Pick an action (grab / release / state / interactive); grab "
-            "takes a --radius around the cursor ray hit point (desktop "
-            "mode only). The resulting hold state is printed after every "
-            "action."
+            "Drive the Resonite IO Grabber service from the shell. "
+            "Without an action the grab action runs, taking a --radius "
+            "around the cursor ray hit point (desktop mode only). The "
+            "resulting hold state is printed after every action."
         ),
     )
     parser.add_argument(
         "action",
+        nargs="?",
+        default="grab",
         choices=["grab", "release", "state", "interactive"],
-        help="The manipulation action to perform.",
+        help="The grab action to perform (default: grab).",
     )
     parser.add_argument(
         "--hand",
@@ -109,7 +117,7 @@ def _raw_tty(stream: TextIO) -> Generator[None]:
 def _print_interactive_help(stream: TextIO) -> None:
     """Print the interactive keymap to ``stream`` once at start."""
     print(
-        "resoio manipulate interactive — controls\n"
+        "resoio grab interactive — controls\n"
         "  g : grab at cursor ray hit point\n"
         "  r : release\n"
         "  s : print current state\n"
@@ -119,20 +127,20 @@ def _print_interactive_help(stream: TextIO) -> None:
 
 
 async def _run_interactive(args: argparse.Namespace) -> int:
-    """Key-driven grab/release loop over the Manipulation UDS."""
-    from resoio.manipulation import ManipulationClient, ManipulationHandArg
+    """Key-driven grab/release loop over the Grabber UDS."""
+    from resoio.grabber import GrabberClient, GrabberHandArg
 
-    hand: ManipulationHandArg = args.hand
+    hand: GrabberHandArg = args.hand
 
     _print_interactive_help(sys.stderr)
 
     try:
         stdin_fd = sys.stdin.fileno()
     except (OSError, ValueError):
-        print("resoio manipulate interactive: stdin has no fd", file=sys.stderr)
+        print("resoio grab interactive: stdin has no fd", file=sys.stderr)
         return 1
 
-    async with ManipulationClient(args.socket) as client:
+    async with GrabberClient(args.socket) as client:
         with _raw_tty(sys.stdin):
             while True:
                 data = os.read(stdin_fd, 64)
@@ -166,9 +174,9 @@ async def _run(args: argparse.Namespace) -> int:
         return await _run_interactive(args)
 
     # Deferred to keep `resoio --help` and shell completion fast.
-    from resoio.manipulation import ManipulationClient
+    from resoio.grabber import GrabberClient
 
-    async with ManipulationClient(args.socket) as client:
+    async with GrabberClient(args.socket) as client:
         if action == "grab":
             result = await client.grab(hand=args.hand, radius=args.radius)
             print(f"grabbed={result.grabbed}")

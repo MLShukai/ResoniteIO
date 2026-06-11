@@ -10,7 +10,7 @@ proto comments per spec, but example scripts are listed only loosely (or not
 at all) in spec "ドキュメント影響" sections.
 
 **Why:** During the 2026-06-10 Cursor-hold / ray-grab verification,
-`manipulation_grab.py` was updated but `cursor_move.py` was missed — it never
+`manipulation_grab.py` (now `grabber_grab.py`) was updated but `cursor_move.py` was missed — it never
 calls `release()`, so under the new hold semantics it leaves the cursor held
 forever (its docstring claim "restores the original position" is now wrong).
 

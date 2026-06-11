@@ -72,6 +72,6 @@ communities = ["resonite"]
 
 # Resonite community のカテゴリ slug。AI エージェント実行環境を提供する開発者向け
 # ツールであり (tools)、Speaker/Microphone で音声を双方向に流し (audio)、
-# Locomotion/Cursor/Manipulation でアバター入力を制御する (controls)。
+# Locomotion/Cursor/Grabber でアバター入力を制御する (controls)。
 [publish.categories]
 resonite = ["mods", "tools", "audio", "controls"]

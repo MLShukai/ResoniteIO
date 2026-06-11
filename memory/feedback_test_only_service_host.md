@@ -26,6 +26,6 @@ Service 単体のロジックは domain method を直接呼べばよいが、Ser
 回帰検知が強くなる。
 
 **How to apply:** Wave 跨ぎで段階導入する modality (Display、Locomotion、
-Manipulation 等) の Core 側 commit では、`<Modality>ServiceHost` を test
+Grabber 等) の Core 側 commit では、`<Modality>ServiceHost` を test
 helper として作って round-trip テストを書く。後続 wave で `GrpcHost` に
 mount された後も、当該 helper は残しても OK (modality 単独テストの隔離環境)。
