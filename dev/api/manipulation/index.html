@@ -1397,9 +1397,18 @@
 
 
 <h1 id="manipulation">Manipulation<a class="headerlink" href="#manipulation" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Breaking change: <code>grab</code> is ray-based</p>
+<p><code>grab</code> no longer takes a world-coordinate <code>point</code>. It always grabs a
+grabbable within <code>radius</code> metres of the <strong>desktop cursor ray's hit
+point</strong> — aim first with
+<a href="../cursor/"><code>CursorClient.set_position</code></a>. A ray miss is reported as
+<code>GrabResult.grabbed == False</code> (not an error); VR mode fails with
+<code>FAILED_PRECONDITION</code>.</p>
+</div>
 <div class="admonition example">
 <p class="admonition-title">Runnable example</p>
-<p><a href="https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/manipulation_grab.py"><code>python/examples/manipulation_grab.py</code></a> — the primary-hand <code>get_state</code> → <code>grab</code> → <code>release</code> cycle.</p>
+<p><a href="https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/manipulation_grab.py"><code>python/examples/manipulation_grab.py</code></a> — a full positive pick-up: spawn a Mirror from the inventory, hold the cursor on it, <code>grab</code> at the ray hit point, then <code>release</code>. The grabbed object stays at the cursor position where it was grabbed and follows the hand from there.</p>
 </div>
 
 
@@ -1478,22 +1487,20 @@ deterministically. Socket resolution mirrors
   </span>
 
 <a href="#resoio.manipulation.ManipulationClient.grab" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">grab</span><span class="p">(</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">ManipulationHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">point</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">grab</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">ManipulationHandArg</span> <span class="o">=</span> <span class="s1">&#39;primary&#39;</span><span class="p">,</span> <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Grab a grabbable in range and return the resulting state.</p>
-<p><code>point</code> is the world-space grab centre; when <code>None</code> the
-server uses the hand's current position. <code>radius</code> is the grab
-sphere radius in metres — a value <code>&lt;= 0</code> lets the server apply
-its default. Finding nothing grabbable in range is reported as
-<code>GrabResult.grabbed == False</code>, not an error.</p>
+        <p>Grab a grabbable near the cursor ray hit point.</p>
+<p>Grabs a grabbable within <code>radius</code> metres (<code>&lt;= 0</code> lets the
+server apply its default, 0.1m) of the current desktop cursor
+ray's hit point. Aim beforehand with
+:meth:<code>resoio.CursorClient.set_position</code>. A ray miss or nothing
+grabbable in range is reported as
+<code>GrabResult.grabbed == False</code>, not an error. In VR mode the
+call fails with :class:<code>grpclib.exceptions.GRPCError</code>
+(<code>FAILED_PRECONDITION</code>).</p>
 <p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
 
 
@@ -1523,22 +1530,22 @@ its default. Finding nothing grabbable in range is reported as
 <a id="__codelineno-0-144" name="__codelineno-0-144"></a>    <span class="bp">self</span><span class="p">,</span>
 <a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="o">*</span><span class="p">,</span>
 <a id="__codelineno-0-146" name="__codelineno-0-146"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">ManipulationHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a>    <span class="n">point</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-148" name="__codelineno-0-148"></a>    <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span><span class="p">:</span>
-<a id="__codelineno-0-150" name="__codelineno-0-150"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Grab a grabbable in range and return the resulting state.</span>
-<a id="__codelineno-0-151" name="__codelineno-0-151"></a>
-<a id="__codelineno-0-152" name="__codelineno-0-152"></a><span class="sd">    ``point`` is the world-space grab centre; when ``None`` the</span>
-<a id="__codelineno-0-153" name="__codelineno-0-153"></a><span class="sd">    server uses the hand&#39;s current position. ``radius`` is the grab</span>
-<a id="__codelineno-0-154" name="__codelineno-0-154"></a><span class="sd">    sphere radius in metres — a value ``&lt;= 0`` lets the server apply</span>
-<a id="__codelineno-0-155" name="__codelineno-0-155"></a><span class="sd">    its default. Finding nothing grabbable in range is reported as</span>
-<a id="__codelineno-0-156" name="__codelineno-0-156"></a><span class="sd">    ``GrabResult.grabbed == False``, not an error.</span>
-<a id="__codelineno-0-157" name="__codelineno-0-157"></a>
-<a id="__codelineno-0-158" name="__codelineno-0-158"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-159" name="__codelineno-0-159"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-160" name="__codelineno-0-160"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">ManipulationGrabRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="n">radius</span><span class="p">)</span>
-<a id="__codelineno-0-161" name="__codelineno-0-161"></a>    <span class="k">if</span> <span class="n">point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-162" name="__codelineno-0-162"></a>        <span class="n">request</span><span class="o">.</span><span class="n">point</span> <span class="o">=</span> <span class="n">WorldPoint</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">point</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">y</span><span class="o">=</span><span class="n">point</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">z</span><span class="o">=</span><span class="n">point</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a>    <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-148" name="__codelineno-0-148"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span><span class="p">:</span>
+<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Grab a grabbable near the cursor ray hit point.</span>
+<a id="__codelineno-0-150" name="__codelineno-0-150"></a>
+<a id="__codelineno-0-151" name="__codelineno-0-151"></a><span class="sd">    Grabs a grabbable within ``radius`` metres (``&lt;= 0`` lets the</span>
+<a id="__codelineno-0-152" name="__codelineno-0-152"></a><span class="sd">    server apply its default, 0.1m) of the current desktop cursor</span>
+<a id="__codelineno-0-153" name="__codelineno-0-153"></a><span class="sd">    ray&#39;s hit point. Aim beforehand with</span>
+<a id="__codelineno-0-154" name="__codelineno-0-154"></a><span class="sd">    :meth:`resoio.CursorClient.set_position`. A ray miss or nothing</span>
+<a id="__codelineno-0-155" name="__codelineno-0-155"></a><span class="sd">    grabbable in range is reported as</span>
+<a id="__codelineno-0-156" name="__codelineno-0-156"></a><span class="sd">    ``GrabResult.grabbed == False``, not an error. In VR mode the</span>
+<a id="__codelineno-0-157" name="__codelineno-0-157"></a><span class="sd">    call fails with :class:`grpclib.exceptions.GRPCError`</span>
+<a id="__codelineno-0-158" name="__codelineno-0-158"></a><span class="sd">    (``FAILED_PRECONDITION``).</span>
+<a id="__codelineno-0-159" name="__codelineno-0-159"></a>
+<a id="__codelineno-0-160" name="__codelineno-0-160"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-161" name="__codelineno-0-161"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-162" name="__codelineno-0-162"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">ManipulationGrabRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="n">radius</span><span class="p">)</span>
 <a id="__codelineno-0-163" name="__codelineno-0-163"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">grab</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_result_from_proto</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
@@ -1668,7 +1675,7 @@ its default. Finding nothing grabbable in range is reported as
 
         <p>Result of a :meth:<code>ManipulationClient.grab</code> call.</p>
 <p><code>grabbed</code> is <code>True</code> only when this call newly grabbed something;
-an empty radius (nothing grabbable in range) is reported as
+a ray miss or nothing grabbable in range is reported as
 <code>grabbed=False</code> rather than an error. <code>state</code> is the hold state
 after the call.</p>
 

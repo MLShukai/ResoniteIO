@@ -1342,7 +1342,7 @@
 <td><code>resoio manipulate</code></td>
 <td>Manipulation</td>
 <td>unary</td>
-<td>Grab / release.</td>
+<td>Grab at the desktop cursor ray hit point / release (desktop mode only).</td>
 </tr>
 <tr>
 <td><code>resoio display</code></td>
@@ -1378,7 +1378,7 @@
 <td><code>resoio cursor</code></td>
 <td>Cursor</td>
 <td>unary</td>
-<td>Set / center / get the desktop cursor.</td>
+<td>Set / center / get / release the desktop cursor. <code>set</code> and <code>center</code> hold the position until <code>release</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -1394,8 +1394,10 @@ is its independent Python → Resonite counterpart.</p>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Video only</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>resoio<span class="w"> </span>record<span class="w"> </span>frames.mp4<span class="w"> </span>--video
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Center the desktop cursor (useful before opening a centered context menu)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Center and hold the desktop cursor (useful before opening a centered</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># context menu or aiming a grab), then release the hold when done</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>

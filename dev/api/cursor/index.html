@@ -1222,6 +1222,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.cursor.CursorClient.release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        release
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1314,6 +1325,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.cursor.CursorClient.release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        release
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1351,6 +1373,15 @@
 
 
 <h1 id="cursor">Cursor<a class="headerlink" href="#cursor" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Breaking change: <code>set_position</code> now holds the cursor</p>
+<p><code>set_position</code> no longer performs a one-shot warp. It <strong>holds</strong> the
+in-engine cursor at the requested position until <code>release()</code> is called
+(<code>CursorState.held</code> reports the hold). The hold never grabs the OS mouse
+pointer, but while held, human mouse movement does not reach the
+in-engine cursor and clicks fire at the held position. Switching world
+focus deactivates the hold (<code>held</code> becomes <code>False</code>).</p>
+</div>
 <div class="admonition example">
 <p class="admonition-title">Runnable example</p>
 <p><a href="https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/cursor_move.py"><code>python/examples/cursor_move.py</code></a> — <code>get_position</code> → center → move → restore the desktop cursor.</p>
@@ -1437,45 +1468,62 @@ deterministically. Socket resolution mirrors
 
     <div class="doc doc-contents ">
 
-        <p>Move the cursor to normalized <code>(x, y)</code> and return the result.</p>
+        <p>Move the cursor to normalized <code>(x, y)</code> and hold it there.</p>
+<p>The cursor is held at the requested position until
+:meth:<code>release</code> is called; the returned state has
+<code>held=True</code>. Calling again while held updates the held
+position. The hold acts on the in-engine cursor only and never
+grabs the OS mouse pointer. Side effect to be aware of: while
+held, human mouse movement does not reach the in-engine cursor,
+but clicks fire at the held position. Switching world focus
+deactivates the hold on the engine side and <code>held</code> becomes
+<code>False</code> (it is not re-applied automatically).</p>
 <p><code>x</code> and <code>y</code> must be in <code>[0, 1]</code> (center is <code>(0.5, 0.5)</code>);
 out-of-range values surface as a
-:class:<code>grpclib.exceptions.GRPCError</code> (<code>INVALID_ARGUMENT</code>). The
-move is a one-shot warp: the cursor is not held at the requested
-position and the mouse stays free after the call returns. Under
-Wine/Proton the OS pointer cannot be moved, so the cursor may
-revert to the real pointer position on the next frame.</p>
+:class:<code>grpclib.exceptions.GRPCError</code> (<code>INVALID_ARGUMENT</code>).</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/cursor.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-79">79</a></span>
-<span class="normal"><a href="#__codelineno-0-80">80</a></span>
-<span class="normal"><a href="#__codelineno-0-81">81</a></span>
-<span class="normal"><a href="#__codelineno-0-82">82</a></span>
-<span class="normal"><a href="#__codelineno-0-83">83</a></span>
-<span class="normal"><a href="#__codelineno-0-84">84</a></span>
-<span class="normal"><a href="#__codelineno-0-85">85</a></span>
-<span class="normal"><a href="#__codelineno-0-86">86</a></span>
-<span class="normal"><a href="#__codelineno-0-87">87</a></span>
-<span class="normal"><a href="#__codelineno-0-88">88</a></span>
-<span class="normal"><a href="#__codelineno-0-89">89</a></span>
-<span class="normal"><a href="#__codelineno-0-90">90</a></span>
-<span class="normal"><a href="#__codelineno-0-91">91</a></span>
-<span class="normal"><a href="#__codelineno-0-92">92</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-79" name="__codelineno-0-79"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CursorState</span><span class="p">:</span>
-<a id="__codelineno-0-80" name="__codelineno-0-80"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Move the cursor to normalized ``(x, y)`` and return the result.</span>
-<a id="__codelineno-0-81" name="__codelineno-0-81"></a>
-<a id="__codelineno-0-82" name="__codelineno-0-82"></a><span class="sd">    ``x`` and ``y`` must be in ``[0, 1]`` (center is ``(0.5, 0.5)``);</span>
-<a id="__codelineno-0-83" name="__codelineno-0-83"></a><span class="sd">    out-of-range values surface as a</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="sd">    :class:`grpclib.exceptions.GRPCError` (``INVALID_ARGUMENT``). The</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="sd">    move is a one-shot warp: the cursor is not held at the requested</span>
-<a id="__codelineno-0-86" name="__codelineno-0-86"></a><span class="sd">    position and the mouse stays free after the call returns. Under</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">    Wine/Proton the OS pointer cannot be moved, so the cursor may</span>
-<a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">    revert to the real pointer position on the next frame.</span>
-<a id="__codelineno-0-89" name="__codelineno-0-89"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-90" name="__codelineno-0-90"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
-<a id="__codelineno-0-91" name="__codelineno-0-91"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">CursorSetPositionRequest</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
-<a id="__codelineno-0-92" name="__codelineno-0-92"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">set_position</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-83"> 83</a></span>
+<span class="normal"><a href="#__codelineno-0-84"> 84</a></span>
+<span class="normal"><a href="#__codelineno-0-85"> 85</a></span>
+<span class="normal"><a href="#__codelineno-0-86"> 86</a></span>
+<span class="normal"><a href="#__codelineno-0-87"> 87</a></span>
+<span class="normal"><a href="#__codelineno-0-88"> 88</a></span>
+<span class="normal"><a href="#__codelineno-0-89"> 89</a></span>
+<span class="normal"><a href="#__codelineno-0-90"> 90</a></span>
+<span class="normal"><a href="#__codelineno-0-91"> 91</a></span>
+<span class="normal"><a href="#__codelineno-0-92"> 92</a></span>
+<span class="normal"><a href="#__codelineno-0-93"> 93</a></span>
+<span class="normal"><a href="#__codelineno-0-94"> 94</a></span>
+<span class="normal"><a href="#__codelineno-0-95"> 95</a></span>
+<span class="normal"><a href="#__codelineno-0-96"> 96</a></span>
+<span class="normal"><a href="#__codelineno-0-97"> 97</a></span>
+<span class="normal"><a href="#__codelineno-0-98"> 98</a></span>
+<span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-83" name="__codelineno-0-83"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CursorState</span><span class="p">:</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Move the cursor to normalized ``(x, y)`` and hold it there.</span>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a>
+<a id="__codelineno-0-86" name="__codelineno-0-86"></a><span class="sd">    The cursor is held at the requested position until</span>
+<a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">    :meth:`release` is called; the returned state has</span>
+<a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">    ``held=True``. Calling again while held updates the held</span>
+<a id="__codelineno-0-89" name="__codelineno-0-89"></a><span class="sd">    position. The hold acts on the in-engine cursor only and never</span>
+<a id="__codelineno-0-90" name="__codelineno-0-90"></a><span class="sd">    grabs the OS mouse pointer. Side effect to be aware of: while</span>
+<a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="sd">    held, human mouse movement does not reach the in-engine cursor,</span>
+<a id="__codelineno-0-92" name="__codelineno-0-92"></a><span class="sd">    but clicks fire at the held position. Switching world focus</span>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a><span class="sd">    deactivates the hold on the engine side and ``held`` becomes</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a><span class="sd">    ``False`` (it is not re-applied automatically).</span>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a><span class="sd">    ``x`` and ``y`` must be in ``[0, 1]`` (center is ``(0.5, 0.5)``);</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="sd">    out-of-range values surface as a</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">    :class:`grpclib.exceptions.GRPCError` (``INVALID_ARGUMENT``).</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">CursorSetPositionRequest</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">set_position</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1499,18 +1547,69 @@ revert to the real pointer position on the next frame.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Return the current cursor position without moving it.</p>
+        <p>Return the current cursor position and hold state (no side
+effects).</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/cursor.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-94">94</a></span>
-<span class="normal"><a href="#__codelineno-0-95">95</a></span>
-<span class="normal"><a href="#__codelineno-0-96">96</a></span>
-<span class="normal"><a href="#__codelineno-0-97">97</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-94" name="__codelineno-0-94"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CursorState</span><span class="p">:</span>
-<a id="__codelineno-0-95" name="__codelineno-0-95"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the current cursor position without moving it.&quot;&quot;&quot;</span>
-<a id="__codelineno-0-96" name="__codelineno-0-96"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
-<a id="__codelineno-0-97" name="__codelineno-0-97"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_position</span><span class="p">(</span><span class="n">CursorGetPositionRequest</span><span class="p">()))</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-104" name="__codelineno-0-104"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CursorState</span><span class="p">:</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the current cursor position and hold state (no side</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a><span class="sd">    effects).&quot;&quot;&quot;</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_position</span><span class="p">(</span><span class="n">CursorGetPositionRequest</span><span class="p">()))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.cursor.CursorClient.release" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">release</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.cursor.CursorClient.release" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">release</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">CursorState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Release a :meth:<code>set_position</code> hold and return the new state.</p>
+<p>Idempotent: succeeds even when nothing is held. The returned
+state has <code>held=False</code>. gRPC failures surface as
+:class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/cursor.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#__codelineno-0-114">114</a></span>
+<span class="normal"><a href="#__codelineno-0-115">115</a></span>
+<span class="normal"><a href="#__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#__codelineno-0-117">117</a></span>
+<span class="normal"><a href="#__codelineno-0-118">118</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-110" name="__codelineno-0-110"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CursorState</span><span class="p">:</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Release a :meth:`set_position` hold and return the new state.</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a><span class="sd">    Idempotent: succeeds even when nothing is held. The returned</span>
+<a id="__codelineno-0-114" name="__codelineno-0-114"></a><span class="sd">    state has ``held=False``. gRPC failures surface as</span>
+<a id="__codelineno-0-115" name="__codelineno-0-115"></a><span class="sd">    :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-117" name="__codelineno-0-117"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>    <span class="k">return</span> <span class="n">_state_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">CursorReleaseRequest</span><span class="p">()))</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1538,7 +1637,7 @@ revert to the real pointer position on the next frame.</p>
   </span>
 
 <a href="#resoio.cursor.CursorState" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">CursorState</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">window_width</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">window_height</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">CursorState</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">window_width</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">window_height</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">held</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1548,7 +1647,9 @@ revert to the real pointer position on the next frame.</p>
         <p>Snapshot of the desktop cursor position.</p>
 <p><code>x</code> / <code>y</code> are normalized window coordinates in <code>[0, 1]</code> (center
 is <code>(0.5, 0.5)</code>). <code>window_width</code> / <code>window_height</code> are the
-window resolution in pixels, the basis for normalized &lt;-&gt; pixel.</p>
+window resolution in pixels, the basis for normalized &lt;-&gt; pixel.
+<code>held</code> reports whether a <code>set_position</code> hold is in effect at the
+time of this snapshot.</p>
 
 
 
