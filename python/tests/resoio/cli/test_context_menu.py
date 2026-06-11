@@ -5,8 +5,13 @@ hosting an inline fake :class:`ContextMenuBase` over a real UDS (no mocking
 of grpclib/betterproto2). Each test asserts that the chosen action invokes
 the correct RPC with the correct ``hand`` (and ``index`` for
 highlight/invoke) and that the resulting menu state is printed in the
-documented format. Argparse-level errors (missing index) are checked
-separately for exit code / stderr.
+documented format.
+
+Per the subparser contract, ``highlight`` / ``invoke`` take a required int
+``index`` positional: a missing or non-numeric index, a missing subcommand,
+or an unknown subcommand is an argparse usage error (SystemExit with code 2
+at ``parse_args`` time). A negative index is pinned by exit code only
+(``_run_cli`` normalizes parse-time SystemExit and runtime return codes).
 """
 
 from pathlib import Path
@@ -26,6 +31,30 @@ from resoio._generated.resonite_io.v1 import (
     ContextMenuState as PbContextMenuState,
 )
 from resoio.cli import _amain, _build_parser
+
+
+async def _run_cli(argv: list[str]) -> int:
+    """Run the CLI and return its exit code.
+
+    Normalizes the two contractual error loci: an argparse usage error
+    (SystemExit raised by ``parse_args``) and a runtime return code from
+    ``_amain``. The contract pins the exit code, not the locus.
+    """
+    try:
+        args = _build_parser().parse_args(argv)
+    except SystemExit as exc:
+        assert isinstance(exc.code, int)
+        return exc.code
+    return await _amain(args)
+
+
+def _parse_error_code(argv: list[str]) -> int:
+    """Return the SystemExit code raised by ``parse_args`` for ``argv``."""
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(argv)
+    assert isinstance(excinfo.value.code, int)
+    return excinfo.value.code
+
 
 # Color components chosen to be exactly representable as float32 so the
 # printed `color=(...)` tuple is stable across the proto round-trip.
@@ -241,20 +270,31 @@ async def test_socket_flag_routes_to_get_state(
         await server.wait_closed()
 
 
-async def test_highlight_without_index_errors(
-    capsys: pytest.CaptureFixture[str],
-):
-    """``highlight`` requires an item index; missing it is a usage error."""
-    args = _build_parser().parse_args(["context-menu", "highlight"])
-    rc = await _amain(args)
-    assert rc == 2
-    assert "index" in capsys.readouterr().err
+def test_highlight_without_index_is_a_parse_error():
+    """``highlight`` requires an item index; omitting it exits 2 at parse."""
+    assert _parse_error_code(["context-menu", "highlight"]) == 2
 
 
-async def test_invoke_without_index_errors(
-    capsys: pytest.CaptureFixture[str],
-):
-    args = _build_parser().parse_args(["context-menu", "invoke"])
-    rc = await _amain(args)
-    assert rc == 2
-    assert "index" in capsys.readouterr().err
+def test_invoke_without_index_is_a_parse_error():
+    """``invoke`` requires an item index; omitting it exits 2 at parse."""
+    assert _parse_error_code(["context-menu", "invoke"]) == 2
+
+
+def test_invoke_with_non_numeric_index_is_a_parse_error():
+    """The index is an argparse int; non-numeric input exits 2 at parse."""
+    assert _parse_error_code(["context-menu", "invoke", "first"]) == 2
+
+
+async def test_invoke_with_negative_index_exits_2():
+    """A negative index is rejected with exit code 2."""
+    assert await _run_cli(["context-menu", "invoke", "-1"]) == 2
+
+
+def test_missing_subcommand_is_a_parse_error():
+    """``context-menu`` without a subcommand is a usage error (exit 2)."""
+    assert _parse_error_code(["context-menu"]) == 2
+
+
+def test_unknown_subcommand_is_a_parse_error():
+    """An unknown ``context-menu`` subcommand is a usage error (exit 2)."""
+    assert _parse_error_code(["context-menu", "toggle"]) == 2
