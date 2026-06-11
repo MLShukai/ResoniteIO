@@ -185,7 +185,7 @@ ______________________________________________________________________
 
 ## 7. CLI 規約
 
-- `python/src/resoio/cli/` 配下に **action 名 flat command** で 1 ファイルずつ (`ping` / `capture` / `record` / `mic` / `locomotion` / `display` 形式)
+- `python/src/resoio/cli/` 配下に **action 名 flat command** で 1 ファイルずつ (`ping` / `record` / `mic` / `drive` / `grab` / `display` 形式)
 - subgroup 階層化はしない (例: `resoio voice` ではなく `resoio mic`)
 - 単体テストは `python/tests/resoio/cli/test_<action>.py`
 

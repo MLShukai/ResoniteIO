@@ -19,7 +19,7 @@ memory: project
   - **Python (`resoio`)**: 親 `__init__.py` の `__all__` に列挙されている名前 / `_` prefix を持たないモジュール / クラス / 関数 / 属性
   - **C# (`ResoniteIO.Core` / `ResoniteIO`)**: `public` 修飾子を持つ型 / メソッド / プロパティ / interface (`I<Modality>Service`, `I<Modality>Bridge` 等)
   - **proto (`proto/resonite_io/v1/*.proto`)**: `service` / `rpc` / `message` / `enum` (wire 互換性は不可侵)
-  - CLI コマンドのサブコマンド名・引数・出力フォーマット (`resoio ping` / `record` / `mic` / `locomotion` / `display`)
+  - CLI コマンドのサブコマンド名・引数・出力フォーマット (`resoio ping` / `record` / `mic` / `drive` / `grab` / `display`)
   - ファイルパス・モジュールパス (`resoio.camera.CameraClient`、`ResoniteIO.Core.Hosting.GrpcHost` の import path)
 - 変更してよい対象:
   - private 名 (Python `_` prefix のモジュール / 関数 / クラス / 属性、C# `private` / `internal` メンバ)

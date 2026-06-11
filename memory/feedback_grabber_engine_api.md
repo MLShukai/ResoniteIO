@@ -37,7 +37,7 @@ Step 6 (2026-06-06 完了)。Resonite 内オブジェクトの **Grab / Release*
 - VR モード (`InputInterface.ScreenActive == false`) は `GrabberNotReadyException` →
   gRPC `FailedPrecondition` (message に "desktop" を含む)。
 - Cursor モダリティの永続保持 (\[\[feedback-cursor-lock-mechanism\]\]) と連動:
-  `cursor.set_position` で照準 → `manipulate grab` の流れが cross-RPC で成立する。
+  `cursor.set_position` で照準 → `grab` (CLI: `resoio grab`、旧 `manipulate grab`) の流れが cross-RPC で成立する。
 
 ## Hold 位置: grab 直後に object を手へ寄せる (頭上に飛ぶ問題の修正、2026-06-10)
 

@@ -16,9 +16,9 @@ resoio --help
 | `resoio info` | Info | unary | Print mod/engine version, OS platform, and Wine flag. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
-| `resoio locomotion` | Locomotion | Python → Resonite | Send movement commands. |
-| `resoio manipulate` | Manipulation | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). |
-| `resoio display` | Display | unary | Read display info. |
+| `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
+| `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (`grab` / `release` / `state` / `interactive`) defaults to `grab`; `--hand` / `--radius` work before or after it. |
+| `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config (`-W/--width`, `-H/--height`, `-F/--max-fps` — at least one required) and prints the post-apply snapshot. |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
@@ -40,9 +40,14 @@ resoio record out.mp4 --duration 10
 # Video only
 resoio record frames.mp4 --video
 
-# Center and hold the desktop cursor (useful before opening a centered
-# context menu or aiming a grab), then release the hold when done
+# Read the display settings, then cap the background fps
+resoio display get
+resoio display set --max-fps 30
+
+# Aim with the held cursor, grab at the ray hit point, then release
 resoio cursor center
+resoio grab --radius 0.5
+resoio grab release
 resoio cursor release
 ```
 

@@ -35,7 +35,24 @@ GitHub Release body. The format follows
   returns `grabbed=false` (not an error); VR mode (screen output inactive)
   returns `FAILED_PRECONDITION`. The Python client's `ManipulationClient.grab`
   lost its `point` parameter and the CLI lost `--point`. Aim with
-  `resoio cursor set X Y` (held until release), then `resoio manipulate grab`
+  `resoio cursor set X Y` (held until release), then `resoio grab`
+- **Breaking — `resoio display` is split into `get` / `set` subcommands**: the
+  implicit branching ("no flags = get, any flag = set") is gone.
+  `resoio display get` prints the current snapshot; `resoio display set`
+  requires at least one of `-W/--width`, `-H/--height`, `-F/--max-fps` and
+  prints the post-apply snapshot
+- **Breaking — `resoio locomotion drive` is flattened to `resoio drive`**: the
+  `locomotion` command group is removed; the flags
+  (`--sprint` / `--look-rate` / `--no-wait`) are unchanged
+- **Breaking — `resoio manipulate` is renamed to `resoio grab`** (following
+  the modality rename): the action positional
+  (`grab` / `release` / `state` / `interactive`) is optional and defaults to
+  `grab`, and `--hand` / `--radius` are accepted before or after the action
+- **CLI required arguments are now enforced by argparse**:
+  `resoio cursor set <x> <y>`, `resoio dash invoke <ref_id>`, and
+  `resoio context-menu highlight/invoke <index>` reject missing positionals as
+  a usage error at parse time instead of failing mid-command. The argv shape
+  of valid invocations is unchanged
 
 ### Added
 
