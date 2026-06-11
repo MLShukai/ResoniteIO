@@ -1,10 +1,12 @@
 """Minimal Cursor example.
 
 Reads the current desktop cursor position, centers it, moves it to an
-off-center point, then restores the original position. Positions are
-normalized window coordinates in [0, 1] (center is (0.5, 0.5)). Assumes a
-Resonite client with the ResoniteIO mod loaded is running on the host in
-desktop mode.
+off-center point, then releases the hold. ``set_position`` keeps the
+in-engine cursor at the set position (``held=True``) until ``release()``
+returns control to the OS pointer; the real OS mouse pointer is never
+captured. Positions are normalized window coordinates in [0, 1] (center is
+(0.5, 0.5)). Assumes a Resonite client with the ResoniteIO mod loaded is
+running on the host in desktop mode.
 
 Run from inside the dev container:
 
@@ -56,15 +58,16 @@ async def main() -> None:
             f"window={initial.window_width}x{initial.window_height}"
         )
 
-        centered = await cursor.set_position(0.5, 0.5)
-        print(f"centered=({centered.x:.3f}, {centered.y:.3f})")
+        try:
+            centered = await cursor.set_position(0.5, 0.5)
+            print(f"centered=({centered.x:.3f}, {centered.y:.3f}) held={centered.held}")
 
-        moved = await cursor.set_position(0.25, 0.25)
-        print(f"moved=({moved.x:.3f}, {moved.y:.3f})")
-
-        # Restore the cursor to where we found it.
-        restored = await cursor.set_position(initial.x, initial.y)
-        print(f"restored=({restored.x:.3f}, {restored.y:.3f})")
+            moved = await cursor.set_position(0.25, 0.25)
+            print(f"moved=({moved.x:.3f}, {moved.y:.3f}) held={moved.held}")
+        finally:
+            # Release the hold so the engine cursor follows the OS pointer again.
+            released = await cursor.release()
+            print(f"released held={released.held}")
 
 
 if __name__ == "__main__":

@@ -125,7 +125,6 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Manipulation.IManipulationBridge",
             "ResoniteIO.Core.Manipulation.ManipulationHandSelector",
             "ResoniteIO.Core.Manipulation.ManipulationNotReadyException",
-            "ResoniteIO.Core.Manipulation.ManipulationPoint",
             "ResoniteIO.Core.Manipulation.ManipulationService",
             "ResoniteIO.Core.Microphone.IMicrophoneBridge",
             "ResoniteIO.Core.Microphone.MicrophoneDisconnectReason",
@@ -208,6 +207,7 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.Cursor+CursorBase",
             "ResoniteIO.V1.CursorGetPositionRequest",
             "ResoniteIO.V1.CursorReflection",
+            "ResoniteIO.V1.CursorReleaseRequest",
             "ResoniteIO.V1.CursorSetPositionRequest",
             "ResoniteIO.V1.CursorState",
             "ResoniteIO.V1.Dash",
@@ -308,7 +308,6 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.StartWorldResponse",
             "ResoniteIO.V1.World",
             "ResoniteIO.V1.World+WorldBase",
-            "ResoniteIO.V1.WorldPoint",
             "ResoniteIO.V1.WorldRecord",
             "ResoniteIO.V1.WorldReflection",
             "ResoniteIO.V1.WorldSession",
@@ -559,7 +558,8 @@ public sealed class ApiContractTests
         AssertMethodSignatures(
             typeof(ICursorBridge),
             ("SetPositionAsync", new[] { typeof(float), typeof(float), typeof(CancellationToken) }),
-            ("GetPositionAsync", new[] { typeof(CancellationToken) })
+            ("GetPositionAsync", new[] { typeof(CancellationToken) }),
+            ("ReleaseAsync", new[] { typeof(CancellationToken) })
         );
     }
 
@@ -596,15 +596,11 @@ public sealed class ApiContractTests
     {
         AssertMethodSignatures(
             typeof(IManipulationBridge),
+            // Grab はカーソルレイの hit 点中心の proximity grab — point 引数は存在しない
+            // (旧 ManipulationPoint? は Part B で削除済み。復活はこの pin で検出する)。
             (
                 "GrabAsync",
-                new[]
-                {
-                    typeof(ManipulationHandSelector),
-                    typeof(ManipulationPoint?),
-                    typeof(float),
-                    typeof(CancellationToken),
-                }
+                new[] { typeof(ManipulationHandSelector), typeof(float), typeof(CancellationToken) }
             ),
             ("ReleaseAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) }),
             ("GetStateAsync", new[] { typeof(ManipulationHandSelector), typeof(CancellationToken) })

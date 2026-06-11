@@ -1,16 +1,15 @@
 """Client for the Resonite IO ``Cursor`` modality (Python -> Resonite).
 
-Unary RPCs controlling the Resonite desktop cursor (mouse pointer). Each
-RPC is a one-shot request/response. Positions use normalized window
-coordinates in ``[0, 1]`` (center is ``(0.5, 0.5)``).
+Unary RPCs controlling the Resonite desktop cursor (mouse pointer).
+Positions use normalized window coordinates in ``[0, 1]`` (center is
+``(0.5, 0.5)``).
 
-A common use is to center the cursor before opening a context menu: on
-desktop the radial menu opens at the cursor's laser hit point, so
-``await cursor.set_position(0.5, 0.5)`` followed by ``context_menu.open()``
-aims for a centered menu. Note that ``set_position`` is a one-shot warp
-that does not hold the cursor afterwards; under Wine/Proton the OS pointer
-cannot be moved, so the position may revert before a follow-up call and
-position-dependent flows are only reliable within the same operation.
+``set_position`` moves the in-engine cursor and **holds** it there until
+``release`` is called; the hold acts on the engine cursor only and never
+grabs the OS mouse pointer. A typical flow is: ``set_position`` to aim
+(e.g. ``(0.5, 0.5)`` so a context menu opens centered, or aiming the
+cursor ray for a grab), perform the position-dependent operation, then
+``release()`` to let the cursor follow the OS pointer again.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ from grpclib.client import Channel
 from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     CursorGetPositionRequest,
+    CursorReleaseRequest,
     CursorSetPositionRequest,
     CursorState as _PbCursorState,
     CursorStub,
@@ -44,12 +44,15 @@ class CursorState:
     ``x`` / ``y`` are normalized window coordinates in ``[0, 1]`` (center
     is ``(0.5, 0.5)``). ``window_width`` / ``window_height`` are the
     window resolution in pixels, the basis for normalized <-> pixel.
+    ``held`` reports whether a ``set_position`` hold is in effect at the
+    time of this snapshot.
     """
 
     x: float
     y: float
     window_width: int
     window_height: int
+    held: bool
 
 
 def _state_from_proto(pb: _PbCursorState) -> CursorState:
@@ -58,6 +61,7 @@ def _state_from_proto(pb: _PbCursorState) -> CursorState:
         y=pb.y,
         window_width=pb.window_width,
         window_height=pb.window_height,
+        held=pb.held,
     )
 
 
@@ -77,21 +81,38 @@ class CursorClient(_BaseClient[CursorStub]):
         return CursorStub(channel)
 
     async def set_position(self, x: float, y: float) -> CursorState:
-        """Move the cursor to normalized ``(x, y)`` and return the result.
+        """Move the cursor to normalized ``(x, y)`` and hold it there.
+
+        The cursor is held at the requested position until
+        :meth:`release` is called; the returned state has
+        ``held=True``. Calling again while held updates the held
+        position. The hold acts on the in-engine cursor only and never
+        grabs the OS mouse pointer. Side effect to be aware of: while
+        held, human mouse movement does not reach the in-engine cursor,
+        but clicks fire at the held position. Switching world focus
+        deactivates the hold on the engine side and ``held`` becomes
+        ``False`` (it is not re-applied automatically).
 
         ``x`` and ``y`` must be in ``[0, 1]`` (center is ``(0.5, 0.5)``);
         out-of-range values surface as a
-        :class:`grpclib.exceptions.GRPCError` (``INVALID_ARGUMENT``). The
-        move is a one-shot warp: the cursor is not held at the requested
-        position and the mouse stays free after the call returns. Under
-        Wine/Proton the OS pointer cannot be moved, so the cursor may
-        revert to the real pointer position on the next frame.
+        :class:`grpclib.exceptions.GRPCError` (``INVALID_ARGUMENT``).
         """
         stub = self._require_stub()
         request = CursorSetPositionRequest(x=x, y=y)
         return _state_from_proto(await stub.set_position(request))
 
     async def get_position(self) -> CursorState:
-        """Return the current cursor position without moving it."""
+        """Return the current cursor position and hold state (no side
+        effects)."""
         stub = self._require_stub()
         return _state_from_proto(await stub.get_position(CursorGetPositionRequest()))
+
+    async def release(self) -> CursorState:
+        """Release a :meth:`set_position` hold and return the new state.
+
+        Idempotent: succeeds even when nothing is held. The returned
+        state has ``held=False``. gRPC failures surface as
+        :class:`grpclib.exceptions.GRPCError`.
+        """
+        stub = self._require_stub()
+        return _state_from_proto(await stub.release(CursorReleaseRequest()))

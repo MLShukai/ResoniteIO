@@ -1,21 +1,27 @@
 ---
 name: feedback-cursor-lock-mechanism
-description: Cursor set は one-shot warp (SetMousePosition + 一時 cursor lock → 即 release) で位置を保持しない。Wine の menu-at-cursor は同一操作内のみ有効
+description: Cursor set は永続 cursor lock + Harmony OutputState 偽装で engine 内カーソルを保持する (OS ポインタは奪わない)。release で OS 追従に戻す。lockCursorPosition だけ null 化すると中央 pin になる罠
 type: project
 ---
 
-Cursor モダリティ (`FrooxEngineCursorBridge`) の `SetPosition` は **one-shot warp** で実装する: engine thread 上で (a) `InputInterface.SetMousePosition` による OS カーソル warp (native では実カーソルが移動し位置が残る、Wine/Proton では `IsInputInjectionSupported=False` で no-op) と (b) `InputBindingManager.RegisterCursorLock` による一時 lock を併用し、settle (反映) を確認したら **RPC が戻る前に必ず `UnregisterCursorLock`** する。**RPC を跨いで lock を保持しない** (「カーソルをその位置に保持する」副作用は廃止)。
+Cursor モダリティ (`FrooxEngineCursorBridge`) の `SetPosition` は **永続保持** で実装する (2026-06-10、one-shot warp から変更): engine thread 上で `InputBindingManager.RegisterCursorLock(world.RootSlot, pixel, priority=1_000_000)` の lock を **RPC を跨いで保持** し、`Release` RPC で解放して OS マウス追従へ戻す。OS ポインタを奪わないために `InputInterface.CollectOutputState` を Harmony Postfix で patch し、renderer へ渡る `OutputState` を「自分の lock が無かった世界線」に偽装する。`SetMousePosition` (OS warp) は廃止 (OS ポインタに触れない契約)。
 
-**Why:** 旧実装は lock を永続保持していた (解放 API なし) ため、`Mouse.Update` が毎フレーム `WindowPosition` を `CursorLockPosition` へ強制し (decompiled/.../Mouse.cs:67-71)、Resonite フォーカス中はマウスが掴まれ他アプリを操作できなかった。一時 lock を残すのは、laser / pointer / context menu が参照する `Mouse.WindowPosition` は OS injection の round-trip でしか動かず Wine では `SetMousePosition` が no-op のため、engine 内で確実に反映させる経路が lock しかないから。Locomotion が SendInput でなく ExternalInput を使うのと同じ思想。
+**Why:** engine 内カーソル保持と OS ポインタ拘束は engine 内では同じ lock 機構に束ねられている:
+
+- `Mouse.Update` (decompiled/.../Mouse.cs:67-71) は `CursorLockPosition.HasValue` なら毎フレーム `WindowPosition` を lock 位置へ強制 — これが engine 内保持の仕組みで、デスクトップのレイ方向 (`TargettingControllerBase.cs:114`、`Mouse.NormalizedWindowPosition` から計算) もこれに追従する。
+- 一方 `InputInterface.CollectOutputState` (InputInterface.cs:325-333) が `lockCursor` / `lockCursorPosition` を renderer 側 `OutputState` に渡し、**renderer の `MouseDriver.HandleStateUpdate` (decompiled/Assembly-CSharp/MouseDriver.cs:62-100) が OS ポインタを拘束する**: `lockCursorPosition` あり → 毎フレーム OS warp + `Confined` (旧永続 lock 実装でマウスが奪われた直接原因)。`lockCursor=true` かつ position なし → `CursorLockMode.Locked` (**中央 pin**)。
+- ⇒ **patch で `lockCursorPosition` だけ null にすると Locked 化して改悪**。`lockCursor` も再計算が必要。`InputInterface.Update` (615-632) は lock が 1 つでもあると unlocker チェックをスキップして `IsCursorLocked = IsWindowFocused` に化けるため、「自 lock 抜きの世界線」の `lockCursor` は `!anyUnlocker && IsWindowFocused` で再計算する。自 world の unlocker は `UnlockCursor` getter (InputBindingManager.cs:54-64) が自 lock の存在で false に化けるので、`AccessTools.FieldRefAccess` で `_cursorUnlockers` / `_cursorLockers` を直接読む。
 
 **How to apply:**
 
-- warp: `world.InputInterface.SetMousePosition(in pixel)`。native では実 OS カーソルが動くので call 後も位置が残る。Wine/Proton では no-op (2026-06-06 実機検証: `IsInputInjectionSupported=False`)。
-- 一時 lock: `world.Input.RegisterCursorLock(world.RootSlot, pixelInt2, priority)`。同一 element 二重登録は例外を投げる → 登録前に `UnregisterCursorLock(element)` (idempotent) を一度呼ぶ。priority は最大の locker が勝つ (`LockCursor` getter) ので mouse-look 等に勝てるよう高めにする (実装では 1_000_000)。settle 確認 (16ms × 最大 20 回 poll) 後、timeout / cancel を含むあらゆる経路で `finally` から `world.RunSynchronously(UnregisterCursorLock)` を queue して解放する (完了は await しない。engine 終了時は world ごと破棄され leak は無害)。
-- **位置は保持されない**: Wine では lock 解放後の次フレームで `WindowPosition` が実 OS カーソル位置へ戻るため、別 RPC の後続 `get_position` が set 値を返すとは限らない。menu-at-cursor (中央表示のための `set_position(0.5, 0.5)` → `context_menu.open()`) は **同一操作内 (warp が効いている間) でのみ有効** — このリスクはユーザー許容済み (2026-06-10、マウストラップ解消を優先)。
-- auto-close は従来どおり agent では発火しない: `ContextMenu` の exit-lerp (live cursor 距離で閉じる) は実 OS カーソル (active screen pointer) を要求し、lock の forced position は active pointer と見なされない。agent は `close()` で明示的に閉じる。
-- 読み取り: `world.InputInterface.Mouse.NormalizedWindowPosition` (= `WindowPosition.Value / WindowResolution`)。proto/Client では正規化 \[0,1\] (中央 0.5,0.5)、bridge が `pixel = clamp(round(norm * resolution), 0, resolution-1)` で変換。範囲チェックは Service 層 (`InvalidArgument`)。
-- 座標系の原点 (上下左右) は engine ネイティブ window 座標に従う。実機の正確な対応は e2e (`python/tests/e2e/cursor.py`) で context menu の出現位置を observable proxy にして確認する。
-- bridge は跨 RPC 状態を持たないため `Dispose` は実質 no-op (plugin の SafeDispose 対称性のため `IDisposable` は維持)。
+- 保持: `RegisterCursorLock` は mutable な `CursorLock` (public `position`/`priority`) を**返す** (InputBindingManager.cs:182-192)。保持中の再 set は `_lock.position = pixel` の直接書き換えで次フレーム反映 (re-register 不要)。**`RegisterCursorLock` は priority 引数を無視する**ため、戻り値の `cursorLock.priority` に明示書き込みする。
+- world 切替: `IsRemoved` な locker は engine が毎フレーム自動 prune (world dispose で lock は自然消滅)。lock 選択は `Running && Focus != Background` の world のみ対象なので、focus が別 world に移ると lock は不活性化 → bridge は「focused world ≠ lockWorld なら held=false 報告」で観測と一致させる (自動マイグレーションはしない)。
+- Harmony Postfix のロジック: `!_held` なら即 return → 自分以外の非 IsRemoved locker が居れば触らない (他者の lock 尊重) → 自分が唯一なら `lockCursorPosition=null` + `lockCursor` 再計算。postfix 内は no-log・例外握りつぶし (Speaker と同方針)。reflection / patch 失敗時は **patch 不適用 + Set/Release を fail-loud** (CursorNotReadyException → FailedPrecondition) に degrade — 偽装なしで lock を張ると OS を奪う退行になるため。
+- settle-poll (16ms × 最大 20 回) は維持 (lock 反映は次の `Mouse.Update` までずれるため、「反映後の state を返す」契約に必要)。
+- Dispose (plugin SafeShutdown、GrpcHost 停止前): `_held=false` → lock 解除 queue → `UnpatchSelf` → singleton クリア。
+- 保持中の副作用: 実マウス移動は `WindowPosition` に反映されないがクリック等のボタンは生きる → **保持中に人間がクリックすると保持位置でクリックされる** (docstring に明記済み)。
+- menu-at-cursor は保持により **cross-RPC でも成立** (`set_position(0.5,0.5)` → 別 RPC の `context_menu.open()` が中央に開く)。auto-close (exit-lerp) は従来どおり agent では発火しない (実 OS active pointer 要求)。agent は `close()` で明示的に閉じる。
+- 読み取り・座標系: `Mouse.NormalizedWindowPosition`、proto は正規化 \[0,1\] (中央 0.5,0.5)、範囲チェックは Service 層 (`InvalidArgument`)。`Release` は冪等 (未保持でも成功し現 state を返す)。
+- 実機検証 (2026-06-10 Wine): set → cross-RPC get で位置維持 (held=True)、release で OS 追従へ復帰、context-menu が保持位置に開く、e2e green。
 
-関連: [froox_contextmenu_reflection.md](agents/spec-driven-implementer/froox_contextmenu_reflection.md) (ContextMenu は engine-native 配置へ移行、中央表示は事前 `cursor.set_position(0.5,0.5)`、auto-close は agent では発火しない)。
+関連: [froox_contextmenu_reflection.md](agents/spec-driven-implementer/froox_contextmenu_reflection.md)、[engine_cursor_lock_quirks.md](agents/spec-driven-implementer/engine_cursor_lock_quirks.md)。

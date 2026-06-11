@@ -17,13 +17,13 @@ resoio --help
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio locomotion` | Locomotion | Python → Resonite | Send movement commands. |
-| `resoio manipulate` | Manipulation | unary | Grab / release. |
+| `resoio manipulate` | Manipulation | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). |
 | `resoio display` | Display | unary | Read display info. |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Browse / spawn inventory items. |
-| `resoio cursor` | Cursor | unary | Set / center / get the desktop cursor. |
+| `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
@@ -40,8 +40,10 @@ resoio record out.mp4 --duration 10
 # Video only
 resoio record frames.mp4 --video
 
-# Center the desktop cursor (useful before opening a centered context menu)
+# Center and hold the desktop cursor (useful before opening a centered
+# context menu or aiming a grab), then release the hold when done
 resoio cursor center
+resoio cursor release
 ```
 
 Run any command with `--help` for its full flag list. For programmatic use, see the

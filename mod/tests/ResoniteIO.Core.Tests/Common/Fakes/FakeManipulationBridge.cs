@@ -4,29 +4,25 @@ namespace ResoniteIO.Core.Tests.Common.Fakes;
 
 /// <summary>
 /// テスト用 <see cref="IManipulationBridge"/>。Grab / Release / GetState の各呼び出しを
-/// (hand / point / radius まで) <c>lock</c> 付き append-only list に記録し、手ごとに簡単な
+/// (hand / radius まで) <c>lock</c> 付き append-only list に記録し、手ごとに簡単な
 /// 保持状態をシミュレートする。Grab で <see cref="GrabbedObjectNames"/> を保持し
 /// <c>IsHolding=true</c> に、Release で空にして <c>IsHolding=false</c> に遷移するため、
 /// Grab→Release の観測可能な状態変化を実 wire で検証できる。
 /// </summary>
 /// <remarks>
 /// 自前 ABC の fake (testing-strategy: 所有している抽象のみ fake 可)。
-/// <see cref="GrabSucceeds"/> を <c>false</c> にすると「範囲に grabbable が無い」=
+/// <see cref="GrabSucceeds"/> を <c>false</c> にすると「レイ miss / 範囲に grabbable 無し」=
 /// <c>Grabbed=false</c> かつ保持状態を変えない挙動 (proto 仕様: エラーではなく結果) を
 /// 再現する。<see cref="ThrowOnNextCall"/> を設定すると全 RPC でその例外を投げ、Service 層の
-/// 例外翻訳 (NotReady→FailedPrecondition / その他→Internal) を検証できる。engine 側の近接判定や
-/// 実 grabbable の探索は再現しない。
+/// 例外翻訳 (NotReady→FailedPrecondition / その他→Internal) を検証できる。
+/// カーソルレイの計算 / raycast は engine 表面なので fake には持ち込まない —
+/// hit / miss の結果だけを <see cref="GrabSucceeds"/> で script する。
 /// </remarks>
 internal sealed class FakeManipulationBridge : IManipulationBridge
 {
-    /// <summary>記録された 1 回の RPC 呼び出し。<paramref name="Point"/> / <paramref name="Radius"/> は
-    /// Grab のみ意味を持ち、Release / GetState では <c>null</c> / <c>0</c>。</summary>
-    public sealed record Call(
-        string Method,
-        ManipulationHandSelector Hand,
-        ManipulationPoint? Point,
-        float Radius
-    );
+    /// <summary>記録された 1 回の RPC 呼び出し。<paramref name="Radius"/> は
+    /// Grab のみ意味を持ち、Release / GetState では <c>0</c>。</summary>
+    public sealed record Call(string Method, ManipulationHandSelector Hand, float Radius);
 
     private readonly List<Call> _calls = new();
 
@@ -34,7 +30,8 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
     private readonly Dictionary<ManipulationHandSelector, IReadOnlyList<string>> _held = new();
     private readonly object _gate = new();
 
-    /// <summary>Grab が成功する (掴める) か。<c>false</c> なら <c>Grabbed=false</c> を返し保持状態を変えない。</summary>
+    /// <summary>Grab が成功する (レイが grabbable に hit する) か。<c>false</c> なら
+    /// 「レイ miss / 範囲に grabbable 無し」を再現し <c>Grabbed=false</c> を返して保持状態を変えない。</summary>
     public bool GrabSucceeds { get; set; } = true;
 
     /// <summary>Grab 成功時に保持するオブジェクト名。GetState / Release の round-trip 検証に使う。</summary>
@@ -56,7 +53,6 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
 
     public Task<GrabOutcome> GrabAsync(
         ManipulationHandSelector hand,
-        ManipulationPoint? point,
         float radius,
         CancellationToken ct
     )
@@ -64,7 +60,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _calls.Add(new Call("Grab", hand, point, radius));
+            _calls.Add(new Call("Grab", hand, radius));
 
             if (ThrowOnNextCall is { } ex)
             {
@@ -86,7 +82,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _calls.Add(new Call("Release", hand, Point: null, Radius: 0f));
+            _calls.Add(new Call("Release", hand, Radius: 0f));
 
             if (ThrowOnNextCall is { } ex)
             {
@@ -103,7 +99,7 @@ internal sealed class FakeManipulationBridge : IManipulationBridge
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _calls.Add(new Call("GetState", hand, Point: null, Radius: 0f));
+            _calls.Add(new Call("GetState", hand, Radius: 0f));
 
             if (ThrowOnNextCall is { } ex)
             {

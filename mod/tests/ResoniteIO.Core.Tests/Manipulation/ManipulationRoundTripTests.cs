@@ -11,15 +11,17 @@ namespace ResoniteIO.Core.Tests.Manipulation;
 /// <see cref="Core.Manipulation.ManipulationService"/> の 3 RPC (Grab / Release / GetState) を
 /// 実 Kestrel + UDS gRPC で end-to-end に流す integration-real テスト。検証対象は
 /// <c>proto/resonite_io/v1/manipulation.proto</c> と <see cref="IManipulationBridge"/> の契約:
-/// (1) proto request の hand / point / radius が Core selector / POCO へ正しく map されて Bridge に届くこと、
+/// (1) proto request の hand / radius が Core selector / float へ正しく map されて Bridge に届くこと
+/// (Grab は常にデスクトップカーソルレイの hit 点中心の proximity grab で、point 指定は存在しない)、
 /// (2) Bridge が返した <see cref="GrabOutcome"/> / <see cref="GrabSnapshot"/> が proto state に round-trip すること、
 /// (3) radius default 解決 (&lt;=0 → 0.1m) が Core 層で行われ Bridge へ渡ること、
-/// (4) 例外 / 未注入 → gRPC Status の翻訳。
+/// (4) 例外 / 未注入 → gRPC Status の翻訳 (VR モード拒否 = NotReady → FailedPrecondition を含む)。
+/// レイ計算 / raycast 自体は engine 表面のためここでは検証しない (実機 e2e / manual で担保)。
 /// </summary>
 /// <remarks>
 /// <see cref="GrpcHostHarness"/> は <c>RESONITE_IO_SOCKET</c> env var を読み書きするため
 /// <c>"GrpcHostEnv"</c> collection で直列化する (harness の契約)。
-/// field の取り違えを検出するため、各 RPC で hand / point / radius / object_names に
+/// field の取り違えを検出するため、各 RPC で hand / radius / object_names に
 /// 互いに異なる識別可能な値を使う。
 /// </remarks>
 [Collection("GrpcHostEnv")]
@@ -27,13 +29,14 @@ public sealed class ManipulationRoundTripTests
 {
     private const float DefaultRadius = 0.1f;
 
-    // ----- Grab: 正常系 (explicit point + radius) -----
+    // ----- Grab: 正常系 (hand + radius round-trip) -----
 
     [Fact]
-    public async Task Grab_with_explicit_point_and_radius_forwards_exact_values_and_round_trips_state()
+    public async Task Grab_forwards_hand_and_radius_and_round_trips_state()
     {
-        // request LEFT / point (1,2,3) / radius 0.25 を Bridge がそのまま受け取り、
-        // 成功した state (IsHolding=true / hand=LEFT / unix_nanos>0) が round-trip すること。
+        // 仕様: Grab は hand + radius のみを運ぶ (カーソルレイの hit 点が grab 中心になるため
+        // point 指定は存在しない)。request LEFT / radius 0.25 を Bridge がそのまま受け取り、
+        // 成功した state (Grabbed=true / IsHolding=true / hand=LEFT / unix_nanos>0) が round-trip すること。
         var bridge = new FakeManipulationBridge
         {
             GrabSucceeds = true,
@@ -44,23 +47,12 @@ public sealed class ManipulationRoundTripTests
         var client = new V1.Manipulation.ManipulationClient(channel);
 
         var result = await client.GrabAsync(
-            new ManipulationGrabRequest
-            {
-                Hand = ManipulationHand.Left,
-                Point = new WorldPoint
-                {
-                    X = 1f,
-                    Y = 2f,
-                    Z = 3f,
-                },
-                Radius = 0.25f,
-            }
+            new ManipulationGrabRequest { Hand = ManipulationHand.Left, Radius = 0.25f }
         );
 
         var call = Assert.Single(bridge.Calls);
         Assert.Equal("Grab", call.Method);
         Assert.Equal(ManipulationHandSelector.Left, call.Hand);
-        Assert.Equal(new ManipulationPoint(1f, 2f, 3f), call.Point);
         Assert.Equal(0.25f, call.Radius);
 
         Assert.True(result.Grabbed);
@@ -68,26 +60,6 @@ public sealed class ManipulationRoundTripTests
         Assert.Equal(ManipulationHand.Left, result.State.Hand);
         Assert.Equal(new[] { "Cube" }, result.State.ObjectNames);
         Assert.True(result.State.UnixNanos > 0);
-    }
-
-    // ----- Grab: point 未設定 → null -----
-
-    [Fact]
-    public async Task Grab_without_point_forwards_null_point_to_bridge()
-    {
-        // proto WorldPoint 不在 → Bridge は null point を受け取る (= 手の現在位置を使う契約)。
-        var bridge = new FakeManipulationBridge();
-        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
-        using var channel = harness.CreateChannel();
-        var client = new V1.Manipulation.ManipulationClient(channel);
-
-        await client.GrabAsync(
-            new ManipulationGrabRequest { Hand = ManipulationHand.Right, Radius = 0.3f }
-        );
-
-        var call = Assert.Single(bridge.Calls);
-        Assert.Null(call.Point);
-        Assert.Equal(ManipulationHandSelector.Right, call.Hand);
     }
 
     // ----- Grab: radius <=0 → default 0.1m に解決 -----
@@ -143,12 +115,13 @@ public sealed class ManipulationRoundTripTests
         Assert.Equal(0.42f, call.Radius);
     }
 
-    // ----- Grab: 掴めない → Grabbed=false だがエラーにしない -----
+    // ----- Grab: レイ miss / 範囲に grabbable 無し → OK + grabbed=false (エラーにしない) -----
 
     [Fact]
     public async Task Grab_when_nothing_grabbable_returns_false_without_error()
     {
-        // 仕様: 範囲に grabbable が無いとき Grabbed=false を返すだけでエラーにはしない。
+        // 仕様: カーソルレイが何にも当たらない (miss)、または hit 点の radius 内に
+        // grabbable が無いとき、Grabbed=false を返すだけでエラーにはしない (gRPC status は OK)。
         var bridge = new FakeManipulationBridge { GrabSucceeds = false };
         await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
         using var channel = harness.CreateChannel();
@@ -293,6 +266,30 @@ public sealed class ManipulationRoundTripTests
             await client.GrabAsync(new ManipulationGrabRequest())
         );
         Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Grab_in_vr_mode_returns_FailedPrecondition_mentioning_desktop()
+    {
+        // 仕様: VR モード (screen 非 active) では Bridge が
+        // ManipulationNotReadyException("Grab requires desktop (screen) mode; VR is active.")
+        // を投げ、Service が FailedPrecondition に翻訳する (新規例外型は追加しない契約)。
+        // message は完全一致ではなく substring "desktop" のみ pin する。
+        var bridge = new FakeManipulationBridge
+        {
+            ThrowOnNextCall = new ManipulationNotReadyException(
+                "Grab requires desktop (screen) mode; VR is active."
+            ),
+        };
+        await using var harness = await GrpcHostHarness.StartAsync(manipulationBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Manipulation.ManipulationClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.GrabAsync(new ManipulationGrabRequest())
+        );
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+        Assert.Contains("desktop", ex.Status.Detail);
     }
 
     [Fact]
