@@ -1,6 +1,6 @@
 ---
 name: resoio-pytest-doctest-modules-not-enabled
-description: This project's pytest addopts do NOT include --doctest-modules; doctests in src/ files are not auto-collected by default, contrary to the CLAUDE.md harness preset.
+description: This project's pytest addopts do NOT include --doctest-modules; doctests in src/ files are not auto-collected by default, contrary to the AGENTS.md harness preset.
 metadata:
   type: project
 ---
@@ -10,7 +10,7 @@ metadata:
 is `tests/resoio`. As of 2026-05-21, `--doctest-modules` is NOT in
 the default invocation (`uv run pytest --no-cov -q`).
 
-**Why:** The harness-level CLAUDE.md mentions "pytest --doctest-modules
+**Why:** The harness-level AGENTS.md mentions "pytest --doctest-modules
 is enabled — meaning every `>>>` doctest example will be executed",
 but that is the harness-wide assumption. In this repo doctests are
 not auto-run.

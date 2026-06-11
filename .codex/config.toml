@@ -1,0 +1,7 @@
+# Project-scoped Codex configuration.
+
+model_reasoning_effort = "xhigh"
+
+[agents]
+max_threads = 6
+max_depth = 1

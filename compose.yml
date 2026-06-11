@@ -79,6 +79,7 @@ services:
       - cache-nuget:/home/dev/.nuget
       - cache-uv:/home/dev/.cache/uv
       - cache-claude:/home/dev/.claude
+      - cache-codex:/home/dev/.codex
 
 volumes:
   cache-nuget:
@@ -87,3 +88,5 @@ volumes:
     name: resonite-io-cache-uv
   cache-claude:
     name: resonite-io-cache-claude
+  cache-codex:
+    name: resonite-io-cache-codex

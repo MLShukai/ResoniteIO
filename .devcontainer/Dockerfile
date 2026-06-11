@@ -90,10 +90,11 @@ RUN set -eux; \
 # キャッシュ系 (.nuget / .cache/uv) は named volume のマウント先で、Docker が初回
 # マウント時に target dir の所有権/モードを継承するため dev 所有で先行作成しておく。
 # /home/dev/.claude は container-init.sh が settings.container.json への symlink を
-# 張る前提でディレクトリだけ用意する。
+# 張る前提でディレクトリだけ用意する。/home/dev/.codex は Codex CLI の
+# 認証・設定 state を compose volume に載せるため先行作成する。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
- && mkdir -p /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude \
+ && mkdir -p /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude /home/dev/.codex \
  && chown -R dev:dev /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
  && chmod 0440 /etc/sudoers.d/dev
@@ -101,10 +102,11 @@ RUN groupadd -g ${USER_GID} dev \
 USER dev
 WORKDIR /workspace
 
-# Claude Code は公式 install.sh (native installer) で最新版を入れる。apt 版は
-# リリース追従が遅いため使わない。install.sh は $HOME/.local/bin に落とすので
-# dev user 切替後に実行する ($HOME/.local は volume マウント対象外なので image に
-# 焼き込んだバイナリがそのまま残る)。
-RUN curl -fsSL https://claude.ai/install.sh | bash
+# Claude Code / Codex CLI は公式 install.sh (native installer) で最新版を入れる。
+# apt / npm 版ではなく standalone installer に揃える。どちらも $HOME/.local/bin に
+# 落とすので dev user 切替後に実行する ($HOME/.local は volume マウント対象外なので
+# image に焼き込んだバイナリがそのまま残る)。
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+ && curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 
 CMD ["sleep", "infinity"]

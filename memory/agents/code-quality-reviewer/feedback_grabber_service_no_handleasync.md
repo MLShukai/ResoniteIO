@@ -18,7 +18,7 @@ metadata:
 - Grabber は RPC ごとに形が違う: `Grab` は point+radius を取り別 proto 型
   `GrabberGrabResult` (Grabbed フィールド付き) を返す。`Release`/`GetState` は
   `GrabberGrabState` を返す。共通化できるのは Release/GetState の 2 つだけで、
-  これは「2 回まで OK、3 回目で抽象化」閾値の内側 (CLAUDE.md 開発原則 2)。
+  これは「2 回まで OK、3 回目で抽象化」閾値の内側 (AGENTS.md 開発原則 2)。
 - Grab を無理に HandleAsync に押し込むと over-abstraction になり repo の simplicity
   方針に反する。
 

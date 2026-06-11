@@ -86,6 +86,11 @@ icon:
 decompile:
     bash scripts/decompile.sh
 
+# Claude settings から Codex rules を形式変換する。
+# skill / agent / prose guidance の移植は .agents/skills/migrate-claude に任せる。
+migrate-codex *ARGS:
+    python3 scripts/migrate_codex.py {{ARGS}}
+
 # ===== Python (python/) =================================================
 
 py-format:

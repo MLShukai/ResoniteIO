@@ -13,5 +13,5 @@ When given an implementation spec on a feature branch whose name matches the tas
 
 - On task start, run `git log --oneline -10` and `git log --all --oneline -- <key files in spec>` to see what's already there.
 - If a commit matching the spec's intent already exists, compare its diff against the spec line-by-line to find the residual gaps.
-- Per CLAUDE.md "create a NEW commit rather than amending" — add a follow-on commit for the gaps rather than rewriting the prior one.
+- Per AGENTS.md "create a NEW commit rather than amending" — add a follow-on commit for the gaps rather than rewriting the prior one.
 - Note this in the final report so the parent agent can reconcile.
