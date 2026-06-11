@@ -325,6 +325,13 @@ log:
     fi; \
     tail -F "$LOG"
 
+# リリース準備の version bump: csproj <Version> (正規ソース) / pyproject.toml /
+# uv.lock を lockstep で <version> に揃える。CHANGELOG.md の確定は手動
+# (RELEASE.md §4-1)。container 内で実行する (uv が必要)。
+#   例: just bump-version 0.4.0 / just bump-version 0.4.0-rc1
+bump-version version:
+    bash scripts/bump-version.sh {{version}}
+
 # format → gen-proto → build → test → type → check-renderer-prebuilt を直列実行。
 # コミット前のゲート。末尾の check-renderer-prebuilt は Renderer ソースを変更したのに
 # committed prebuilt の更新を忘れていないかを検出する drift guard (build/test に非依存)。

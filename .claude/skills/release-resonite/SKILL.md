@@ -29,17 +29,16 @@ ______________________________________________________________________
 git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
 ```
 
-1. `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Version>` を `X.Y.Z` に
-2. `python/pyproject.toml` の `version` を **同じ** `X.Y.Z` に
-3. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)。
+1. `just bump-version X.Y.Z` (container 内、`scripts/bump-version.sh`) — csproj `<Version>` /
+   `pyproject.toml` の `version` / `uv.lock` の 3 ファイルを lockstep で bump する
+2. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)。
    **末尾の link reference definitions も忘れず追加する** (`[X.Y.Z]: https://github.com/MLShukai/ResoniteIO/releases/tag/vX.Y.Z` と `[unreleased]: ...compare/vX.Y.Z...HEAD`)。
    これが無いと `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、§2-4 の changelog 抽出 (`## \[X.Y.Z\]` regex) が失敗して Release ノートが generic な "Release X.Y.Z" にフォールバックする。Keep a Changelog 慣習どおり全 version 分の `[version]: url` を揃える
-4. `python/` で `uv lock` を回す
-5. `just run` (`format`→`gen-proto`→`build`→`test`→`type`→`check-renderer-prebuilt`) が green になるまで回す。
+3. `just run` (`format`→`gen-proto`→`build`→`test`→`type`→`check-renderer-prebuilt`) が green になるまで回す。
    末尾の `check-renderer-prebuilt` が落ちたら Camera v2 Renderer prebuilt が stale。**Resonite のあるローカルで**
    `just renderer-prebuild` → `mod/prebuilt/` の差分を commit する (§7 の prebuilt note 参照)。CI では rebuild できないので
    ここで揃えておかないと publish.yml の build job が drift guard で fail する
-6. PR を出す (`github-ops` skill の `gh pr create` HEREDOC)。**main へのマージはユーザーが実行**
+4. PR を出す (`github-ops` skill の `gh pr create` HEREDOC)。**main へのマージはユーザーが実行**
 
 ### 1-2. release ブランチ + tag
 
@@ -110,7 +109,7 @@ ______________________________________________________________________
 ## 5. トラブルシュート
 
 - **version-guard mismatch で build job が fail**: tag の `X.Y.Z` と csproj `<Version>` と `pyproject.toml` version の
-  どれかがズレている。3 箇所を一致させ、`uv lock` の追従も確認してから tag を打ち直す
+  どれかがズレている。`just bump-version X.Y.Z` で 3 ファイル (csproj / pyproject / uv.lock) を揃え直してから tag を打ち直す
   (誤 tag は `git push origin :refs/tags/vX.Y.Z` で remote から消してから再 push)。
 - **Renderer prebuilt drift guard で build job が fail** (`Renderer prebuilt is stale`): Renderer ソース
   (`mod/src/ResoniteIO.Renderer/` ∥ `mod/src/ResoniteIO.RendererShared/` の `.cs` / `.csproj`) を変更したのに
