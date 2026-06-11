@@ -57,12 +57,12 @@ developer_instructions = '''
 
 - monorepo 構成: C# Core (`mod/src/ResoniteIO.Core/`、Resonite 非依存)、C# Mod (`mod/src/ResoniteIO/`、BepInEx adapter)、Python (`python/src/resoio/`)、proto (`proto/resonite_io/v1/`)。新規モダリティ仕様は **proto → C# Service / Bridge IF → Python Client の順** で 3 層を必ず網羅する。
 - **モダリティ単位ミラーリング**: C# / Python で同じモダリティ名でファイルを揃える。新規モダリティ追加時は [add-new-modality skill](../../.agents/skills/add-new-modality/SKILL.md) の手順 / 命名 / テスト方針を踏襲した仕様にする。
-- **設計思想**: RL `step()` 同期 / `Observation/Action` の抽象は **スコープ外**。`Camera` / `Speaker` / `Microphone` / `Locomotion` / `Manipulation` 等のモダリティを **独立した非同期ストリーム** で提供し、各ストリームに **タイムスタンプ** を付与する。Python 側ライブラリで上に同期 layer を構築する想定。
+- **設計思想**: RL `step()` 同期 / `Observation/Action` の抽象は **スコープ外**。`Camera` / `Speaker` / `Microphone` / `Locomotion` / `Grabber` 等のモダリティを **独立した非同期ストリーム** で提供し、各ストリームに **タイムスタンプ** を付与する。Python 側ライブラリで上に同期 layer を構築する想定。
 - **Core ← Mod 依存方向**: Core から FrooxEngine / BepInEx への逆参照は禁止。`I<Modality>Bridge` interface を Core で定義し、Mod 側 `FrooxEngine<Modality>Bridge` がそれを実装する形を提案する。
 - 型 / lint: C# は `Nullable=enable` + `TreatWarningsAsErrors=true` + `csharpier`。Python は pyright strict、ruff (line-length 88, double quotes)。仕様もこれらに準拠する形で記述する (例: C# `public` 修飾子、Python snake_case、型注釈必須など)。
 - **UDS path**: 本番 gRPC IPC は `$HOME/.resonite-io/`、debug は `$HOME/.resonite-io-debug/`。仕様で path を扱う場合は明記する。
 - proto は **single source of truth**。proto を変更したら `just gen-proto` で Python 生成物を再生成し commit する (C# は build-time 生成のため commit しない)。仕様にはこのフローへの影響を明記する。
-- 既存実装済みステップ (Step 0〜5、7) と未着手 Step (6 = Manipulation など) の関係は [resonite_io_plan.md](../../resonite_io_plan.md) を正規とする。
+- 既存実装済みステップ (Step 0〜5、7) と未着手 Step (6 = Grabber (旧称 Manipulation) など) の関係は [resonite_io_plan.md](../../resonite_io_plan.md) を正規とする。
 
 ## 出力形式
 
