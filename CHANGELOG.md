@@ -7,6 +7,16 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-11
+
+A **breaking** release that renames the Manipulation modality to Grabber
+(gRPC route / C# surface / Python module all change), makes Cursor
+`SetPosition` a persistent hold until `Release`, switches `Grab` to a
+ray-based targeting model, and redesigns the CLI
+(`manipulate` → `grab`, `locomotion drive` → `drive`,
+`display` split into `get` / `set`). Update the ResoniteIO mod and the
+`resoio` Python package in lockstep.
+
 ### Changed
 
 - **Breaking — the Manipulation modality is renamed to Grabber**: the gRPC
@@ -251,4 +261,5 @@ bridge that uses Resonite as an execution environment for AI agents (C# mod
 [0.1.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.0...v0.1.1
 [0.2.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...v0.2.0
 [0.3.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.2.0...v0.3.0
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.3.0...HEAD
+[0.4.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.3.0...v0.4.0
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.4.0...HEAD
