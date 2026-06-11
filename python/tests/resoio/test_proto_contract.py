@@ -44,6 +44,7 @@ from resoio._generated.resonite_io.v1 import (
     ContextMenuOpenRequest,
     ContextMenuState,
     CursorGetPositionRequest,
+    CursorReleaseRequest,
     CursorSetPositionRequest,
     CursorState,
     DashActionResult,
@@ -115,7 +116,6 @@ from resoio._generated.resonite_io.v1 import (
     SpeakerStreamRequest,
     StartWorldRequest,
     StartWorldResponse,
-    WorldPoint,
     WorldRecord,
     WorldSession,
 )
@@ -264,12 +264,14 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "y": 2,
         "window_width": 3,
         "window_height": 4,
+        "held": 5,
     },
     CursorSetPositionRequest: {
         "x": 1,
         "y": 2,
     },
     CursorGetPositionRequest: {},
+    CursorReleaseRequest: {},
     # Inventory
     InventoryEntry: {
         "name": 1,
@@ -382,14 +384,11 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "key": 2,
     },
     # Manipulation
-    WorldPoint: {
-        "x": 1,
-        "y": 2,
-        "z": 3,
-    },
+    # Field 2 was the former `WorldPoint point` (explicit world-coordinate
+    # proximity grab), removed when grab became cursor-ray based. The proto
+    # reserves number 2 and name "point"; neither may ever be reused.
     ManipulationGrabRequest: {
         "hand": 1,
-        "point": 2,
         "radius": 3,
     },
     ManipulationReleaseRequest: {

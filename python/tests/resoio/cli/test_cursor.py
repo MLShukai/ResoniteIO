@@ -4,8 +4,11 @@ The CLI register/_run path is driven against a real ``grpclib.server.Server``
 hosting an inline fake :class:`CursorBase` over a real UDS (no mocking of
 grpclib/betterproto2). Each test asserts that the chosen action invokes the
 correct RPC with the correct coordinates and that the resulting cursor
-state is printed in the documented format. Argparse/validation errors
-(missing or out-of-range coordinates) are checked for exit code / stderr.
+state is printed in the documented format
+(``x={x} y={y} window={w}x{h} held={held}``, with ``held`` rendered as the
+Python bool repr). ``release`` is a new action that drops the hold
+established by ``set`` / ``center``. Argparse/validation errors (missing or
+out-of-range coordinates) are checked for exit code / stderr.
 """
 
 from pathlib import Path
@@ -16,6 +19,7 @@ from grpclib.server import Server
 from resoio._generated.resonite_io.v1 import (
     CursorBase,
     CursorGetPositionRequest,
+    CursorReleaseRequest,
     CursorSetPositionRequest,
     CursorState as PbCursorState,
 )
@@ -23,24 +27,38 @@ from resoio.cli import _amain, _build_parser
 
 
 class _FakeCursor(CursorBase):
-    """In-process fake recording each request and returning a fixed state."""
+    """In-process fake recording each request and returning a fixed state.
+
+    Per the hold contract, ``set_position`` echoes the requested position
+    with ``held=True``, ``get_position`` reports an unheld cursor, and
+    ``release`` reports ``held=False``.
+    """
 
     def __init__(self) -> None:
         self.set_requests: list[CursorSetPositionRequest] = []
         self.get_requests: list[CursorGetPositionRequest] = []
+        self.release_requests: list[CursorReleaseRequest] = []
 
     async def set_position(self, message: CursorSetPositionRequest) -> PbCursorState:
         self.set_requests.append(message)
         return PbCursorState(
-            x=message.x, y=message.y, window_width=1920, window_height=1080
+            x=message.x, y=message.y, window_width=1920, window_height=1080, held=True
         )
 
     async def get_position(self, message: CursorGetPositionRequest) -> PbCursorState:
         self.get_requests.append(message)
-        return PbCursorState(x=0.5, y=0.25, window_width=1920, window_height=1080)
+        return PbCursorState(
+            x=0.5, y=0.25, window_width=1920, window_height=1080, held=False
+        )
+
+    async def release(self, message: CursorReleaseRequest) -> PbCursorState:
+        self.release_requests.append(message)
+        return PbCursorState(
+            x=0.5, y=0.25, window_width=1920, window_height=1080, held=False
+        )
 
 
-async def test_set_forwards_xy_and_prints_state(
+async def test_set_forwards_xy_and_prints_held_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -60,7 +78,7 @@ async def test_set_forwards_xy_and_prints_state(
         assert fake.set_requests[0].y == pytest.approx(0.25)
 
         out = capsys.readouterr().out.strip()
-        assert out == "x=0.5 y=0.25 window=1920x1080"
+        assert out == "x=0.5 y=0.25 window=1920x1080 held=True"
     finally:
         server.close()
         await server.wait_closed()
@@ -106,9 +124,37 @@ async def test_get_is_read_only(
 
         assert len(fake.get_requests) == 1
         assert fake.set_requests == []
+        assert fake.release_requests == []
 
         out = capsys.readouterr().out.strip()
-        assert out == "x=0.5 y=0.25 window=1920x1080"
+        assert out == "x=0.5 y=0.25 window=1920x1080 held=False"
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_release_issues_release_rpc_and_prints_unheld_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``release`` drops the hold without moving or reading the cursor."""
+    socket_path = tmp_path / "rio-cursor.sock"
+    fake = _FakeCursor()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["cursor", "release"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.release_requests) == 1
+        assert fake.set_requests == []
+        assert fake.get_requests == []
+
+        out = capsys.readouterr().out.strip()
+        assert out == "x=0.5 y=0.25 window=1920x1080 held=False"
     finally:
         server.close()
         await server.wait_closed()

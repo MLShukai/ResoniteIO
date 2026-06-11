@@ -1,14 +1,21 @@
 // Cursor service: Resonite の desktop カーソル (マウスポインタ) 位置を engine 経由で
-// 操作する modality。AI エージェントから「カーソルを画面上の指定位置へ動かす」
-// 「現在のカーソル位置を読む」を行う。
+// 操作する modality。AI エージェントから「カーソルを画面上の指定位置へ動かして保持する」
+// 「保持を解除する」「現在のカーソル位置を読む」を行う。
+//
+// 保持 semantics: `SetPosition` は反映を確認した後も engine 内カーソルをその位置に
+// **保持し続け**、`Release` が呼ばれるまで有効。保持は engine 内カーソルのみに作用し、
+// **OS のマウスポインタは一切奪わない** (物理マウスで他アプリを操作できる)。保持中は
+// 人間のマウス移動は engine 内カーソルに反映されず、クリックは保持位置で発火する。
+// world の focus 切替で保持は engine 側で不活性化し、`held = false` として観測される
+// (自動で張り直さない)。
 //
 // 用途の例: desktop では radial コンテキストメニューが laser のヒット点 (= ライブの
-// カーソル位置) に開くため、ContextMenu を画面中央に出したいときは事前に
-// `SetPosition(0.5, 0.5)` でカーソルを中央へ寄せる。Dash / 各種 UI のクリック前にも使える。
+// カーソル位置) に開くため、`SetPosition(0.5, 0.5)` で保持してから ContextMenu を開くと
+// 画面中央に出せる。Part B の Grab (カーソルレイ照準) の照準にも使う。
 //
-// 座標は **正規化ウィンドウ座標** ([0,1] × [0,1]、中央 = (0.5, 0.5)) で表す。(0,0) と
-// (1,1) はウィンドウの対角コーナーで、コーナーの向き (上下) は engine ネイティブの
-// window 座標に従う。engine への dispatch は同期マーシャル (`RunSynchronously` +
+// 座標は **正規化ウィンドウ座標** ([0,1] × [0,1]、中央 = (0.5, 0.5))。(0,0) と (1,1) は
+// ウィンドウの対角コーナーで、コーナーの向き (上下) は engine ネイティブの window 座標に
+// 従う。engine への dispatch は同期マーシャル (`RunSynchronously` +
 // `TaskCompletionSource`) で行い、`SetPosition` は位置が反映されるまで待ってから結果の
 // `CursorState` を返す。
 syntax = "proto3";
@@ -26,6 +33,9 @@ message CursorState {
   // ウィンドウ解像度 (ピクセル)。正規化↔ピクセル変換の基準。
   int32 window_width = 3;
   int32 window_height = 4;
+  // SetPosition による保持がこの応答時点で有効か。Release 後 / world focus 切替後 /
+  // 未保持なら false。
+  bool held = 5;
 }
 
 message CursorSetPositionRequest {
@@ -37,9 +47,17 @@ message CursorSetPositionRequest {
 
 message CursorGetPositionRequest {}
 
+// Release は引数を取らない (保持は client 単位ではなく server 全体で高々 1 つ)。
+message CursorReleaseRequest {}
+
 service Cursor {
-  // カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+  // カーソルを指定した正規化位置へ移動して **保持** し、反映後の状態 (held=true) を返す。
+  // 保持は Release まで有効。保持中の再呼び出しは保持位置を更新する。OS のマウス
+  // ポインタは奪わない。
   rpc SetPosition(CursorSetPositionRequest) returns (CursorState);
-  // 現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+  // 現在のカーソル位置・ウィンドウ解像度・保持状態を読む (副作用なし)。
   rpc GetPosition(CursorGetPositionRequest) returns (CursorState);
+  // SetPosition による保持を解除し、解除後の状態 (held=false) を返す。**冪等**: 保持して
+  // いなくても成功し現在の状態を返す。
+  rpc Release(CursorReleaseRequest) returns (CursorState);
 }

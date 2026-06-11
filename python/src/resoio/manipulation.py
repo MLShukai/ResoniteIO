@@ -8,9 +8,10 @@ objects in Resonite via a chosen hand (``primary`` / ``left`` /
 grab/release only — there is no hand-pose / fine-articulation control.
 
 * :meth:`ManipulationClient.grab` tries to grab a grabbable within a
-  radius of a world point (or the hand's current position) and returns a
+  radius of the current desktop cursor ray's hit point and returns a
   :class:`GrabResult` (whether something was newly grabbed plus the
-  resulting :class:`GrabState`).
+  resulting :class:`GrabState`). VR mode is rejected with
+  ``FAILED_PRECONDITION``.
 * :meth:`ManipulationClient.release` releases everything the hand holds.
 * :meth:`ManipulationClient.get_state` returns the current hold state.
 """
@@ -33,7 +34,6 @@ from resoio._generated.resonite_io.v1 import (
     ManipulationHand,
     ManipulationReleaseRequest,
     ManipulationStub,
-    WorldPoint,
 )
 
 __all__ = [
@@ -70,7 +70,7 @@ class GrabResult:
     """Result of a :meth:`ManipulationClient.grab` call.
 
     ``grabbed`` is ``True`` only when this call newly grabbed something;
-    an empty radius (nothing grabbable in range) is reported as
+    a ray miss or nothing grabbable in range is reported as
     ``grabbed=False`` rather than an error. ``state`` is the hold state
     after the call.
     """
@@ -144,22 +144,22 @@ class ManipulationClient(_BaseClient[ManipulationStub]):
         self,
         *,
         hand: ManipulationHandArg = "primary",
-        point: tuple[float, float, float] | None = None,
         radius: float = 0.0,
     ) -> GrabResult:
-        """Grab a grabbable in range and return the resulting state.
+        """Grab a grabbable near the cursor ray hit point.
 
-        ``point`` is the world-space grab centre; when ``None`` the
-        server uses the hand's current position. ``radius`` is the grab
-        sphere radius in metres — a value ``<= 0`` lets the server apply
-        its default. Finding nothing grabbable in range is reported as
-        ``GrabResult.grabbed == False``, not an error.
+        Grabs a grabbable within ``radius`` metres (``<= 0`` lets the
+        server apply its default, 0.1m) of the current desktop cursor
+        ray's hit point. Aim beforehand with
+        :meth:`resoio.CursorClient.set_position`. A ray miss or nothing
+        grabbable in range is reported as
+        ``GrabResult.grabbed == False``, not an error. In VR mode the
+        call fails with :class:`grpclib.exceptions.GRPCError`
+        (``FAILED_PRECONDITION``).
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
         request = ManipulationGrabRequest(hand=_hand_to_proto(hand), radius=radius)
-        if point is not None:
-            request.point = WorldPoint(x=point[0], y=point[1], z=point[2])
         return await self._dispatch(lambda stub: stub.grab(request), _result_from_proto)
 
     async def release(self, *, hand: ManipulationHandArg = "primary") -> GrabState:

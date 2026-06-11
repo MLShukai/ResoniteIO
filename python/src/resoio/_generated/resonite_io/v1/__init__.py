@@ -24,6 +24,7 @@ __all__ = (
     "ContextMenuStub",
     "CursorBase",
     "CursorGetPositionRequest",
+    "CursorReleaseRequest",
     "CursorSetPositionRequest",
     "CursorState",
     "CursorStub",
@@ -116,7 +117,6 @@ __all__ = (
     "StartWorldRequest",
     "StartWorldResponse",
     "WorldBase",
-    "WorldPoint",
     "WorldRecord",
     "WorldSession",
     "WorldStub",
@@ -689,6 +689,20 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class CursorReleaseRequest(betterproto2.Message):
+    """
+    Release は引数を取らない (保持は client 単位ではなく server 全体で高々 1 つ)。
+    """
+
+    pass
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "CursorReleaseRequest", CursorReleaseRequest
+)
+
+
+@dataclass(eq=False, repr=False)
 class CursorSetPositionRequest(betterproto2.Message):
     x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
     """
@@ -728,6 +742,12 @@ class CursorState(betterproto2.Message):
     """
 
     window_height: "int" = betterproto2.field(4, betterproto2.TYPE_INT32)
+
+    held: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    SetPosition による保持がこの応答時点で有効か。Release 後 / world focus 切替後 /
+    未保持なら false。
+    """
 
 
 default_message_pool.register_message("resonite_io.v1", "CursorState", CursorState)
@@ -1836,20 +1856,21 @@ default_message_pool.register_message(
 
 @dataclass(eq=False, repr=False)
 class ManipulationGrabRequest(betterproto2.Message):
+    """
+    Grab は常に **現在のデスクトップカーソルレイ** (engine 内カーソル位置から計算する
+    視線レイ) の hit 点を中心に radius 内の grabbable を掴む。VR モード (screen 非
+    active) は FAILED_PRECONDITION。レイが何にも当たらない場合は grabbed=false
+    (エラーではない)。
+    """
+
     hand: "ManipulationHand" = betterproto2.field(
         1, betterproto2.TYPE_ENUM, default_factory=lambda: ManipulationHand(0)
     )
 
-    point: "WorldPoint | None" = betterproto2.field(
-        2, betterproto2.TYPE_MESSAGE, optional=True
-    )
-    """
-    grab 中心点。未設定なら手の現在位置。
-    """
-
     radius: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
     """
-    grab 判定球の半径 (メートル)。<=0 はサーバ default (0.1m)。
+    カーソルレイ hit 点を中心とした grab 判定球の半径 (メートル)。<=0 はサーバ
+    default (0.1m)。
     """
 
 
@@ -1863,7 +1884,7 @@ class ManipulationGrabResult(betterproto2.Message):
     grabbed: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
     """
     この呼び出しで新たに掴めたか (`Grabber.Grab` の戻り値)。範囲に grabbable が
-    無い / 掴めない場合は false。エラーではなく結果として表現する。
+    無い / レイ miss の場合は false。エラーではなく結果として表現する。
     """
 
     state: "ManipulationGrabState | None" = betterproto2.field(
@@ -2124,23 +2145,6 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
-class WorldPoint(betterproto2.Message):
-    """
-    grab を行うワールド座標点。message 不在 (= 未設定) のときはサーバが手の現在
-    ワールド位置を使う。
-    """
-
-    x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
-
-    y: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
-
-    z: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
-
-
-default_message_pool.register_message("resonite_io.v1", "WorldPoint", WorldPoint)
-
-
-@dataclass(eq=False, repr=False)
 class WorldRecord(betterproto2.Message):
     """
     ワールドレコード 1 件の情報 (保存済みワールド / テンプレート)。
@@ -2391,7 +2395,9 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "CursorState":
         """
-        カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+        カーソルを指定した正規化位置へ移動して **保持** し、反映後の状態 (held=true) を返す。
+        保持は Release まで有効。保持中の再呼び出しは保持位置を更新する。OS のマウス
+        ポインタは奪わない。
         """
 
         return await self._unary_unary(
@@ -2412,7 +2418,7 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "CursorState":
         """
-        現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+        現在のカーソル位置・ウィンドウ解像度・保持状態を読む (副作用なし)。
         """
 
         if message is None:
@@ -2420,6 +2426,31 @@ class CursorStub(betterproto2_grpclib.ServiceStub):
 
         return await self._unary_unary(
             "/resonite_io.v1.Cursor/GetPosition",
+            message,
+            CursorState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def release(
+        self,
+        message: "CursorReleaseRequest | None" = None,
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "CursorState":
+        """
+        SetPosition による保持を解除し、解除後の状態 (held=false) を返す。**冪等**: 保持して
+        いなくても成功し現在の状態を返す。
+        """
+
+        if message is None:
+            message = CursorReleaseRequest()
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Cursor/Release",
             message,
             CursorState,
             timeout=timeout,
@@ -2883,8 +2914,9 @@ class ManipulationStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "ManipulationGrabResult":
         """
-        指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
-        掴む。掴めたかと実行後の状態を返す。
+        指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
+        grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
+        と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
         """
 
         return await self._unary_unary(
@@ -3375,14 +3407,24 @@ class ContextMenuBase(betterproto2_grpclib.ServiceBase):
 class CursorBase(betterproto2_grpclib.ServiceBase):
     async def set_position(self, message: "CursorSetPositionRequest") -> "CursorState":
         """
-        カーソルを指定した正規化位置へ移動し、反映後の状態を返す。
+        カーソルを指定した正規化位置へ移動して **保持** し、反映後の状態 (held=true) を返す。
+        保持は Release まで有効。保持中の再呼び出しは保持位置を更新する。OS のマウス
+        ポインタは奪わない。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def get_position(self, message: "CursorGetPositionRequest") -> "CursorState":
         """
-        現在のカーソル位置とウィンドウ解像度を読む (副作用なし)。
+        現在のカーソル位置・ウィンドウ解像度・保持状態を読む (副作用なし)。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def release(self, message: "CursorReleaseRequest") -> "CursorState":
+        """
+        SetPosition による保持を解除し、解除後の状態 (held=false) を返す。**冪等**: 保持して
+        いなくても成功し現在の状態を返す。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
@@ -3403,6 +3445,14 @@ class CursorBase(betterproto2_grpclib.ServiceBase):
         response = await self.get_position(request)
         await stream.send_message(response)
 
+    async def __rpc_release(
+        self, stream: "grpclib.server.Stream[CursorReleaseRequest, CursorState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.release(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Cursor/SetPosition": grpclib.const.Handler(
@@ -3415,6 +3465,12 @@ class CursorBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_get_position,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 CursorGetPositionRequest,
+                CursorState,
+            ),
+            "/resonite_io.v1.Cursor/Release": grpclib.const.Handler(
+                self.__rpc_release,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                CursorReleaseRequest,
                 CursorState,
             ),
         }
@@ -3884,8 +3940,9 @@ class ManipulationBase(betterproto2_grpclib.ServiceBase):
         self, message: "ManipulationGrabRequest"
     ) -> "ManipulationGrabResult":
         """
-        指定した手で point (未指定なら手の現在位置) を中心に radius 内の grabbable を
-        掴む。掴めたかと実行後の状態を返す。
+        指定した手で、現在のデスクトップカーソルレイの hit 点を中心に radius 内の
+        grabbable を掴む。掴めたか (レイ miss / 範囲に grabbable 無しは grabbed=false)
+        と実行後の状態を返す。VR モードは FAILED_PRECONDITION。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)

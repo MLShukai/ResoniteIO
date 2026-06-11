@@ -33,12 +33,11 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
     {
         var bridge = RequireBridge("Grab");
         var hand = ToSelector(request.Hand);
-        var point = ToPoint(request);
         var radius = request.Radius > 0f ? request.Radius : DefaultGrabRadius;
 
         var outcome = await InvokeBridge(
                 "Grab",
-                ct => bridge.GrabAsync(hand, point, radius, ct),
+                ct => bridge.GrabAsync(hand, radius, ct),
                 context.CancellationToken
             )
             .ConfigureAwait(false);
@@ -122,9 +121,6 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             _ => ManipulationHandSelector.Primary,
         };
 
-    private static ManipulationPoint? ToPoint(V1.ManipulationGrabRequest request) =>
-        request.Point is { } p ? new ManipulationPoint(p.X, p.Y, p.Z) : null;
-
     private static V1.ManipulationHand ToProtoHand(ManipulationHandSelector hand) =>
         hand switch
         {
@@ -141,12 +137,7 @@ public sealed class ManipulationService : V1.Manipulation.ManipulationBase
             IsHolding = snapshot.IsHolding,
             UnixNanos = UnixNanosClock.Now(),
         };
-
-        foreach (var name in snapshot.ObjectNames)
-        {
-            state.ObjectNames.Add(name);
-        }
-
+        state.ObjectNames.AddRange(snapshot.ObjectNames);
         return state;
     }
 }

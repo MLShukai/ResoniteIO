@@ -14,13 +14,13 @@ any subset.
 | Speaker | Resonite → Python | server-streaming | [`SpeakerClient`](../api/speaker.md) | Audio rendered by Resonite (engine output tap). |
 | Microphone | Python → Resonite | client-streaming | [`MicrophoneClient`](../api/microphone.md) | Push audio into Resonite as a virtual mic. |
 | Locomotion | Python → Resonite | client-streaming | [`LocomotionClient`](../api/locomotion.md) | Drive movement commands; reset. |
-| Manipulation | request/response | unary | [`ManipulationClient`](../api/manipulation.md) | Grab / release objects via the interaction grabber. |
+| Manipulation | request/response | unary | [`ManipulationClient`](../api/manipulation.md) | Grab at the desktop cursor ray hit point / release (desktop mode only). |
 | Display | request/response | unary | [`DisplayClient`](../api/display.md) | Read display info. |
 | World | request/response | unary | [`WorldClient`](../api/world.md) | List/open worlds, sessions, and records. |
 | ContextMenu | request/response | unary | [`ContextMenuClient`](../api/context_menu.md) | Open/select the radial context menu. |
 | Dash | request/response | unary | [`DashClient`](../api/dash.md) | Drive the ESC dash overlay (Userspace). |
 | Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse and spawn inventory items. |
-| Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/get the desktop cursor in normalized coords. |
+| Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/hold/release/get the desktop cursor in normalized coords. |
 
 Each modality also ships a minimal runnable script under
 [`python/examples/`](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples), and the

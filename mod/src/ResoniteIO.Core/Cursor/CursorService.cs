@@ -9,7 +9,8 @@ namespace ResoniteIO.Core.Cursor;
 /// <see cref="ICursorBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
 /// Core 単体テストや cursor 非対応 engine 構成も成立させる (ContextMenuService と同 pattern)。
 /// <c>SetPosition</c> の正規化座標 ([0,1]) 範囲チェックは engine 非依存なので Service 層で行い、
-/// 範囲外は <c>InvalidArgument</c>。Bridge 由来の例外翻訳は
+/// 範囲外は <c>InvalidArgument</c>。Bridge 由来の例外翻訳は <c>SetPosition</c> /
+/// <c>GetPosition</c> / <c>Release</c> の全 RPC 共通で
 /// <see cref="CursorNotReadyException"/> → <c>FailedPrecondition</c>、
 /// <see cref="ArgumentOutOfRangeException"/> → <c>InvalidArgument</c>、その他 → <c>Internal</c>。
 /// </remarks>
@@ -41,6 +42,11 @@ public sealed class CursorService : V1.Cursor.CursorBase
         V1.CursorGetPositionRequest request,
         ServerCallContext context
     ) => HandleAsync("GetPosition", (bridge, ct) => bridge.GetPositionAsync(ct), context);
+
+    public override Task<V1.CursorState> Release(
+        V1.CursorReleaseRequest request,
+        ServerCallContext context
+    ) => HandleAsync("Release", (bridge, ct) => bridge.ReleaseAsync(ct), context);
 
     /// <summary>正規化座標が [0,1] かつ NaN でないことを検証する。範囲外は <c>InvalidArgument</c>。</summary>
     private static void ValidateNormalized(float x, float y)
@@ -116,5 +122,6 @@ public sealed class CursorService : V1.Cursor.CursorBase
             Y = snapshot.Y,
             WindowWidth = snapshot.WindowWidth,
             WindowHeight = snapshot.WindowHeight,
+            Held = snapshot.Held,
         };
 }
