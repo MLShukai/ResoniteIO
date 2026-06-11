@@ -105,7 +105,7 @@ DLL override 引数として通る。
 
 **How to apply:**
 
-- README / CLAUDE.md / `just init` の手順表示で **Launch Options 必須** を
+- README / AGENTS.md / `just init` の手順表示で **Launch Options 必須** を
   人間に伝える (commit `cf05254` で実施済み)
 - Renderer 側 BepInEx ログ (`gale/Renderer/BepInEx/LogOutput.log`) が空 /
   生成されない症状を見たら 99% Launch Options を疑う

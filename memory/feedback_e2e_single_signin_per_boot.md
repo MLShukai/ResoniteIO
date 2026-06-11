@@ -11,4 +11,4 @@ metadata:
 
 **How to apply:** sign-in を要する e2e は **1 file = 1 test** に畳み、1 boot / 1 sign-in 内で全シナリオ (cloud ops + 視覚検証 + spawn 等) を回す。readiness timeout を伸ばしても 2 回目は sign-in 自体が来ないので無駄。複数 boot がどうしても要るなら test 間に十分な間隔を置くか、fixture を session-scoped 化する設計を別途検討する (現状の function-scoped clean-slate 方針とトレードオフ)。Inventory e2e (`test_folder_lifecycle_and_spawn`) は cloud ops + spawn + link + dash 視覚検証を 1 test に統合してこれを回避している。
 
-関連: \[\[feedback_claude_drives_e2e_verification\]\] / \[\[feedback_resonite_status_before_asking\]\] / \[\[feedback_record_save_await_upload_task\]\]
+関連: \[\[feedback_codex_drives_e2e_verification\]\] / \[\[feedback_resonite_status_before_asking\]\] / \[\[feedback_record_save_await_upload_task\]\]

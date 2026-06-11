@@ -8,7 +8,7 @@ metadata:
 `ResoniteIO` は **`v*` tag の push で Thunderstore mod (`mlshukai-ResoniteIO`) と PyPI パッケージ
 (`resoio`) を同時公開する** tag-driven リリースパイプラインを持つ (`.github/workflows/publish.yml`、
 4 ジョブ直列: build → publish-thunderstore → publish-pypi → github-release)。手順の正規 runbook は
-[`RELEASE.md`](../RELEASE.md)、タスク発火型 skill は `.claude/skills/release-resonite/`。
+[`RELEASE.md`](../RELEASE.md)、タスク発火型 skill は `.agents/skills/release-resonite/`。
 
 リリースを扱うときに前提とすべき非自明な事実:
 

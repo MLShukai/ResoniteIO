@@ -11,4 +11,4 @@ metadata:
 
 **実例:** record-cli の muxed テスト 6 件のうち `test_record_both_flags_equivalent_to_no_flag` は `muxed` という単語を関数名に含まないので、`pytest -k muxed` で 5/6 しか collect されなかった (リポジトリ a6b9d76 時点)。
 
-**How to apply:** レビュー時に「この機能の test を `-k <feature>` で全部 stress-run できるか?」を 1 回確認する。漏れがあればリネーム提案を Should / Nice に出す。テスト書く側にも「機能 keyword を関数名先頭付近に必ず含める」を CLAUDE.md か skill に上げる候補。
+**How to apply:** レビュー時に「この機能の test を `-k <feature>` で全部 stress-run できるか?」を 1 回確認する。漏れがあればリネーム提案を Should / Nice に出す。テスト書く側にも「機能 keyword を関数名先頭付近に必ず含める」を AGENTS.md か skill に上げる候補。

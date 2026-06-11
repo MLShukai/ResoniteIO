@@ -8,7 +8,7 @@ metadata:
 公式 wiki [modding.resonite.net](https://modding.resonite.net/) を 2026-05-13 時点で巡回して抽出。
 **多くのページが "work in progress" であり**、実装詳細は BepInEx 本家 / lethal.wiki / `decompiled/` を読みに行くのが速い。本メモはエントリポイントと既知の挙動の固定知識として使う。
 
-このリポジトリの規約（[CLAUDE.md](../../CLAUDE.md)）はすでに公式 wiki の手順と整合済み（`bep6resonite` テンプレート使用、`tcli` local tool、`BepInEx/plugins/ResoniteIO/` への配置、`OnEngineReady` 購読、`PluginMetadata.*` 自動生成）。本メモは wiki 側の "なぜ" と "どこに何があるか" を補完するために置いている。
+このリポジトリの規約（[AGENTS.md](../AGENTS.md)）はすでに公式 wiki の手順と整合済み（`bep6resonite` テンプレート使用、`tcli` local tool、`BepInEx/plugins/ResoniteIO/` への配置、`OnEngineReady` 購読、`PluginMetadata.*` 自動生成）。本メモは wiki 側の "なぜ" と "どこに何があるか" を補完するために置いている。
 
 ## エコシステム全体像
 
@@ -17,12 +17,12 @@ metadata:
 - ソース: [github.com/ResoniteModding](https://github.com/ResoniteModding) (BepisLoader / docs / Templates 等)
 - Discord: [discord.gg/vCDJK9xyvm](https://discord.gg/vCDJK9xyvm)
 - ライセンス上の立場: 公式 wiki は "an independent project and are not affiliated with Resonite or Yellow Dog Man Studios S.r.o." と明記。Resonite 本体に対しては非公式コミュニティ。
-- mod 利用そのものは慣習的に黙認〜歓迎（\[\[../../resonite_io_plan\]\] §7 と整合）。
+- mod 利用そのものは慣習的に黙認〜歓迎（\[\[../resonite_io_plan\]\] §7 と整合）。
 
 ## ロード機構
 
 - Windows: **HookFxr** で .NET ホストにフック。手動セットアップ時は Resonite ディレクトリ直下の `hookfxr.ini` で `enable=false` → `enable=true` に書き換える。
-- Linux: `LinuxBootstrap.sh` を BepisLoader 提供版で差し替え、`BepisLoader.dll` を読み込ませる。Steam Linux ネイティブ FrooxEngine 構成（Proton 経由 Renderite）は本リポジトリの想定環境（[CLAUDE.md](../../CLAUDE.md)「Resonite クライアント」節）。
+- Linux: `LinuxBootstrap.sh` を BepisLoader 提供版で差し替え、`BepisLoader.dll` を読み込ませる。Steam Linux ネイティブ FrooxEngine 構成（Proton 経由 Renderite）は本リポジトリの想定環境（[AGENTS.md](../AGENTS.md)「Resonite クライアント」節）。
 - ロード後、BepisLoader が以下のディレクトリを規約として持つ:
 
 ```text
@@ -79,7 +79,7 @@ dotnet new bep6resonite \
 2. Steam インストール検出
 3. NuGet パッケージ参照（dummy 解決）
 
-→ 本リポジトリは `.env` 経由で `ResonitePath` を強制している（CLAUDE.md「実行環境の注意点」）。
+→ 本リポジトリは `.env` 経由で `ResonitePath` を強制している（AGENTS.md「実行環境の注意点」）。
 
 ## Plugin.cs の最小骨格
 
@@ -116,7 +116,7 @@ public class Plugin : BasePlugin
 - **`ResoniteHooks.OnEngineReady` が最重要フック**。`Engine.Current` を含む FrooxEngine API はここから先でないと安全に触れない。プラグインの初期化処理の大部分はここに置く。
 - `BepInDependency` で `BepInExResoniteShim`（`ResoniteHooks` の提供元）への依存を明示する。
 
-\[\[../../resonite_io_plan\]\] Step 2 以降で UDS gRPC server を立てる際も、bind は `OnEngineReady` 内で行うのが正解。FrooxEngine の更新スレッドをブロックしない別スレッドで server を回すのは [CLAUDE.md](../../CLAUDE.md) の「C# 側コーディング規約」と整合。
+\[\[../resonite_io_plan\]\] Step 2 以降で UDS gRPC server を立てる際も、bind は `OnEngineReady` 内で行うのが正解。FrooxEngine の更新スレッドをブロックしない別スレッドで server を回すのは [AGENTS.md](../AGENTS.md) の「C# 側コーディング規約」と整合。
 
 ## ロギング
 
@@ -154,7 +154,7 @@ public class Plugin : BasePlugin
 ## Hot Reload
 
 - wiki 本文は WIP。現状、BepisLoader 単体で in-process hot reload が公式提供されているか不明。
-- 実用フローは [CLAUDE.md](../../CLAUDE.md) の通り「`just deploy-mod` → Resonite 再起動 → `just log` で確認」。
+- 実用フローは [AGENTS.md](../AGENTS.md) の通り「`just deploy-mod` → Resonite 再起動 → `just log` で確認」。
 
 ## Localization (BepisLocaleLoader)
 
