@@ -102,7 +102,7 @@ nav:
       - Speaker: api/speaker.md
       - Microphone: api/microphone.md
       - Locomotion: api/locomotion.md
-      - Manipulation: api/manipulation.md
+      - Grabber: api/grabber.md
       - Display: api/display.md
       - World: api/world.md
       - Context Menu: api/context_menu.md

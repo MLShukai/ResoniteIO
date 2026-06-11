@@ -43,7 +43,7 @@ ______________________________________________________________________
 CLAUDE.md の規約:
 
 - **`main` に直接 commit しない**。作業ブランチは `main` から `<種別>/<日付>/<内容>` で分岐 (`種別` = `feature` / `fix` / `refactor` / `docs` / `chore`)
-- 例: `feature/20260521/manipulation-skeleton` / `fix/20260521/uds-permission`
+- 例: `feature/20260521/grabber-skeleton` / `fix/20260521/uds-permission`
 
 ```bash
 git switch -c feature/$(date +%Y%m%d)/<short-slug> main

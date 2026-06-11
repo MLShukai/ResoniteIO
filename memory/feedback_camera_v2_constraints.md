@@ -53,7 +53,7 @@ binary) と `IpcSocketPaths` 定数を bit-exact に揃える。
 
 **How to apply:** Camera v2 周辺をいじるときは「engine ↔ renderer ↔ Python
 の 3 段すべてで同じ概念モデルが成立しているか」を本図で照合する。新規
-モダリティ (Audio / Locomotion / Manipulation) で renderer process 側に
+モダリティ (Audio / Locomotion / Grabber) で renderer process 側に
 触れる必要が出たら同じ pipeline (RendererShared + InterprocessLib +
 BepInEx 5 plugin) を再利用する。
 

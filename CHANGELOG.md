@@ -9,6 +9,15 @@ GitHub Release body. The format follows
 
 ### Changed
 
+- **Breaking — the Manipulation modality is renamed to Grabber**: the gRPC
+  route changed from `/resonite_io.v1.Manipulation/*` to
+  `/resonite_io.v1.Grabber/*` (`manipulation.proto` → `grabber.proto`,
+  `Manipulation*` messages → `Grabber*`), the C# surface is now
+  `GrabberService` / `IGrabberBridge` / `FrooxEngineGrabberBridge`, and the
+  Python module and client are `resoio.grabber` / `GrabberClient` (the
+  `GrabResult` / `GrabState` dataclasses keep their names). An old mod and a
+  new client (or vice versa) cannot talk over the renamed route — update the
+  ResoniteIO mod and the `resoio` Python package in lockstep
 - **Breaking — Cursor `SetPosition` now holds the cursor until `Release`**:
   `SetPosition` was a one-shot warp (the engine cursor reverted to the OS
   pointer on the next frame, especially under Wine/Proton). It now registers a

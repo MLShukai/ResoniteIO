@@ -12,7 +12,7 @@ one line of the shape:
 
 where `<direction>` is one of `Resonite -> Python` (server-streaming
 sources: Camera, Speaker), `Python -> Resonite` (client-streaming or
-unary control: Microphone, Locomotion, Manipulation, ContextMenu, Cursor,
+unary control: Microphone, Locomotion, Grabber, ContextMenu, Cursor,
 Dash, Inventory, World), or omitted-but-implied for the bidirectional
 Connection modality.
 
