@@ -13,6 +13,7 @@ import argparse
 import json
 import shlex
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
@@ -193,7 +194,7 @@ def group_prefixes(
     return rules
 
 
-def collect_sources(source_groups: object) -> tuple[str, ...]:
+def collect_sources(source_groups: Iterable[Iterable[str]]) -> tuple[str, ...]:
     sources: set[str] = set()
     for source_group in source_groups:
         sources.update(source_group)
