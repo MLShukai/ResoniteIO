@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using FrooxEngine;
@@ -41,12 +39,6 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
 {
     private const int _defaultRecordCount = 60;
 
-    /// <summary>
-    /// thumbnail バイト取得用の共有 <see cref="HttpClient"/>。per-call で生成すると socket
-    /// 枯渇を招くため、プロセス全体で 1 つを使い回す。
-    /// </summary>
-    private static readonly HttpClient _httpClient = new();
-
     private readonly Engine _engine;
     private readonly SkyFrostInterface _cloud;
     private readonly FrooxWorldManager _worldManager;
@@ -55,6 +47,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     private readonly ContactManager _contacts;
     private readonly RecordManager _recordManager;
     private readonly ILogSink _log;
+    private readonly ThumbnailFetcher _thumbnails;
 
     public FrooxEngineWorldBridge(Engine engine, ILogSink log)
     {
@@ -69,6 +62,7 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
         _contacts = engine.Cloud.Contacts;
         _recordManager = engine.RecordManager;
         _log = log;
+        _thumbnails = new ThumbnailFetcher(engine, log);
     }
 
     /// <inheritdoc/>
@@ -479,101 +473,16 @@ internal sealed class FrooxEngineWorldBridge : IWorldBridge
     /// <inheritdoc/>
     public async Task<ThumbnailBytesSnapshot> FetchThumbnailAsync(string uri, CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
-
-        if (string.IsNullOrEmpty(uri))
-        {
-            throw new WorldNotFoundException("Thumbnail uri is empty.");
-        }
-
-        var httpUri = await ResolveThumbnailUriAsync(uri, ct).ConfigureAwait(false);
-
         try
         {
-            using var response = await _httpClient.GetAsync(httpUri, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-            var contentType =
-                response.Content.Headers.ContentType?.MediaType ?? InferContentType(httpUri);
-
-            return new ThumbnailBytesSnapshot(bytes, contentType);
+            var (data, contentType) = await _thumbnails.FetchAsync(uri, ct).ConfigureAwait(false);
+            return new ThumbnailBytesSnapshot(data, contentType);
         }
-        catch (OperationCanceledException)
+        catch (ThumbnailUnavailableException ex)
         {
-            throw;
-        }
-        catch (HttpRequestException ex)
-        {
-            _log.LogWarning(
-                $"WorldBridge: thumbnail download failed for '{httpUri}': {ex.Message}"
-            );
-            throw new WorldNotFoundException($"Thumbnail '{uri}' could not be downloaded.", ex);
+            throw new WorldNotFoundException(ex.Message, ex);
         }
     }
-
-    /// <summary>
-    /// thumbnail uri を fetch 可能な http(s) URL に解決する。<c>resdb</c> scheme は engine の
-    /// asset interface (<c>Engine.Cloud.Assets.DBToHttp</c>) で CDN URL に変換する。既に
-    /// http/https ならそのまま使う。解決できなければ <see cref="WorldNotFoundException"/>。
-    /// </summary>
-    /// <remarks>
-    /// private / 認証付きアセットには <c>Engine.AssetManager.GatherAssetFile</c> 経由の
-    /// fallback もあり得るが、public CDN で足りるため現時点では実装しない。
-    /// </remarks>
-    private async Task<Uri> ResolveThumbnailUriAsync(string uri, CancellationToken ct)
-    {
-        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
-        {
-            _log.LogWarning($"WorldBridge: thumbnail uri '{uri}' is not a valid absolute URI.");
-            throw new WorldNotFoundException($"Thumbnail uri '{uri}' is not a valid absolute URI.");
-        }
-
-        if (
-            parsed.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
-            || parsed.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return parsed;
-        }
-
-        if (parsed.Scheme.Equals("resdb", StringComparison.OrdinalIgnoreCase))
-        {
-            // DBToHttp は cache 済み endpoint への純粋な文字列変換だが、engine cloud state を
-            // 参照するため既存の dispatch helper に合わせて engine thread 上で解決する。
-            var resolved = await RunOnEngineAsync(
-                    () => _engine.Cloud.Assets.DBToHttp(parsed, DB_Endpoint.Default),
-                    ct
-                )
-                .ConfigureAwait(false);
-            if (resolved is null)
-            {
-                _log.LogWarning($"WorldBridge: resdb uri '{uri}' resolved to no http URL.");
-                throw new WorldNotFoundException(
-                    $"Thumbnail uri '{uri}' could not be resolved to a fetchable URL."
-                );
-            }
-            return resolved;
-        }
-
-        _log.LogWarning($"WorldBridge: unsupported thumbnail uri scheme '{parsed.Scheme}'.");
-        throw new WorldNotFoundException(
-            $"Thumbnail uri '{uri}' has unsupported scheme '{parsed.Scheme}'."
-        );
-    }
-
-    /// <summary>
-    /// Content-Type ヘッダが無い場合に uri 拡張子から MIME を推測する。未知の拡張子は
-    /// 空文字を返す (Client 側で扱う)。
-    /// </summary>
-    private static string InferContentType(Uri uri) =>
-        Path.GetExtension(uri.AbsolutePath).ToLowerInvariant() switch
-        {
-            ".webp" => "image/webp",
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            _ => "",
-        };
 
     /// <summary>
     /// session を filter 条件に照合する。Friends は host が相互フォロー contact、または

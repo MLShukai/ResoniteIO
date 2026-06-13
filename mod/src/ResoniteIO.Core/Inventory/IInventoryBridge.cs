@@ -43,6 +43,13 @@ public sealed record InventorySpawnSnapshot(
     string SpawnedSlotName
 );
 
+/// <summary>
+/// アイテムのサムネイル画像バイト + content-type の snapshot
+/// (proto <c>InventoryThumbnailResponse</c> 由来)。
+/// </summary>
+/// <remarks><paramref name="ContentType"/> は判定不能なら空文字。</remarks>
+public sealed record InventoryThumbnailSnapshot(byte[] Data, string ContentType);
+
 /// <summary>Mod 側 (FrooxEngine) が実装し DI で注入する個人インベントリ操作の抽象。</summary>
 /// <remarks>
 /// 全メソッドは解決済みの絶対パス (例 <c>/Inventory/Folder</c>) を受け取る (cwd は持たない)。
@@ -92,6 +99,16 @@ public interface IInventoryBridge
     /// <exception cref="InventoryNotReadyException">未ログイン / world 未準備 / spawn 不可。</exception>
     /// <exception cref="InventoryNotFoundException"><paramref name="path"/> が存在しない。</exception>
     Task<InventorySpawnSnapshot> SpawnAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// <paramref name="path"/> のアイテムのサムネイル (<c>Record.ThumbnailURI</c>) を解決し、
+    /// 画像のバイト列と content-type を返す (resdb 解決と HTTP 取得は Mod 実装が行う)。
+    /// </summary>
+    /// <exception cref="InventoryNotReadyException">未ログイン / engine 未準備。</exception>
+    /// <exception cref="InventoryNotFoundException">
+    /// <paramref name="path"/> が存在しない / サムネイルが無い / 画像が取得できない。
+    /// </exception>
+    Task<InventoryThumbnailSnapshot> FetchThumbnailAsync(string path, CancellationToken ct);
 }
 
 /// <summary>

@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using Grpc.Core;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Rpc;
@@ -120,6 +121,32 @@ public sealed class InventoryService : V1.Inventory.InventoryBase
             )
             .ConfigureAwait(false);
         return ToProto(snapshot);
+    }
+
+    public override async Task<V1.InventoryThumbnailResponse> FetchThumbnail(
+        V1.InventoryThumbnailRequest request,
+        ServerCallContext context
+    )
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            throw new RpcException(
+                new Status(StatusCode.InvalidArgument, "path must not be empty.")
+            );
+        }
+
+        var bridge = RequireBridge("FetchThumbnail");
+        var snapshot = await InvokeBridge(
+                "FetchThumbnail",
+                ct => bridge.FetchThumbnailAsync(request.Path, ct),
+                context.CancellationToken
+            )
+            .ConfigureAwait(false);
+        return new V1.InventoryThumbnailResponse
+        {
+            Data = ByteString.CopyFrom(snapshot.Data),
+            ContentType = snapshot.ContentType,
+        };
     }
 
     private IInventoryBridge RequireBridge(string rpc) =>

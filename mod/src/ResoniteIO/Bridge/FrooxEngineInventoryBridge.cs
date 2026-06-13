@@ -38,6 +38,7 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
 
     private readonly Engine _engine;
     private readonly ILogSink _log;
+    private readonly ThumbnailFetcher _thumbnails;
 
     public FrooxEngineInventoryBridge(Engine engine, ILogSink log)
     {
@@ -45,6 +46,7 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
         ArgumentNullException.ThrowIfNull(log);
         _engine = engine;
         _log = log;
+        _thumbnails = new ThumbnailFetcher(engine, log);
     }
 
     /// <inheritdoc/>
@@ -401,6 +403,38 @@ internal sealed class FrooxEngineInventoryBridge : IInventoryBridge
             var result = await tcs.Task.ConfigureAwait(false);
             _log.LogInfo($"[ResoniteIO] Inventory.Spawn: {path} -> slot {result.SpawnedSlotId}");
             return result;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<InventoryThumbnailSnapshot> FetchThumbnailAsync(
+        string path,
+        CancellationToken ct
+    )
+    {
+        ct.ThrowIfCancellationRequested();
+        // 途中のリンクを辿って実体 record を得る (グループ所有の共有アイテムでも取得できる)。
+        var (_, _, record) = await ResolveLocationAsync(path, ct).ConfigureAwait(false);
+
+        var thumbnailUri = record.ThumbnailURI;
+        if (string.IsNullOrEmpty(thumbnailUri))
+        {
+            throw new InventoryNotFoundException($"{path} has no thumbnail.");
+        }
+
+        try
+        {
+            var (data, contentType) = await _thumbnails
+                .FetchAsync(thumbnailUri, ct)
+                .ConfigureAwait(false);
+            return new InventoryThumbnailSnapshot(data, contentType);
+        }
+        catch (ThumbnailUnavailableException ex)
+        {
+            throw new InventoryNotFoundException(
+                $"Thumbnail for {path} could not be fetched: {ex.Message}",
+                ex
+            );
         }
     }
 
