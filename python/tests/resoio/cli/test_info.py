@@ -3,9 +3,10 @@
 Per testing-strategy: a real ``grpclib.server.Server`` with a self-owned
 ``InfoBase`` fake; the command is driven through the real parser + ``_amain``
 entry point. The command prints one ``key=value`` line per ``ServerInfo``
-field (``mod_version`` / ``engine_version`` / ``platform`` / ``is_wine``,
-in that order); against a server without the Info service (a mod predating
-this modality) it reports guidance on stderr and exits 1.
+field (``mod_version`` / ``engine_version`` / ``platform`` / ``is_wine`` /
+``resonite_pid`` / ``renderer_pid``, in that order); against a server without
+the Info service (a mod predating this modality) it reports guidance on stderr
+and exits 1.
 """
 
 from pathlib import Path
@@ -29,6 +30,8 @@ class _FakeInfo(InfoBase):
             engine_version="2025.1.1.1",
             platform=PbServerPlatform.LINUX,
             is_wine=True,
+            resonite_pid=4242,
+            renderer_pid=4343,
         )
 
 
@@ -39,7 +42,7 @@ class _PreInfoMod(InfoBase):
     C# Kestrel server does not share)."""
 
 
-async def test_info_prints_four_key_value_lines(
+async def test_info_prints_six_key_value_lines(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -53,13 +56,15 @@ async def test_info_prints_four_key_value_lines(
         rc = await _amain(args)
         assert rc == 0
         lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
-        assert len(lines) == 4
+        assert len(lines) == 6
         assert lines[0] == "mod_version=9.9.9-mod"
         assert lines[1] == "engine_version=2025.1.1.1"
         # The platform / bool rendering case is not part of the contract;
         # the value itself (linux / true) is.
         assert lines[2].lower() == "platform=linux"
         assert lines[3].lower() == "is_wine=true"
+        assert lines[4] == "resonite_pid=4242"
+        assert lines[5] == "renderer_pid=4343"
     finally:
         server.close()
         await server.wait_closed()
