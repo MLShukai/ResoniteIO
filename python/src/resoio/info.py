@@ -58,12 +58,21 @@ class ServerInfo:
         engine_version: Engine version string (``Engine.VersionString``).
         platform: OS platform the Resonite client runs on.
         is_wine: True when the client runs under Wine/Proton.
+        resonite_pid: Host PID of the engine process (``Resonite.exe``). The
+            engine runs natively on Linux, so this is the real host kernel PID,
+            usable with ``pgrep``/``os.kill``. ``0`` if unavailable.
+        renderer_pid: Host PID of the renderer process
+            (``Renderite.Renderer.exe``), or ``0`` when headless / no renderer.
+            This is the engine's direct child; under Proton it may be a
+            launcher/wrapper PID rather than the literal renderer.
     """
 
     mod_version: str
     engine_version: str
     platform: ServerPlatform
     is_wine: bool
+    resonite_pid: int
+    renderer_pid: int
 
 
 _PLATFORM_FROM_PROTO: dict[_PbServerPlatform, ServerPlatform] = {
@@ -81,6 +90,8 @@ def _info_from_proto(pb: _PbServerInfo) -> ServerInfo:
         engine_version=pb.engine_version,
         platform=_PLATFORM_FROM_PROTO.get(pb.platform, ServerPlatform.UNSPECIFIED),
         is_wine=pb.is_wine,
+        resonite_pid=pb.resonite_pid,
+        renderer_pid=pb.renderer_pid,
     )
 
 

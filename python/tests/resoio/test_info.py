@@ -34,6 +34,8 @@ _SAMPLE_PB_INFO = PbServerInfo(
     engine_version="2025.1.1.1",
     platform=PbServerPlatform.LINUX,
     is_wine=True,
+    resonite_pid=4242,
+    renderer_pid=4343,
 )
 
 
@@ -78,6 +80,8 @@ class TestGetServerInfo:
         assert info.engine_version == "2025.1.1.1"
         assert info.platform is ServerPlatform.LINUX
         assert info.is_wine is True
+        assert info.resonite_pid == 4242
+        assert info.renderer_pid == 4343
         assert len(fake.requests) == 1
 
     async def test_explicit_socket_path_connects_without_env_resolution(
