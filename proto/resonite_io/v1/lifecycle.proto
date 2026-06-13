@@ -1,0 +1,31 @@
+// Lifecycle service: graceful engine-shutdown control plane.
+//
+// A single unary RPC `Shutdown` asks the running engine to quit gracefully
+// (FrooxEngine `Engine.RequestShutdown()`), the same path the in-app Quit
+// button takes. The server schedules the shutdown on the engine thread and
+// returns promptly so the caller observes an ACK before the process tears
+// down; the actual exit happens asynchronously. Forceful termination (OS
+// signals) is a client-side concern (`resoio terminate`) and is intentionally
+// out of scope for this service.
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// ShutdownRequest takes no arguments (requests a graceful engine shutdown).
+message ShutdownRequest {}
+
+// ShutdownResponse acknowledges that the shutdown was scheduled. `accepted` is
+// false only when the engine had already begun shutting down (the request is
+// idempotent: a second call is a safe no-op).
+message ShutdownResponse {
+  bool accepted = 1;
+}
+
+// Lifecycle exposes graceful engine-shutdown control. The RPC returns an ACK
+// immediately and the engine exits asynchronously on its update thread.
+// Forceful OS-signal termination is handled client-side and is out of scope.
+service Lifecycle {
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
