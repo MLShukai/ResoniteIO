@@ -21,8 +21,9 @@ side.
 
 - **Camera / Speaker** — Resonite → Python (server-streaming): vision and audio out.
 - **Microphone / Locomotion** — Python → Resonite (client-streaming): voice in, movement.
-- **Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor** — request/response
-  (unary): grabbing objects, reading the display, navigating worlds, driving the UI.
+- **Connection / Info / Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor /
+  Lifecycle** — request/response (unary): liveness and server info, grabbing objects, reading
+  the display, navigating worlds, driving the UI, and graceful shutdown.
 
 ## Two-layer C# design
 
