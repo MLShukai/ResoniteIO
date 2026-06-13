@@ -1,5 +1,7 @@
 # ResoniteIO
 
+![ResoniteIO — Resonite ⇄ Python](assets/banner.png)
+
 **ResoniteIO** is a bidirectional IPC bridge that turns [Resonite](https://resonite.com/)
 into a runtime environment for AI agents. A C# mod running inside the Resonite client
 (`ResoniteIO`, loaded via BepisLoader) and a Python package (`resoio`) talk to each other
