@@ -30,6 +30,7 @@ from resoio.inventory import (
     InventoryListing,
     InventoryMutationResult,
     InventorySpawnResult,
+    InventoryThumbnail,
 )
 from resoio.lifecycle import LifecycleClient, terminate
 from resoio.locomotion import (
@@ -89,6 +90,7 @@ __all__ = [
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "InventoryThumbnail",
     "LifecycleClient",
     "ListRecordsResponse",
     "ListSessionsResponse",

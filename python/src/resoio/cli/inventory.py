@@ -39,13 +39,14 @@ _COMMANDS = (
     "mv",
     "rm",
     "spawn",
+    "thumb",
     "help",
     "exit",
     "quit",
 )
 
 # Commands whose positional operands are inventory paths (used by completion).
-_PATH_COMMANDS = frozenset({"ls", "cd", "mkdir", "cp", "mv", "rm", "spawn"})
+_PATH_COMMANDS = frozenset({"ls", "cd", "mkdir", "cp", "mv", "rm", "spawn", "thumb"})
 # Commands that accept the recursive flag.
 _RECURSIVE_COMMANDS = frozenset({"cp", "rm"})
 
@@ -59,6 +60,7 @@ commands:
   mv <src> <dst>       move/rename (folders move recursively)
   rm [-r] <path>       remove (use -r for folders)
   spawn <path>         spawn an item into the current world
+  thumb <path> [-o f]  save an item's thumbnail image (default ./<name>.<ext>)
   help                 show this help
   exit | quit          leave the shell"""
 
@@ -84,6 +86,19 @@ def _split_flags(rest: list[str]) -> tuple[bool, list[str]]:
         else:
             positionals.append(tok)
     return recursive, positionals
+
+
+_THUMBNAIL_EXT_BY_CONTENT_TYPE = {
+    "image/webp": ".webp",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+}
+
+
+def _thumbnail_extension(content_type: str) -> str:
+    """Pick a file extension for a thumbnail's content type (``.bin`` if
+    unknown)."""
+    return _THUMBNAIL_EXT_BY_CONTENT_TYPE.get(content_type, ".bin")
 
 
 class InventoryShell:
@@ -168,6 +183,8 @@ class InventoryShell:
             await self._client.remove(self.resolve(pos[0]), recursive=recursive)
         elif cmd == "spawn":
             await self._spawn(rest)
+        elif cmd == "thumb":
+            await self._thumb(rest)
 
     async def _ls(self, rest: list[str]) -> None:
         target = self.resolve(rest[0]) if rest else self.cwd
@@ -190,6 +207,33 @@ class InventoryShell:
             f"spawned {result.spawned_slot_name} "
             f"({result.spawned_slot_id}) from {result.source_path}"
         )
+
+    async def _thumb(self, rest: list[str]) -> None:
+        output: str | None = None
+        positionals: list[str] = []
+        i = 0
+        while i < len(rest):
+            tok = rest[i]
+            if tok in ("-o", "--output"):
+                if i + 1 >= len(rest):
+                    self._eprint("thumb: -o/--output requires a file path")
+                    return
+                output = rest[i + 1]
+                i += 2
+                continue
+            positionals.append(tok)
+            i += 1
+
+        target = self.resolve(positionals[0])  # IndexError -> "thumb: missing operand"
+        thumb = await self._client.fetch_thumbnail(target)
+        dest = (
+            output
+            if output is not None
+            else posixpath.basename(target) + _thumbnail_extension(thumb.content_type)
+        )
+        with open(dest, "wb") as fp:
+            fp.write(thumb.data)
+        self._print(f"saved {len(thumb.data)} bytes ({thumb.content_type}) -> {dest}")
 
     async def complete(self, text_before_cursor: str) -> list[tuple[str, int]]:
         """Return ``(completion_text, start_position)`` pairs for tab

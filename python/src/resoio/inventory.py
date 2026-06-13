@@ -35,6 +35,8 @@ from resoio._generated.resonite_io.v1 import (
     InventorySpawnRequest,
     InventorySpawnResult as _PbInventorySpawnResult,
     InventoryStub,
+    InventoryThumbnailRequest,
+    InventoryThumbnailResponse as _PbInventoryThumbnailResponse,
 )
 
 __all__ = [
@@ -44,6 +46,7 @@ __all__ = [
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "InventoryThumbnail",
 ]
 
 _logger = logging.getLogger("resoio.inventory")
@@ -105,6 +108,21 @@ class InventorySpawnResult:
     spawned_slot_name: str
 
 
+@dataclass(frozen=True, slots=True)
+class InventoryThumbnail:
+    """Thumbnail image of an inventory item.
+
+    Attributes:
+        data: Raw image bytes as stored on the Resonite CDN (typically
+            WebP); returned verbatim, not re-encoded.
+        content_type: MIME type of ``data`` (e.g. ``"image/webp"``), empty
+            if the server could not determine it.
+    """
+
+    data: bytes
+    content_type: str
+
+
 _KIND_FROM_PROTO: dict[_PbInventoryEntryKind, InventoryEntryKind] = {
     _PbInventoryEntryKind.DIRECTORY: InventoryEntryKind.DIRECTORY,
     _PbInventoryEntryKind.OBJECT: InventoryEntryKind.OBJECT,
@@ -142,6 +160,10 @@ def _spawn_from_proto(pb: _PbInventorySpawnResult) -> InventorySpawnResult:
         spawned_slot_id=pb.spawned_slot_id,
         spawned_slot_name=pb.spawned_slot_name,
     )
+
+
+def _thumbnail_from_proto(pb: _PbInventoryThumbnailResponse) -> InventoryThumbnail:
+    return InventoryThumbnail(data=pb.data, content_type=pb.content_type)
 
 
 class InventoryClient(_BaseClient[InventoryStub]):
@@ -205,3 +227,15 @@ class InventoryClient(_BaseClient[InventoryStub]):
         """Spawn the item at ``path`` into the current world."""
         stub = self._require_stub()
         return _spawn_from_proto(await stub.spawn(InventorySpawnRequest(path=path)))
+
+    async def fetch_thumbnail(self, path: str) -> InventoryThumbnail:
+        """Fetch the thumbnail image of the item at ``path``.
+
+        Resolves the item's ``Record.ThumbnailURI`` server-side and returns
+        the raw image bytes plus their content type. Raises ``NotFound`` if
+        the item does not exist or has no thumbnail.
+        """
+        stub = self._require_stub()
+        return _thumbnail_from_proto(
+            await stub.fetch_thumbnail(InventoryThumbnailRequest(path=path))
+        )

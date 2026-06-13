@@ -8,6 +8,7 @@ terminal layer (which is a thin adapter over the shell).
 import io
 from pathlib import Path
 
+import pytest
 from grpclib.const import Status
 from grpclib.exceptions import GRPCError
 from grpclib.server import Server
@@ -25,6 +26,8 @@ from resoio._generated.resonite_io.v1 import (
     InventoryRemoveRequest,
     InventorySpawnRequest,
     InventorySpawnResult as PbInventorySpawnResult,
+    InventoryThumbnailRequest,
+    InventoryThumbnailResponse as PbInventoryThumbnailResponse,
 )
 from resoio.cli.inventory import InventoryShell
 from resoio.inventory import InventoryClient
@@ -49,6 +52,9 @@ class _FakeInventory(InventoryBase):
             "/Inventory/MyAvatar": "object",
             "/Inventory/Avatars/Robot": "object",
         }
+        self.thumb_requests: list[str] = []
+        self.thumb_data: bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 fake-bytes"
+        self.thumb_content_type: str = "image/webp"
 
     async def list(self, message: InventoryListRequest) -> PbInventoryListing:
         path = message.path
@@ -109,6 +115,14 @@ class _FakeInventory(InventoryBase):
             source_path=message.path,
             spawned_slot_id="ID-x",
             spawned_slot_name=_name(message.path),
+        )
+
+    async def fetch_thumbnail(
+        self, message: InventoryThumbnailRequest
+    ) -> PbInventoryThumbnailResponse:
+        self.thumb_requests.append(message.path)
+        return PbInventoryThumbnailResponse(
+            data=self.thumb_data, content_type=self.thumb_content_type
         )
 
 
@@ -199,6 +213,57 @@ async def test_spawn_prints_slot_info(tmp_path: Path):
     assert "ID-x" in out
 
 
+# --- thumb --------------------------------------------------------------
+
+
+async def test_thumb_with_output_writes_file_and_reports(tmp_path: Path):
+    fake = _FakeInventory()
+    out_file = tmp_path / "avatar.webp"
+    h = await _run(fake, tmp_path / "s.sock", [f"thumb MyAvatar -o {out_file}"])
+    # The resolved absolute path travels to the server verbatim.
+    assert fake.thumb_requests == ["/Inventory/MyAvatar"]
+    # Bytes are written verbatim (no re-encoding).
+    assert out_file.read_bytes() == fake.thumb_data
+    report = h.out.getvalue()
+    assert "saved" in report
+    assert "image/webp" in report
+    assert str(out_file) in report
+
+
+async def test_thumb_default_filename_uses_content_type_extension(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    fake = _FakeInventory()
+    monkeypatch.chdir(tmp_path)
+    await _run(fake, tmp_path / "s.sock", ["thumb MyAvatar"])
+    # Default name is "<item>.<ext>" in the process cwd; webp -> .webp.
+    assert (tmp_path / "MyAvatar.webp").read_bytes() == fake.thumb_data
+
+
+async def test_thumb_default_filename_unknown_content_type_uses_bin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    fake = _FakeInventory()
+    fake.thumb_content_type = ""
+    monkeypatch.chdir(tmp_path)
+    await _run(fake, tmp_path / "s.sock", ["thumb MyAvatar"])
+    assert (tmp_path / "MyAvatar.bin").read_bytes() == fake.thumb_data
+
+
+async def test_thumb_missing_operand_errors_without_calling_server(tmp_path: Path):
+    fake = _FakeInventory()
+    h = await _run(fake, tmp_path / "s.sock", ["thumb"])
+    assert fake.thumb_requests == []
+    assert "missing operand" in h.err.getvalue()
+
+
+async def test_thumb_output_flag_without_value_errors(tmp_path: Path):
+    fake = _FakeInventory()
+    h = await _run(fake, tmp_path / "s.sock", ["thumb MyAvatar -o"])
+    assert fake.thumb_requests == []
+    assert "-o" in h.err.getvalue()
+
+
 async def test_exit_signals_stop(tmp_path: Path):
     fake = _FakeInventory()
     server = Server([fake])
@@ -259,3 +324,12 @@ async def test_complete_recursive_flag(tmp_path: Path):
     fake = _FakeInventory()
     assert await _complete(fake, tmp_path / "s.sock", "rm -") == ["-r"]
     assert await _complete(fake, tmp_path / "s.sock", "cp -") == ["-r"]
+
+
+async def test_complete_paths_for_thumb_offers_items(tmp_path: Path):
+    fake = _FakeInventory()
+    # thumb completes any entry (items have thumbnails), not directories only.
+    assert set(await _complete(fake, tmp_path / "s.sock", "thumb ")) == {
+        "Avatars/",
+        "MyAvatar",
+    }

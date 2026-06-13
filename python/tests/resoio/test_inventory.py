@@ -16,11 +16,14 @@ from resoio._generated.resonite_io.v1 import (
     InventoryRemoveRequest,
     InventorySpawnRequest,
     InventorySpawnResult as PbInventorySpawnResult,
+    InventoryThumbnailRequest,
+    InventoryThumbnailResponse,
 )
 from resoio.inventory import (
     InventoryClient,
     InventoryEntry,
     InventoryEntryKind,
+    InventoryThumbnail,
 )
 
 if TYPE_CHECKING:
@@ -32,12 +35,18 @@ UdsServer = Callable[["IServable"], Awaitable[str]]
 class _FakeInventory(InventoryBase):
     """In-process fake recording requests and serving a tiny seed tree."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        thumbnail_response: InventoryThumbnailResponse | None = None,
+    ) -> None:
         self.last_copy: InventoryCopyRequest | None = None
         self.last_move: InventoryMoveRequest | None = None
         self.last_remove: InventoryRemoveRequest | None = None
         self.last_make_dir: InventoryMakeDirRequest | None = None
         self.last_spawn: InventorySpawnRequest | None = None
+        self.fetch_thumbnail_requests: list[InventoryThumbnailRequest] = []
+        self._thumbnail_response = thumbnail_response or InventoryThumbnailResponse()
 
     async def list(self, message: InventoryListRequest) -> PbInventoryListing:
         return PbInventoryListing(
@@ -95,6 +104,12 @@ class _FakeInventory(InventoryBase):
             spawned_slot_id="ID-123",
             spawned_slot_name="MyAvatar",
         )
+
+    async def fetch_thumbnail(
+        self, message: InventoryThumbnailRequest
+    ) -> InventoryThumbnailResponse:
+        self.fetch_thumbnail_requests.append(message)
+        return self._thumbnail_response
 
 
 class TestInventoryClient:
@@ -181,3 +196,55 @@ class TestInventoryClient:
         client = InventoryClient()
         with pytest.raises(RuntimeError, match="not connected"):
             await client.list("/Inventory")
+
+
+class TestFetchThumbnail:
+    async def test_returns_thumbnail_with_bytes_content_type_and_forwards_path(
+        self, uds_server: UdsServer
+    ):
+        webp_bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 "
+        fake = _FakeInventory(
+            thumbnail_response=InventoryThumbnailResponse(
+                data=webp_bytes,
+                content_type="image/webp",
+            )
+        )
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            thumbnail = await client.fetch_thumbnail("/Inventory/MyAvatar")
+
+        # The user-facing ``path`` arg must travel verbatim on the wire.
+        assert len(fake.fetch_thumbnail_requests) == 1
+        assert fake.fetch_thumbnail_requests[0].path == "/Inventory/MyAvatar"
+
+        # The method converts the response into the public InventoryThumbnail
+        # dataclass, carrying the exact bytes and content_type.
+        assert thumbnail == InventoryThumbnail(
+            data=webp_bytes,
+            content_type="image/webp",
+        )
+
+    async def test_allows_empty_content_type_with_returned_bytes(
+        self, uds_server: UdsServer
+    ):
+        # The server may not know the MIME type; an empty content_type is a
+        # valid response and must surface verbatim (not coerced to a default).
+        raw_bytes = b"\x89PNG\r\n\x1a\n"
+        fake = _FakeInventory(
+            thumbnail_response=InventoryThumbnailResponse(
+                data=raw_bytes,
+                content_type="",
+            )
+        )
+        await uds_server(fake)
+        async with InventoryClient() as client:
+            thumbnail = await client.fetch_thumbnail("/Inventory/NoType")
+
+        assert fake.fetch_thumbnail_requests[0].path == "/Inventory/NoType"
+        assert thumbnail.data == raw_bytes
+        assert thumbnail.content_type == ""
+
+    async def test_raises_when_not_connected(self):
+        client = InventoryClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.fetch_thumbnail("/Inventory/MyAvatar")

@@ -17,6 +17,10 @@ bug-fixed in the mod bridge:
 * **Spawn** — the real ``DragonFruit`` object at ``/Inventory/DragonFruit``
   is spawned (validating the ``ToWorld`` engine-thread fix) and the host
   desktop is screenshotted so the spawned item can be confirmed visually.
+* **Thumbnail fetch** — the ``DragonFruit`` object's thumbnail image is
+  fetched via ``FetchThumbnail`` (resolving ``Record.ThumbnailURI`` and
+  downloading it server-side), asserting non-empty bytes + a content type,
+  and the image is kept as a human-viewable artifact.
 * **Link navigation** — a top-level inventory *link* (e.g.
   ``Resonite Essentials``) is listed into, validating the link-following
   fix returns a listing instead of hanging or erroring.
@@ -268,6 +272,32 @@ class TestInventory:
                         )
                         await asyncio.sleep(_SETTLE_S)
                         _screenshot(out_dir, "spawned.png")
+
+                    # Thumbnail fetch (FetchThumbnail RPC): resolve the
+                    # DragonFruit item's Record.ThumbnailURI server-side,
+                    # download the image, and assert non-empty bytes + a
+                    # content type. The raw image is kept as an artifact.
+                    # Opportunistic: skip-with-log if the account no longer
+                    # holds the item.
+                    if dragon is None:
+                        record(
+                            f"no OBJECT named {_SPAWN_SOURCE_NAME!r} at inventory root; "
+                            "skipping thumbnail"
+                        )
+                    else:
+                        thumb = await _op(inv.fetch_thumbnail(_SPAWN_SOURCE))
+                        assert len(thumb.data) > 0, (
+                            "fetch_thumbnail returned empty bytes"
+                        )
+                        assert thumb.content_type != "", (
+                            "fetch_thumbnail returned empty content_type"
+                        )
+                        ext = thumb.content_type.rsplit("/", 1)[-1] or "bin"
+                        (out_dir / f"thumbnail.{ext}").write_bytes(thumb.data)
+                        record(
+                            f"fetch_thumbnail {_SPAWN_SOURCE_NAME!r}: "
+                            f"{len(thumb.data)} bytes ({thumb.content_type})"
+                        )
 
                     # Link navigation (link-following fix): list into a
                     # top-level LINK and confirm it returns a listing without
