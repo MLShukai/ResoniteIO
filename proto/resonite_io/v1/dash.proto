@@ -1,21 +1,26 @@
 // Dash service: Resonite の Esc キーで開く userspace overlay メニュー (dash /
 // RadiantDash) を engine 経由で取得・操作する modality。AI エージェントから
-// 「dash を開く / 閉じる」「開いている dash UI ツリーを列挙する」「要素を
-// ハイライト / 実行 / スクロールする」を行う。
+// 「dash を開く / 閉じる」「下部タブ (Home/Worlds/Contacts/...) を列挙・切替する」
+// 「現在のタブ内の操作可能な control (押せる Button / スクロールできる ScrollRect) を
+// 構造化して列挙する」「control を実行 / スクロール / ハイライトする」を行う。
 //
-// dash は ContextMenu の radial メニュー (`InteractionHandler`) とは別系統で、
-// `Userspace.UserspaceWorld` 配下に globally-registered された
-// `UserspaceRadiantDash` を `.Open` (bool) で開閉する。
+// dash の構造: `Userspace.UserspaceWorld` 配下に globally-registered された
+// `UserspaceRadiantDash` を `.Open` (bool) で開閉する。下部の **tab** バーは
+// `RadiantDashScreen` 群で、現在の tab (`CurrentScreen`) の `ScreenRoot` 配下にだけ
+// 操作対象の control がある。tab 切替で control は総入れ替えになる。
+// dash は ContextMenu の radial メニュー (`InteractionHandler`) とは別系統。
 //
-// 要素の指定は **言語非依存の `ref_id`** (engine の `Slot.ReferenceID` を文字列化
-// したもの) を主キーにする。dash UI は言語ごとに localize されるため、表示
-// テキスト (`label`) ではなく `ref_id` と (取得できれば) `locale_key` で要素を
-// 一意特定し、Invoke / Highlight / Scroll はその `ref_id` で engine 側の要素を
-// `ReferenceController.GetObjectOrNull` 解決して操作する。
+// 指定キー: tab も control も **言語非依存の `ref_id`** (engine の `Slot.ReferenceID` を
+// 文字列化したもの) を主キーにする。dash UI は言語ごとに localize されるため、表示
+// テキスト (`label`) ではなく `ref_id` と (取得できれば) `locale_key` で一意特定し、
+// SetTab / Invoke / Scroll / Highlight はその `ref_id` で engine 側を
+// `ReferenceController.GetObjectOrNull` 解決して操作する。`label` / index による選択は
+// client 側 (Python / CLI) で `ref_id` に解決してから送る (wire は言語非依存を保つ)。
 //
-// 状態変化系 (Invoke / Highlight / Scroll) は軽量な `DashActionResult` を返し、
-// UI ツリー全体は `GetTree` で明示的に取り直す (Invoke 後に UI が総入れ替えに
-// なり得るため毎回 tree を返すのは過剰)。engine への dispatch は同期マーシャル
+// 状態変化系 (SetTab / Invoke / Scroll / Highlight) は軽量な `DashActionResult` を返し、
+// 解決失敗は例外ではなく `found=false` / `ok=false` で表す (soft-fail)。control 一覧は
+// `ListControls` で明示的に取り直す (操作後に UI が総入れ替えになり得るため)。dash/
+// userspace 未準備時のみ FailedPrecondition。engine への dispatch は同期マーシャル
 // (`RunSynchronously` + `TaskCompletionSource`)。
 syntax = "proto3";
 
@@ -31,60 +36,63 @@ message DashState {
   float open_lerp = 2;
 }
 
-// UI 要素の矩形。origin = 画面左上 (0,0)、x 右・y 下。
-// is_screen_space=false の場合は canvas 空間座標 (screen pixel 逆投影が未確定な
-// ときのフォールバック)。client は is_screen_space で解釈を切り替える。
-message DashRect {
-  float x = 1;
-  float y = 2;
-  float width = 3;
-  float height = 4;
-  bool is_screen_space = 5;
-}
-
-// dash UI ツリーの 1 ノード。`ref_id` / `locale_key` が言語非依存の主キー。
-message DashElement {
-  // `Slot.ReferenceID.ToString()`。Invoke / Highlight / Scroll はこの ref_id で解決する。
+// 下部タブバーの 1 タブ (`RadiantDashScreen`)。
+// `ref_id` と `locale_key` (例 "Dash.Screens.Worlds") が言語非依存キー。
+message DashTab {
+  // screen slot の `ReferenceID.ToString()`。SetTab の exact 指定キー。
   string ref_id = 1;
-  // component 型名 ("Button" / "ScrollRect" / "Text" / "Image" 等)。
-  string type = 2;
-  // `Slot.Name` (author 設定。空のことがある)。
-  string slot_name = 3;
-  // `LocaleString.content` (isLocaleKey のときのみ。例 "Settings.Audio")。言語非依存。
-  // 生文字列ラベル (localize 済み) しか無い要素では空。
-  string locale_key = 4;
-  // 表示テキスト (`Button.LabelText` 等。localize 済み。debug / 人間向け)。
-  string label = 5;
-  // 有効か (`Slot.IsActive` かつ component active)。
+  // 言語非依存キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
+  // 取得できない tab では空文字。
+  string locale_key = 2;
+  // `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
+  string name = 3;
+  // `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
+  string label = 4;
+  // この tab が現在表示中か (`screen == dash.Dash.CurrentScreen.Target`)。
+  bool is_current = 5;
+  // 遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
   bool enabled = 6;
-  // 操作可能か (`IUIInteractable` かつ enabled)。
-  bool interactable = 7;
-  // 要素の矩形。
-  DashRect rect = 8;
-  // 親要素の ref_id (ツリー連結用。root は空)。
-  string parent_ref_id = 9;
-  // ツリー深さ (root = 0)。
-  int32 depth = 10;
 }
 
-// dash UI ツリーのスナップショット。
-message DashTree {
-  // 列挙された要素 (深さ優先順)。dash が閉じているときは空。
-  repeated DashElement elements = 1;
-  // ポインタ座標空間 = 現在の window 解像度 (pixel)。grounding 用。
-  int32 screen_width = 2;
-  int32 screen_height = 3;
+// `ListTabs` の戻り。dash の全 tab 一覧。
+message DashTabList {
+  repeated DashTab tabs = 1;
 }
 
-// 状態変化系操作の結果。
+// 現在の tab 内の操作可能な control 1 個 (押せる `Button` か、スクロールできる
+// `ScrollRect`)。v1 はこの 2 種のみ (slider / text field は対象外)。
+message DashControl {
+  // control slot の `ReferenceID.ToString()`。Invoke / Scroll / Highlight の主キー。
+  string ref_id = 1;
+  // "button" | "scroll"。server 側で正規化済み。
+  string control_type = 2;
+  // 人間向け表示ラベル (localize 済み)。`Button.LabelText` → 子 `Text.Content`
+  // → `locale_key` → `Slot.Name` の優先で解決。icon-only button 等では空のこともある。
+  string label = 3;
+  // 言語非依存の locale key (`LocaleStringDriver.Key`)。生文字列ラベルでは空文字。
+  string locale_key = 4;
+  // 操作可能か (`Button.Enabled` 等)。include_disabled=true のとき disabled も含む。
+  bool enabled = 5;
+  // 直近の列挙済み control 祖先の ref_id (軽い階層表示用。最上位は空文字)。
+  string parent_ref_id = 6;
+  // 列挙済み control 階層の深さ (最上位 = 0)。
+  int32 depth = 7;
+}
+
+// `ListControls` の戻り。現在の tab 内の control 一覧 (reading 順 = 上→下, 左→右)。
+message DashControlList {
+  repeated DashControl controls = 1;
+}
+
+// 状態変化系操作 (SetTab / Invoke / Scroll / Highlight) の結果。
 message DashActionResult {
   // 操作が適用できたか。
   bool ok = 1;
-  // 指定 ref_id の要素が解決できたか (false なら ok も false)。
+  // 指定 ref_id の対象が解決できたか (false なら ok も false)。
   bool found = 2;
   // 操作対象として解決した ref_id (echo back)。
   string ref_id = 3;
-  // 補足 (lock / 非 interactable / 未解決などの理由)。
+  // 補足 (型不一致 / 未解決 / disabled などの理由)。
   string detail = 4;
 }
 
@@ -94,57 +102,33 @@ message DashCloseRequest {}
 
 message DashGetStateRequest {}
 
-message DashGetTreeRequest {
-  // true なら interactable な要素のみ返す。
-  bool interactable_only = 1;
-  // 部分木の root に使う ref_id。空なら dash 全体。
-  string root_ref_id = 2;
+message DashListTabsRequest {}
+
+message DashSetTabRequest {
+  // exact 指定キー (screen slot の ReferenceID)。非空なら優先。
+  string ref_id = 1;
+  // 言語非依存キー (例 "Dash.Screens.Worlds")。ref_id が空なら使う。
+  string locale_key = 2;
+}
+
+message DashListControlsRequest {
+  // true なら disabled control も含める。default(false) は enabled のみ。
+  bool include_disabled = 1;
 }
 
 message DashInvokeRequest {
   string ref_id = 1;
 }
 
-message DashHighlightRequest {
-  string ref_id = 1;
-}
-
 message DashScrollRequest {
   string ref_id = 1;
+  // `ScrollRect.NormalizedPosition` への加算量 ([0,1] 空間)。
   float delta_x = 2;
   float delta_y = 3;
 }
 
-// dash 下部タブが切り替える 1 screen (`RadiantDashScreen`) のスナップショット。
-// `key` (LocaleStringDriver key、例 "Dash.Screens.Worlds") と `ref_id` が言語非依存キー。
-message DashScreen {
-  // screen slot の `ReferenceID.ToString()`。SetScreen の exact 指定キー。
+message DashHighlightRequest {
   string ref_id = 1;
-  // 言語非依存の主キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
-  // 取得できない screen では空文字。
-  string key = 2;
-  // `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
-  string name = 3;
-  // `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
-  string label = 4;
-  // この screen が current screen か (`screen == dash.Dash.CurrentScreen.Target`)。
-  bool is_current = 5;
-  // 遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
-  bool enabled = 6;
-}
-
-// `ListScreens` の戻り。dash の全 screen 一覧。
-message DashScreenList {
-  repeated DashScreen screens = 1;
-}
-
-message DashListScreensRequest {}
-
-message DashSetScreenRequest {
-  // exact 指定キー (screen slot の ReferenceID)。非空なら優先。
-  string ref_id = 1;
-  // 言語非依存キー (例 "Dash.Screens.Worlds")。ref_id が空なら使う。
-  string key = 2;
 }
 
 service Dash {
@@ -154,16 +138,16 @@ service Dash {
   rpc Close(DashCloseRequest) returns (DashState);
   // 現在の dash 開閉状態を取得する。
   rpc GetState(DashGetStateRequest) returns (DashState);
-  // 現在開いている dash UI ツリーを列挙する。
-  rpc GetTree(DashGetTreeRequest) returns (DashTree);
-  // 指定 ref_id の要素のアクションを実行する (Button.SimulatePress 等)。
+  // 下部タブバーの全 tab を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+  rpc ListTabs(DashListTabsRequest) returns (DashTabList);
+  // 指定 tab (ref_id 優先、でなければ locale_key) へ切り替える。両空は InvalidArgument。
+  rpc SetTab(DashSetTabRequest) returns (DashActionResult);
+  // 現在の tab 内の操作可能な control を reading 順で列挙する (tab 切替は SetTab で先に行う)。
+  rpc ListControls(DashListControlsRequest) returns (DashControlList);
+  // 指定 ref_id の control を実行する (Button.SimulatePress)。
   rpc Invoke(DashInvokeRequest) returns (DashActionResult);
-  // 指定 ref_id の要素をハイライト (hover) する。実行はしない。
-  rpc Highlight(DashHighlightRequest) returns (DashActionResult);
-  // 指定 ref_id の要素にスクロールを当てる。
+  // 指定 ref_id の control にスクロールを当てる (ScrollRect)。
   rpc Scroll(DashScrollRequest) returns (DashActionResult);
-  // dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
-  rpc ListScreens(DashListScreensRequest) returns (DashScreenList);
-  // 指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
-  rpc SetScreen(DashSetScreenRequest) returns (DashActionResult);
+  // 指定 ref_id の control をハイライト (hover) する。実行はしない (Button のみ対応)。
+  rpc Highlight(DashHighlightRequest) returns (DashActionResult);
 }
