@@ -106,7 +106,6 @@ WORKDIR /workspace
 # apt / npm 版ではなく standalone installer に揃える。どちらも $HOME/.local/bin に
 # 落とすので dev user 切替後に実行する ($HOME/.local は volume マウント対象外なので
 # image に焼き込んだバイナリがそのまま残る)。
-RUN curl -fsSL https://claude.ai/install.sh | bash \
- && curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 CMD ["sleep", "infinity"]
