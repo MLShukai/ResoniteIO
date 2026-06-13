@@ -32,6 +32,7 @@ from resoio.inventory import (
     InventorySpawnResult,
     InventoryThumbnail,
 )
+from resoio.lifecycle import LifecycleClient, terminate
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
@@ -90,6 +91,7 @@ __all__ = [
     "InventoryMutationResult",
     "InventorySpawnResult",
     "InventoryThumbnail",
+    "LifecycleClient",
     "ListRecordsResponse",
     "ListSessionsResponse",
     "LocomotionClient",
@@ -111,4 +113,5 @@ __all__ = [
     "WorldSession",
     "__version__",
     "get_server_info",
+    "terminate",
 ]

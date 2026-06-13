@@ -37,6 +37,8 @@ public sealed class InfoService : V1.Info.InfoBase
             EngineVersion = snapshot.EngineVersion,
             Platform = ToProtoPlatform(snapshot.Platform),
             IsWine = snapshot.IsWine,
+            ResonitePid = snapshot.ResonitePid,
+            RendererPid = snapshot.RendererPid,
         };
 
     /// <summary>Core enum → proto enum の明示変換。未知値は <c>Unspecified</c> に落とす。</summary>

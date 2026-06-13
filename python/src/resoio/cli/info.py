@@ -50,4 +50,6 @@ async def _run(args: argparse.Namespace) -> int:
     print(f"engine_version={info.engine_version}")
     print(f"platform={info.platform.value}")
     print(f"is_wine={'true' if info.is_wine else 'false'}")
+    print(f"resonite_pid={info.resonite_pid}")
+    print(f"renderer_pid={info.renderer_pid}")
     return 0

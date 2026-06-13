@@ -13,8 +13,9 @@ resoio --help
 | Command | Modality | Direction | Notes |
 | --- | --- | --- | --- |
 | `resoio ping` | Connection | unary | Liveness check. |
-| `resoio info` | Info | unary | Print mod/engine version, OS platform, and Wine flag. |
+| `resoio info` | Info | unary | Print mod/engine version, OS platform, Wine flag, and engine/renderer host PIDs. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
+| `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o` a `.png` path or `-` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
 | `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (`grab` / `release` / `state` / `interactive`) defaults to `grab`; `--hand` / `--radius` work before or after it. |
@@ -24,9 +25,15 @@ resoio --help
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Interactive REPL: browse (`ls`/`cd`), mutate (`mkdir`/`cp`/`mv`/`rm`), `spawn`, and `thumb` (save an item's thumbnail image). |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
+| `resoio terminate` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
+
+`terminate` is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
+reachable. A graceful shutdown is enough to stop the whole client — there is no SIGTERM/SIGKILL
+fallback, because the engine's own PID is not discoverable by name (`pgrep -f Resonite.exe`
+matches the Steam/Proton launch wrappers, which must not be signalled).
 
 ## Examples
 
@@ -40,6 +47,13 @@ resoio record out.mp4 --duration 10
 # Video only
 resoio record frames.mp4 --video
 
+# Save a single frame as PNG (timestamped file in the current directory)
+resoio screenshot
+
+# ... or to an explicit path / stdout
+resoio screenshot -o shot.png
+resoio screenshot -o - | feh -
+
 # Read the display settings, then cap the background fps
 resoio display get
 resoio display set --max-fps 30
@@ -49,6 +63,9 @@ resoio cursor center
 resoio grab --radius 0.5
 resoio grab release
 resoio cursor release
+
+# Ask the engine to quit gracefully (prints the engine host PID)
+resoio terminate
 ```
 
 Run any command with `--help` for its full flag list. For programmatic use, see the

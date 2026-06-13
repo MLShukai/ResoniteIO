@@ -113,6 +113,8 @@ from resoio._generated.resonite_io.v1 import (
     ServerInfo,
     ServerPlatform,
     SessionFilter,
+    ShutdownRequest,
+    ShutdownResponse,
     SpeakerStreamRequest,
     StartWorldRequest,
     StartWorldResponse,
@@ -422,6 +424,13 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "engine_version": 2,
         "platform": 3,
         "is_wine": 4,
+        "resonite_pid": 5,
+        "renderer_pid": 6,
+    },
+    # Lifecycle
+    ShutdownRequest: {},
+    ShutdownResponse: {
+        "accepted": 1,
     },
     # World
     WorldSession: {
