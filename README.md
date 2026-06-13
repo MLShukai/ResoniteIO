@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="mod/icon.png" width="180" alt="ResoniteIO logo">
+  <img src="banner.png" width="720" alt="ResoniteIO — Resonite ⇄ Python">
 </p>
 
 <h1 align="center">ResoniteIO</h1>
