@@ -7,6 +7,14 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-13
+
+Adds the `Lifecycle` modality (graceful shutdown), a one-shot camera
+screenshot, inventory thumbnail fetching, and engine/renderer host PIDs in
+`Info`. Also **breaking**: the Dash modality is redesigned from a flat tree to
+a tab/control model (gRPC route / C# surface / Python client + CLI all change),
+so update the ResoniteIO mod and the `resoio` Python package in lockstep.
+
 ### Added
 
 - **`Lifecycle.Shutdown` RPC**: A new `Lifecycle` modality with a unary
@@ -28,6 +36,38 @@ GitHub Release body. The format follows
   renderer + launch wrappers. A pure gRPC call (no OS signals), so it works from
   anywhere the UDS is reachable. Prints / returns the engine's host PID, or
   "resonite not running" / `None` when no engine is reachable
+- **`CameraClient.shot()` and `resoio screenshot`**: A convenience method that
+  captures a single Camera frame and closes the stream (instead of opening a
+  stream and breaking on the first frame), plus a CLI command that saves it as
+  an opaque PNG. `resoio screenshot` takes `-o` / `--output` (a `.png` path or
+  `-` for stdout) and otherwise writes a timestamped
+  `screenshot_<timestamp>.png` to the current directory. The PNG drops the alpha
+  channel, because the engine framebuffer's non-opaque alpha would otherwise
+  render washed-out in image viewers. Exposed as `CameraClient.shot()`
+- **`Inventory.FetchThumbnail` RPC**: A unary RPC that returns the thumbnail
+  image of an inventory item, resolving the item's `Record.ThumbnailURI`
+  server-side and returning the raw image bytes plus their content type (e.g.
+  `"image/webp"`, returned verbatim from the Resonite CDN, not re-encoded).
+  Exposed as `InventoryClient.fetch_thumbnail()` (returning the new
+  `InventoryThumbnail` dataclass) and the `thumb` command in the interactive
+  `resoio inventory` REPL
+
+### Changed
+
+- **Breaking — the Dash modality is redesigned to a tab/control model**: the
+  flat-tree contract (`GetTree` / `ListScreens` / `SetScreen` with the
+  `DashTree` / `DashElement` / `DashRect` / `DashScreen` / `DashScreenList`
+  messages) is replaced by a tab-first model. The bottom tab bar is enumerated
+  with `ListTabs` → `DashTabList`, the current tab's controls (Button /
+  ScrollRect) with `ListControls` → `DashControlList`, and a new `SetTab` RPC
+  switches tabs (`Open` / `Close` / `GetState` / `Invoke` / `Scroll` /
+  `Highlight` are retained). On the Python side the `DashTree` / `DashElement` /
+  `DashScreen` dataclasses are replaced by `DashTab` / `DashControl`, and the
+  `resoio dash` CLI is restructured into `open` / `close` / `state` / `tabs` /
+  `tab` / `ls` / `invoke` / `scroll` / `highlight` (tab navigation first, then
+  control interaction within the current tab). The gRPC route is wire-broken by
+  the message/RPC changes — update the ResoniteIO mod and the `resoio` Python
+  package in lockstep
 
 ## [0.4.0] - 2026-06-11
 
@@ -284,4 +324,5 @@ bridge that uses Resonite as an execution environment for AI agents (C# mod
 [0.2.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.1.1...v0.2.0
 [0.3.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.2.0...v0.3.0
 [0.4.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.3.0...v0.4.0
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.4.0...HEAD
+[0.5.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.4.0...v0.5.0
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.5.0...HEAD
