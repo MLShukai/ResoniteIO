@@ -19,6 +19,7 @@ dependencies = [
   # 引いて import が壊れる。compiler 側の固定は [dependency-groups].dev と lockstep。
   "betterproto2[grpclib]>=0.10,<0.11",
   "numpy>=2.0",
+  "pillow>=11",
   "prompt-toolkit>=3.0",
 ]
 classifiers = [

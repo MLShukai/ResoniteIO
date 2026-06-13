@@ -208,6 +208,10 @@ python/tests/e2e/e2e_artifacts/
 # repo-relative path で書き出すため repo root 直下に `tmp/` を作る。
 tmp/
 
+# `resoio screenshot` の -o 無指定時のデフォルト出力。cwd (しばしば repo root)
+# に screenshot_YYYYMMDD_HHMMSS.png を書くため、使い捨て撮影の誤 commit を防ぐ。
+screenshot_*.png
+
 # =============================================================================
 # Decompiled sources
 # =============================================================================

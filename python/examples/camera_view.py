@@ -35,8 +35,8 @@ async def wait_for_ready() -> None:
     while True:
         try:
             async with CameraClient(SOCKET_PATH) as cam:
-                async for _ in cam.stream():
-                    return
+                await cam.shot()
+                return
         except grpclib.exceptions.GRPCError as e:
             if e.status != Status.FAILED_PRECONDITION:
                 raise
