@@ -15,7 +15,7 @@ resoio --help
 | `resoio ping` | Connection | unary | Liveness check. |
 | `resoio info` | Info | unary | Print mod/engine version, OS platform, and Wine flag. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
-| `resoio screenshot` | Camera | Resonite → Python | Save a single frame as a lossless RGBA PNG. `-o` a `.png` path or `-` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. |
+| `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o` a `.png` path or `-` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
 | `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (`grab` / `release` / `state` / `interactive`) defaults to `grab`; `--hand` / `--radius` work before or after it. |

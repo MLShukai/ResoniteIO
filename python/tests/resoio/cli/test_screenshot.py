@@ -2,8 +2,8 @@
 
 The CLI is exercised end-to-end over a real grpclib UDS server (the
 ``uds_server`` fixture) with an in-process fake Camera, and the emitted
-bytes are decoded back through PyAV — a real PNG codec round-trip rather
-than a byte-pattern assertion.
+bytes are decoded back through Pillow — a real PNG codec round-trip
+rather than a byte-pattern assertion.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import av
 import numpy as np
 import pytest
+from PIL import Image
 
 from resoio._generated.resonite_io.v1 import (
     CameraBase,
@@ -33,7 +33,9 @@ if TYPE_CHECKING:
 UdsServer = Callable[["IServable"], Awaitable[str]]
 
 # Non-square so a width/height swap cannot pass by coincidence, and a
-# distinct value per channel so RGBA channel order is verified on decode.
+# distinct value per channel so RGB channel order is verified on decode.
+# Alpha is deliberately non-opaque (40) so the tests prove screenshot
+# drops it and saves an opaque RGB PNG.
 _FRAME_W = 4
 _FRAME_H = 2
 _PIXEL = (10, 20, 30, 40)
@@ -63,11 +65,15 @@ class _FixedCamera(CameraBase):
             )
 
 
-def _decode_png(data: bytes) -> np.ndarray:
-    """Decode PNG bytes back to an ``(H, W, 4)`` RGBA8 array via PyAV."""
-    with av.open(io.BytesIO(data)) as container:
-        frame = next(container.decode(video=0))
-        return frame.to_ndarray(format="rgba")
+def _decode_rgb(data: bytes) -> np.ndarray:
+    """Decode PNG bytes to an ``(H, W, 3)`` array, asserting it is opaque.
+
+    ``mode == "RGB"`` (not ``"RGBA"``) is the precise pin for the
+    alpha-drop fix: the saved PNG has no alpha channel at all.
+    """
+    with Image.open(io.BytesIO(data)) as img:
+        assert img.mode == "RGB", f"expected opaque RGB PNG, got mode {img.mode!r}"
+        return np.asarray(img)
 
 
 def _png_magic() -> bytes:
@@ -84,11 +90,12 @@ class TestScreenshotCli:
 
         data = out_path.read_bytes()
         assert data.startswith(_png_magic())
-        decoded = _decode_png(data)
-        assert decoded.shape == (_FRAME_H, _FRAME_W, 4)
-        # PNG is lossless: the round-tripped pixel matches the source RGBA
-        # exactly (proves channel order and dimensions are preserved).
-        assert tuple(int(c) for c in decoded[0, 0]) == _PIXEL
+        decoded = _decode_rgb(data)
+        assert decoded.shape == (_FRAME_H, _FRAME_W, 3)
+        # PNG is lossless: the round-tripped RGB matches the source exactly
+        # (proves channel order and dimensions are preserved). The source
+        # alpha (40) is dropped — _decode_rgb already pinned mode == "RGB".
+        assert tuple(int(c) for c in decoded[0, 0]) == _PIXEL[:3]
 
     async def test_writes_png_to_stdout(
         self,
@@ -102,8 +109,8 @@ class TestScreenshotCli:
 
         data = capsysbinary.readouterr().out
         assert data.startswith(_png_magic())
-        decoded = _decode_png(data)
-        assert decoded.shape == (_FRAME_H, _FRAME_W, 4)
+        decoded = _decode_rgb(data)
+        assert decoded.shape == (_FRAME_H, _FRAME_W, 3)
 
     async def test_default_filename_in_cwd(
         self,

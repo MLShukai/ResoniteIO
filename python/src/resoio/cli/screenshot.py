@@ -2,9 +2,10 @@
 
 A one-shot counterpart to ``record``: it pulls a single frame from the
 Camera stream (:meth:`resoio.camera.CameraClient.shot`), encodes it as a
-PNG, and writes it to a file or stdout. Unlike ``record`` the alpha
-channel is preserved — PNG is lossless RGBA so the saved image matches
-the engine framebuffer exactly.
+PNG, and writes it to a file or stdout. The alpha channel is dropped so
+the screenshot is opaque — the engine framebuffer's alpha is not 255
+everywhere, and preserving it renders as a washed-out image when a viewer
+composites it over a background (same reason ``record`` drops alpha).
 
 Output target:
 
@@ -13,10 +14,6 @@ Output target:
 * (omitted)           → ``screenshot_YYYYMMDD_HHMMSS.png`` in the current
   directory, stamped with the local wall-clock time so repeated shots do
   not clobber each other.
-
-PNG encoding reuses the already-present PyAV dependency (ffmpeg's ``png``
-encoder takes ``rgba`` directly), so no image library is added for this
-one command.
 """
 
 from __future__ import annotations
@@ -92,33 +89,23 @@ def _validate_args(args: argparse.Namespace) -> int | None:
 
 
 def _encode_png(pixels: NDArray[np.uint8]) -> bytes:
-    """Encode an ``(H, W, 4)`` RGBA8 array as a complete PNG byte string.
+    """Encode an ``(H, W, 4)`` RGBA8 array as an opaque RGB PNG.
 
-    Uses ffmpeg's ``png`` encoder via PyAV (already a dependency); the
-    encoder emits one self-contained PNG per flushed packet, so the
-    encode + flush pair below yields the full file.
+    The alpha channel is dropped before encoding: the engine framebuffer
+    carries a non-opaque alpha (a large fraction of pixels < 255), which
+    a viewer composites over its background into a washed-out image. A
+    screenshot must be opaque, so only the RGB channels are saved (the
+    record mp4 path drops alpha for the same reason).
     """
-    import av
-    import numpy as np
-    from av.codec import CodecContext
-    from av.video.codeccontext import VideoCodecContext
+    import io
 
-    height = int(pixels.shape[0])
-    width = int(pixels.shape[1])
-    codec = CodecContext.create("png", "w")
-    assert isinstance(codec, VideoCodecContext)
-    codec.width = width
-    codec.height = height
-    codec.pix_fmt = "rgba"
-    frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(pixels), format="rgba")
-    # The png encoder emits one self-contained PNG per packet; encode the
-    # frame then flush (encode(None)). The pyright: ignore is confined here
-    # because PyAV's stubs type encode() as list[Packet[Unknown]] (mirrors
-    # the mux_*_packets helpers in _recording_io).
-    chunks: list[bytes] = []
-    for packet in [*codec.encode(frame), *codec.encode(None)]:  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-        chunks.append(bytes(packet))  # pyright: ignore[reportUnknownArgumentType]
-    return b"".join(chunks)
+    import numpy as np
+    from PIL import Image
+
+    rgb = np.ascontiguousarray(pixels[..., :3])
+    buffer = io.BytesIO()
+    Image.fromarray(rgb, mode="RGB").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 # ---------------------------------------------------------------------------
