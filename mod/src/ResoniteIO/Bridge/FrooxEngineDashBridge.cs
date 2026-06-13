@@ -122,9 +122,12 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                 // 確実かつ同期的に切り替えられ、Button の hit-test / interactable gating に左右されないため。
                 radiant.CurrentScreen.Target = screen;
 
+                // echo は ListTabs / ResolveScreen と同じ Slot の RefID に揃える
+                // (client が echo した ref_id を再度 set_tab(ref_id=...) に使えるように)。
                 var afterRefId =
-                    radiant.CurrentScreen?.Target?.ReferenceID.ToString()
-                    ?? screen.ReferenceID.ToString();
+                    radiant.CurrentScreen?.Target?.Slot?.ReferenceID.ToString()
+                    ?? screen.Slot?.ReferenceID.ToString()
+                    ?? string.Empty;
 
                 // disabled screen でも代入自体はブロックされない (button 側の gating)。
                 // 遷移は成立扱い (ok=true) とし、無効状態は detail で通知する。
@@ -373,7 +376,9 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
 
             foreach (var screen in radiant.Screens)
             {
-                if (screen.ReferenceID == parsed)
+                // ListTabs は screen.Slot.ReferenceID を tab の ref_id として出すので、
+                // 解決側も Slot の RefID で突き合わせる (screen 自身の ReferenceID とは別物)。
+                if (screen.Slot?.ReferenceID == parsed)
                 {
                     return screen;
                 }
