@@ -1,20 +1,28 @@
 """Client for the Resonite IO ``Dash`` modality (Python -> Resonite).
 
-Unary RPCs driving the userspace radiant dash overlay.
+Unary RPCs driving the userspace radiant dash overlay (the ``Esc`` menu).
 
-The Dash service mirrors the userspace overlay opened by the dash button.
-Open / close / get-state RPCs return a :class:`DashState` snapshot of the
-overlay's open/animation state, while :meth:`DashClient.get_tree` enumerates
-the dash UI as a :class:`DashTree` of :class:`DashElement` nodes keyed by
-``ref_id``. Mutating actions (:meth:`DashClient.invoke`,
-:meth:`DashClient.highlight`, :meth:`DashClient.scroll`) address an element
-by ``ref_id`` and return a :class:`DashActionResult`.
+The Dash is structured as a **bottom tab bar** (Home / Worlds / Contacts /
+Inventory / ...), and within the current tab a set of **interactable
+controls** (pressable ``Button`` s and scrollable ``ScrollRect`` s). The
+client mirrors that: :meth:`DashClient.list_tabs` enumerates the tab bar and
+:meth:`DashClient.set_tab` switches the current tab, while
+:meth:`DashClient.list_controls` enumerates the current tab's controls and
+:meth:`DashClient.invoke` / :meth:`DashClient.scroll` /
+:meth:`DashClient.highlight` act on one by ``ref_id``.
+
+On the wire selection is always by ``ref_id`` (the engine ``ReferenceID``),
+which is the stable, language-independent handle. The ``*_by_label`` helpers
+add client-side ergonomics: they fetch the relevant list and resolve a
+human-friendly query (label / ``locale_key`` / ``name`` / ``ref_id``) to a
+single ``ref_id`` via :func:`_resolve_one`, raising :class:`DashNoMatchError`
+or :class:`DashAmbiguousMatchError` when the query is unresolvable.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import override
 
@@ -24,51 +32,31 @@ from resoio._client import _BaseClient
 from resoio._generated.resonite_io.v1 import (
     DashActionResult as _PbDashActionResult,
     DashCloseRequest,
-    DashElement as _PbDashElement,
+    DashControl as _PbDashControl,
     DashGetStateRequest,
-    DashGetTreeRequest,
     DashHighlightRequest,
     DashInvokeRequest,
-    DashListScreensRequest,
+    DashListControlsRequest,
+    DashListTabsRequest,
     DashOpenRequest,
-    DashRect as _PbDashRect,
-    DashScreen as _PbDashScreen,
     DashScrollRequest,
-    DashSetScreenRequest,
+    DashSetTabRequest,
     DashState as _PbDashState,
     DashStub,
-    DashTree as _PbDashTree,
+    DashTab as _PbDashTab,
 )
 
 __all__ = [
     "DashActionResult",
+    "DashAmbiguousMatchError",
     "DashClient",
-    "DashElement",
-    "DashRect",
-    "DashScreen",
+    "DashControl",
+    "DashNoMatchError",
     "DashState",
-    "DashTree",
+    "DashTab",
 ]
 
 _logger = logging.getLogger("resoio.dash")
-
-
-@dataclass(frozen=True, slots=True)
-class DashRect:
-    """Rectangle of a dash UI element.
-
-    Origin is the top-left corner ``(0, 0)`` with ``x`` increasing right and
-    ``y`` increasing down. When ``is_screen_space`` is ``True`` the values are
-    screen pixels (the same space as :attr:`DashTree.screen_width` /
-    :attr:`DashTree.screen_height`); when ``False`` they are canvas-space
-    coordinates used as a fallback.
-    """
-
-    x: float
-    y: float
-    width: float
-    height: float
-    is_screen_space: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,51 +71,57 @@ class DashState:
 
 
 @dataclass(frozen=True, slots=True)
-class DashElement:
-    """A single node in the dash UI tree.
+class DashTab:
+    """A single tab in the dash's bottom tab bar.
 
-    ``ref_id`` (the slot's ``ReferenceID``) is the language-independent key
-    that :meth:`DashClient.invoke` / :meth:`DashClient.highlight` /
-    :meth:`DashClient.scroll` address. ``locale_key`` is the locale string key
-    when present (empty for already-localised labels); ``label`` is the
-    human-readable, localised text. ``parent_ref_id`` links the node to its
-    parent (empty at the root) and ``depth`` is the tree depth (root = ``0``).
+    ``ref_id`` (the tab slot's engine ``ReferenceID``) and ``locale_key``
+    (the tab label's ``LocaleStringDriver`` key, e.g. ``Dash.Screens.Worlds``)
+    are the language-independent keys that :meth:`DashClient.set_tab`
+    addresses; ``name`` is the slot name (e.g. ``Worlds``) and ``label`` is
+    the localized display text. ``is_current`` is ``True`` for the tab
+    currently shown; ``enabled`` reports whether the tab is navigable (e.g.
+    ``Contacts`` is ``False`` while logged out).
     """
 
     ref_id: str
-    type: str
-    slot_name: str
     locale_key: str
+    name: str
     label: str
+    is_current: bool
     enabled: bool
-    interactable: bool
-    rect: DashRect
-    parent_ref_id: str
-    depth: int
 
 
 @dataclass(frozen=True, slots=True)
-class DashTree:
-    """Snapshot of the dash UI tree.
+class DashControl:
+    """A single interactable control within the current tab.
 
-    ``elements`` are enumerated in depth-first order and is empty when the
-    dash is closed. ``screen_width`` / ``screen_height`` are the current
-    window resolution (pixels) that screen-space rects are expressed in.
+    ``control_type`` is ``"button"`` (pressable) or ``"scroll"`` (scrollable).
+    ``ref_id`` (the slot's engine ``ReferenceID``) is the stable key that
+    :meth:`DashClient.invoke` / :meth:`DashClient.scroll` /
+    :meth:`DashClient.highlight` address. ``label`` is the human-readable
+    text (may be empty for icon-only buttons) and ``locale_key`` is the
+    language-independent key when present. ``parent_ref_id`` links the
+    control to its nearest enumerated control ancestor (empty at the top) and
+    ``depth`` is that light hierarchy's depth (top = ``0``).
     """
 
-    elements: tuple[DashElement, ...]
-    screen_width: int
-    screen_height: int
+    ref_id: str
+    control_type: str
+    label: str
+    locale_key: str
+    enabled: bool
+    parent_ref_id: str
+    depth: int
 
 
 @dataclass(frozen=True, slots=True)
 class DashActionResult:
     """Result of a mutating dash action.
 
-    ``found`` indicates whether the requested ``ref_id`` resolved to an
-    element (``ok`` is always ``False`` when ``found`` is ``False``).
+    ``found`` indicates whether the requested ``ref_id`` resolved to a tab or
+    control (``ok`` is always ``False`` when ``found`` is ``False``).
     ``ref_id`` echoes the resolved target and ``detail`` carries the reason
-    when the action could not be applied (e.g. locked / non-interactable).
+    when the action could not be applied (e.g. type mismatch, disabled).
     """
 
     ok: bool
@@ -136,43 +130,84 @@ class DashActionResult:
     detail: str
 
 
-@dataclass(frozen=True, slots=True)
-class DashScreen:
-    """A single screen (tab) of the dash.
+class DashNoMatchError(ValueError):
+    """A label / index query did not match any tab or control."""
 
-    ``key`` (the ``LocaleStringDriver`` key driving the screen label, e.g.
-    ``Dash.Screens.Worlds``) and ``ref_id`` (the screen slot's engine
-    ``ReferenceID``) are the language-independent keys that
-    :meth:`DashClient.set_screen` addresses. ``name`` is the slot name and
-    ``label`` is the localised display text. ``is_current`` is ``True`` for
-    the screen currently shown; ``enabled`` reports whether the screen is
-    navigable (e.g. ``Contacts`` is ``False`` while logged out).
+
+class DashAmbiguousMatchError(ValueError):
+    """A label query matched more than one tab or control.
+
+    The message lists the matching candidates so the caller can narrow the
+    query (or use an exact ``ref_id``).
     """
 
-    ref_id: str
-    key: str
-    name: str
-    label: str
-    is_current: bool
-    enabled: bool
 
+def _resolve_one[T](
+    items: Sequence[T],
+    query: str,
+    keys: Callable[[T], Iterable[str]],
+) -> T:
+    """Resolve ``query`` to exactly one item in ``items`` by its keys.
 
-def _rect_from_proto(pb: _PbDashRect | None) -> DashRect:
-    if pb is None:
-        return DashRect(
-            x=0.0,
-            y=0.0,
-            width=0.0,
-            height=0.0,
-            is_screen_space=False,
+    ``keys`` extracts the comparable strings for an item (e.g. its
+    ``ref_id``, ``locale_key``, ``name``, ``label``). Matching is tried in
+    order of decreasing strictness, returning as soon as a stage is decisive:
+
+    1. **Exact** (case-sensitive) match on any key equal to ``query`` -- this
+       is what makes a full ``ref_id`` an unambiguous handle.
+    2. **Case-insensitive exact** match (``casefold``) on any key; returned
+       only when exactly one item matches.
+    3. **Case-insensitive substring** match on any key; returned only when
+       exactly one item matches.
+
+    Raises :class:`DashNoMatchError` when nothing matches anywhere, or
+    :class:`DashAmbiguousMatchError` (listing candidates) when the substring
+    stage matches more than one item.
+    """
+    for item in items:
+        if any(key == query for key in keys(item)):
+            return item
+
+    folded = query.casefold()
+
+    exact_ci = [
+        item for item in items if any(k.casefold() == folded for k in keys(item))
+    ]
+    if len(exact_ci) == 1:
+        return exact_ci[0]
+
+    substring = [
+        item for item in items if any(folded in k.casefold() for k in keys(item))
+    ]
+    if len(substring) == 1:
+        return substring[0]
+    if not substring:
+        raise DashNoMatchError(
+            f"no match for {query!r}; candidates: {_candidate_hint(items, keys)}"
         )
-    return DashRect(
-        x=pb.x,
-        y=pb.y,
-        width=pb.width,
-        height=pb.height,
-        is_screen_space=pb.is_screen_space,
+    raise DashAmbiguousMatchError(
+        f"{query!r} matched {len(substring)} items: {_candidate_hint(substring, keys)}"
     )
+
+
+def _candidate_hint[T](
+    items: Sequence[T],
+    keys: Callable[[T], Iterable[str]],
+) -> str:
+    """Render a short ``key | key`` hint listing each item's first key."""
+    hints: list[str] = []
+    for item in items:
+        first = next((k for k in keys(item) if k), "")
+        hints.append(first)
+    return ", ".join(repr(h) for h in hints)
+
+
+def _tab_keys(tab: DashTab) -> tuple[str, str, str, str]:
+    return (tab.ref_id, tab.locale_key, tab.name, tab.label)
+
+
+def _control_keys(control: DashControl) -> tuple[str, str, str]:
+    return (control.ref_id, control.locale_key, control.label)
 
 
 def _state_from_proto(pb: _PbDashState) -> DashState:
@@ -182,26 +217,26 @@ def _state_from_proto(pb: _PbDashState) -> DashState:
     )
 
 
-def _element_from_proto(pb: _PbDashElement) -> DashElement:
-    return DashElement(
+def _tab_from_proto(pb: _PbDashTab) -> DashTab:
+    return DashTab(
         ref_id=pb.ref_id,
-        type=pb.type,
-        slot_name=pb.slot_name,
         locale_key=pb.locale_key,
+        name=pb.name,
         label=pb.label,
+        is_current=pb.is_current,
         enabled=pb.enabled,
-        interactable=pb.interactable,
-        rect=_rect_from_proto(pb.rect),
-        parent_ref_id=pb.parent_ref_id,
-        depth=pb.depth,
     )
 
 
-def _tree_from_proto(pb: _PbDashTree) -> DashTree:
-    return DashTree(
-        elements=tuple(_element_from_proto(element) for element in pb.elements),
-        screen_width=pb.screen_width,
-        screen_height=pb.screen_height,
+def _control_from_proto(pb: _PbDashControl) -> DashControl:
+    return DashControl(
+        ref_id=pb.ref_id,
+        control_type=pb.control_type,
+        label=pb.label,
+        locale_key=pb.locale_key,
+        enabled=pb.enabled,
+        parent_ref_id=pb.parent_ref_id,
+        depth=pb.depth,
     )
 
 
@@ -211,17 +246,6 @@ def _result_from_proto(pb: _PbDashActionResult) -> DashActionResult:
         found=pb.found,
         ref_id=pb.ref_id,
         detail=pb.detail,
-    )
-
-
-def _screen_from_proto(pb: _PbDashScreen) -> DashScreen:
-    return DashScreen(
-        ref_id=pb.ref_id,
-        key=pb.key,
-        name=pb.name,
-        label=pb.label,
-        is_current=pb.is_current,
-        enabled=pb.enabled,
     )
 
 
@@ -274,31 +298,65 @@ class DashClient(_BaseClient[DashStub]):
             await self._dispatch(lambda stub: stub.get_state(request))
         )
 
-    async def get_tree(
-        self, *, interactable_only: bool = False, root_ref_id: str = ""
-    ) -> DashTree:
-        """Enumerate the dash UI tree as a :class:`DashTree`.
+    async def list_tabs(self) -> list[DashTab]:
+        """Enumerate the dash's bottom tab bar as a list of :class:`DashTab`.
 
-        When ``interactable_only`` is ``True`` only interactable elements are
-        returned. ``root_ref_id`` restricts the result to the subtree rooted
-        at that ``ref_id``; an empty string enumerates the whole dash. The
-        tree is empty when the dash is closed.
+        Tabs can be enumerated even while the dash is closed. Each tab
+        carries the language-independent ``ref_id`` / ``locale_key`` /
+        ``name`` that :meth:`set_tab` and :meth:`find_tab` address.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        request = DashGetTreeRequest(
-            interactable_only=interactable_only,
-            root_ref_id=root_ref_id,
+        request = DashListTabsRequest()
+        tab_list = await self._dispatch(lambda stub: stub.list_tabs(request))
+        return [_tab_from_proto(tab) for tab in tab_list.tabs]
+
+    async def set_tab(
+        self, *, ref_id: str = "", locale_key: str = ""
+    ) -> DashActionResult:
+        """Switch the current tab, selecting by ``ref_id`` or ``locale_key``.
+
+        ``ref_id`` takes precedence: when non-empty it selects the tab by its
+        exact engine ``ReferenceID``; otherwise the tab is matched by its
+        language-independent ``locale_key`` (e.g. ``Dash.Screens.Worlds``).
+        Passing neither raises :class:`ValueError` before any network round
+        trip.
+
+        An unresolved ``ref_id`` / ``locale_key`` is a soft failure
+        (``found == ok == False``), not an exception. After switching, the
+        new tab's controls are read with :meth:`list_controls`.
+
+        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
+        """
+        if not ref_id and not locale_key:
+            raise ValueError("set_tab requires ref_id or locale_key")
+        request = DashSetTabRequest(ref_id=ref_id, locale_key=locale_key)
+        return _result_from_proto(
+            await self._dispatch(lambda stub: stub.set_tab(request))
         )
-        return _tree_from_proto(
-            await self._dispatch(lambda stub: stub.get_tree(request))
-        )
+
+    async def list_controls(
+        self, *, include_disabled: bool = False
+    ) -> list[DashControl]:
+        """Enumerate the **current** tab's controls in reading order.
+
+        Returns the pressable / scrollable controls of whichever tab is
+        current; switch tabs with :meth:`set_tab` first to read another tab.
+        When ``include_disabled`` is ``True`` disabled controls are included
+        too (the default lists only enabled ones). The list is empty when the
+        dash is closed.
+
+        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
+        """
+        request = DashListControlsRequest(include_disabled=include_disabled)
+        control_list = await self._dispatch(lambda stub: stub.list_controls(request))
+        return [_control_from_proto(control) for control in control_list.controls]
 
     async def invoke(self, ref_id: str) -> DashActionResult:
-        """Press the element identified by ``ref_id``.
+        """Press the control identified by ``ref_id``.
 
-        Fires the element's interaction (e.g. a button press), which may
-        mutate world or dash state. The returned result reports whether the
+        Fires the control's interaction (a button press), which may mutate
+        world or dash state. The returned result reports whether the
         ``ref_id`` resolved and whether the action was applied.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
@@ -308,27 +366,15 @@ class DashClient(_BaseClient[DashStub]):
             await self._dispatch(lambda stub: stub.invoke(request))
         )
 
-    async def highlight(self, ref_id: str) -> DashActionResult:
-        """Highlight (preview) the element identified by ``ref_id``.
-
-        Highlight only moves the visual selection; it does not trigger the
-        element. Use :meth:`invoke` to act on it.
-
-        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
-        """
-        request = DashHighlightRequest(ref_id=ref_id)
-        return _result_from_proto(
-            await self._dispatch(lambda stub: stub.highlight(request))
-        )
-
     async def scroll(
         self, ref_id: str, *, delta_x: float = 0.0, delta_y: float = 0.0
     ) -> DashActionResult:
-        """Scroll the element identified by ``ref_id`` by ``(delta_x,
+        """Scroll the control identified by ``ref_id`` by ``(delta_x,
         delta_y)``.
 
-        The result reports whether the ``ref_id`` resolved and whether the
-        scroll was applied.
+        ``delta_x`` / ``delta_y`` are added to the ``ScrollRect`` 's
+        normalized position (``[0, 1]`` space). The result reports whether the
+        ``ref_id`` resolved and whether the scroll was applied.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
@@ -337,42 +383,66 @@ class DashClient(_BaseClient[DashStub]):
             await self._dispatch(lambda stub: stub.scroll(request))
         )
 
-    async def list_screens(self) -> list[DashScreen]:
-        """Enumerate the dash screens (tabs) as a list of :class:`DashScreen`.
+    async def highlight(self, ref_id: str) -> DashActionResult:
+        """Hover-highlight the control identified by ``ref_id``.
 
-        Each screen carries the language-independent ``key`` and ``ref_id``
-        that :meth:`set_screen` addresses. Screens can be enumerated even
-        while the dash is closed.
-
-        gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
-        """
-        request = DashListScreensRequest()
-        screen_list = await self._dispatch(lambda stub: stub.list_screens(request))
-        return [_screen_from_proto(screen) for screen in screen_list.screens]
-
-    async def set_screen(self, ref_id: str = "", key: str = "") -> DashActionResult:
-        """Navigate to a dash screen identified by ``ref_id`` or ``key``.
-
-        Navigation does not open or close the dash; it only switches the
-        active screen, so the new screen renders on the next ``get_tree``.
-
-        ``ref_id`` takes precedence: when non-empty it selects the screen by
-        its exact engine ``ReferenceID``; otherwise the screen is matched by
-        its language-independent ``key`` (e.g. ``Dash.Screens.Worlds``).
-        Passing neither raises :class:`ValueError` before any network round
-        trip.
-
-        An unresolved ``ref_id`` / ``key`` is a soft failure
-        (``found == ok == False``), not an exception. On success the result's
-        ``ref_id`` echoes the current screen after navigating; a disabled
-        screen still navigates with ``ok == True`` and ``detail`` set to
-        ``"screen disabled"``.
+        Highlight only moves the visual hover; it does not press the control.
+        A control that does not support hover (e.g. a ``ScrollRect``) is a
+        soft rejection (``found == True``, ``ok == False``). Use
+        :meth:`invoke` to act on a control.
 
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        if not ref_id and not key:
-            raise ValueError("set_screen requires ref_id or key")
-        request = DashSetScreenRequest(ref_id=ref_id, key=key)
+        request = DashHighlightRequest(ref_id=ref_id)
         return _result_from_proto(
-            await self._dispatch(lambda stub: stub.set_screen(request))
+            await self._dispatch(lambda stub: stub.highlight(request))
         )
+
+    async def find_tab(self, query: str) -> DashTab:
+        """Resolve ``query`` to a single :class:`DashTab` (client-side).
+
+        ``query`` matches a tab's ``ref_id`` / ``locale_key`` / ``name`` /
+        ``label`` via :func:`_resolve_one` (exact, then case-insensitive
+        exact, then unique substring). Raises :class:`DashNoMatchError` or
+        :class:`DashAmbiguousMatchError` when the query is unresolvable.
+        """
+        return _resolve_one(await self.list_tabs(), query, _tab_keys)
+
+    async def set_tab_by_label(self, query: str) -> DashActionResult:
+        """Resolve ``query`` to a tab and switch to it by its ``ref_id``.
+
+        Convenience over :meth:`find_tab` + :meth:`set_tab`; the wire request
+        always carries the resolved ``ref_id``. Resolution errors surface as
+        :class:`DashNoMatchError` / :class:`DashAmbiguousMatchError`.
+        """
+        tab = await self.find_tab(query)
+        return await self.set_tab(ref_id=tab.ref_id)
+
+    async def find_control(self, query: str) -> DashControl:
+        """Resolve ``query`` to a single control in the current tab.
+
+        ``query`` matches a control's ``ref_id`` / ``locale_key`` / ``label``
+        via :func:`_resolve_one`. Raises :class:`DashNoMatchError` or
+        :class:`DashAmbiguousMatchError` when the query is unresolvable.
+        """
+        return _resolve_one(await self.list_controls(), query, _control_keys)
+
+    async def invoke_by_label(self, query: str) -> DashActionResult:
+        """Resolve ``query`` to a control and :meth:`invoke` it by
+        ``ref_id``."""
+        control = await self.find_control(query)
+        return await self.invoke(control.ref_id)
+
+    async def scroll_by_label(
+        self, query: str, *, delta_x: float = 0.0, delta_y: float = 0.0
+    ) -> DashActionResult:
+        """Resolve ``query`` to a control and :meth:`scroll` it by
+        ``ref_id``."""
+        control = await self.find_control(query)
+        return await self.scroll(control.ref_id, delta_x=delta_x, delta_y=delta_y)
+
+    async def highlight_by_label(self, query: str) -> DashActionResult:
+        """Resolve ``query`` to a control and :meth:`highlight` it by
+        ``ref_id``."""
+        control = await self.find_control(query)
+        return await self.highlight(control.ref_id)

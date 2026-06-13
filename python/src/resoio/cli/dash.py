@@ -1,23 +1,32 @@
-"""``resoio dash <subcommand>``: drive the Esc dash (userspace overlay) menu.
+"""``resoio dash [<subcommand>]``: drive the Esc dash (userspace overlay).
 
-Nested subcommands mirror ``resoio world``: a ``dash`` parent parser
-holds the leaves, each with the shared ``-s/--socket`` parent re-attached
-(argparse does not inherit it) and its own handler set via
-``set_defaults(func=...)``:
+Structured, flat, agent-first commands. Running ``resoio dash`` with no
+subcommand prints a **summary** ("what can I do now"): the open state, the
+current tab, and a numbered list of the current tab's controls. The leaves
+mirror ``resoio world``: a ``dash`` parent parser holds them, each with the
+shared ``-s/--socket`` parent re-attached (argparse does not inherit it) and
+its own handler set via ``set_defaults(func=...)``:
 
 * ``open`` / ``close`` / ``state`` — open/close the dash or read its state
-* ``tree`` — list the current dash UI tree; each element carries a
-  language-independent ``ref_id`` (engine RefID) and ``locale_key``
-* ``invoke <ref_id>`` — press the element identified by ``ref_id``
-* ``screens`` — list the dash screens (tabs); each carries a
-  language-independent ``key`` and ``ref_id`` (browse)
-* ``set-screen <key>`` / ``set-screen --ref-id <ref_id>`` — navigate to a
-  screen by its language-independent ``key`` or exact ``ref_id`` (select)
+* ``tabs`` — list the bottom tab bar (``*`` marks the current tab)
+* ``tab <selector>`` — switch to a tab
+* ``ls`` — list the current tab's controls (numbered; ``--all`` adds disabled)
+* ``invoke <selector>`` — press a control
+* ``scroll <selector> <dx> <dy>`` — scroll a control by ``(dx, dy)``
+* ``highlight <selector>`` — hover-highlight a control
 
-``--interactable-only`` filters ``tree`` to interactable elements and
-``--root-ref-id`` scopes it to a subtree. The CLI surface is intentionally
-"browse + select"; ``highlight`` / ``scroll`` live on
-:class:`resoio.dash.DashClient` (and the e2e harness) only.
+A ``<selector>`` is resolved client-side against the just-fetched listing
+(tabs for ``tab``; controls for ``invoke`` / ``scroll`` / ``highlight``):
+
+1. a numeric, 0-based **index** into that listing (as shown in ``tabs`` /
+   ``ls``) — valid only within this one invocation; or
+2. an exact ``ref_id`` / a case-insensitive exact or unique substring of the
+   label / ``locale_key`` / ``name`` (via
+   :func:`resoio.dash._resolve_one`).
+
+``ref_id`` is the stable handle; index handles are positional and only valid
+within a single command. Ambiguous / no-match / out-of-range selectors print
+a friendly candidate list to stderr and exit ``2``.
 """
 
 from __future__ import annotations
@@ -26,8 +35,14 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from resoio.dash import (
+    DashAmbiguousMatchError,
+    DashNoMatchError,
+    _resolve_one,  # pyright: ignore[reportPrivateUsage]
+)
+
 if TYPE_CHECKING:
-    from resoio.dash import DashActionResult, DashScreen, DashState, DashTree
+    from resoio.dash import DashActionResult, DashControl, DashState, DashTab
 
 
 def register(
@@ -38,17 +53,19 @@ def register(
     parser = subparsers.add_parser(
         "dash",
         parents=[common],
-        help="Drive the Esc dash menu (open/close/state/tree/invoke/screens).",
+        help="Drive the Esc dash menu (summary/open/close/tabs/tab/ls/invoke/...).",
         description=(
-            "Drive the Resonite IO Dash service from the shell. Pick a "
-            "subcommand (open / close / state / tree / invoke / screens / "
-            "set-screen); invoke requires a language-independent ref_id from "
-            "'tree', and set-screen requires a screen key from 'screens' (or "
-            "--ref-id). The resulting state / tree / screen list / action "
-            "result is printed."
+            "Drive the Resonite IO Dash service from the shell. With no "
+            "subcommand, prints a summary of the current state, tab, and "
+            "controls. Subcommands: open / close / state, tabs / tab "
+            "<selector>, ls, invoke / scroll / highlight <selector>. A "
+            "selector is a 0-based index from the 'tabs' / 'ls' listing, an "
+            "exact ref_id, or a label / locale_key / name substring."
         ),
     )
-    dash_subs = parser.add_subparsers(dest="dash_command", required=True)
+    # No subcommand -> summary view ("what can I do now").
+    parser.set_defaults(func=_run_summary)
+    dash_subs = parser.add_subparsers(dest="dash_command", required=False)
 
     open_parser = dash_subs.add_parser(
         "open",
@@ -71,73 +88,122 @@ def register(
     )
     state_parser.set_defaults(func=_run_state)
 
-    tree_parser = dash_subs.add_parser(
-        "tree",
+    tabs_parser = dash_subs.add_parser(
+        "tabs",
         parents=[common],
-        help="List the current dash UI tree.",
+        help="List the bottom tab bar ('*' marks the current tab).",
     )
-    tree_parser.add_argument(
-        "--interactable-only",
+    tabs_parser.set_defaults(func=_run_tabs)
+
+    tab_parser = dash_subs.add_parser(
+        "tab",
+        parents=[common],
+        help="Switch to a tab (selector: index from 'tabs', ref_id, or label).",
+    )
+    tab_parser.add_argument(
+        "selector",
+        help="Tab selector: 0-based index, exact ref_id, or label substring.",
+    )
+    tab_parser.set_defaults(func=_run_tab)
+
+    ls_parser = dash_subs.add_parser(
+        "ls",
+        parents=[common],
+        help="List the current tab's controls (numbered).",
+    )
+    ls_parser.add_argument(
+        "--all",
         action="store_true",
-        help="Only list interactable elements.",
+        help="Include disabled controls.",
     )
-    tree_parser.add_argument(
-        "--root-ref-id",
-        default="",
-        help="Scope the tree to this element's subtree.",
-    )
-    tree_parser.set_defaults(func=_run_tree)
+    ls_parser.set_defaults(func=_run_ls)
 
     invoke_parser = dash_subs.add_parser(
         "invoke",
         parents=[common],
-        help="Press the element identified by ref_id (from 'tree').",
+        help="Press a control (selector: index from 'ls', ref_id, or label).",
     )
     invoke_parser.add_argument(
-        "ref_id",
-        help="Target ref_id (from 'tree').",
+        "selector",
+        help="Control selector: 0-based index, exact ref_id, or label substring.",
     )
     invoke_parser.set_defaults(func=_run_invoke)
 
-    screens_parser = dash_subs.add_parser(
-        "screens",
+    scroll_parser = dash_subs.add_parser(
+        "scroll",
         parents=[common],
-        help="List the dash screens (tabs).",
+        help="Scroll a control by (dx, dy).",
     )
-    screens_parser.set_defaults(func=_run_screens)
+    scroll_parser.add_argument(
+        "selector",
+        help="Control selector: 0-based index, exact ref_id, or label substring.",
+    )
+    scroll_parser.add_argument("dx", type=float, help="Normalized scroll delta x.")
+    scroll_parser.add_argument("dy", type=float, help="Normalized scroll delta y.")
+    scroll_parser.set_defaults(func=_run_scroll)
 
-    set_screen_parser = dash_subs.add_parser(
-        "set-screen",
+    highlight_parser = dash_subs.add_parser(
+        "highlight",
         parents=[common],
-        help="Navigate to a screen by key (from 'screens') or --ref-id.",
+        help="Hover-highlight a control (selector: index, ref_id, or label).",
     )
-    set_screen_parser.add_argument(
-        "key",
-        nargs="?",
-        default=None,
-        help="Screen key (from 'screens').",
+    highlight_parser.add_argument(
+        "selector",
+        help="Control selector: 0-based index, exact ref_id, or label substring.",
     )
-    set_screen_parser.add_argument(
-        "--ref-id",
-        default="",
-        help="Select the screen by its exact ref_id.",
-    )
-    set_screen_parser.set_defaults(func=_run_set_screen)
+    highlight_parser.set_defaults(func=_run_highlight)
+
+
+def _shortref(ref_id: str) -> str:
+    """Trailing segment of a ``ReferenceID`` (the part that varies per
+    slot)."""
+    return ref_id.rsplit("@", 1)[0].rsplit("ID", 1)[-1] or ref_id
 
 
 def _format_state(state: DashState) -> str:
-    return f"is_open={state.is_open}\nopen_lerp={state.open_lerp}"
+    return f"is_open={state.is_open} open_lerp={state.open_lerp}"
 
 
-def _format_tree(tree: DashTree) -> str:
-    lines: list[str] = [f"screen={tree.screen_width}x{tree.screen_height}"]
-    for e in tree.elements:
-        space = "screen" if e.rect.is_screen_space else "canvas"
+def _format_tabs(tabs: list[DashTab]) -> str:
+    lines: list[str] = []
+    for idx, tab in enumerate(tabs):
+        mark = "*" if tab.is_current else " "
+        name = tab.name or tab.label or tab.locale_key
         lines.append(
-            f"[{e.ref_id}] {e.type} locale={e.locale_key!r} label={e.label!r} "
-            f"enabled={e.enabled} interactable={e.interactable} "
-            f"rect=({e.rect.x}, {e.rect.y}, {e.rect.width}, {e.rect.height}, {space})"
+            f"{mark} {idx:>2}  {name}  enabled={tab.enabled} "
+            f"locale={tab.locale_key!r} label={tab.label!r} "
+            f"ref_id={tab.ref_id}"
         )
+    return "\n".join(lines)
+
+
+def _format_controls(controls: list[DashControl]) -> str:
+    lines: list[str] = []
+    for idx, control in enumerate(controls):
+        indent = "  " * control.depth
+        lines.append(
+            f"{idx:>2}  {control.control_type:<6}  enabled={control.enabled}  "
+            f"{_shortref(control.ref_id)}  {indent}{control.label!r}"
+        )
+    return "\n".join(lines)
+
+
+def _format_summary(
+    state: DashState,
+    tabs: list[DashTab],
+    controls: list[DashControl],
+) -> str:
+    current = next((tab for tab in tabs if tab.is_current), None)
+    if current is None:
+        tab_line = "current tab: (none)"
+    else:
+        name = current.name or current.label or current.locale_key
+        tab_line = f"current tab: {name} (ref_id={current.ref_id})"
+    lines = [_format_state(state), tab_line, "controls:"]
+    if controls:
+        lines.append(_format_controls(controls))
+    else:
+        lines.append("  (none)")
     return "\n".join(lines)
 
 
@@ -148,16 +214,91 @@ def _format_result(result: DashActionResult) -> str:
     )
 
 
-def _format_screens(screens: list[DashScreen]) -> str:
-    return "\n".join(
-        f"[{s.ref_id}] {s.key} {s.name} is_current={s.is_current} "
-        f"enabled={s.enabled} label={s.label!r}"
-        for s in screens
+def _resolve_tab(tabs: list[DashTab], selector: str) -> DashTab | None:
+    """Resolve a tab selector, printing a friendly error on failure.
+
+    Returns the matched :class:`DashTab`, or ``None`` after writing a
+    candidate list to stderr (the caller then exits ``2``).
+    """
+    if selector.isdigit():
+        index = int(selector)
+        if 0 <= index < len(tabs):
+            return tabs[index]
+        _print_index_error(selector, len(tabs), [_tab_hint(t) for t in tabs])
+        return None
+    try:
+        from resoio.dash import _tab_keys  # pyright: ignore[reportPrivateUsage]
+
+        return _resolve_one(tabs, selector, _tab_keys)
+    except (DashNoMatchError, DashAmbiguousMatchError) as exc:
+        _print_match_error(exc, [_tab_hint(t) for t in tabs])
+        return None
+
+
+def _resolve_control(controls: list[DashControl], selector: str) -> DashControl | None:
+    """Resolve a control selector, printing a friendly error on failure."""
+    if selector.isdigit():
+        index = int(selector)
+        if 0 <= index < len(controls):
+            return controls[index]
+        _print_index_error(
+            selector, len(controls), [_control_hint(c) for c in controls]
+        )
+        return None
+    try:
+        from resoio.dash import _control_keys  # pyright: ignore[reportPrivateUsage]
+
+        return _resolve_one(controls, selector, _control_keys)
+    except (DashNoMatchError, DashAmbiguousMatchError) as exc:
+        _print_match_error(exc, [_control_hint(c) for c in controls])
+        return None
+
+
+def _tab_hint(tab: DashTab) -> str:
+    label = tab.name or tab.label or tab.locale_key
+    return f"{label!r} ({_shortref(tab.ref_id)})"
+
+
+def _control_hint(control: DashControl) -> str:
+    label = control.label or control.locale_key or control.control_type
+    return f"{label!r} ({_shortref(control.ref_id)})"
+
+
+def _print_index_error(selector: str, count: int, hints: list[str]) -> None:
+    print(
+        f"error: index {selector} out of range (0..{count - 1})",
+        file=sys.stderr,
     )
+    _print_candidates(hints)
+
+
+def _print_match_error(exc: ValueError, hints: list[str]) -> None:
+    print(f"error: {exc}", file=sys.stderr)
+    _print_candidates(hints)
+
+
+def _print_candidates(hints: list[str]) -> None:
+    if not hints:
+        print("  (no candidates)", file=sys.stderr)
+        return
+    print("candidates:", file=sys.stderr)
+    for idx, hint in enumerate(hints):
+        print(f"  [{idx}] {hint}", file=sys.stderr)
+
+
+async def _run_summary(args: argparse.Namespace) -> int:
+    # Deferred to keep `resoio --help` and shell completion fast.
+    from resoio.dash import DashClient
+
+    async with DashClient(args.socket) as client:
+        state = await client.get_state()
+        tabs = await client.list_tabs()
+        controls = await client.list_controls()
+    print(_format_summary(state, tabs, controls))
+    return 0
 
 
 async def _run_open(args: argparse.Namespace) -> int:
-    # Deferred to keep `resoio --help` and shell completion fast.
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
@@ -181,15 +322,33 @@ async def _run_state(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _run_tree(args: argparse.Namespace) -> int:
+async def _run_tabs(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        tree = await client.get_tree(
-            interactable_only=args.interactable_only,
-            root_ref_id=args.root_ref_id,
-        )
-    print(_format_tree(tree))
+        print(_format_tabs(await client.list_tabs()))
+    return 0
+
+
+async def _run_tab(args: argparse.Namespace) -> int:
+    from resoio.dash import DashClient
+
+    async with DashClient(args.socket) as client:
+        tabs = await client.list_tabs()
+        tab = _resolve_tab(tabs, args.selector)
+        if tab is None:
+            return 2
+        result = await client.set_tab(ref_id=tab.ref_id)
+    print(_format_result(result))
+    return 0
+
+
+async def _run_ls(args: argparse.Namespace) -> int:
+    from resoio.dash import DashClient
+
+    async with DashClient(args.socket) as client:
+        controls = await client.list_controls(include_disabled=args.all)
+    print(_format_controls(controls))
     return 0
 
 
@@ -197,28 +356,36 @@ async def _run_invoke(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_result(await client.invoke(args.ref_id)))
+        controls = await client.list_controls()
+        control = _resolve_control(controls, args.selector)
+        if control is None:
+            return 2
+        result = await client.invoke(control.ref_id)
+    print(_format_result(result))
     return 0
 
 
-async def _run_screens(args: argparse.Namespace) -> int:
+async def _run_scroll(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_screens(await client.list_screens()))
+        controls = await client.list_controls()
+        control = _resolve_control(controls, args.selector)
+        if control is None:
+            return 2
+        result = await client.scroll(control.ref_id, delta_x=args.dx, delta_y=args.dy)
+    print(_format_result(result))
     return 0
 
 
-async def _run_set_screen(args: argparse.Namespace) -> int:
+async def _run_highlight(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
-    key: str = args.key or ""
-    ref_id: str = args.ref_id
-    if not key and not ref_id:
-        print("error: 'set-screen' requires a key or --ref-id", file=sys.stderr)
-        return 2
-
     async with DashClient(args.socket) as client:
-        result = await client.set_screen(ref_id=ref_id, key=key)
+        controls = await client.list_controls()
+        control = _resolve_control(controls, args.selector)
+        if control is None:
+            return 2
+        result = await client.highlight(control.ref_id)
     print(_format_result(result))
     return 0

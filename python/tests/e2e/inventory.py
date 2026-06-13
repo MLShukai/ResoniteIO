@@ -56,7 +56,7 @@ from typing import TypeVar
 import grpclib
 from grpclib.const import Status
 
-from resoio.dash import DashClient, DashTree
+from resoio.dash import DashClient, DashControl
 from resoio.inventory import InventoryClient, InventoryEntryKind, InventoryListing
 from tests.helpers import mark_e2e
 
@@ -91,13 +91,13 @@ _OP_TIMEOUT_S = 20.0
 # The Inventory tab of the Esc dash, addressed by its language-independent
 # LocaleStringDriver key (never the localised label). The test folder created
 # under _TEST_DIR renders at the InventoryBrowser's top level once the dash
-# opens this screen.
-_INVENTORY_SCREEN_KEY = "Dash.Screens.Inventory"
-# Let the screen-switch animation finish and the browser begin loading its
-# records before the first screenshot / tree read.
+# switches to this tab.
+_INVENTORY_TAB_KEY = "Dash.Screens.Inventory"
+# Let the tab-switch animation finish and the browser begin loading its
+# records before the first screenshot / controls read.
 _PANEL_SETTLE_S = 1.5
 # The InventoryBrowser populates its item tiles asynchronously after the
-# screen is shown; poll the rendered tree until the folder label appears.
+# tab is shown; poll the rendered controls until the folder label appears.
 _PANEL_VISIBLE_TIMEOUT_S = 40.0
 _PANEL_POLL_INTERVAL_S = 2.0
 
@@ -126,15 +126,13 @@ def _screenshot(out_dir: Path, name: str) -> None:
     )
 
 
-def _format_tree(tree: DashTree) -> str:
-    """Render a dash UI tree to a human-readable dump for ``states.txt``."""
-    lines = [
-        f"screen={tree.screen_width}x{tree.screen_height} count={len(tree.elements)}"
-    ]
-    for e in tree.elements:
+def _format_controls(controls: list[DashControl]) -> str:
+    """Render the dash controls to a human-readable dump for ``states.txt``."""
+    lines = [f"count={len(controls)}"]
+    for c in controls:
         lines.append(
-            f"  [{e.ref_id}] {e.type} locale={e.locale_key!r} label={e.label!r} "
-            f"enabled={e.enabled} interactable={e.interactable}"
+            f"  [{c.ref_id}] {c.control_type} locale={c.locale_key!r} "
+            f"label={c.label!r} enabled={c.enabled} depth={c.depth}"
         )
     return "\n".join(lines)
 
@@ -297,45 +295,46 @@ class TestInventory:
                     # counterpart to the cloud-only round trips above — it proves
                     # an InventoryClient mutation is reflected in the in-client UI
                     # a human sees. The assert is structural (the folder name
-                    # appears as an element label in the dash tree); the
+                    # appears as a control label in the dash's current tab); the
                     # screenshots are kept as human-viewable artifacts. The dash
                     # is opened only now, so the InventoryBrowser's first load is
                     # a fresh cloud query that already includes __resoio_e2e__.
                     async with DashClient() as dash:
                         await dash.open()
                         await asyncio.sleep(_SETTLE_S)
-                        nav = await dash.set_screen(key=_INVENTORY_SCREEN_KEY)
+                        nav = await dash.set_tab(locale_key=_INVENTORY_TAB_KEY)
                         assert nav.found, (
-                            f"dash has no {_INVENTORY_SCREEN_KEY} screen "
-                            "(unexpected logged-out / minimal screen set)"
+                            f"dash has no {_INVENTORY_TAB_KEY} tab "
+                            "(unexpected logged-out / minimal tab set)"
                         )
                         await asyncio.sleep(_PANEL_SETTLE_S)
                         _screenshot(out_dir, "dash_inventory_panel.png")
 
-                        # Poll the rendered tree until the folder's label shows
-                        # (tiles populate asynchronously). Substring match
-                        # tolerates <nobr> wrapping around the name.
+                        # Poll the current tab's controls until the folder's
+                        # label shows (tiles populate asynchronously). Include
+                        # disabled controls so a non-interactable tile still
+                        # counts. Substring match tolerates <nobr> wrapping
+                        # around the name.
                         found = False
-                        tree: DashTree | None = None
+                        controls: list[DashControl] = []
                         deadline = time.monotonic() + _PANEL_VISIBLE_TIMEOUT_S
                         while True:
-                            tree = await dash.get_tree()
-                            if any("__resoio_e2e__" in e.label for e in tree.elements):
+                            controls = await dash.list_controls(include_disabled=True)
+                            if any("__resoio_e2e__" in c.label for c in controls):
                                 found = True
                                 break
                             if time.monotonic() >= deadline:
                                 break
                             await asyncio.sleep(_PANEL_POLL_INTERVAL_S)
 
-                        assert tree is not None
-                        (out_dir / "dash_tree.txt").write_text(
-                            _format_tree(tree), encoding="utf-8"
+                        (out_dir / "dash_controls.txt").write_text(
+                            _format_controls(controls), encoding="utf-8"
                         )
                         _screenshot(out_dir, "dash_folder_visible.png")
                         assert found, (
                             "test folder '__resoio_e2e__' did not render in the "
-                            f"dash Inventory panel ({len(tree.elements)} elements; "
-                            "see dash_tree.txt)"
+                            f"dash Inventory panel ({len(controls)} controls; "
+                            "see dash_controls.txt)"
                         )
                         record("dash Inventory panel shows '__resoio_e2e__': OK")
                         await dash.close()
