@@ -30,6 +30,7 @@ from resoio.inventory import (
     InventoryListing,
     InventoryMutationResult,
     InventorySpawnResult,
+    InventoryThumbnail,
 )
 from resoio.locomotion import (
     DriveSummary,
@@ -88,6 +89,7 @@ __all__ = [
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "InventoryThumbnail",
     "ListRecordsResponse",
     "ListSessionsResponse",
     "LocomotionClient",
