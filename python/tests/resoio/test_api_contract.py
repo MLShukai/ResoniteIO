@@ -71,6 +71,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "InventoryThumbnail",
     "ListRecordsResponse",
     "ListSessionsResponse",
     "LocomotionClient",

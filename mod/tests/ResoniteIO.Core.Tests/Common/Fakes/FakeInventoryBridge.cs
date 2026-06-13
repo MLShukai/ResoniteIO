@@ -26,6 +26,12 @@ internal sealed class FakeInventoryBridge : IInventoryBridge
 
     public Exception? ThrowOnNextCall { get; set; }
 
+    /// <summary>FetchThumbnail が返す解決済みサムネ bytes + content-type。</summary>
+    public InventoryThumbnailSnapshot NextThumbnail { get; set; } = new(Array.Empty<byte>(), "");
+
+    /// <summary>最後に FetchThumbnail に渡された path。未呼び出しなら null。</summary>
+    public string? LastFetchPath { get; private set; }
+
     public FakeInventoryBridge()
     {
         _nodes["/Inventory"] = Dir("R-inv-root");
@@ -174,6 +180,15 @@ internal sealed class FakeInventoryBridge : IInventoryBridge
         Require(path);
         var name = Name(path);
         return Task.FromResult(new InventorySpawnSnapshot(path, $"ID-{name}", name));
+    }
+
+    public Task<InventoryThumbnailSnapshot> FetchThumbnailAsync(string path, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        TripIfArmed();
+        Calls.Add($"FetchThumbnail {path}");
+        LastFetchPath = path;
+        return Task.FromResult(NextThumbnail);
     }
 
     /// <summary>テスト補助: パスが存在するか。</summary>

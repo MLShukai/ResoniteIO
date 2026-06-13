@@ -287,4 +287,86 @@ public sealed class InventoryServiceTests
 
         Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
     }
+
+    // ===================================================================
+    //  FetchThumbnail — path → bytes + content_type / validation
+    // ===================================================================
+
+    [Fact]
+    public async Task FetchThumbnail_forwards_path_to_bridge_and_round_trips_bytes_and_content_type()
+    {
+        var bridge = new FakeInventoryBridge
+        {
+            NextThumbnail = new InventoryThumbnailSnapshot(new byte[] { 1, 2, 3, 4 }, "image/webp"),
+        };
+        await using var host = await InventoryServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Inventory.InventoryClient(channel);
+
+        var response = await client.FetchThumbnailAsync(
+            new InventoryThumbnailRequest { Path = "/Inventory/MyAvatar" }
+        );
+
+        Assert.Equal("/Inventory/MyAvatar", bridge.LastFetchPath);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, response.Data.ToByteArray());
+        Assert.Equal("image/webp", response.ContentType);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task FetchThumbnail_blank_path_returns_InvalidArgument_without_invoking_bridge(
+        string path
+    )
+    {
+        // Service は dispatch 前に path を validate する契約。bridge は呼ばれない。
+        var bridge = new FakeInventoryBridge();
+        await using var host = await InventoryServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Inventory.InventoryClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(new InventoryThumbnailRequest { Path = path })
+        );
+
+        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        Assert.Null(bridge.LastFetchPath);
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_translates_InventoryNotFoundException_to_NotFound()
+    {
+        var bridge = new FakeInventoryBridge
+        {
+            ThrowOnNextCall = new InventoryNotFoundException("no thumbnail for /Inventory/Gone"),
+        };
+        await using var host = await InventoryServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Inventory.InventoryClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(
+                new InventoryThumbnailRequest { Path = "/Inventory/Gone" }
+            )
+        );
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task FetchThumbnail_without_bridge_returns_Unavailable()
+    {
+        // path は valid (非空) にしておき、bridge 未注入のみが原因で Unavailable になることを保証。
+        await using var host = await InventoryServiceHost.StartAsync(bridge: null);
+        using var channel = host.CreateChannel();
+        var client = new V1.Inventory.InventoryClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.FetchThumbnailAsync(
+                new InventoryThumbnailRequest { Path = "/Inventory/MyAvatar" }
+            )
+        );
+
+        Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+    }
 }
