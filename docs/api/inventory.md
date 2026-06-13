@@ -14,3 +14,5 @@
 ::: resoio.inventory.InventoryMutationResult
 
 ::: resoio.inventory.InventorySpawnResult
+
+::: resoio.inventory.InventoryThumbnail

@@ -19,7 +19,7 @@ any subset.
 | World | request/response | unary | [`WorldClient`](../api/world.md) | List/open worlds, sessions, and records. |
 | ContextMenu | request/response | unary | [`ContextMenuClient`](../api/context_menu.md) | Open/select the radial context menu. |
 | Dash | request/response | unary | [`DashClient`](../api/dash.md) | Drive the ESC dash overlay (Userspace). |
-| Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse and spawn inventory items. |
+| Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse, spawn, and fetch thumbnail images of inventory items. |
 | Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/hold/release/get the desktop cursor in normalized coords. |
 
 Each modality also ships a minimal runnable script under
