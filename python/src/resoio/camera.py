@@ -7,7 +7,7 @@ yields them as :class:`Frame` instances.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import override
 
@@ -70,7 +70,7 @@ class CameraClient(_BaseClient[CameraStub]):
     def _make_stub(self, channel: Channel) -> CameraStub:
         return CameraStub(channel)
 
-    async def stream(self) -> AsyncIterator[Frame]:
+    async def stream(self) -> AsyncGenerator[Frame]:
         """Stream camera frames from the server.
 
         The capture resolution is the Display modality's responsibility;
@@ -88,3 +88,23 @@ class CameraClient(_BaseClient[CameraStub]):
                 unix_nanos=raw.unix_nanos,
                 frame_id=raw.frame_id,
             )
+
+    async def shot(self) -> Frame:
+        """Take a single frame, then close the stream (one-shot).
+
+        Convenience wrapper over :meth:`stream` for the common
+        screenshot case: open the server stream, return the first
+        :class:`Frame`, and close the stream so no further frames are
+        pulled. Raises :class:`RuntimeError` if called outside
+        ``async with`` or if the server closes the stream before
+        delivering a frame.
+        """
+        frames = self.stream()
+        try:
+            return await anext(frames)
+        except StopAsyncIteration:
+            raise RuntimeError(
+                "camera stream ended before delivering a frame"
+            ) from None
+        finally:
+            await frames.aclose()

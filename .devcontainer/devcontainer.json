@@ -15,6 +15,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "anthropic.claude-code",
         "openai.chatgpt",
         "nefrob.vscode-just-syntax",
         "ms-python.python",
