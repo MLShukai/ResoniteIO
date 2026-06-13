@@ -1383,8 +1383,9 @@ side.</p>
 <ul>
 <li><strong>Camera / Speaker</strong> — Resonite → Python (server-streaming): vision and audio out.</li>
 <li><strong>Microphone / Locomotion</strong> — Python → Resonite (client-streaming): voice in, movement.</li>
-<li><strong>Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor</strong> — request/response
-  (unary): grabbing objects, reading the display, navigating worlds, driving the UI.</li>
+<li><strong>Connection / Info / Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor /
+  Lifecycle</strong> — request/response (unary): liveness and server info, grabbing objects, reading
+  the display, navigating worlds, driving the UI, and graceful shutdown.</li>
 </ul>
 <h2 id="two-layer-c-design">Two-layer C# design<a class="headerlink" href="#two-layer-c-design" title="Permanent link">&para;</a></h2>
 <p>The C# side is split into two layers:</p>
