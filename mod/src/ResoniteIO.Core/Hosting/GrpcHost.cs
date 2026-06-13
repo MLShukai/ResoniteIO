@@ -13,6 +13,7 @@ using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Info;
 using ResoniteIO.Core.Inventory;
+using ResoniteIO.Core.Lifecycle;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Microphone;
@@ -91,7 +92,8 @@ public sealed class GrpcHost : IAsyncDisposable
         IGrabberBridge? grabberBridge = null,
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
-        IInfoBridge? infoBridge = null
+        IInfoBridge? infoBridge = null,
+        ILifecycleBridge? lifecycleBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -146,6 +148,7 @@ public sealed class GrpcHost : IAsyncDisposable
         Register(grabberBridge, "Grabber");
         Register(inventoryBridge, "Inventory");
         Register(cursorBridge, "Cursor");
+        Register(lifecycleBridge, "Lifecycle");
 
         builder.WebHost.ConfigureKestrel(opts =>
         {
@@ -169,6 +172,7 @@ public sealed class GrpcHost : IAsyncDisposable
         app.MapGrpcService<GrabberService>();
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();
+        app.MapGrpcService<LifecycleService>();
 
         log.LogInfo($"GrpcHost binding UDS at {socketPath}");
 

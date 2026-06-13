@@ -71,6 +71,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "InventoryListing",
     "InventoryMutationResult",
     "InventorySpawnResult",
+    "LifecycleClient",
     "ListRecordsResponse",
     "ListSessionsResponse",
     "LocomotionClient",
@@ -92,6 +93,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "WorldSession",
     "__version__",
     "get_server_info",
+    "terminate",
 )
 
 
@@ -154,6 +156,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "GrabberClient",
         "WorldClient",
         "InventoryClient",
+        "LifecycleClient",
     ],
 )
 def test_client_class_is_importable_from_resoio(client_name: str):
@@ -302,15 +305,24 @@ def test_server_info_is_a_frozen_dataclass():
         engine_version="2025.1.1.1",
         platform=resoio.ServerPlatform.LINUX,
         is_wine=False,
+        resonite_pid=0,
+        renderer_pid=0,
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         info.mod_version = "2.0.0"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_server_info_field_names_match_snapshot():
-    """Pin the four public payload fields in declaration order."""
+    """Pin the public payload fields in declaration order."""
     names = tuple(f.name for f in dataclasses.fields(resoio.ServerInfo))
-    assert names == ("mod_version", "engine_version", "platform", "is_wine")
+    assert names == (
+        "mod_version",
+        "engine_version",
+        "platform",
+        "is_wine",
+        "resonite_pid",
+        "renderer_pid",
+    )
 
 
 def test_get_server_info_is_a_coroutine_with_optional_socket_path():

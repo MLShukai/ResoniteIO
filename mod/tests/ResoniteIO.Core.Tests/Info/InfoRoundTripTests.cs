@@ -26,14 +26,16 @@ public sealed class InfoRoundTripTests
                 ModVersion: "1.2.3-test",
                 EngineVersion: "2025.1.1.1",
                 Platform: ServerPlatform.Linux,
-                IsWine: true
+                IsWine: true,
+                ResonitePid: 4242,
+                RendererPid: 4343
             );
 
         public ServerInfoSnapshot ReadServerInfo() => Snapshot;
     }
 
     [Fact]
-    public async Task GetServerInfo_RoundTripsAllFourFieldsFromBridgeSnapshot()
+    public async Task GetServerInfo_RoundTripsAllFieldsFromBridgeSnapshot()
     {
         var bridge = new FakeInfoBridge();
         await using var harness = await GrpcHostHarness.StartAsync(infoBridge: bridge);
@@ -46,6 +48,8 @@ public sealed class InfoRoundTripTests
         Assert.Equal("2025.1.1.1", info.EngineVersion);
         Assert.Equal(V1.ServerPlatform.Linux, info.Platform);
         Assert.True(info.IsWine);
+        Assert.Equal(4242, info.ResonitePid);
+        Assert.Equal(4343, info.RendererPid);
     }
 
     [Theory]
@@ -66,7 +70,9 @@ public sealed class InfoRoundTripTests
                 ModVersion: "1.2.3-test",
                 EngineVersion: "2025.1.1.1",
                 Platform: corePlatform,
-                IsWine: false
+                IsWine: false,
+                ResonitePid: 0,
+                RendererPid: 0
             ),
         };
         await using var harness = await GrpcHostHarness.StartAsync(infoBridge: bridge);

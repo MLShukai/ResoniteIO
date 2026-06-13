@@ -13,7 +13,7 @@ resoio --help
 | Command | Modality | Direction | Notes |
 | --- | --- | --- | --- |
 | `resoio ping` | Connection | unary | Liveness check. |
-| `resoio info` | Info | unary | Print mod/engine version, OS platform, and Wine flag. |
+| `resoio info` | Info | unary | Print mod/engine version, OS platform, Wine flag, and engine/renderer host PIDs. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio to a file. `--video` / `--audio` filter; with neither, a muxed mp4/mkv. |
 | `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o` a `.png` path or `-` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
@@ -25,9 +25,15 @@ resoio --help
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Browse / spawn inventory items. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
+| `resoio terminate` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
+
+`terminate` is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
+reachable. A graceful shutdown is enough to stop the whole client — there is no SIGTERM/SIGKILL
+fallback, because the engine's own PID is not discoverable by name (`pgrep -f Resonite.exe`
+matches the Steam/Proton launch wrappers, which must not be signalled).
 
 ## Examples
 
@@ -57,6 +63,9 @@ resoio cursor center
 resoio grab --radius 0.5
 resoio grab release
 resoio cursor release
+
+# Ask the engine to quit gracefully (prints the engine host PID)
+resoio terminate
 ```
 
 Run any command with `--help` for its full flag list. For programmatic use, see the

@@ -7,6 +7,28 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`Lifecycle.Shutdown` RPC**: A new `Lifecycle` modality with a unary
+  `Shutdown` RPC that asks the engine to quit gracefully
+  (`Engine.RequestShutdown`, the in-app Quit path). The mod schedules the
+  shutdown on the engine tick and ACKs before the process tears down, so the
+  RPC returns promptly and the engine exits asynchronously. Exposed as
+  `LifecycleClient.shutdown()`
+- **`ServerInfo.resonite_pid` / `renderer_pid`**: `Info.GetServerInfo` now also
+  reports the engine (`Resonite.exe`) and renderer (`Renderite.Renderer.exe`)
+  host PIDs. The engine runs natively on Linux (`is_wine=false`), so
+  `resonite_pid` (`Environment.ProcessId`) and `renderer_pid`
+  (`RenderSystem.RendererProcess`, `0` when headless) are real host kernel PIDs.
+  Surfaced on `ServerInfo` and in the `resoio info` output (new `resonite_pid=` /
+  `renderer_pid=` lines)
+- **`resoio terminate` / `resoio.terminate`**: Stops the running Resonite client
+  gracefully — it reads the engine PID from `Info` (for reporting) and sends
+  `Lifecycle.Shutdown`; the engine quits itself and Steam/Proton reaps the
+  renderer + launch wrappers. A pure gRPC call (no OS signals), so it works from
+  anywhere the UDS is reachable. Prints / returns the engine's host PID, or
+  "resonite not running" / `None` when no engine is reachable
+
 ## [0.4.0] - 2026-06-11
 
 A **breaking** release that renames the Manipulation modality to Grabber

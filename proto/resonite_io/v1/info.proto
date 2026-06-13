@@ -36,6 +36,15 @@ message ServerInfo {
   ServerPlatform platform = 3;
   // True when the client runs under Wine/Proton (Engine.IsWine).
   bool is_wine = 4;
+  // Host PID of the engine process (Resonite.exe), from Environment.ProcessId.
+  // The engine runs natively on Linux (not under Wine), so this is the real
+  // host kernel PID, usable with pgrep/os.kill. 0 if unavailable.
+  int32 resonite_pid = 5;
+  // Host PID of the renderer process (Renderite.Renderer.exe), from
+  // RenderSystem.RendererProcess. 0 when running headless / no renderer. This
+  // is the engine's direct child; under Proton it may be a launcher/wrapper PID
+  // rather than the literal Renderite.Renderer.exe.
+  int32 renderer_pid = 6;
 }
 
 // Info exposes static, immutable metadata about the running server. Dynamic
