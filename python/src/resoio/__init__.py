@@ -13,12 +13,12 @@ from resoio.context_menu import (
 from resoio.cursor import CursorClient, CursorState
 from resoio.dash import (
     DashActionResult,
+    DashAmbiguousMatchError,
     DashClient,
-    DashElement,
-    DashRect,
-    DashScreen,
+    DashControl,
+    DashNoMatchError,
     DashState,
-    DashTree,
+    DashTab,
 )
 from resoio.display import DisplayClient, DisplayInfo
 from resoio.grabber import GrabberClient, GrabResult, GrabState
@@ -70,12 +70,12 @@ __all__ = [
     "CursorClient",
     "CursorState",
     "DashActionResult",
+    "DashAmbiguousMatchError",
     "DashClient",
-    "DashElement",
-    "DashRect",
-    "DashScreen",
+    "DashControl",
+    "DashNoMatchError",
     "DashState",
-    "DashTree",
+    "DashTab",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",

@@ -1,10 +1,11 @@
-"""Minimal Dash open -> list_screens -> set_screen -> get_tree -> invoke.
+"""Minimal Dash open -> list_tabs -> set_tab -> list_controls -> invoke.
 
-Opens the userspace Esc dash, enumerates its screens (tabs), navigates to
-the first enabled non-current screen by its language-independent key,
-introspects the rendered UI tree, invokes the first interactable element
-by ref_id, then closes the dash. Screen and element addressing use
-language-independent ``key`` / ``ref_id`` rather than localised labels.
+Opens the userspace Esc dash, enumerates its bottom-bar tabs, navigates to
+the first enabled non-current tab by its language-independent ``locale_key``,
+enumerates the interactable controls (buttons / scroll areas) of that tab,
+invokes the first control by ``ref_id``, then closes the dash. Tab and
+control addressing use language-independent ``locale_key`` / ``ref_id``
+rather than localised labels.
 
 Run from inside the dev container:
 
@@ -20,7 +21,7 @@ from grpclib.const import Status
 from resoio import DashClient
 
 SOCKET_PATH: str | None = None
-SCREEN_SETTLE_S = 0.6
+TAB_SETTLE_S = 0.6
 READY_TIMEOUT_S = 120.0
 READY_INTERVAL_S = 2.0
 
@@ -53,36 +54,39 @@ async def main() -> None:
         opened = await client.open()
         print(f"opened: is_open={opened.is_open} open_lerp={opened.open_lerp}")
 
-        screens = await client.list_screens()
-        print(f"screens: {len(screens)}")
-        for screen in screens:
+        tabs = await client.list_tabs()
+        print(f"tabs: {len(tabs)}")
+        for tab in tabs:
             print(
-                f"  key={screen.key!r} is_current={screen.is_current} "
-                f"enabled={screen.enabled} label={screen.label!r}"
+                f"  locale_key={tab.locale_key!r} is_current={tab.is_current} "
+                f"enabled={tab.enabled} label={tab.label!r}"
             )
 
-        # Navigate to the first enabled, keyed screen that is not the current
-        # one. set_screen addresses screens by language-independent key.
+        # Navigate to the first enabled, keyed tab that is not the current one.
+        # set_tab addresses tabs by language-independent locale_key.
         target = next(
-            (s for s in screens if s.enabled and s.key and not s.is_current), None
+            (t for t in tabs if t.enabled and t.locale_key and not t.is_current), None
         )
         if target is not None:
-            nav = await client.set_screen(key=target.key)
-            print(f"set_screen({target.key!r}): ok={nav.ok} found={nav.found}")
-            # The screen-switch animation needs a moment before get_tree
-            # reflects the new screen's content.
-            await asyncio.sleep(SCREEN_SETTLE_S)
+            nav = await client.set_tab(locale_key=target.locale_key)
+            print(f"set_tab({target.locale_key!r}): ok={nav.ok} found={nav.found}")
+            # The tab-switch animation needs a moment before list_controls
+            # reflects the new tab's content.
+            await asyncio.sleep(TAB_SETTLE_S)
 
-        tree = await client.get_tree(interactable_only=True)
-        print(
-            f"tree: {len(tree.elements)} interactable elements "
-            f"screen={tree.screen_width}x{tree.screen_height}"
-        )
+        controls = await client.list_controls()
+        print(f"controls: {len(controls)} interactable")
+        for control in controls:
+            indent = "  " * control.depth
+            print(
+                f"  {indent}[{control.control_type}] {control.label!r} "
+                f"enabled={control.enabled} ref_id={control.ref_id}"
+            )
 
-        # Invoke the first interactable element by its language-independent
-        # ref_id. found/ok report whether it resolved and applied.
-        if tree.elements:
-            ref_id = tree.elements[0].ref_id
+        # Invoke the first control by its language-independent ref_id.
+        # found/ok report whether it resolved and applied.
+        if controls:
+            ref_id = controls[0].ref_id
             result = await client.invoke(ref_id)
             print(
                 f"invoke ref_id={ref_id}: ok={result.ok} found={result.found} "

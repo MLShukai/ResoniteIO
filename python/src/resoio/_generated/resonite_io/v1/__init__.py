@@ -31,21 +31,20 @@ __all__ = (
     "DashActionResult",
     "DashBase",
     "DashCloseRequest",
-    "DashElement",
+    "DashControl",
+    "DashControlList",
     "DashGetStateRequest",
-    "DashGetTreeRequest",
     "DashHighlightRequest",
     "DashInvokeRequest",
-    "DashListScreensRequest",
+    "DashListControlsRequest",
+    "DashListTabsRequest",
     "DashOpenRequest",
-    "DashRect",
-    "DashScreen",
-    "DashScreenList",
     "DashScrollRequest",
-    "DashSetScreenRequest",
+    "DashSetTabRequest",
     "DashState",
     "DashStub",
-    "DashTree",
+    "DashTab",
+    "DashTabList",
     "DisplayApplyResponse",
     "DisplayBase",
     "DisplayConfig",
@@ -762,7 +761,7 @@ default_message_pool.register_message("resonite_io.v1", "CursorState", CursorSta
 @dataclass(eq=False, repr=False)
 class DashActionResult(betterproto2.Message):
     """
-    状態変化系操作の結果。
+    状態変化系操作 (SetTab / Invoke / Scroll / Highlight) の結果。
     """
 
     ok: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
@@ -772,7 +771,7 @@ class DashActionResult(betterproto2.Message):
 
     found: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
     """
-    指定 ref_id の要素が解決できたか (false なら ok も false)。
+    指定 ref_id の対象が解決できたか (false なら ok も false)。
     """
 
     ref_id: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
@@ -782,7 +781,7 @@ class DashActionResult(betterproto2.Message):
 
     detail: "str" = betterproto2.field(4, betterproto2.TYPE_STRING)
     """
-    補足 (lock / 非 interactable / 未解決などの理由)。
+    補足 (型不一致 / 未解決 / disabled などの理由)。
     """
 
 
@@ -802,66 +801,66 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
-class DashElement(betterproto2.Message):
+class DashControl(betterproto2.Message):
     """
-    dash UI ツリーの 1 ノード。`ref_id` / `locale_key` が言語非依存の主キー。
+    現在の tab 内の操作可能な control 1 個 (押せる `Button` か、スクロールできる
+    `ScrollRect`)。v1 はこの 2 種のみ (slider / text field は対象外)。
     """
 
     ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
     """
-    `Slot.ReferenceID.ToString()`。Invoke / Highlight / Scroll はこの ref_id で解決する。
+    control slot の `ReferenceID.ToString()`。Invoke / Scroll / Highlight の主キー。
     """
 
-    type: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    control_type: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
     """
-    component 型名 ("Button" / "ScrollRect" / "Text" / "Image" 等)。
+    "button" | "scroll"。server 側で正規化済み。
     """
 
-    slot_name: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
+    label: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
     """
-    `Slot.Name` (author 設定。空のことがある)。
+    人間向け表示ラベル (localize 済み)。`Button.LabelText` → 子 `Text.Content`
+    → `locale_key` → `Slot.Name` の優先で解決。icon-only button 等では空のこともある。
     """
 
     locale_key: "str" = betterproto2.field(4, betterproto2.TYPE_STRING)
     """
-    `LocaleString.content` (isLocaleKey のときのみ。例 "Settings.Audio")。言語非依存。
-    生文字列ラベル (localize 済み) しか無い要素では空。
+    言語非依存の locale key (`LocaleStringDriver.Key`)。生文字列ラベルでは空文字。
     """
 
-    label: "str" = betterproto2.field(5, betterproto2.TYPE_STRING)
+    enabled: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
     """
-    表示テキスト (`Button.LabelText` 等。localize 済み。debug / 人間向け)。
-    """
-
-    enabled: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
-    """
-    有効か (`Slot.IsActive` かつ component active)。
+    操作可能か (`Button.Enabled` 等)。include_disabled=true のとき disabled も含む。
     """
 
-    interactable: "bool" = betterproto2.field(7, betterproto2.TYPE_BOOL)
+    parent_ref_id: "str" = betterproto2.field(6, betterproto2.TYPE_STRING)
     """
-    操作可能か (`IUIInteractable` かつ enabled)。
+    直近の列挙済み control 祖先の ref_id (軽い階層表示用。最上位は空文字)。
     """
 
-    rect: "DashRect | None" = betterproto2.field(
-        8, betterproto2.TYPE_MESSAGE, optional=True
+    depth: "int" = betterproto2.field(7, betterproto2.TYPE_INT32)
+    """
+    列挙済み control 階層の深さ (最上位 = 0)。
+    """
+
+
+default_message_pool.register_message("resonite_io.v1", "DashControl", DashControl)
+
+
+@dataclass(eq=False, repr=False)
+class DashControlList(betterproto2.Message):
+    """
+    `ListControls` の戻り。現在の tab 内の control 一覧 (reading 順 = 上→下, 左→右)。
+    """
+
+    controls: "list[DashControl]" = betterproto2.field(
+        1, betterproto2.TYPE_MESSAGE, repeated=True
     )
-    """
-    要素の矩形。
-    """
-
-    parent_ref_id: "str" = betterproto2.field(9, betterproto2.TYPE_STRING)
-    """
-    親要素の ref_id (ツリー連結用。root は空)。
-    """
-
-    depth: "int" = betterproto2.field(10, betterproto2.TYPE_INT32)
-    """
-    ツリー深さ (root = 0)。
-    """
 
 
-default_message_pool.register_message("resonite_io.v1", "DashElement", DashElement)
+default_message_pool.register_message(
+    "resonite_io.v1", "DashControlList", DashControlList
+)
 
 
 @dataclass(eq=False, repr=False)
@@ -871,24 +870,6 @@ class DashGetStateRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "resonite_io.v1", "DashGetStateRequest", DashGetStateRequest
-)
-
-
-@dataclass(eq=False, repr=False)
-class DashGetTreeRequest(betterproto2.Message):
-    interactable_only: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
-    """
-    true なら interactable な要素のみ返す。
-    """
-
-    root_ref_id: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
-    """
-    部分木の root に使う ref_id。空なら dash 全体。
-    """
-
-
-default_message_pool.register_message(
-    "resonite_io.v1", "DashGetTreeRequest", DashGetTreeRequest
 )
 
 
@@ -913,12 +894,25 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
-class DashListScreensRequest(betterproto2.Message):
+class DashListControlsRequest(betterproto2.Message):
+    include_disabled: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
+    """
+    true なら disabled control も含める。default(false) は enabled のみ。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "DashListControlsRequest", DashListControlsRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class DashListTabsRequest(betterproto2.Message):
     pass
 
 
 default_message_pool.register_message(
-    "resonite_io.v1", "DashListScreensRequest", DashListScreensRequest
+    "resonite_io.v1", "DashListTabsRequest", DashListTabsRequest
 )
 
 
@@ -933,90 +927,13 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
-class DashRect(betterproto2.Message):
-    """
-    UI 要素の矩形。origin = 画面左上 (0,0)、x 右・y 下。
-    is_screen_space=false の場合は canvas 空間座標 (screen pixel 逆投影が未確定な
-    ときのフォールバック)。client は is_screen_space で解釈を切り替える。
-    """
-
-    x: "float" = betterproto2.field(1, betterproto2.TYPE_FLOAT)
-
-    y: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
-
-    width: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
-
-    height: "float" = betterproto2.field(4, betterproto2.TYPE_FLOAT)
-
-    is_screen_space: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
-
-
-default_message_pool.register_message("resonite_io.v1", "DashRect", DashRect)
-
-
-@dataclass(eq=False, repr=False)
-class DashScreen(betterproto2.Message):
-    """
-    dash 下部タブが切り替える 1 screen (`RadiantDashScreen`) のスナップショット。
-    `key` (LocaleStringDriver key、例 "Dash.Screens.Worlds") と `ref_id` が言語非依存キー。
-    """
-
-    ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
-    """
-    screen slot の `ReferenceID.ToString()`。SetScreen の exact 指定キー。
-    """
-
-    key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
-    """
-    言語非依存の主キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
-    取得できない screen では空文字。
-    """
-
-    name: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
-    """
-    `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
-    """
-
-    label: "str" = betterproto2.field(4, betterproto2.TYPE_STRING)
-    """
-    `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
-    """
-
-    is_current: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
-    """
-    この screen が current screen か (`screen == dash.Dash.CurrentScreen.Target`)。
-    """
-
-    enabled: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
-    """
-    遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
-    """
-
-
-default_message_pool.register_message("resonite_io.v1", "DashScreen", DashScreen)
-
-
-@dataclass(eq=False, repr=False)
-class DashScreenList(betterproto2.Message):
-    """
-    `ListScreens` の戻り。dash の全 screen 一覧。
-    """
-
-    screens: "list[DashScreen]" = betterproto2.field(
-        1, betterproto2.TYPE_MESSAGE, repeated=True
-    )
-
-
-default_message_pool.register_message(
-    "resonite_io.v1", "DashScreenList", DashScreenList
-)
-
-
-@dataclass(eq=False, repr=False)
 class DashScrollRequest(betterproto2.Message):
     ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
 
     delta_x: "float" = betterproto2.field(2, betterproto2.TYPE_FLOAT)
+    """
+    `ScrollRect.NormalizedPosition` への加算量 ([0,1] 空間)。
+    """
 
     delta_y: "float" = betterproto2.field(3, betterproto2.TYPE_FLOAT)
 
@@ -1027,20 +944,20 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
-class DashSetScreenRequest(betterproto2.Message):
+class DashSetTabRequest(betterproto2.Message):
     ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
     """
     exact 指定キー (screen slot の ReferenceID)。非空なら優先。
     """
 
-    key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    locale_key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
     """
     言語非依存キー (例 "Dash.Screens.Worlds")。ref_id が空なら使う。
     """
 
 
 default_message_pool.register_message(
-    "resonite_io.v1", "DashSetScreenRequest", DashSetScreenRequest
+    "resonite_io.v1", "DashSetTabRequest", DashSetTabRequest
 )
 
 
@@ -1065,27 +982,59 @@ default_message_pool.register_message("resonite_io.v1", "DashState", DashState)
 
 
 @dataclass(eq=False, repr=False)
-class DashTree(betterproto2.Message):
+class DashTab(betterproto2.Message):
     """
-    dash UI ツリーのスナップショット。
+    下部タブバーの 1 タブ (`RadiantDashScreen`)。
+    `ref_id` と `locale_key` (例 "Dash.Screens.Worlds") が言語非依存キー。
     """
 
-    elements: "list[DashElement]" = betterproto2.field(
+    ref_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+    """
+    screen slot の `ReferenceID.ToString()`。SetTab の exact 指定キー。
+    """
+
+    locale_key: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    """
+    言語非依存キー。`LocaleHelper.GetLocalizedDriver(screen.Label)?.Key?.Value`。
+    取得できない tab では空文字。
+    """
+
+    name: "str" = betterproto2.field(3, betterproto2.TYPE_STRING)
+    """
+    `screen.Slot.Name` (例 "Worlds")。第 2 の言語非依存 ID。
+    """
+
+    label: "str" = betterproto2.field(4, betterproto2.TYPE_STRING)
+    """
+    `screen.Label.Value` (localize 済み表示テキスト。debug / 人間向け)。
+    """
+
+    is_current: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    この tab が現在表示中か (`screen == dash.Dash.CurrentScreen.Target`)。
+    """
+
+    enabled: "bool" = betterproto2.field(6, betterproto2.TYPE_BOOL)
+    """
+    遷移可能か (`screen.ScreenEnabled.Value`。例: ログアウト中の Contacts は false)。
+    """
+
+
+default_message_pool.register_message("resonite_io.v1", "DashTab", DashTab)
+
+
+@dataclass(eq=False, repr=False)
+class DashTabList(betterproto2.Message):
+    """
+    `ListTabs` の戻り。dash の全 tab 一覧。
+    """
+
+    tabs: "list[DashTab]" = betterproto2.field(
         1, betterproto2.TYPE_MESSAGE, repeated=True
     )
-    """
-    列挙された要素 (深さ優先順)。dash が閉じているときは空。
-    """
-
-    screen_width: "int" = betterproto2.field(2, betterproto2.TYPE_INT32)
-    """
-    ポインタ座標空間 = 現在の window 解像度 (pixel)。grounding 用。
-    """
-
-    screen_height: "int" = betterproto2.field(3, betterproto2.TYPE_INT32)
 
 
-default_message_pool.register_message("resonite_io.v1", "DashTree", DashTree)
+default_message_pool.register_message("resonite_io.v1", "DashTabList", DashTabList)
 
 
 @dataclass(eq=False, repr=False)
@@ -2612,22 +2561,67 @@ class DashStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
-    async def get_tree(
+    async def list_tabs(
         self,
-        message: "DashGetTreeRequest",
+        message: "DashListTabsRequest | None" = None,
         *,
         timeout: "float | None" = None,
         deadline: "Deadline | None" = None,
         metadata: "MetadataLike | None" = None,
-    ) -> "DashTree":
+    ) -> "DashTabList":
         """
-        現在開いている dash UI ツリーを列挙する。
+        下部タブバーの全 tab を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+        """
+
+        if message is None:
+            message = DashListTabsRequest()
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Dash/ListTabs",
+            message,
+            DashTabList,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def set_tab(
+        self,
+        message: "DashSetTabRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "DashActionResult":
+        """
+        指定 tab (ref_id 優先、でなければ locale_key) へ切り替える。両空は InvalidArgument。
         """
 
         return await self._unary_unary(
-            "/resonite_io.v1.Dash/GetTree",
+            "/resonite_io.v1.Dash/SetTab",
             message,
-            DashTree,
+            DashActionResult,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def list_controls(
+        self,
+        message: "DashListControlsRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "DashControlList":
+        """
+        現在の tab 内の操作可能な control を reading 順で列挙する (tab 切替は SetTab で先に行う)。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Dash/ListControls",
+            message,
+            DashControlList,
             timeout=timeout,
             deadline=deadline,
             metadata=metadata,
@@ -2642,32 +2636,11 @@ class DashStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "DashActionResult":
         """
-        指定 ref_id の要素のアクションを実行する (Button.SimulatePress 等)。
+        指定 ref_id の control を実行する (Button.SimulatePress)。
         """
 
         return await self._unary_unary(
             "/resonite_io.v1.Dash/Invoke",
-            message,
-            DashActionResult,
-            timeout=timeout,
-            deadline=deadline,
-            metadata=metadata,
-        )
-
-    async def highlight(
-        self,
-        message: "DashHighlightRequest",
-        *,
-        timeout: "float | None" = None,
-        deadline: "Deadline | None" = None,
-        metadata: "MetadataLike | None" = None,
-    ) -> "DashActionResult":
-        """
-        指定 ref_id の要素をハイライト (hover) する。実行はしない。
-        """
-
-        return await self._unary_unary(
-            "/resonite_io.v1.Dash/Highlight",
             message,
             DashActionResult,
             timeout=timeout,
@@ -2684,7 +2657,7 @@ class DashStub(betterproto2_grpclib.ServiceStub):
         metadata: "MetadataLike | None" = None,
     ) -> "DashActionResult":
         """
-        指定 ref_id の要素にスクロールを当てる。
+        指定 ref_id の control にスクロールを当てる (ScrollRect)。
         """
 
         return await self._unary_unary(
@@ -2696,44 +2669,20 @@ class DashStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
-    async def list_screens(
+    async def highlight(
         self,
-        message: "DashListScreensRequest | None" = None,
-        *,
-        timeout: "float | None" = None,
-        deadline: "Deadline | None" = None,
-        metadata: "MetadataLike | None" = None,
-    ) -> "DashScreenList":
-        """
-        dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
-        """
-
-        if message is None:
-            message = DashListScreensRequest()
-
-        return await self._unary_unary(
-            "/resonite_io.v1.Dash/ListScreens",
-            message,
-            DashScreenList,
-            timeout=timeout,
-            deadline=deadline,
-            metadata=metadata,
-        )
-
-    async def set_screen(
-        self,
-        message: "DashSetScreenRequest",
+        message: "DashHighlightRequest",
         *,
         timeout: "float | None" = None,
         deadline: "Deadline | None" = None,
         metadata: "MetadataLike | None" = None,
     ) -> "DashActionResult":
         """
-        指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
+        指定 ref_id の control をハイライト (hover) する。実行はしない (Button のみ対応)。
         """
 
         return await self._unary_unary(
-            "/resonite_io.v1.Dash/SetScreen",
+            "/resonite_io.v1.Dash/Highlight",
             message,
             DashActionResult,
             timeout=timeout,
@@ -3627,44 +3576,46 @@ class DashBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
-    async def get_tree(self, message: "DashGetTreeRequest") -> "DashTree":
+    async def list_tabs(self, message: "DashListTabsRequest") -> "DashTabList":
         """
-        現在開いている dash UI ツリーを列挙する。
+        下部タブバーの全 tab を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def set_tab(self, message: "DashSetTabRequest") -> "DashActionResult":
+        """
+        指定 tab (ref_id 優先、でなければ locale_key) へ切り替える。両空は InvalidArgument。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def list_controls(
+        self, message: "DashListControlsRequest"
+    ) -> "DashControlList":
+        """
+        現在の tab 内の操作可能な control を reading 順で列挙する (tab 切替は SetTab で先に行う)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def invoke(self, message: "DashInvokeRequest") -> "DashActionResult":
         """
-        指定 ref_id の要素のアクションを実行する (Button.SimulatePress 等)。
-        """
-
-        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
-
-    async def highlight(self, message: "DashHighlightRequest") -> "DashActionResult":
-        """
-        指定 ref_id の要素をハイライト (hover) する。実行はしない。
+        指定 ref_id の control を実行する (Button.SimulatePress)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
     async def scroll(self, message: "DashScrollRequest") -> "DashActionResult":
         """
-        指定 ref_id の要素にスクロールを当てる。
+        指定 ref_id の control にスクロールを当てる (ScrollRect)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
-    async def list_screens(self, message: "DashListScreensRequest") -> "DashScreenList":
+    async def highlight(self, message: "DashHighlightRequest") -> "DashActionResult":
         """
-        dash の全 screen を言語非依存キー付きで列挙する。dash が閉じていても列挙できる。
-        """
-
-        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
-
-    async def set_screen(self, message: "DashSetScreenRequest") -> "DashActionResult":
-        """
-        指定 screen (ref_id 優先、でなければ key) へ遷移する。両空は InvalidArgument。
+        指定 ref_id の control をハイライト (hover) する。実行はしない (Button のみ対応)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
@@ -3693,12 +3644,28 @@ class DashBase(betterproto2_grpclib.ServiceBase):
         response = await self.get_state(request)
         await stream.send_message(response)
 
-    async def __rpc_get_tree(
-        self, stream: "grpclib.server.Stream[DashGetTreeRequest, DashTree]"
+    async def __rpc_list_tabs(
+        self, stream: "grpclib.server.Stream[DashListTabsRequest, DashTabList]"
     ) -> None:
         request = await stream.recv_message()
         assert request is not None
-        response = await self.get_tree(request)
+        response = await self.list_tabs(request)
+        await stream.send_message(response)
+
+    async def __rpc_set_tab(
+        self, stream: "grpclib.server.Stream[DashSetTabRequest, DashActionResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.set_tab(request)
+        await stream.send_message(response)
+
+    async def __rpc_list_controls(
+        self, stream: "grpclib.server.Stream[DashListControlsRequest, DashControlList]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.list_controls(request)
         await stream.send_message(response)
 
     async def __rpc_invoke(
@@ -3709,14 +3676,6 @@ class DashBase(betterproto2_grpclib.ServiceBase):
         response = await self.invoke(request)
         await stream.send_message(response)
 
-    async def __rpc_highlight(
-        self, stream: "grpclib.server.Stream[DashHighlightRequest, DashActionResult]"
-    ) -> None:
-        request = await stream.recv_message()
-        assert request is not None
-        response = await self.highlight(request)
-        await stream.send_message(response)
-
     async def __rpc_scroll(
         self, stream: "grpclib.server.Stream[DashScrollRequest, DashActionResult]"
     ) -> None:
@@ -3725,20 +3684,12 @@ class DashBase(betterproto2_grpclib.ServiceBase):
         response = await self.scroll(request)
         await stream.send_message(response)
 
-    async def __rpc_list_screens(
-        self, stream: "grpclib.server.Stream[DashListScreensRequest, DashScreenList]"
+    async def __rpc_highlight(
+        self, stream: "grpclib.server.Stream[DashHighlightRequest, DashActionResult]"
     ) -> None:
         request = await stream.recv_message()
         assert request is not None
-        response = await self.list_screens(request)
-        await stream.send_message(response)
-
-    async def __rpc_set_screen(
-        self, stream: "grpclib.server.Stream[DashSetScreenRequest, DashActionResult]"
-    ) -> None:
-        request = await stream.recv_message()
-        assert request is not None
-        response = await self.set_screen(request)
+        response = await self.highlight(request)
         await stream.send_message(response)
 
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
@@ -3761,22 +3712,28 @@ class DashBase(betterproto2_grpclib.ServiceBase):
                 DashGetStateRequest,
                 DashState,
             ),
-            "/resonite_io.v1.Dash/GetTree": grpclib.const.Handler(
-                self.__rpc_get_tree,
+            "/resonite_io.v1.Dash/ListTabs": grpclib.const.Handler(
+                self.__rpc_list_tabs,
                 grpclib.const.Cardinality.UNARY_UNARY,
-                DashGetTreeRequest,
-                DashTree,
+                DashListTabsRequest,
+                DashTabList,
+            ),
+            "/resonite_io.v1.Dash/SetTab": grpclib.const.Handler(
+                self.__rpc_set_tab,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DashSetTabRequest,
+                DashActionResult,
+            ),
+            "/resonite_io.v1.Dash/ListControls": grpclib.const.Handler(
+                self.__rpc_list_controls,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DashListControlsRequest,
+                DashControlList,
             ),
             "/resonite_io.v1.Dash/Invoke": grpclib.const.Handler(
                 self.__rpc_invoke,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 DashInvokeRequest,
-                DashActionResult,
-            ),
-            "/resonite_io.v1.Dash/Highlight": grpclib.const.Handler(
-                self.__rpc_highlight,
-                grpclib.const.Cardinality.UNARY_UNARY,
-                DashHighlightRequest,
                 DashActionResult,
             ),
             "/resonite_io.v1.Dash/Scroll": grpclib.const.Handler(
@@ -3785,16 +3742,10 @@ class DashBase(betterproto2_grpclib.ServiceBase):
                 DashScrollRequest,
                 DashActionResult,
             ),
-            "/resonite_io.v1.Dash/ListScreens": grpclib.const.Handler(
-                self.__rpc_list_screens,
+            "/resonite_io.v1.Dash/Highlight": grpclib.const.Handler(
+                self.__rpc_highlight,
                 grpclib.const.Cardinality.UNARY_UNARY,
-                DashListScreensRequest,
-                DashScreenList,
-            ),
-            "/resonite_io.v1.Dash/SetScreen": grpclib.const.Handler(
-                self.__rpc_set_screen,
-                grpclib.const.Cardinality.UNARY_UNARY,
-                DashSetScreenRequest,
+                DashHighlightRequest,
                 DashActionResult,
             ),
         }

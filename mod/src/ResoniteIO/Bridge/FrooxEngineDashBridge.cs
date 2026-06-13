@@ -23,10 +23,9 @@ namespace ResoniteIO.Bridge;
 /// </para>
 /// <para>
 /// dash は ContextMenu の radial メニューとは別系統で、<c>UserspaceWorld</c> 配下に
-/// globally-registered された <see cref="UserspaceRadiantDash"/> を扱う。Open/Close/State は
-/// engine API で確実に動くが、ツリー列挙 / Invoke / Highlight / Scroll は UIX (<see cref="RectTransform"/> /
-/// <see cref="Button"/> / <see cref="ScrollRect"/> 等) の best-effort で、screen pixel への逆投影は
-/// 未対応のため Rect は canvas 空間で返す (<c>IsScreenSpace=false</c>)。
+/// globally-registered された <see cref="UserspaceRadiantDash"/> を扱う。下部タブ
+/// (<see cref="RadiantDashScreen"/>) と、現タブ内の操作対象コントロール
+/// (<see cref="Button"/> = 押下 / <see cref="ScrollRect"/> = スクロール) を扱う。
 /// </para>
 /// <para>
 /// 操作系 (Invoke / Highlight / Scroll) の対象未解決・型不一致は例外でなく
@@ -80,33 +79,109 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <inheritdoc/>
-    public Task<DashTreeSnapshot> GetTreeAsync(
-        bool interactableOnly,
-        string rootRefId,
+    public Task<DashTabListSnapshot> ListTabsAsync(CancellationToken ct)
+    {
+        return RunOnEngineAsync(
+            () =>
+            {
+                var radiant = ResolveRadiantDash();
+                var current = radiant.CurrentScreen?.Target;
+
+                var tabs = new List<DashTabSnapshot>();
+                foreach (var screen in radiant.Screens)
+                {
+                    tabs.Add(BuildTabSnapshot(screen, current));
+                }
+
+                return new DashTabListSnapshot(tabs);
+            },
+            ct
+        );
+    }
+
+    /// <inheritdoc/>
+    public Task<DashActionResultSnapshot> SetTabAsync(
+        string refId,
+        string localeKey,
         CancellationToken ct
     )
     {
         return RunOnEngineAsync(
             () =>
             {
-                var world = ResolveWorld();
-                var dash = ResolveDash(world);
+                var radiant = ResolveRadiantDash();
 
-                var rootSlot = ResolveTreeRoot(world, dash, rootRefId);
-                var elements = new List<DashElementSnapshot>();
-                if (rootSlot is not null)
+                var screen = ResolveScreen(radiant, refId, localeKey);
+                if (screen is null)
                 {
-                    CollectElements(
-                        rootSlot,
-                        parentRefId: string.Empty,
-                        depth: 0,
-                        interactableOnly,
-                        elements
-                    );
+                    return NotFoundTab();
                 }
 
-                var resolution = world.InputInterface?.WindowResolution ?? int2.Zero;
-                return new DashTreeSnapshot(elements, resolution.x, resolution.y);
+                // engine 自身の RadiantDashButton.Pressed と同一経路で CurrentScreen.Target に直接代入する。
+                // タブ Button を SimulatePress で叩く経路は採らない: 言語非依存 locale_key で解決した screen を
+                // 確実かつ同期的に切り替えられ、Button の hit-test / interactable gating に左右されないため。
+                radiant.CurrentScreen.Target = screen;
+
+                // echo は ListTabs / ResolveScreen と同じ Slot の RefID に揃える
+                // (client が echo した ref_id を再度 set_tab(ref_id=...) に使えるように)。
+                var afterRefId =
+                    radiant.CurrentScreen?.Target?.Slot?.ReferenceID.ToString()
+                    ?? screen.Slot?.ReferenceID.ToString()
+                    ?? string.Empty;
+
+                // disabled screen でも代入自体はブロックされない (button 側の gating)。
+                // 遷移は成立扱い (ok=true) とし、無効状態は detail で通知する。
+                var detail =
+                    screen.ScreenEnabled?.Value == false ? "screen disabled" : string.Empty;
+
+                return new DashActionResultSnapshot(
+                    Ok: true,
+                    Found: true,
+                    RefId: afterRefId,
+                    Detail: detail
+                );
+            },
+            ct
+        );
+    }
+
+    /// <inheritdoc/>
+    public Task<DashControlListSnapshot> ListControlsAsync(
+        bool includeDisabled,
+        CancellationToken ct
+    )
+    {
+        return RunOnEngineAsync(
+            () =>
+            {
+                var radiant = ResolveRadiantDash();
+                var root = radiant.CurrentScreen?.Target?.ScreenRoot;
+                if (root is null)
+                {
+                    return new DashControlListSnapshot(Array.Empty<DashControlSnapshot>());
+                }
+
+                // DFS で root 配下から control (Button / ScrollRect) を収集する。control を実際に
+                // emit したときだけ parent/depth を進める (light hierarchy)。各 control の sort key
+                // (canvas-space rect) も同時に拾い、最後に y→x で stable-sort する。
+                var collected = new List<CollectedControl>();
+                CollectControls(
+                    root,
+                    parentRefId: string.Empty,
+                    depth: 0,
+                    includeDisabled,
+                    collected
+                );
+
+                StableSortByRect(collected);
+
+                var controls = new List<DashControlSnapshot>(collected.Count);
+                foreach (var entry in collected)
+                {
+                    controls.Add(entry.Snapshot);
+                }
+
+                return new DashControlListSnapshot(controls);
             },
             ct
         );
@@ -126,7 +201,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                 var button = slot.GetComponent<Button>();
                 if (button is null)
                 {
-                    return Rejected(refId, "element is not a button");
+                    return Rejected(refId, "control is not a button");
                 }
 
                 // ContextMenu.PressMenuItem と同じ呼び方:
@@ -140,30 +215,6 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                     0.1f,
                     new ButtonEventData(button, in globalPoint, in localPress, in localPress)
                 );
-                return Succeeded(refId);
-            },
-            ct
-        );
-    }
-
-    /// <inheritdoc/>
-    public Task<DashActionResultSnapshot> HighlightAsync(string refId, CancellationToken ct)
-    {
-        return RunOnEngineAsync(
-            () =>
-            {
-                if (!TryResolveSlot(refId, out var slot))
-                {
-                    return NotFound(refId);
-                }
-
-                var element = slot.GetComponent<InteractionElement>();
-                if (element is null)
-                {
-                    return Rejected(refId, "element does not support hover");
-                }
-
-                element.IsHovering.Value = true;
                 return Succeeded(refId);
             },
             ct
@@ -190,7 +241,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
                     slot.GetComponent<ScrollRect>() ?? slot.GetComponentInParents<ScrollRect>();
                 if (scroll is null)
                 {
-                    return Rejected(refId, "element is not scrollable");
+                    return Rejected(refId, "control is not scrollable");
                 }
 
                 scroll.NormalizedPosition.Value = MathX.Clamp01(
@@ -203,64 +254,25 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <inheritdoc/>
-    public Task<DashScreenListSnapshot> ListScreensAsync(CancellationToken ct)
+    public Task<DashActionResultSnapshot> HighlightAsync(string refId, CancellationToken ct)
     {
         return RunOnEngineAsync(
             () =>
             {
-                var radiant = ResolveRadiantDash();
-                var current = radiant.CurrentScreen?.Target;
-
-                var screens = new List<DashScreenSnapshot>();
-                foreach (var screen in radiant.Screens)
+                if (!TryResolveSlot(refId, out var slot))
                 {
-                    screens.Add(BuildScreenSnapshot(screen, current));
+                    return NotFound(refId);
                 }
 
-                return new DashScreenListSnapshot(screens);
-            },
-            ct
-        );
-    }
-
-    /// <inheritdoc/>
-    public Task<DashActionResultSnapshot> SetScreenAsync(
-        string refId,
-        string key,
-        CancellationToken ct
-    )
-    {
-        return RunOnEngineAsync(
-            () =>
-            {
-                var radiant = ResolveRadiantDash();
-
-                var screen = ResolveScreen(radiant, refId, key);
-                if (screen is null)
+                var element = slot.GetComponent<InteractionElement>();
+                if (element is null)
                 {
-                    return NotFoundScreen();
+                    // ScrollRect は InteractionElement ではないため hover 非対応として reject される。
+                    return Rejected(refId, "control does not support hover");
                 }
 
-                // engine 自身の RadiantDashButton.Pressed と同一経路で CurrentScreen.Target に直接代入する。
-                // タブ Button を SimulatePress で叩く経路は採らない: 言語非依存 key で解決した screen を
-                // 確実かつ同期的に切り替えられ、Button の hit-test / interactable gating に左右されないため。
-                radiant.CurrentScreen.Target = screen;
-
-                var afterRefId =
-                    radiant.CurrentScreen?.Target?.ReferenceID.ToString()
-                    ?? screen.ReferenceID.ToString();
-
-                // disabled screen でも代入自体はブロックされない (button 側の gating)。
-                // 遷移は成立扱い (ok=true) とし、無効状態は detail で通知する。
-                var detail =
-                    screen.ScreenEnabled?.Value == false ? "screen disabled" : string.Empty;
-
-                return new DashActionResultSnapshot(
-                    Ok: true,
-                    Found: true,
-                    RefId: afterRefId,
-                    Detail: detail
-                );
+                element.IsHovering.Value = true;
+                return Succeeded(refId);
             },
             ct
         );
@@ -283,20 +295,13 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         return world;
     }
 
-    /// <summary>現在の userspace world から dash を解決する。</summary>
+    /// <summary>
+    /// 現在の userspace world に globally-registered された <see cref="UserspaceRadiantDash"/> を解決する。
+    /// 未準備なら <see cref="DashNotReadyException"/>。engine thread 前提。
+    /// </summary>
     private static UserspaceRadiantDash ResolveDash()
     {
-        return ResolveDash(ResolveWorld());
-    }
-
-    /// <summary>
-    /// <paramref name="world"/> に globally-registered された <see cref="UserspaceRadiantDash"/> を解決する。
-    /// 未準備なら <see cref="DashNotReadyException"/>。
-    /// </summary>
-    /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private static UserspaceRadiantDash ResolveDash(World world)
-    {
-        var dash = world.GetGloballyRegisteredComponent<UserspaceRadiantDash>();
+        var dash = ResolveWorld().GetGloballyRegisteredComponent<UserspaceRadiantDash>();
         if (dash is null)
         {
             throw new DashNotReadyException(
@@ -313,7 +318,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <summary>
-    /// 現在の dash から <see cref="RadiantDash"/> (screen 列挙・遷移の本体) を解決する。
+    /// 現在の dash から <see cref="RadiantDash"/> (tab 列挙・遷移の本体) を解決する。
     /// <c>dash.Dash</c> が transient に null のことがあるため、null なら <see cref="DashNotReadyException"/>。
     /// </summary>
     /// <remarks>engine thread 前提。</remarks>
@@ -328,26 +333,27 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <summary>
-    /// 1 screen の snapshot を構築する。<c>Key</c> は <see cref="ResolveLocaleKey"/> 経由で
-    /// screen ラベルを駆動する <c>LocaleStringDriver</c> から取る (言語非依存の主キー)。engine thread 前提。
+    /// 1 tab (<see cref="RadiantDashScreen"/>) の snapshot を構築する。<c>LocaleKey</c> は
+    /// <see cref="ResolveLocaleKey"/> 経由で tab ラベルを駆動する <c>LocaleStringDriver</c> から取る
+    /// (言語非依存の主キー)。engine thread 前提。
     /// </summary>
-    private static DashScreenSnapshot BuildScreenSnapshot(
+    private static DashTabSnapshot BuildTabSnapshot(
         RadiantDashScreen screen,
         RadiantDashScreen? current
     )
     {
-        return new DashScreenSnapshot(
-            RefId: screen.ReferenceID.ToString(),
-            Key: ResolveLocaleKey(screen.Label),
+        return new DashTabSnapshot(
+            RefId: screen.Slot?.ReferenceID.ToString() ?? string.Empty,
+            LocaleKey: ResolveLocaleKey(screen.Label),
             Name: screen.Slot?.Name ?? string.Empty,
             Label: screen.Label?.Value ?? string.Empty,
             IsCurrent: current is not null && screen == current,
-            Enabled: screen.ScreenEnabled?.Value ?? false
+            Enabled: screen.ScreenEnabled?.Value ?? true
         );
     }
 
     /// <summary>
-    /// <paramref name="refId"/> 優先、空なら <paramref name="key"/> で <paramref name="radiant"/> の
+    /// <paramref name="refId"/> 優先、空なら <paramref name="localeKey"/> で <paramref name="radiant"/> の
     /// <see cref="RadiantDash.Screens"/> から screen を解決する。未解決なら null。
     /// </summary>
     /// <remarks>
@@ -355,7 +361,11 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     /// ref_id が「この dash に所属する screen」であることを保証するため (任意 RefID の Slot を
     /// screen と取り違えて代入する事故を防ぐ)。
     /// </remarks>
-    private static RadiantDashScreen? ResolveScreen(RadiantDash radiant, string refId, string key)
+    private static RadiantDashScreen? ResolveScreen(
+        RadiantDash radiant,
+        string refId,
+        string localeKey
+    )
     {
         if (!string.IsNullOrEmpty(refId))
         {
@@ -366,7 +376,9 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
 
             foreach (var screen in radiant.Screens)
             {
-                if (screen.ReferenceID == parsed)
+                // ListTabs は screen.Slot.ReferenceID を tab の ref_id として出すので、
+                // 解決側も Slot の RefID で突き合わせる (screen 自身の ReferenceID とは別物)。
+                if (screen.Slot?.ReferenceID == parsed)
                 {
                     return screen;
                 }
@@ -375,11 +387,11 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             return null;
         }
 
-        if (!string.IsNullOrEmpty(key))
+        if (!string.IsNullOrEmpty(localeKey))
         {
             foreach (var screen in radiant.Screens)
             {
-                if (ResolveLocaleKey(screen.Label) == key)
+                if (ResolveLocaleKey(screen.Label) == localeKey)
                 {
                     return screen;
                 }
@@ -390,129 +402,185 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
     }
 
     /// <summary>
-    /// 列挙対象の root Slot を解決する。<paramref name="rootRefId"/> が非空ならその要素を root に、
-    /// 空なら現在表示中の screen (なければ dash の VisualsRoot) を root にする。
-    /// 解決できなければ null (= 空ツリー)。
+    /// <paramref name="slot"/> から深さ優先で control (<see cref="Button"/> または <see cref="ScrollRect"/>
+    /// を持つ Slot) を収集する。<c>!IsActive</c> な部分木はスキップする。control を実際に emit したときだけ
+    /// 子孫の <c>parentRefId</c> / <c>depth</c> を更新する (light hierarchy)。
+    /// <paramref name="includeDisabled"/> が false の場合、disabled control は emit しないが子孫の再帰は続ける。
     /// </summary>
     /// <remarks>engine thread 前提。</remarks>
-    private static Slot? ResolveTreeRoot(World world, UserspaceRadiantDash dash, string rootRefId)
-    {
-        if (!string.IsNullOrEmpty(rootRefId))
-        {
-            return TryResolveSlot(world, rootRefId, out var slot) ? slot : null;
-        }
-
-        var radiant = dash.Dash;
-        if (radiant is null)
-        {
-            return null;
-        }
-
-        return radiant.CurrentScreen.Target?.ScreenRoot ?? radiant.VisualsRoot;
-    }
-
-    /// <summary>
-    /// <paramref name="slot"/> から深さ優先で <see cref="RectTransform"/> を持つ Slot を要素として収集する。
-    /// </summary>
-    /// <remarks>engine thread 前提。</remarks>
-    private static void CollectElements(
+    private static void CollectControls(
         Slot slot,
         string parentRefId,
         int depth,
-        bool interactableOnly,
-        List<DashElementSnapshot> elements
+        bool includeDisabled,
+        List<CollectedControl> collected
     )
     {
-        var rect = slot.GetComponent<RectTransform>();
+        if (!slot.IsActive)
+        {
+            return;
+        }
+
         var nextParentRefId = parentRefId;
         var nextDepth = depth;
 
-        if (rect is not null)
+        var button = slot.GetComponent<Button>();
+        var scroll = button is null ? slot.GetComponent<ScrollRect>() : null;
+        if (button is not null || scroll is not null)
         {
-            var refId = slot.ReferenceID.ToString();
-            var interactable = ResolveInteractable(slot);
-            if (!interactableOnly || interactable)
+            var enabled = button?.Enabled ?? scroll!.Enabled;
+            if (includeDisabled || enabled)
             {
-                elements.Add(BuildElement(slot, rect, refId, parentRefId, depth, interactable));
-            }
+                var refId = slot.ReferenceID.ToString();
+                var snapshot = BuildControlSnapshot(
+                    slot,
+                    button,
+                    scroll,
+                    refId,
+                    parentRefId,
+                    depth,
+                    enabled
+                );
+                var sortRect = ComputeSortRect(slot, scroll);
+                collected.Add(new CollectedControl(snapshot, sortRect));
 
-            // RectTransform を持つ Slot を「親」とみなして子孫の ParentRefId / Depth を更新する。
-            nextParentRefId = refId;
-            nextDepth = depth + 1;
+                // emit した control を基準に子孫の parent/depth を進める。
+                nextParentRefId = refId;
+                nextDepth = depth + 1;
+            }
         }
 
         foreach (var child in slot.Children)
         {
-            CollectElements(child, nextParentRefId, nextDepth, interactableOnly, elements);
+            CollectControls(child, nextParentRefId, nextDepth, includeDisabled, collected);
         }
     }
 
-    /// <summary>1 要素の snapshot を構築する。engine thread 前提。</summary>
-    private static DashElementSnapshot BuildElement(
+    /// <summary>1 control の snapshot を構築する。engine thread 前提。</summary>
+    private static DashControlSnapshot BuildControlSnapshot(
         Slot slot,
-        RectTransform rect,
+        Button? button,
+        ScrollRect? scroll,
         string refId,
         string parentRefId,
         int depth,
-        bool interactable
+        bool enabled
     )
     {
-        var button = slot.GetComponent<Button>();
-        var type = ResolveType(slot, button);
+        var controlType = button is not null ? "button" : "scroll";
 
-        var text = button is not null ? button.Label : slot.GetComponentInChildren<Text>();
-        var label = text?.Content?.Value ?? string.Empty;
-        var localeKey = ResolveLocaleKey(text?.Content);
+        // label を駆動している IField<string> (Text.Content) を特定し、その同じ field から locale_key を取る。
+        var labelField = button is not null
+            ? button.LabelTextField
+            : slot.GetComponentInChildren<Text>()?.Content;
 
-        var globalRect = rect.ComputeGlobalComputeRect();
-        var rectSnapshot = new DashRectSnapshot(
-            globalRect.position.x,
-            globalRect.position.y,
-            globalRect.size.x,
-            globalRect.size.y,
-            IsScreenSpace: false
-        );
+        var labelText = labelField?.Value;
+        var localeKey = ResolveLocaleKey(labelField);
 
-        return new DashElementSnapshot(
+        // 1) label 本文 → 2) (上で labelField から取得済み) → 3) locale_key → 4) slot.Name。
+        // 最初の non-empty を採用する。label は icon-only button などで "" のことがある。
+        var label = FirstNonEmpty(labelText, localeKey, slot.Name);
+
+        return new DashControlSnapshot(
             RefId: refId,
-            Type: type,
-            SlotName: slot.Name ?? string.Empty,
-            LocaleKey: localeKey,
+            ControlType: controlType,
             Label: label,
-            Enabled: slot.IsActive,
-            Interactable: interactable,
-            Rect: rectSnapshot,
+            LocaleKey: localeKey,
+            Enabled: enabled,
             ParentRefId: parentRefId,
             Depth: depth
         );
     }
 
-    /// <summary>component 型からラベル付きの型名を決める。</summary>
-    private static string ResolveType(Slot slot, Button? button)
+    /// <summary>
+    /// sort 用の canvas-space rect を計算する。<paramref name="scroll"/> が非 null の control は
+    /// content の伸びた extent ではなく viewport rect を使う (ScrollRect は scroll される Content slot に
+    /// 載っており、その slot の rect は content の extent になるため)。RectTransform が無ければ null。
+    /// </summary>
+    /// <remarks>engine thread 前提。rect は ordering 専用で、wire には emit しない。</remarks>
+    private static Rect? ComputeSortRect(Slot slot, ScrollRect? scroll)
     {
-        if (button is not null)
+        if (scroll is not null)
         {
-            return "Button";
+            var viewportSlot =
+                scroll.ViewportOverride.Target?.Slot ?? scroll.RectTransform?.RectParent?.Slot;
+            var viewportRect = viewportSlot?.GetComponent<RectTransform>();
+            if (viewportRect is not null)
+            {
+                return viewportRect.ComputeGlobalComputeRect();
+            }
+            // viewport を解決できなければ content rect に fallback する。
         }
-        if (slot.GetComponent<ScrollRect>() is not null)
+
+        var rect = slot.GetComponent<RectTransform>();
+        return rect?.ComputeGlobalComputeRect();
+    }
+
+    /// <summary>
+    /// 収集した control を canvas-space rect の y 昇順 → x 昇順で stable-sort する。
+    /// rect が無い (RectTransform を持たない) control は末尾に置く。
+    /// </summary>
+    private static void StableSortByRect(List<CollectedControl> collected)
+    {
+        // List.Sort は unstable なため、index を tie-breaker にして stable に並べる。
+        var indexed = new List<(int Index, CollectedControl Control)>(collected.Count);
+        for (var i = 0; i < collected.Count; i++)
         {
-            return "ScrollRect";
+            indexed.Add((i, collected[i]));
         }
-        if (slot.GetComponent<Text>() is not null)
+
+        indexed.Sort(
+            (a, b) =>
+            {
+                var cmp = CompareByRect(a.Control.SortRect, b.Control.SortRect);
+                // 同 rect (両方 rect 無し含む) は元の DFS 順を保つ — これが stable 性を担う。
+                return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+            }
+        );
+
+        collected.Clear();
+        foreach (var entry in indexed)
         {
-            return "Text";
+            collected.Add(entry.Control);
         }
-        if (slot.GetComponent<Image>() is not null)
+    }
+
+    /// <summary>
+    /// 2 つの sort rect を y 昇順 → x 昇順で比較する。rect 無し (null) は常に末尾
+    /// (null は正、非 null は負)。両方 null なら 0 (順序は呼び出し側の tie-breaker に委ねる)。
+    /// </summary>
+    private static int CompareByRect(Rect? a, Rect? b)
+    {
+        if (a is null)
         {
-            return "Image";
+            return b is null ? 0 : 1;
         }
-        return "RectTransform";
+        if (b is null)
+        {
+            return -1;
+        }
+
+        var cmpY = a.Value.position.y.CompareTo(b.Value.position.y);
+        return cmpY != 0 ? cmpY : a.Value.position.x.CompareTo(b.Value.position.x);
+    }
+
+    /// <summary>引数を順に評価し、最初の非空文字列を返す。すべて空なら空文字。</summary>
+    private static string FirstNonEmpty(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrEmpty(candidate))
+            {
+                return candidate;
+            }
+        }
+        return string.Empty;
     }
 
     /// <summary>
     /// <paramref name="field"/> (<see cref="Text.Content"/> や <see cref="RadiantDashScreen.Label"/> 等の
     /// <c>Sync&lt;string&gt;</c>) を駆動している <see cref="LocaleStringDriver"/> から言語非依存の key を読む。
-    /// driver が無い (生文字列ラベルしか無い) 要素では空文字。
+    /// driver が無い (生文字列ラベルしか無い) 要素では空文字。slot.Name には決して fallback しない。
     /// </summary>
     private static string ResolveLocaleKey(IField<string>? field)
     {
@@ -520,31 +588,16 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         {
             return string.Empty;
         }
+        // Elements.Core にも GetLocalizedDriver を持たない LocaleHelper があるため fully-qualify する。
         var driver = FrooxEngine.LocaleHelper.GetLocalizedDriver(field);
         return driver?.Key?.Value ?? string.Empty;
     }
 
     /// <summary>
-    /// slot が <see cref="IUIInteractable"/> を持ち、その component が enabled なら interactable。
+    /// 現在の userspace world から <paramref name="refId"/> を Slot に解決する。
+    /// parse 失敗・未解決・Slot 以外なら false。例外は投げない。engine thread 前提。
     /// </summary>
-    private static bool ResolveInteractable(Slot slot)
-    {
-        var interactable = slot.GetComponent<IUIInteractable>();
-        return interactable is not null && interactable.Enabled;
-    }
-
-    /// <summary>現在の userspace world から <paramref name="refId"/> を Slot に解決する。engine thread 前提。</summary>
     private static bool TryResolveSlot(string refId, out Slot slot)
-    {
-        return TryResolveSlot(ResolveWorld(), refId, out slot);
-    }
-
-    /// <summary>
-    /// <paramref name="refId"/> を parse し <paramref name="world"/> 内の Slot に解決する。
-    /// parse 失敗・未解決・Slot 以外なら false。例外は投げない。
-    /// </summary>
-    /// <remarks>engine thread 前提。</remarks>
-    private static bool TryResolveSlot(World world, string refId, out Slot slot)
     {
         slot = null!;
         if (!RefID.TryParse(refId, out var parsed))
@@ -552,7 +605,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             return false;
         }
 
-        var element = world.ReferenceController.GetObjectOrNull(in parsed);
+        var element = ResolveWorld().ReferenceController.GetObjectOrNull(in parsed);
         if (element is Slot resolved)
         {
             slot = resolved;
@@ -568,22 +621,22 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             Ok: false,
             Found: false,
             RefId: refId,
-            Detail: "element not found"
+            Detail: "control not found"
         );
     }
 
-    /// <summary>指定 (ref_id / key) に一致する screen が解決できなかったときの結果 (<c>Found=false</c>)。</summary>
-    private static DashActionResultSnapshot NotFoundScreen()
+    /// <summary>指定 (ref_id / locale_key) に一致する tab が解決できなかったときの結果 (<c>Found=false</c>)。</summary>
+    private static DashActionResultSnapshot NotFoundTab()
     {
         return new DashActionResultSnapshot(
             Ok: false,
             Found: false,
             RefId: string.Empty,
-            Detail: "screen not found"
+            Detail: "tab not found"
         );
     }
 
-    /// <summary>要素は解決できたが操作対象として不適 (型不一致等) なときの結果 (<c>Found=true, Ok=false</c>)。</summary>
+    /// <summary>control は解決できたが操作対象として不適 (型不一致等) なときの結果 (<c>Found=true, Ok=false</c>)。</summary>
     private static DashActionResultSnapshot Rejected(string refId, string detail)
     {
         return new DashActionResultSnapshot(Ok: false, Found: true, RefId: refId, Detail: detail);
@@ -598,5 +651,22 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             RefId: refId,
             Detail: string.Empty
         );
+    }
+
+    /// <summary>
+    /// DFS で収集した 1 control と、その sort key (canvas-space rect、無ければ null)。
+    /// rect は ordering 専用で wire には載せない。
+    /// </summary>
+    private readonly struct CollectedControl
+    {
+        public CollectedControl(DashControlSnapshot snapshot, Rect? sortRect)
+        {
+            Snapshot = snapshot;
+            SortRect = sortRect;
+        }
+
+        public DashControlSnapshot Snapshot { get; }
+
+        public Rect? SortRect { get; }
     }
 }
