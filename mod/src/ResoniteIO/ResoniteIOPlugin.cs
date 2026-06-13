@@ -14,6 +14,7 @@ using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Grabber;
 using ResoniteIO.Core.Hosting;
+using ResoniteIO.Core.Lifecycle;
 using ResoniteIO.Core.Microphone;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
@@ -48,6 +49,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private GrpcHost? _grpcHost;
     private FrooxEngineConnectionBridge? _connectionBridge;
     private FrooxEngineInfoBridge? _infoBridge;
+    private FrooxEngineLifecycleBridge? _lifecycleBridge;
 
     private ICameraBridge? _cameraBridge;
     private RendererFrameInterprocessReceiver? _frameReceiver;
@@ -112,6 +114,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 _logSink
             );
 
+            _lifecycleBridge = new FrooxEngineLifecycleBridge(Engine.Current, _logSink);
+
             var pushedBridge = new PushedFrameCameraBridge();
             _cameraBridge = pushedBridge;
             _frameReceiver = new RendererFrameInterprocessReceiver(pushedBridge, _logSink);
@@ -152,7 +156,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 grabberBridge: _grabberBridge,
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge,
-                infoBridge: _infoBridge
+                infoBridge: _infoBridge,
+                lifecycleBridge: _lifecycleBridge
             );
             Log.LogInfo($"GrpcHost bound at: {_grpcHost.SocketPath}");
         }
@@ -232,6 +237,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
         // IDisposable でもない) ため、参照 null 化のみで足りる。
         _infoBridge = null;
+
+        // LifecycleBridge は Engine 参照を読むだけで状態を保持せず (RequestShutdown を
+        // engine tick に enqueue する one-shot)、IDisposable でもないため参照 null 化のみで足りる。
+        _lifecycleBridge = null;
 
         SafeDispose(_connectionBridge, nameof(_connectionBridge));
         _connectionBridge = null;

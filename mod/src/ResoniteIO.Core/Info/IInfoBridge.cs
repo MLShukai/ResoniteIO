@@ -20,11 +20,22 @@ public enum ServerPlatform
 /// <param name="EngineVersion">engine のバージョン文字列 (<c>Engine.VersionString</c>)。</param>
 /// <param name="Platform">Resonite クライアントが動作する OS プラットフォーム。</param>
 /// <param name="IsWine">Wine/Proton 上で動作しているか (<c>Engine.IsWine</c>)。</param>
+/// <param name="ResonitePid">
+/// engine プロセス (Resonite.exe) の host PID (<c>Environment.ProcessId</c>)。engine はネイティブ
+/// Linux で動くため host kernel PID で、pgrep/os.kill に使える。不明なら 0。
+/// </param>
+/// <param name="RendererPid">
+/// renderer プロセス (Renderite.Renderer.exe) の host PID
+/// (<c>RenderSystem.RendererProcess</c>)。headless / renderer 無しなら 0。engine の直接の子なので
+/// Proton 下では launcher/wrapper の PID のことがある。mod-init 時点の値で renderer 再起動は非追跡。
+/// </param>
 public sealed record ServerInfoSnapshot(
     string ModVersion,
     string EngineVersion,
     ServerPlatform Platform,
-    bool IsWine
+    bool IsWine,
+    int ResonitePid,
+    int RendererPid
 );
 
 /// <summary>Mod 側 (FrooxEngine) が実装し DI で注入する server メタ情報供給の抽象。</summary>
