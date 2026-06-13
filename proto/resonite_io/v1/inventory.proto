@@ -113,6 +113,18 @@ message InventorySpawnRequest {
   string path = 1;
 }
 
+message InventoryThumbnailRequest {
+  // サムネ画像を取得するアイテムの解決済み絶対パス
+  // (例 "/Inventory/DragonFruit")。
+  string path = 1;
+}
+
+message InventoryThumbnailResponse {
+  bytes data = 1;
+  // MIME (例 "image/webp")。判定不能なら空。
+  string content_type = 2;
+}
+
 service Inventory {
   // 指定パス直下のエントリを列挙する (ls)。
   rpc List(InventoryListRequest) returns (InventoryListing);
@@ -126,4 +138,6 @@ service Inventory {
   rpc Remove(InventoryRemoveRequest) returns (InventoryMutationResult);
   // 指定アイテムを現在のワールドに spawn する。
   rpc Spawn(InventorySpawnRequest) returns (InventorySpawnResult);
+  // 指定アイテムのサムネ (Record.ThumbnailURI) を解決して画像バイトを返す。
+  rpc FetchThumbnail(InventoryThumbnailRequest) returns (InventoryThumbnailResponse);
 }

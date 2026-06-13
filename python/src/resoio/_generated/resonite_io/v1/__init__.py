@@ -82,6 +82,8 @@ __all__ = (
     "InventorySpawnRequest",
     "InventorySpawnResult",
     "InventoryStub",
+    "InventoryThumbnailRequest",
+    "InventoryThumbnailResponse",
     "JoinRequest",
     "JoinResponse",
     "LeaveRequest",
@@ -1566,6 +1568,35 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class InventoryThumbnailRequest(betterproto2.Message):
+    path: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
+    """
+    サムネ画像を取得するアイテムの解決済み絶対パス
+    (例 "/Inventory/DragonFruit")。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "InventoryThumbnailRequest", InventoryThumbnailRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class InventoryThumbnailResponse(betterproto2.Message):
+    data: "bytes" = betterproto2.field(1, betterproto2.TYPE_BYTES)
+
+    content_type: "str" = betterproto2.field(2, betterproto2.TYPE_STRING)
+    """
+    MIME (例 "image/webp")。判定不能なら空。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "InventoryThumbnailResponse", InventoryThumbnailResponse
+)
+
+
+@dataclass(eq=False, repr=False)
 class JoinRequest(betterproto2.Message):
     session_id: "str" = betterproto2.field(1, betterproto2.TYPE_STRING)
     """
@@ -2923,6 +2954,27 @@ class InventoryStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
+    async def fetch_thumbnail(
+        self,
+        message: "InventoryThumbnailRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "InventoryThumbnailResponse":
+        """
+        指定アイテムのサムネ (Record.ThumbnailURI) を解決して画像バイトを返す。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Inventory/FetchThumbnail",
+            message,
+            InventoryThumbnailResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
 
 class LocomotionStub(betterproto2_grpclib.ServiceStub):
     async def drive(
@@ -3858,6 +3910,15 @@ class InventoryBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def fetch_thumbnail(
+        self, message: "InventoryThumbnailRequest"
+    ) -> "InventoryThumbnailResponse":
+        """
+        指定アイテムのサムネ (Record.ThumbnailURI) を解決して画像バイトを返す。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def __rpc_list(
         self, stream: "grpclib.server.Stream[InventoryListRequest, InventoryListing]"
     ) -> None:
@@ -3911,6 +3972,15 @@ class InventoryBase(betterproto2_grpclib.ServiceBase):
         response = await self.spawn(request)
         await stream.send_message(response)
 
+    async def __rpc_fetch_thumbnail(
+        self,
+        stream: "grpclib.server.Stream[InventoryThumbnailRequest, InventoryThumbnailResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.fetch_thumbnail(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Inventory/List": grpclib.const.Handler(
@@ -3948,6 +4018,12 @@ class InventoryBase(betterproto2_grpclib.ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 InventorySpawnRequest,
                 InventorySpawnResult,
+            ),
+            "/resonite_io.v1.Inventory/FetchThumbnail": grpclib.const.Handler(
+                self.__rpc_fetch_thumbnail,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                InventoryThumbnailRequest,
+                InventoryThumbnailResponse,
             ),
         }
 
