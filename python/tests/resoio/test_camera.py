@@ -93,12 +93,11 @@ class TestCameraClient:
         # pixels.shape == (H, W, 4), not stored fields.
         await uds_server(_EchoCamera())
         async with CameraClient() as client:
-            async for frame in client.stream():
-                assert frame.height == frame.pixels.shape[0]
-                assert frame.width == frame.pixels.shape[1]
-                assert frame.channels == frame.pixels.shape[2]
-                assert frame.channels == 4
-                break
+            frame = await client.shot()
+        assert frame.height == frame.pixels.shape[0]
+        assert frame.width == frame.pixels.shape[1]
+        assert frame.channels == frame.pixels.shape[2]
+        assert frame.channels == 4
 
     async def test_frame_is_immutable(self, uds_server: UdsServer):
         # Frame is a frozen dataclass: assigning a stored field raises.
@@ -106,13 +105,26 @@ class TestCameraClient:
         # property descriptors have no setter), asserted separately below.
         await uds_server(_EchoCamera())
         async with CameraClient() as client:
-            async for frame in client.stream():
-                with pytest.raises(dataclasses.FrozenInstanceError):
-                    frame.frame_id = 99  # type: ignore[misc]
-                assert type(frame).width.fset is None
-                assert type(frame).height.fset is None
-                assert type(frame).channels.fset is None
-                break
+            frame = await client.shot()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            frame.frame_id = 99  # type: ignore[misc]
+        assert type(frame).width.fset is None
+        assert type(frame).height.fset is None
+        assert type(frame).channels.fset is None
+
+    async def test_shot_returns_first_frame(self, uds_server: UdsServer):
+        # shot() is the one-shot wrapper: it returns the first streamed
+        # frame (frame_id 0) and stops, rather than draining all
+        # _FRAME_COUNT frames the way stream() does.
+        await uds_server(_EchoCamera())
+        async with CameraClient() as client:
+            frame = await client.shot()
+        assert frame.frame_id == 0
+        assert frame.pixels.dtype == np.uint8
+        assert frame.pixels.shape == (_FRAME_H, _FRAME_W, 4)
+        # First byte = frame index (see _EchoCamera): proves shot()
+        # returned the first frame, not a later one.
+        assert int(frame.pixels[0, 0, 0]) == 0
 
     async def test_raises_when_not_connected(self):
         client = CameraClient()
