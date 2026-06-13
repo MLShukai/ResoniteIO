@@ -42,7 +42,15 @@ from resoio.dash import (
 )
 
 if TYPE_CHECKING:
-    from resoio.dash import DashActionResult, DashControl, DashState, DashTab
+    from collections.abc import Awaitable, Callable, Iterable, Sequence
+
+    from resoio.dash import (
+        DashActionResult,
+        DashClient,
+        DashControl,
+        DashState,
+        DashTab,
+    )
 
 
 def register(
@@ -214,44 +222,47 @@ def _format_result(result: DashActionResult) -> str:
     )
 
 
-def _resolve_tab(tabs: list[DashTab], selector: str) -> DashTab | None:
-    """Resolve a tab selector, printing a friendly error on failure.
+def _resolve_selector[T](
+    items: Sequence[T],
+    selector: str,
+    keys: Callable[[T], Iterable[str]],
+    hint: Callable[[T], str],
+) -> T | None:
+    """Resolve a selector against ``items``, printing a friendly error on
+    failure.
 
-    Returns the matched :class:`DashTab`, or ``None`` after writing a
-    candidate list to stderr (the caller then exits ``2``).
+    A numeric ``selector`` is a 0-based index into ``items`` (bounds-checked
+    here); anything else is matched by :func:`resoio.dash._resolve_one` using
+    ``keys``. Returns the matched item, or ``None`` after writing a candidate
+    list (one ``hint`` per item) to stderr -- the caller then exits ``2``.
     """
     if selector.isdigit():
         index = int(selector)
-        if 0 <= index < len(tabs):
-            return tabs[index]
-        _print_index_error(selector, len(tabs), [_tab_hint(t) for t in tabs])
+        if 0 <= index < len(items):
+            return items[index]
+        _print_index_error(selector, len(items), [hint(i) for i in items])
         return None
     try:
-        from resoio.dash import _tab_keys  # pyright: ignore[reportPrivateUsage]
-
-        return _resolve_one(tabs, selector, _tab_keys)
+        return _resolve_one(items, selector, keys)
     except (DashNoMatchError, DashAmbiguousMatchError) as exc:
-        _print_match_error(exc, [_tab_hint(t) for t in tabs])
+        _print_match_error(exc, [hint(i) for i in items])
         return None
+
+
+def _resolve_tab(tabs: list[DashTab], selector: str) -> DashTab | None:
+    """Resolve a tab selector (index / ref_id / label), or ``None`` on
+    error."""
+    from resoio.dash import _tab_keys  # pyright: ignore[reportPrivateUsage]
+
+    return _resolve_selector(tabs, selector, _tab_keys, _tab_hint)
 
 
 def _resolve_control(controls: list[DashControl], selector: str) -> DashControl | None:
-    """Resolve a control selector, printing a friendly error on failure."""
-    if selector.isdigit():
-        index = int(selector)
-        if 0 <= index < len(controls):
-            return controls[index]
-        _print_index_error(
-            selector, len(controls), [_control_hint(c) for c in controls]
-        )
-        return None
-    try:
-        from resoio.dash import _control_keys  # pyright: ignore[reportPrivateUsage]
+    """Resolve a control selector (index / ref_id / label), or ``None`` on
+    error."""
+    from resoio.dash import _control_keys  # pyright: ignore[reportPrivateUsage]
 
-        return _resolve_one(controls, selector, _control_keys)
-    except (DashNoMatchError, DashAmbiguousMatchError) as exc:
-        _print_match_error(exc, [_control_hint(c) for c in controls])
-        return None
+    return _resolve_selector(controls, selector, _control_keys, _control_hint)
 
 
 def _tab_hint(tab: DashTab) -> str:
@@ -352,7 +363,16 @@ async def _run_ls(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _run_invoke(args: argparse.Namespace) -> int:
+async def _run_control_action(
+    args: argparse.Namespace,
+    action: Callable[[DashClient, DashControl], Awaitable[DashActionResult]],
+) -> int:
+    """Resolve ``args.selector`` against the current tab and apply ``action``.
+
+    Fetches the current controls, resolves the selector (exit ``2`` with a
+    candidate list on failure, without issuing any action RPC), then runs
+    ``action`` against the resolved control and prints the result line.
+    """
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
@@ -360,32 +380,27 @@ async def _run_invoke(args: argparse.Namespace) -> int:
         control = _resolve_control(controls, args.selector)
         if control is None:
             return 2
-        result = await client.invoke(control.ref_id)
+        result = await action(client, control)
     print(_format_result(result))
     return 0
+
+
+async def _run_invoke(args: argparse.Namespace) -> int:
+    return await _run_control_action(
+        args, lambda client, control: client.invoke(control.ref_id)
+    )
 
 
 async def _run_scroll(args: argparse.Namespace) -> int:
-    from resoio.dash import DashClient
-
-    async with DashClient(args.socket) as client:
-        controls = await client.list_controls()
-        control = _resolve_control(controls, args.selector)
-        if control is None:
-            return 2
-        result = await client.scroll(control.ref_id, delta_x=args.dx, delta_y=args.dy)
-    print(_format_result(result))
-    return 0
+    return await _run_control_action(
+        args,
+        lambda client, control: client.scroll(
+            control.ref_id, delta_x=args.dx, delta_y=args.dy
+        ),
+    )
 
 
 async def _run_highlight(args: argparse.Namespace) -> int:
-    from resoio.dash import DashClient
-
-    async with DashClient(args.socket) as client:
-        controls = await client.list_controls()
-        control = _resolve_control(controls, args.selector)
-        if control is None:
-            return 2
-        result = await client.highlight(control.ref_id)
-    print(_format_result(result))
-    return 0
+    return await _run_control_action(
+        args, lambda client, control: client.highlight(control.ref_id)
+    )

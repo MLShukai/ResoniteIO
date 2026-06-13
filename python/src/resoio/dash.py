@@ -195,11 +195,7 @@ def _candidate_hint[T](
     keys: Callable[[T], Iterable[str]],
 ) -> str:
     """Render a short ``key | key`` hint listing each item's first key."""
-    hints: list[str] = []
-    for item in items:
-        first = next((k for k in keys(item) if k), "")
-        hints.append(first)
-    return ", ".join(repr(h) for h in hints)
+    return ", ".join(repr(next((k for k in keys(item) if k), "")) for item in items)
 
 
 def _tab_keys(tab: DashTab) -> tuple[str, str, str, str]:

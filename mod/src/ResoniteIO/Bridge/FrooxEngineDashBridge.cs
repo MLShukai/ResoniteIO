@@ -292,20 +292,13 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         return world;
     }
 
-    /// <summary>現在の userspace world から dash を解決する。</summary>
+    /// <summary>
+    /// 現在の userspace world に globally-registered された <see cref="UserspaceRadiantDash"/> を解決する。
+    /// 未準備なら <see cref="DashNotReadyException"/>。engine thread 前提。
+    /// </summary>
     private static UserspaceRadiantDash ResolveDash()
     {
-        return ResolveDash(ResolveWorld());
-    }
-
-    /// <summary>
-    /// <paramref name="world"/> に globally-registered された <see cref="UserspaceRadiantDash"/> を解決する。
-    /// 未準備なら <see cref="DashNotReadyException"/>。
-    /// </summary>
-    /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private static UserspaceRadiantDash ResolveDash(World world)
-    {
-        var dash = world.GetGloballyRegisteredComponent<UserspaceRadiantDash>();
+        var dash = ResolveWorld().GetGloballyRegisteredComponent<UserspaceRadiantDash>();
         if (dash is null)
         {
             throw new DashNotReadyException(
@@ -534,34 +527,9 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         indexed.Sort(
             (a, b) =>
             {
-                var ra = a.Control.SortRect;
-                var rb = b.Control.SortRect;
-
-                // rect 無しは末尾。
-                if (ra is null && rb is null)
-                {
-                    return a.Index.CompareTo(b.Index);
-                }
-                if (ra is null)
-                {
-                    return 1;
-                }
-                if (rb is null)
-                {
-                    return -1;
-                }
-
-                var cmpY = ra.Value.position.y.CompareTo(rb.Value.position.y);
-                if (cmpY != 0)
-                {
-                    return cmpY;
-                }
-                var cmpX = ra.Value.position.x.CompareTo(rb.Value.position.x);
-                if (cmpX != 0)
-                {
-                    return cmpX;
-                }
-                return a.Index.CompareTo(b.Index);
+                var cmp = CompareByRect(a.Control.SortRect, b.Control.SortRect);
+                // 同 rect (両方 rect 無し含む) は元の DFS 順を保つ — これが stable 性を担う。
+                return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
             }
         );
 
@@ -570,6 +538,25 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         {
             collected.Add(entry.Control);
         }
+    }
+
+    /// <summary>
+    /// 2 つの sort rect を y 昇順 → x 昇順で比較する。rect 無し (null) は常に末尾
+    /// (null は正、非 null は負)。両方 null なら 0 (順序は呼び出し側の tie-breaker に委ねる)。
+    /// </summary>
+    private static int CompareByRect(Rect? a, Rect? b)
+    {
+        if (a is null)
+        {
+            return b is null ? 0 : 1;
+        }
+        if (b is null)
+        {
+            return -1;
+        }
+
+        var cmpY = a.Value.position.y.CompareTo(b.Value.position.y);
+        return cmpY != 0 ? cmpY : a.Value.position.x.CompareTo(b.Value.position.x);
     }
 
     /// <summary>引数を順に評価し、最初の非空文字列を返す。すべて空なら空文字。</summary>
@@ -601,18 +588,11 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
         return driver?.Key?.Value ?? string.Empty;
     }
 
-    /// <summary>現在の userspace world から <paramref name="refId"/> を Slot に解決する。engine thread 前提。</summary>
-    private static bool TryResolveSlot(string refId, out Slot slot)
-    {
-        return TryResolveSlot(ResolveWorld(), refId, out slot);
-    }
-
     /// <summary>
-    /// <paramref name="refId"/> を parse し <paramref name="world"/> 内の Slot に解決する。
-    /// parse 失敗・未解決・Slot 以外なら false。例外は投げない。
+    /// 現在の userspace world から <paramref name="refId"/> を Slot に解決する。
+    /// parse 失敗・未解決・Slot 以外なら false。例外は投げない。engine thread 前提。
     /// </summary>
-    /// <remarks>engine thread 前提。</remarks>
-    private static bool TryResolveSlot(World world, string refId, out Slot slot)
+    private static bool TryResolveSlot(string refId, out Slot slot)
     {
         slot = null!;
         if (!RefID.TryParse(refId, out var parsed))
@@ -620,7 +600,7 @@ internal sealed class FrooxEngineDashBridge : IDashBridge
             return false;
         }
 
-        var element = world.ReferenceController.GetObjectOrNull(in parsed);
+        var element = ResolveWorld().ReferenceController.GetObjectOrNull(in parsed);
         if (element is Slot resolved)
         {
             slot = resolved;
