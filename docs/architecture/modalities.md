@@ -9,7 +9,7 @@ any subset.
 | Modality | Direction | RPC style | Python client | What it does |
 | --- | --- | --- | --- | --- |
 | Connection | request/response | unary | [`ConnectionClient`](../api/connection.md) | Liveness check (`ping`). |
-| Info | request/response | unary | [`get_server_info`](../api/info.md) | Mod/engine version, OS platform, Wine flag. |
+| Info | request/response | unary | [`get_server_info`](../api/info.md) | Mod/engine version, OS platform, Wine flag, engine/renderer host PIDs. |
 | Camera | Resonite → Python | server-streaming | [`CameraClient`](../api/camera.md) | RGBA frames from the headset/view. |
 | Speaker | Resonite → Python | server-streaming | [`SpeakerClient`](../api/speaker.md) | Audio rendered by Resonite (engine output tap). |
 | Microphone | Python → Resonite | client-streaming | [`MicrophoneClient`](../api/microphone.md) | Push audio into Resonite as a virtual mic. |
@@ -21,6 +21,7 @@ any subset.
 | Dash | request/response | unary | [`DashClient`](../api/dash.md) | Drive the ESC dash overlay (Userspace). |
 | Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse and spawn inventory items. |
 | Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/hold/release/get the desktop cursor in normalized coords. |
+| Lifecycle | Python → Resonite | unary | [`LifecycleClient`](../api/lifecycle.md) | Ask the engine to quit gracefully (`shutdown`); `resoio.terminate` wraps it with engine-PID reporting. |
 
 Each modality also ships a minimal runnable script under
 [`python/examples/`](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples), and the

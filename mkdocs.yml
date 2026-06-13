@@ -109,6 +109,7 @@ nav:
       - Dash: api/dash.md
       - Inventory: api/inventory.md
       - Cursor: api/cursor.md
+      - Lifecycle: api/lifecycle.md
 
 extra:
   # Versioned docs via mike (deployed by .github/workflows/docs.yml). Renders a
