@@ -933,6 +933,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.camera.CameraClient.shot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shot
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1294,6 +1305,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.camera.CameraClient.shot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shot
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1412,7 +1434,7 @@ deterministically. Socket resolution mirrors
   </span>
 
 <a href="#resoio.camera.CameraClient.stream" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -1442,7 +1464,7 @@ frames arrive uncapped (best-effort native fps). Raises
 <span class="normal"><a href="#__codelineno-0-87">87</a></span>
 <span class="normal"><a href="#__codelineno-0-88">88</a></span>
 <span class="normal"><a href="#__codelineno-0-89">89</a></span>
-<span class="normal"><a href="#__codelineno-0-90">90</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]:</span>
+<span class="normal"><a href="#__codelineno-0-90">90</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">[</span><span class="n">Frame</span><span class="p">]:</span>
 <a id="__codelineno-0-74" name="__codelineno-0-74"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stream camera frames from the server.</span>
 <a id="__codelineno-0-75" name="__codelineno-0-75"></a>
 <a id="__codelineno-0-76" name="__codelineno-0-76"></a><span class="sd">    The capture resolution is the Display modality&#39;s responsibility;</span>
@@ -1460,6 +1482,77 @@ frames arrive uncapped (best-effort native fps). Raises
 <a id="__codelineno-0-88" name="__codelineno-0-88"></a>            <span class="n">unix_nanos</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">unix_nanos</span><span class="p">,</span>
 <a id="__codelineno-0-89" name="__codelineno-0-89"></a>            <span class="n">frame_id</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">frame_id</span><span class="p">,</span>
 <a id="__codelineno-0-90" name="__codelineno-0-90"></a>        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.camera.CameraClient.shot" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">shot</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.camera.CameraClient.shot" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">shot</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Frame</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Take a single frame, then close the stream (one-shot).</p>
+<p>Convenience wrapper over :meth:<code>stream</code> for the common
+screenshot case: open the server stream, return the first
+:class:<code>Frame</code>, and close the stream so no further frames are
+pulled. Raises :class:<code>RuntimeError</code> if called outside
+<code>async with</code> or if the server closes the stream before
+delivering a frame.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/camera.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-92"> 92</a></span>
+<span class="normal"><a href="#__codelineno-0-93"> 93</a></span>
+<span class="normal"><a href="#__codelineno-0-94"> 94</a></span>
+<span class="normal"><a href="#__codelineno-0-95"> 95</a></span>
+<span class="normal"><a href="#__codelineno-0-96"> 96</a></span>
+<span class="normal"><a href="#__codelineno-0-97"> 97</a></span>
+<span class="normal"><a href="#__codelineno-0-98"> 98</a></span>
+<span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#__codelineno-0-110">110</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-92" name="__codelineno-0-92"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shot</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Frame</span><span class="p">:</span>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Take a single frame, then close the stream (one-shot).</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a><span class="sd">    Convenience wrapper over :meth:`stream` for the common</span>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a><span class="sd">    screenshot case: open the server stream, return the first</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="sd">    :class:`Frame`, and close the stream so no further frames are</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">    pulled. Raises :class:`RuntimeError` if called outside</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a><span class="sd">    ``async with`` or if the server closes the stream before</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">    delivering a frame.</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>    <span class="n">frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">()</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>        <span class="k">return</span> <span class="k">await</span> <span class="n">anext</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="k">except</span> <span class="ne">StopAsyncIteration</span><span class="p">:</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>            <span class="s2">&quot;camera stream ended before delivering a frame&quot;</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>    <span class="k">finally</span><span class="p">:</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a>        <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
