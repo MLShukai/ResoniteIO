@@ -37,13 +37,39 @@ public sealed class DashService : V1.Dash.DashBase
         ServerCallContext context
     ) => HandleAsync("GetState", (bridge, ct) => bridge.GetStateAsync(ct), MapToProto, context);
 
-    public override Task<V1.DashTree> GetTree(
-        V1.DashGetTreeRequest request,
+    public override Task<V1.DashTabList> ListTabs(
+        V1.DashListTabsRequest request,
+        ServerCallContext context
+    ) => HandleAsync("ListTabs", (bridge, ct) => bridge.ListTabsAsync(ct), MapToProto, context);
+
+    public override Task<V1.DashActionResult> SetTab(
+        V1.DashSetTabRequest request,
         ServerCallContext context
     ) =>
         HandleAsync(
-            "GetTree",
-            (bridge, ct) => bridge.GetTreeAsync(request.InteractableOnly, request.RootRefId, ct),
+            "SetTab",
+            (bridge, ct) =>
+            {
+                // ref_id / locale_key 両空はクライアントの引数ミス。bridge を起動せず
+                // InvalidArgument に翻訳する (既存の ArgumentException → InvalidArgument 経路に乗せる)。
+                if (string.IsNullOrEmpty(request.RefId) && string.IsNullOrEmpty(request.LocaleKey))
+                {
+                    throw new ArgumentException("ref_id or locale_key must be provided.");
+                }
+
+                return bridge.SetTabAsync(request.RefId, request.LocaleKey, ct);
+            },
+            MapToProto,
+            context
+        );
+
+    public override Task<V1.DashControlList> ListControls(
+        V1.DashListControlsRequest request,
+        ServerCallContext context
+    ) =>
+        HandleAsync(
+            "ListControls",
+            (bridge, ct) => bridge.ListControlsAsync(request.IncludeDisabled, ct),
             MapToProto,
             context
         );
@@ -59,17 +85,6 @@ public sealed class DashService : V1.Dash.DashBase
             context
         );
 
-    public override Task<V1.DashActionResult> Highlight(
-        V1.DashHighlightRequest request,
-        ServerCallContext context
-    ) =>
-        HandleAsync(
-            "Highlight",
-            (bridge, ct) => bridge.HighlightAsync(request.RefId, ct),
-            MapToProto,
-            context
-        );
-
     public override Task<V1.DashActionResult> Scroll(
         V1.DashScrollRequest request,
         ServerCallContext context
@@ -81,43 +96,23 @@ public sealed class DashService : V1.Dash.DashBase
             context
         );
 
-    public override Task<V1.DashScreenList> ListScreens(
-        V1.DashListScreensRequest request,
+    public override Task<V1.DashActionResult> Highlight(
+        V1.DashHighlightRequest request,
         ServerCallContext context
     ) =>
         HandleAsync(
-            "ListScreens",
-            (bridge, ct) => bridge.ListScreensAsync(ct),
-            MapToProto,
-            context
-        );
-
-    public override Task<V1.DashActionResult> SetScreen(
-        V1.DashSetScreenRequest request,
-        ServerCallContext context
-    ) =>
-        HandleAsync(
-            "SetScreen",
-            (bridge, ct) =>
-            {
-                // ref_id / key 両空はクライアントの引数ミス。bridge を起動せず InvalidArgument に翻訳する
-                // (既存の ArgumentException → InvalidArgument 経路に乗せる)。
-                if (string.IsNullOrEmpty(request.RefId) && string.IsNullOrEmpty(request.Key))
-                {
-                    throw new ArgumentException("ref_id or key must be provided.");
-                }
-
-                return bridge.SetScreenAsync(request.RefId, request.Key, ct);
-            },
+            "Highlight",
+            (bridge, ct) => bridge.HighlightAsync(request.RefId, ct),
             MapToProto,
             context
         );
 
     /// <summary>
     /// 全 RPC 共通の orchestration: bridge 解決 → 例外翻訳付き呼び出し → proto 変換。
-    /// 戻り型が 3 種 (<c>DashState</c> / <c>DashTree</c> / <c>DashActionResult</c>) あるので
-    /// snapshot 型 <typeparamref name="TSnap"/> と proto 型 <typeparamref name="TProto"/> で
-    /// ジェネリック化し、各 override は <paramref name="call"/> と <paramref name="map"/> を差し込むだけ。
+    /// 戻り型が複数 (<c>DashState</c> / <c>DashTabList</c> / <c>DashControlList</c> /
+    /// <c>DashActionResult</c>) あるので snapshot 型 <typeparamref name="TSnap"/> と
+    /// proto 型 <typeparamref name="TProto"/> でジェネリック化し、各 override は
+    /// <paramref name="call"/> と <paramref name="map"/> を差し込むだけ。
     /// </summary>
     private async Task<TProto> HandleAsync<TSnap, TProto>(
         string rpc,
@@ -181,62 +176,48 @@ public sealed class DashService : V1.Dash.DashBase
             Detail = snapshot.Detail,
         };
 
-    private static V1.DashTree MapToProto(DashTreeSnapshot snapshot)
-    {
-        var tree = new V1.DashTree
+    private static V1.DashTab MapToProto(DashTabSnapshot tab) =>
+        new()
         {
-            ScreenWidth = snapshot.ScreenWidth,
-            ScreenHeight = snapshot.ScreenHeight,
+            RefId = tab.RefId,
+            LocaleKey = tab.LocaleKey,
+            Name = tab.Name,
+            Label = tab.Label,
+            IsCurrent = tab.IsCurrent,
+            Enabled = tab.Enabled,
         };
 
-        foreach (var element in snapshot.Elements)
+    private static V1.DashTabList MapToProto(DashTabListSnapshot snapshot)
+    {
+        var list = new V1.DashTabList();
+
+        foreach (var tab in snapshot.Tabs)
         {
-            tree.Elements.Add(MapToProto(element));
+            list.Tabs.Add(MapToProto(tab));
         }
 
-        return tree;
+        return list;
     }
 
-    private static V1.DashElement MapToProto(DashElementSnapshot element) =>
+    private static V1.DashControl MapToProto(DashControlSnapshot control) =>
         new()
         {
-            RefId = element.RefId,
-            Type = element.Type,
-            SlotName = element.SlotName,
-            LocaleKey = element.LocaleKey,
-            Label = element.Label,
-            Enabled = element.Enabled,
-            Interactable = element.Interactable,
-            Rect = new V1.DashRect
-            {
-                X = element.Rect.X,
-                Y = element.Rect.Y,
-                Width = element.Rect.Width,
-                Height = element.Rect.Height,
-                IsScreenSpace = element.Rect.IsScreenSpace,
-            },
-            ParentRefId = element.ParentRefId,
-            Depth = element.Depth,
+            RefId = control.RefId,
+            ControlType = control.ControlType,
+            Label = control.Label,
+            LocaleKey = control.LocaleKey,
+            Enabled = control.Enabled,
+            ParentRefId = control.ParentRefId,
+            Depth = control.Depth,
         };
 
-    private static V1.DashScreen MapToProto(DashScreenSnapshot screen) =>
-        new()
-        {
-            RefId = screen.RefId,
-            Key = screen.Key,
-            Name = screen.Name,
-            Label = screen.Label,
-            IsCurrent = screen.IsCurrent,
-            Enabled = screen.Enabled,
-        };
-
-    private static V1.DashScreenList MapToProto(DashScreenListSnapshot snapshot)
+    private static V1.DashControlList MapToProto(DashControlListSnapshot snapshot)
     {
-        var list = new V1.DashScreenList();
+        var list = new V1.DashControlList();
 
-        foreach (var screen in snapshot.Screens)
+        foreach (var control in snapshot.Controls)
         {
-            list.Screens.Add(MapToProto(screen));
+            list.Controls.Add(MapToProto(control));
         }
 
         return list;
