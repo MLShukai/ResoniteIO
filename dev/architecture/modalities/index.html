@@ -823,6 +823,8 @@
       
         
       
+        
+      
     
     
     
@@ -1232,6 +1234,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1346,7 +1376,7 @@ any subset.</p>
 <td>request/response</td>
 <td>unary</td>
 <td><a href="../../api/info/"><code>get_server_info</code></a></td>
-<td>Mod/engine version, OS platform, Wine flag.</td>
+<td>Mod/engine version, OS platform, Wine flag, engine/renderer host PIDs.</td>
 </tr>
 <tr>
 <td>Camera</td>
@@ -1424,6 +1454,13 @@ any subset.</p>
 <td>unary</td>
 <td><a href="../../api/cursor/"><code>CursorClient</code></a></td>
 <td>Set/hold/release/get the desktop cursor in normalized coords.</td>
+</tr>
+<tr>
+<td>Lifecycle</td>
+<td>Python → Resonite</td>
+<td>unary</td>
+<td><a href="../../api/lifecycle/"><code>LifecycleClient</code></a></td>
+<td>Ask the engine to quit gracefully (<code>shutdown</code>); <code>resoio.terminate</code> wraps it with engine-PID reporting.</td>
 </tr>
 </tbody>
 </table>
