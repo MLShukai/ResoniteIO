@@ -6,13 +6,14 @@ takes. The engine schedules the shutdown on its update thread and ACKs
 immediately, then exits asynchronously — the RPC does not wait for the process
 to die. Steam/Proton reaps the renderer and launch wrappers when the engine
 exits, so a graceful shutdown is sufficient to stop the whole client; no OS
-signals are sent. The :func:`terminate` convenience wraps this with PID
-reporting.
+signals are sent. The :func:`shutdown` convenience wraps this with PID
+reporting (``terminate`` is its deprecated former name).
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import override
 
 from grpclib.client import Channel
@@ -26,6 +27,7 @@ from resoio._generated.resonite_io.v1 import (
 
 __all__ = [
     "LifecycleClient",
+    "shutdown",
     "terminate",
 ]
 
@@ -56,7 +58,7 @@ class LifecycleClient(_BaseClient[LifecycleStub]):
         and ACKs before the process tears down, so this returns promptly. It
         does **not** wait for the engine to exit; poll liveness (e.g. via
         :class:`resoio.ConnectionClient`) if you need to confirm the process is
-        gone, or use :func:`terminate` for a one-call stop that also reports the
+        gone, or use :func:`shutdown` for a one-call stop that also reports the
         engine PID.
 
         Returns:
@@ -74,7 +76,7 @@ class LifecycleClient(_BaseClient[LifecycleStub]):
         return await stub.shutdown(ShutdownRequest())
 
 
-async def terminate(*, socket_path: str | None = None) -> int | None:
+async def shutdown(*, socket_path: str | None = None) -> int | None:
     """Stop the running Resonite client gracefully and return the engine's PID.
 
     Reads the engine's host PID from the ``Info`` RPC (for reporting), then
@@ -96,7 +98,7 @@ async def terminate(*, socket_path: str | None = None) -> int | None:
     try:
         pid = (await get_server_info(socket_path)).resonite_pid
     except Exception as exc:
-        _logger.info("No reachable Resonite engine to terminate (%s).", exc)
+        _logger.info("No reachable Resonite engine to shut down (%s).", exc)
         return None
 
     try:
@@ -109,3 +111,29 @@ async def terminate(*, socket_path: str | None = None) -> int | None:
         _logger.info("Lifecycle.Shutdown connection ended (%s); engine exiting.", exc)
 
     return pid or None
+
+
+async def terminate(*, socket_path: str | None = None) -> int | None:
+    """Deprecated former name of :func:`shutdown`.
+
+    Renamed to :func:`shutdown` to match Resonite's terminology and the
+    ``Lifecycle.Shutdown`` RPC. This alias still forwards to :func:`shutdown`
+    but is **no longer maintained** and will be removed in a future release;
+    migrate to :func:`shutdown`.
+
+    .. deprecated::
+        Use :func:`shutdown` instead.
+
+    Args:
+        socket_path: Forwarded to :func:`shutdown`.
+
+    Returns:
+        The engine's host PID, or ``None`` when no engine was reachable.
+    """
+    warnings.warn(
+        "resoio.terminate is deprecated and no longer maintained; use "
+        "resoio.shutdown instead. It will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return await shutdown(socket_path=socket_path)

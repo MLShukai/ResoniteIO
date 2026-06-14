@@ -7,6 +7,25 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`resoio shutdown` / `resoio.shutdown`**: The graceful-stop command and
+  convenience function are now named `shutdown`, matching Resonite's terminology
+  and the `Lifecycle.Shutdown` RPC. Behaviour is unchanged — it reads the engine
+  PID from `Info` (for reporting) and sends `Lifecycle.Shutdown`; the engine
+  quits itself and Steam/Proton reaps the renderer + launch wrappers. Prints /
+  returns the engine's host PID, or "resonite not running" / `None` when no
+  engine is reachable
+
+### Deprecated
+
+- **`resoio terminate` / `resoio.terminate`**: Renamed to `shutdown` (above).
+  The `terminate` command and function still work but are **no longer
+  maintained** and will be **removed in a future release**. The CLI prints a
+  deprecation notice on stderr and `resoio.terminate` emits a
+  `DeprecationWarning`; both forward to `shutdown`. Migrate to `resoio shutdown`
+  / `resoio.shutdown`
+
 ## [0.5.0] - 2026-06-13
 
 Adds the `Lifecycle` modality (graceful shutdown), a one-shot camera

@@ -5,4 +5,6 @@
 
 ::: resoio.lifecycle.LifecycleClient
 
+::: resoio.lifecycle.shutdown
+
 ::: resoio.lifecycle.terminate

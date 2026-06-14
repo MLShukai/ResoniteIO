@@ -94,6 +94,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "WorldSession",
     "__version__",
     "get_server_info",
+    "shutdown",
     "terminate",
 )
 

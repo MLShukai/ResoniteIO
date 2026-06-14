@@ -21,7 +21,7 @@ any subset.
 | Dash | request/response | unary | [`DashClient`](../api/dash.md) | Drive the ESC dash overlay (Userspace). |
 | Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse, spawn, and fetch thumbnail images of inventory items. |
 | Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/hold/release/get the desktop cursor in normalized coords. |
-| Lifecycle | Python → Resonite | unary | [`LifecycleClient`](../api/lifecycle.md) | Ask the engine to quit gracefully (`shutdown`); `resoio.terminate` wraps it with engine-PID reporting. |
+| Lifecycle | Python → Resonite | unary | [`LifecycleClient`](../api/lifecycle.md) | Ask the engine to quit gracefully (`shutdown`); `resoio.shutdown` wraps it with engine-PID reporting (`resoio.terminate` is the deprecated former name). |
 
 Each modality also ships a minimal runnable script under
 [`python/examples/`](https://github.com/MLShukai/ResoniteIO/tree/main/python/examples), and the
