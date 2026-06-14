@@ -7,7 +7,7 @@ and does not wait for the process to die. Assumes a Resonite client with the
 ResoniteIO mod loaded is running on the host.
 
 For a one-call stop that also reports the engine's host PID, use
-:func:`resoio.terminate` (it reads the PID from ``Info`` then sends this RPC).
+:func:`resoio.shutdown` (it reads the PID from ``Info`` then sends this RPC).
 
 Run from inside the dev container:
 

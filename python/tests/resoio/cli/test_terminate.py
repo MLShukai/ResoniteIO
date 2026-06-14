@@ -1,11 +1,12 @@
-"""Tests for the ``resoio terminate`` CLI command.
+"""Tests for the deprecated ``resoio terminate`` CLI command.
 
-The command's real behaviour (read the engine PID from Info, send
-``Lifecycle.Shutdown``) is covered by ``test_lifecycle.py`` against a real
-grpclib server. Here we only pin the CLI dispatch contract: it drives
-``resoio.lifecycle.terminate`` and renders the result — ``resonite_pid=<pid>``
+``terminate`` is the deprecated former name of ``shutdown``. Its real shutdown
+behaviour (read the engine PID from Info, send ``Lifecycle.Shutdown``) is
+covered by ``test_lifecycle.py`` against a real grpclib server. Here we pin the
+CLI dispatch contract: it warns about the deprecation on stderr, drives
+``resoio.lifecycle.shutdown``, and renders the result — ``resonite_pid=<pid>``
 on success, ``resonite not running`` when no engine was reachable. We stub our
-own first-party ``terminate`` so the dispatch is exercised in isolation.
+own first-party ``shutdown`` so the dispatch is exercised in isolation.
 """
 
 import pytest
@@ -13,31 +14,36 @@ import pytest
 from resoio.cli import _amain, _build_parser
 
 
-async def test_terminate_prints_pid_on_success(
+async def test_terminate_warns_and_prints_pid_on_success(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    async def _fake_terminate(*, socket_path: str | None) -> int:
+    async def _fake_shutdown(*, socket_path: str | None) -> int:
         return 4242
 
-    monkeypatch.setattr("resoio.lifecycle.terminate", _fake_terminate)
+    monkeypatch.setattr("resoio.lifecycle.shutdown", _fake_shutdown)
     args = _build_parser().parse_args(["terminate"])
     rc = await _amain(args)
 
+    captured = capsys.readouterr()
     assert rc == 0
-    assert capsys.readouterr().out.strip() == "resonite_pid=4242"
+    assert captured.out.strip() == "resonite_pid=4242"
+    assert "deprecated" in captured.err
+    assert "resoio shutdown" in captured.err
 
 
 async def test_terminate_reports_nothing_running(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    async def _fake_terminate(*, socket_path: str | None) -> None:
+    async def _fake_shutdown(*, socket_path: str | None) -> None:
         return None
 
-    monkeypatch.setattr("resoio.lifecycle.terminate", _fake_terminate)
+    monkeypatch.setattr("resoio.lifecycle.shutdown", _fake_shutdown)
     args = _build_parser().parse_args(["terminate"])
     rc = await _amain(args)
 
+    captured = capsys.readouterr()
     assert rc == 0
-    assert capsys.readouterr().out.strip() == "resonite not running"
+    assert captured.out.strip() == "resonite not running"
+    assert "deprecated" in captured.err

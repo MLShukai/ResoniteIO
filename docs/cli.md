@@ -25,15 +25,17 @@ resoio --help
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Interactive REPL: browse (`ls`/`cd`), mutate (`mkdir`/`cp`/`mv`/`rm`), `spawn`, and `thumb` (save an item's thumbnail image). |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
-| `resoio terminate` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
+| `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
+| `resoio terminate` | Lifecycle | unary | **Deprecated** alias of `shutdown` (no longer maintained, removed in a future release). Behaves identically but prints a deprecation notice on stderr. |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
 
-`terminate` is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
+`shutdown` is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
 reachable. A graceful shutdown is enough to stop the whole client — there is no SIGTERM/SIGKILL
 fallback, because the engine's own PID is not discoverable by name (`pgrep -f Resonite.exe`
-matches the Steam/Proton launch wrappers, which must not be signalled).
+matches the Steam/Proton launch wrappers, which must not be signalled). `terminate` is the
+deprecated former name of this command; prefer `shutdown`.
 
 ## Examples
 
@@ -65,7 +67,7 @@ resoio grab release
 resoio cursor release
 
 # Ask the engine to quit gracefully (prints the engine host PID)
-resoio terminate
+resoio shutdown
 ```
 
 Run any command with `--help` for its full flag list. For programmatic use, see the

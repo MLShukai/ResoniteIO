@@ -33,6 +33,7 @@ from resoio.cli import (
     ping,
     record,
     screenshot,
+    shutdown,
     terminate,
     world,
 )
@@ -53,6 +54,7 @@ _COMMAND_MODULES: list[ModuleType] = [
     screenshot,
     world,
     inventory,
+    shutdown,
     terminate,
 ]
 

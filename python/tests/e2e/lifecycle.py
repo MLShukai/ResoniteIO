@@ -1,6 +1,6 @@
-"""E2E: graceful terminate against a live Resonite + Info host-PID cross-check.
+"""E2E: graceful shutdown against a live Resonite + Info host-PID cross-check.
 
-Validates the Lifecycle/terminate feature against a real Resonite started via the
+Validates the Lifecycle/shutdown feature against a real Resonite started via the
 host-agent:
 
 1. ``Info.GetServerInfo`` reports the engine's host PID (`resonite_pid`) and the
@@ -10,11 +10,11 @@ host-agent:
    Linux, ``is_wine=false``). NOTE: the engine's own `resonite_pid` is observed
    only — it does NOT appear in ``pgrep -f Resonite.exe`` because that name
    matches the Steam/Proton launch wrappers, not the native engine process.
-2. ``terminate()`` reads the engine PID from Info and sends ``Lifecycle.Shutdown``;
+2. ``shutdown()`` reads the engine PID from Info and sends ``Lifecycle.Shutdown``;
    the engine quits itself and Steam/Proton reaps the renderer + wrappers. We poll
    the host until the whole Resonite process group is gone.
 
-``terminate`` is a pure gRPC call (no OS signals), so this drives the real public
+``shutdown`` is a pure gRPC call (no OS signals), so this drives the real public
 function from inside the container against the host Resonite.
 """
 
@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from resoio.info import get_server_info
-from resoio.lifecycle import terminate
+from resoio.lifecycle import shutdown
 from tests.helpers import mark_e2e
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[3]
@@ -84,7 +84,7 @@ def _host_status() -> tuple[list[int], list[int], bool]:
 
 class TestLifecycle:
     @mark_e2e
-    def test_terminate_exits_engine_and_info_reports_host_pids(
+    def test_shutdown_exits_engine_and_info_reports_host_pids(
         self, resonite_session: Path
     ) -> None:
         del resonite_session  # fixture only manages the Resonite lifecycle
@@ -122,10 +122,10 @@ class TestLifecycle:
                 f"{info.resonite_pid in host_resonite} (expected False — wrappers)"
             )
 
-            _screenshot(out_dir, "before_terminate.png")
+            _screenshot(out_dir, "before_shutdown.png")
 
-            pid = await terminate()
-            print(f"terminate returned pid={pid}")
+            pid = await shutdown()
+            print(f"shutdown returned pid={pid}")
             assert pid == info.resonite_pid
 
             # The window vanishes on shutdown, so we confirm exit by the host
@@ -134,11 +134,11 @@ class TestLifecycle:
             while time.monotonic() < deadline:
                 _, _, still_running = _host_status()
                 if not still_running:
-                    print("engine exited after terminate")
+                    print("engine exited after shutdown")
                     return
                 time.sleep(_SHUTDOWN_POLL_S)
             raise AssertionError(
-                f"engine did not exit within {_SHUTDOWN_TIMEOUT_S:.0f}s of terminate"
+                f"engine did not exit within {_SHUTDOWN_TIMEOUT_S:.0f}s of shutdown"
             )
 
         asyncio.run(scenario())
