@@ -58,12 +58,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             () =>
             {
                 var world = ResolveWorld();
-                if (!world.IsAuthority)
-                {
-                    throw new SessionPermissionDeniedException(
-                        "Only the session host can change session settings."
-                    );
-                }
+                RequirePermission(
+                    world.IsAuthority,
+                    "Only the session host can change session settings."
+                );
 
                 ApplySettings(world.Configuration, patch);
                 _log.LogInfo("[ResoniteIO] Session.ApplySettings");
@@ -107,12 +105,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             {
                 var world = ResolveWorld();
                 var user = ResolveUser(world, target);
-                if (!world.LocalUser.CanKick())
-                {
-                    throw new SessionPermissionDeniedException(
-                        "You do not have permission to kick users in this session."
-                    );
-                }
+                RequirePermission(
+                    world.LocalUser.CanKick(),
+                    "You do not have permission to kick users in this session."
+                );
                 user.Kick(MapKick(kind));
                 _log.LogInfo($"[ResoniteIO] Session.Kick: {user.UserName}");
                 return true;
@@ -132,12 +128,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             {
                 var world = ResolveWorld();
                 var user = ResolveUser(world, target);
-                if (!world.LocalUser.CanBan())
-                {
-                    throw new SessionPermissionDeniedException(
-                        "You do not have permission to ban users in this session."
-                    );
-                }
+                RequirePermission(
+                    world.LocalUser.CanBan(),
+                    "You do not have permission to ban users in this session."
+                );
                 user.Ban();
                 _log.LogInfo($"[ResoniteIO] Session.Ban: {user.UserName}");
                 return true;
@@ -161,12 +155,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             {
                 var world = ResolveWorld();
                 var user = ResolveUser(world, target);
-                if (!world.LocalUser.CanSilence())
-                {
-                    throw new SessionPermissionDeniedException(
-                        "You do not have permission to silence users in this session."
-                    );
-                }
+                RequirePermission(
+                    world.LocalUser.CanSilence(),
+                    "You do not have permission to silence users in this session."
+                );
                 user.IsSilenced = silenced;
                 _log.LogInfo($"[ResoniteIO] Session.Silence({silenced}): {user.UserName}");
                 return ReadUser(user);
@@ -187,12 +179,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
                 var world = ResolveWorld();
                 var user = ResolveUser(world, target);
                 // ローカルユーザは自分を常に respawn できる (SessionUserController.OnRespawn と同じ)。
-                if (!user.IsLocalUser && !user.CanRespawn())
-                {
-                    throw new SessionPermissionDeniedException(
-                        "You do not have permission to respawn this user."
-                    );
-                }
+                RequirePermission(
+                    user.IsLocalUser || user.CanRespawn(),
+                    "You do not have permission to respawn this user."
+                );
                 // SessionUserController.OnRespawn と同経路。既に engine thread 上なので直接呼ぶ。
                 user.Root?.Slot?.DestroyPreservingAssets();
                 _log.LogInfo($"[ResoniteIO] Session.Respawn: {user.UserName}");
@@ -218,12 +208,10 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             {
                 var world = ResolveWorld();
                 var user = ResolveUser(world, target);
-                if (!world.LocalUser.CanAssignRoles())
-                {
-                    throw new SessionPermissionDeniedException(
-                        "You do not have permission to assign roles in this session."
-                    );
-                }
+                RequirePermission(
+                    world.LocalUser.CanAssignRoles(),
+                    "You do not have permission to assign roles in this session."
+                );
 
                 var role = FindRole(world.Permissions, roleName);
                 if (role is null)
@@ -417,6 +405,19 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
     }
 
     // ---- resolution helpers -----------------------------------------------
+
+    /// <summary>
+    /// host 権限ゲート: <paramref name="allowed"/> が false なら
+    /// <paramref name="deniedMessage"/> を持つ <see cref="SessionPermissionDeniedException"/>
+    /// を投げる。前提: engine thread 上で呼ぶ (権限判定が world state を参照するため)。
+    /// </summary>
+    private static void RequirePermission(bool allowed, string deniedMessage)
+    {
+        if (!allowed)
+        {
+            throw new SessionPermissionDeniedException(deniedMessage);
+        }
+    }
 
     /// <summary>
     /// focused world を解決する。null / dispose 済み / userspace のみのときは
