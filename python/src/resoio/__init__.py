@@ -42,6 +42,16 @@ from resoio.microphone import (
     MicrophoneClient,
     MicrophoneStreamSummary,
 )
+from resoio.session import (
+    KickKind,
+    SessionAccessLevel,
+    SessionClient,
+    SessionRole,
+    SessionRoles,
+    SessionSettings,
+    SessionUser,
+    UserRoleOverride,
+)
 from resoio.speaker import SpeakerChunk, SpeakerClient
 from resoio.world import (
     FetchThumbnailResponse,
@@ -91,6 +101,7 @@ __all__ = [
     "InventoryMutationResult",
     "InventorySpawnResult",
     "InventoryThumbnail",
+    "KickKind",
     "LifecycleClient",
     "ListRecordsResponse",
     "ListSessionsResponse",
@@ -104,10 +115,17 @@ __all__ = [
     "ResetSummary",
     "ServerInfo",
     "ServerPlatform",
+    "SessionAccessLevel",
+    "SessionClient",
     "SessionFilter",
+    "SessionRole",
+    "SessionRoles",
+    "SessionSettings",
+    "SessionUser",
     "SocketNotFoundError",
     "SpeakerChunk",
     "SpeakerClient",
+    "UserRoleOverride",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
