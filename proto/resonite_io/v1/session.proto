@@ -1,0 +1,226 @@
+// Session service: Resonite の dash メニュー内「Session」画面 (接続中セッションの
+// 設定) を engine API 直叩きで操作する unary userspace modality。Inventory / Display
+// と同じく UI を駆動せず FrooxEngine の World.Configuration / World.AllUsers /
+// World.Permissions を直接読み書きする。3 タブを 1 service に集約する:
+//   - Settings:    World.Configuration (WorldConfiguration) の get / 部分 apply。
+//   - Users:       接続ユーザー一覧 + kick / ban / silence / respawn / role 割り当て。
+//   - Permissions: role 一覧 read + ユーザー別 override read + role 割り当て (write)。
+//
+// 部分更新は **proto3 `optional` (explicit presence)** で表す。Display の「0=変更
+// しない」方式は AccessLevel / bool 群で 0 が有効値のため採れない (locomotion.proto
+// の `optional float` と同じ explicit presence パターン)。ApplySettings は set された
+// field だけを engine に書き込み、unset field は触らない。Apply は適用後 snapshot を
+// 返さない (engine thread への dispatch race で stale を返すため。新しい値が要るなら
+// GetSettings を呼び直す。Display と同契約)。
+//
+// host 権限を要する操作 (設定変更 / kick / ban / silence / role / respawn) は、非
+// authority / 権限不足のとき PermissionDenied を返す。engine 未準備 (userspace のみ
+// 等) は FailedPrecondition。全 RPC は unary。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// SkyFrost.Base.SessionAccessLevel と 1:1。設定値として渡すため
+// UNSPECIFIED=0 を「変更しない」に割り当てる (ApplySettings 用)。
+enum SessionAccessLevel {
+  SESSION_ACCESS_LEVEL_UNSPECIFIED = 0;
+  SESSION_ACCESS_LEVEL_PRIVATE = 1;
+  SESSION_ACCESS_LEVEL_LAN = 2;
+  SESSION_ACCESS_LEVEL_CONTACTS = 3;
+  SESSION_ACCESS_LEVEL_CONTACTS_PLUS = 4;
+  SESSION_ACCESS_LEVEL_REGISTERED_USERS = 5;
+  SESSION_ACCESS_LEVEL_ANYONE = 6;
+}
+
+// kick 種別 (User.Kick の KickRequestState)。UNSPECIFIED は
+// KickAndRevokeInvite (engine 既定) として扱う。
+enum KickKind {
+  KICK_KIND_UNSPECIFIED = 0;
+  KICK_KIND_KICK = 1;
+  KICK_KIND_KICK_AND_REVOKE = 2;
+}
+
+// ===== Settings タブ =========================================================
+
+// GetSettings が返す現在の WorldConfiguration snapshot。全 field を actual 値で
+// 埋める (presence 概念なし)。session_id / is_host は読み取り専用メタ。
+message SessionSettings {
+  string world_name = 1;
+  string world_description = 2;
+  int32 max_users = 3;
+  SessionAccessLevel access_level = 4;
+  bool hide_from_listing = 5;
+  bool mobile_friendly = 6;
+  bool away_kick_enabled = 7;
+  float away_kick_minutes = 8;
+  bool auto_save_enabled = 9;
+  float auto_save_interval_minutes = 10;
+  bool auto_cleanup_enabled = 11;
+  float auto_cleanup_interval_seconds = 12;
+  repeated string tags = 13;
+  string session_id = 14;
+  bool is_host = 15;
+}
+
+// ApplySettings の部分更新 request。set された field のみ engine に書き込む。
+// scalar / bool / string は proto3 `optional` で「未指定」を wire 上で区別する
+// (0 / false / "" が有効値のため presence が必須)。access_level は enum 単独で
+// presence を表す (UNSPECIFIED=変更しない) ので optional は付けない。
+message SessionSettingsPatch {
+  optional string world_name = 1;
+  optional string world_description = 2;
+  optional int32 max_users = 3;
+  // UNSPECIFIED=変更しない。それ以外は新しい access level。
+  SessionAccessLevel access_level = 4;
+  optional bool hide_from_listing = 5;
+  optional bool mobile_friendly = 6;
+  optional bool away_kick_enabled = 7;
+  optional float away_kick_minutes = 8;
+  optional bool auto_save_enabled = 9;
+  optional float auto_save_interval_minutes = 10;
+  optional bool auto_cleanup_enabled = 11;
+  optional float auto_cleanup_interval_seconds = 12;
+  // tags は「全置換」セマンティクス。repeated に optional は付けられないため
+  // bool gate で制御する: replace_tags=true のときだけ tags を全置換する
+  // (空配列で全消し可能)。replace_tags=false なら tags は無視。
+  bool replace_tags = 13;
+  repeated string tags = 14;
+}
+
+message GetSettingsRequest {}
+
+// Apply の placeholder response (値を返さない契約。Display と同じく
+// google.protobuf.Empty を避け custom empty を採用)。
+message ApplySettingsResponse {}
+
+// ===== Users タブ ============================================================
+
+// 接続ユーザー 1 名の snapshot。
+message SessionUser {
+  // cloud user id (ゲストは空のことがある)。
+  string user_id = 1;
+  string user_name = 2;
+  bool is_host = 3;
+  bool is_local_user = 4;
+  bool is_present_in_world = 5;
+  bool is_silenced = 6;
+  float local_volume = 7;
+  // User.Role?.RoleName (無ければ空)。
+  string role_name = 8;
+  string platform = 9;
+  string head_device = 10;
+}
+
+// 対象ユーザーの指定方法。local=true のとき local user (自分) を対象にする。
+// 否なら user_id を優先し、空なら user_name で解決する。user_name で複数一致
+// (同名ゲスト等) した場合 Service は FailedPrecondition (曖昧) を返す。
+message UserTarget {
+  string user_id = 1;
+  string user_name = 2;
+  bool local = 3;
+}
+
+message ListUsersRequest {}
+
+message ListUsersResponse {
+  repeated SessionUser users = 1;
+}
+
+message KickUserRequest {
+  UserTarget target = 1;
+  KickKind kind = 2;
+}
+
+message KickUserResponse {}
+
+message BanUserRequest {
+  UserTarget target = 1;
+}
+
+message BanUserResponse {}
+
+message SilenceUserRequest {
+  UserTarget target = 1;
+  // true=silence, false=unsilence。
+  bool silenced = 2;
+}
+
+message SilenceUserResponse {
+  // 更新後 snapshot。
+  SessionUser user = 1;
+}
+
+message RespawnUserRequest {
+  UserTarget target = 1;
+}
+
+message RespawnUserResponse {}
+
+// role 割り当て (Users / Permissions 両タブから使う唯一の write RPC)。
+message SetUserRoleRequest {
+  UserTarget target = 1;
+  // Permissions.Roles に存在する role 名。
+  string role_name = 2;
+}
+
+message SetUserRoleResponse {
+  // 更新後 snapshot。
+  SessionUser user = 1;
+}
+
+// ===== Permissions タブ (read 中心) ==========================================
+
+// role 1 件 (PermissionSet snapshot)。
+message SessionRole {
+  string role_name = 1;
+  string role_description = 2;
+  // Roles[0] (最高権限)。
+  bool is_highest = 3;
+  // Roles[last] (最低権限)。
+  bool is_lowest = 4;
+}
+
+message ListRolesRequest {}
+
+message ListRolesResponse {
+  repeated SessionRole roles = 1;
+  // 既定 role 名 (空もありうる)。
+  string default_anonymous_role = 2;
+  string default_visitor_role = 3;
+  string default_contact_role = 4;
+  string default_host_role = 5;
+  string default_owner_role = 6;
+}
+
+// DefaultUserPermissions (userId -> role) の 1 エントリ。
+message UserRoleOverride {
+  string user_id = 1;
+  string role_name = 2;
+}
+
+message GetUserRoleOverridesRequest {}
+
+message GetUserRoleOverridesResponse {
+  repeated UserRoleOverride overrides = 1;
+}
+
+service Session {
+  // Settings タブ
+  rpc GetSettings(GetSettingsRequest) returns (SessionSettings);
+  rpc ApplySettings(SessionSettingsPatch) returns (ApplySettingsResponse);
+
+  // Users タブ
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc KickUser(KickUserRequest) returns (KickUserResponse);
+  rpc BanUser(BanUserRequest) returns (BanUserResponse);
+  rpc SilenceUser(SilenceUserRequest) returns (SilenceUserResponse);
+  rpc RespawnUser(RespawnUserRequest) returns (RespawnUserResponse);
+  // role 割り当て (Permissions タブからも使う共通 write)。
+  rpc SetUserRole(SetUserRoleRequest) returns (SetUserRoleResponse);
+
+  // Permissions タブ (read 中心)
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+  rpc GetUserRoleOverrides(GetUserRoleOverridesRequest) returns (GetUserRoleOverridesResponse);
+}
