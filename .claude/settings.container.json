@@ -22,5 +22,6 @@
   "allow": [
     "Read",
     "Bash"
-  ]
+  ],
+  "tui": "fullscreen"
 }
