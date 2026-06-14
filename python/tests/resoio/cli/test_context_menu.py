@@ -14,6 +14,7 @@ at ``parse_args`` time). A negative index is pinned by exit code only
 (``_run_cli`` normalizes parse-time SystemExit and runtime return codes).
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -298,3 +299,163 @@ def test_missing_subcommand_is_a_parse_error():
 def test_unknown_subcommand_is_a_parse_error():
     """An unknown ``context-menu`` subcommand is a usage error (exit 2)."""
     assert _parse_error_code(["context-menu", "toggle"]) == 2
+
+
+# --- --format json --------------------------------------------------------
+#
+# ``--format json`` emits the ContextMenuState as a single document on
+# stdout: ``{is_open, highlighted_index, items:[...]}`` where each item's
+# ``color`` tuple becomes a 4-element array (``to_jsonable`` collapses the
+# tuple). The colour components are exactly representable in float32 so they
+# survive the proto round-trip unchanged.
+
+_ITEM_JSON = {
+    "index": 0,
+    "label": "Move",
+    "enabled": True,
+    "has_icon": False,
+    "color": [0.5, 0.25, 1.0, 0.0],
+}
+
+
+def _sole_json_document(out: str) -> object:
+    """Parse ``out`` as exactly one JSON document and return it.
+
+    Pins the "stdout holds exactly ONE json document" contract: the
+    captured output must decode as a single top-level value with nothing
+    but trailing whitespace after it.
+    """
+    decoded, end = json.JSONDecoder().raw_decode(out)
+    assert out[end:].strip() == ""
+    return decoded
+
+
+async def test_open_json_emits_context_menu_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-context-menu.sock"
+    fake = _FakeContextMenu()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["context-menu", "open", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        # The item color tuple is rendered as a 4-element array.
+        assert payload == {
+            "is_open": True,
+            "items": [_ITEM_JSON],
+            "highlighted_index": -1,
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_close_json_emits_closed_state_with_empty_items(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-context-menu.sock"
+    fake = _FakeContextMenu()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["context-menu", "close", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {"is_open": False, "items": [], "highlighted_index": -1}
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_list_json_emits_state_with_highlighted_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-context-menu.sock"
+    fake = _FakeContextMenu()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["context-menu", "list", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.get_state_requests) == 1
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "is_open": True,
+            "items": [_ITEM_JSON],
+            "highlighted_index": 0,
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_highlight_json_reflects_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-context-menu.sock"
+    fake = _FakeContextMenu()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["context-menu", "highlight", "0", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert isinstance(payload, dict)
+        assert payload["highlighted_index"] == 0
+        assert payload["items"] == [_ITEM_JSON]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_invoke_json_emits_context_menu_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-context-menu.sock"
+    fake = _FakeContextMenu()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["context-menu", "invoke", "0", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+
+        assert len(fake.invoke_requests) == 1
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "is_open": True,
+            "items": [_ITEM_JSON],
+            "highlighted_index": 0,
+        }
+    finally:
+        server.close()
+        await server.wait_closed()

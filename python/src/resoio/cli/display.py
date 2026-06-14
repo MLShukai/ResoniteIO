@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import argparse
 
+from resoio.cli import output
+
 
 def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
@@ -32,17 +34,19 @@ def register(
     )
     display_subs = parser.add_subparsers(dest="display_command", required=True)
 
-    _register_get(display_subs, common)
-    _register_set(display_subs, common)
+    fmt = output.build_format_parent()
+    _register_get(display_subs, common, fmt)
+    _register_set(display_subs, common, fmt)
 
 
 def _register_get(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "get",
-        parents=[common],
+        parents=[common, fmt],
         help="Print the current display snapshot.",
     )
     parser.set_defaults(func=_run_get)
@@ -51,10 +55,11 @@ def _register_get(
 def _register_set(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "set",
-        parents=[common],
+        parents=[common, fmt],
         help="Apply a partial display config, then print the snapshot.",
         description=(
             "Apply a partial display config. Omitted flags are sent as the "
@@ -94,13 +99,20 @@ def _format_info(width: int, height: int, max_fps: float) -> str:
     return f"width={width} height={height} max_fps={max_fps}"
 
 
+def _emit_info(width: int, height: int, max_fps: float, fmt: str) -> None:
+    if output.is_structured(fmt):
+        output.emit({"width": width, "height": height, "max_fps": max_fps}, fmt)
+    else:
+        print(_format_info(width, height, max_fps))
+
+
 async def _run_get(args: argparse.Namespace) -> int:
     # Deferred to keep `resoio --help` and shell completion fast.
     from resoio.display import DisplayClient
 
     async with DisplayClient(args.socket) as client:
         info = await client.get()
-    print(_format_info(info.width, info.height, info.max_fps))
+    _emit_info(info.width, info.height, info.max_fps, args.format)
     return 0
 
 
@@ -128,5 +140,5 @@ async def _run_set(args: argparse.Namespace) -> int:
             max_fps=args.max_fps if args.max_fps is not None else 0.0,
         )
         info = await client.get()
-    print(_format_info(info.width, info.height, info.max_fps))
+    _emit_info(info.width, info.height, info.max_fps, args.format)
     return 0

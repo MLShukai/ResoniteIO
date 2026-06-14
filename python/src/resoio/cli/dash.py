@@ -35,6 +35,7 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from resoio.cli import output
 from resoio.dash import (
     DashAmbiguousMatchError,
     DashNoMatchError,
@@ -71,41 +72,44 @@ def register(
             "exact ref_id, or a label / locale_key / name substring."
         ),
     )
-    # No subcommand -> summary view ("what can I do now").
+    # No subcommand -> summary view ("what can I do now"); the summary is a
+    # result-producing leaf, so --format goes on the parent parser too.
+    fmt = output.build_format_parent()
+    output.add_format_argument(parser)
     parser.set_defaults(func=_run_summary)
     dash_subs = parser.add_subparsers(dest="dash_command", required=False)
 
     open_parser = dash_subs.add_parser(
         "open",
-        parents=[common],
+        parents=[common, fmt],
         help="Open the dash.",
     )
     open_parser.set_defaults(func=_run_open)
 
     close_parser = dash_subs.add_parser(
         "close",
-        parents=[common],
+        parents=[common, fmt],
         help="Close the dash.",
     )
     close_parser.set_defaults(func=_run_close)
 
     state_parser = dash_subs.add_parser(
         "state",
-        parents=[common],
+        parents=[common, fmt],
         help="Read the dash open state.",
     )
     state_parser.set_defaults(func=_run_state)
 
     tabs_parser = dash_subs.add_parser(
         "tabs",
-        parents=[common],
+        parents=[common, fmt],
         help="List the bottom tab bar ('*' marks the current tab).",
     )
     tabs_parser.set_defaults(func=_run_tabs)
 
     tab_parser = dash_subs.add_parser(
         "tab",
-        parents=[common],
+        parents=[common, fmt],
         help="Switch to a tab (selector: index from 'tabs', ref_id, or label).",
     )
     tab_parser.add_argument(
@@ -116,7 +120,7 @@ def register(
 
     ls_parser = dash_subs.add_parser(
         "ls",
-        parents=[common],
+        parents=[common, fmt],
         help="List the current tab's controls (numbered).",
     )
     ls_parser.add_argument(
@@ -128,7 +132,7 @@ def register(
 
     invoke_parser = dash_subs.add_parser(
         "invoke",
-        parents=[common],
+        parents=[common, fmt],
         help="Press a control (selector: index from 'ls', ref_id, or label).",
     )
     invoke_parser.add_argument(
@@ -139,7 +143,7 @@ def register(
 
     scroll_parser = dash_subs.add_parser(
         "scroll",
-        parents=[common],
+        parents=[common, fmt],
         help="Scroll a control by (dx, dy).",
     )
     scroll_parser.add_argument(
@@ -152,7 +156,7 @@ def register(
 
     highlight_parser = dash_subs.add_parser(
         "highlight",
-        parents=[common],
+        parents=[common, fmt],
         help="Hover-highlight a control (selector: index, ref_id, or label).",
     )
     highlight_parser.add_argument(
@@ -305,7 +309,13 @@ async def _run_summary(args: argparse.Namespace) -> int:
         state = await client.get_state()
         tabs = await client.list_tabs()
         controls = await client.list_controls()
-    print(_format_summary(state, tabs, controls))
+    if output.is_structured(args.format):
+        output.emit(
+            {"state": state, "tabs": list(tabs), "controls": list(controls)},
+            args.format,
+        )
+    else:
+        print(_format_summary(state, tabs, controls))
     return 0
 
 
@@ -313,7 +323,11 @@ async def _run_open(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_state(await client.open()))
+        state = await client.open()
+    if output.is_structured(args.format):
+        output.emit(state, args.format)
+    else:
+        print(_format_state(state))
     return 0
 
 
@@ -321,7 +335,11 @@ async def _run_close(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_state(await client.close()))
+        state = await client.close()
+    if output.is_structured(args.format):
+        output.emit(state, args.format)
+    else:
+        print(_format_state(state))
     return 0
 
 
@@ -329,7 +347,11 @@ async def _run_state(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_state(await client.get_state()))
+        state = await client.get_state()
+    if output.is_structured(args.format):
+        output.emit(state, args.format)
+    else:
+        print(_format_state(state))
     return 0
 
 
@@ -337,7 +359,11 @@ async def _run_tabs(args: argparse.Namespace) -> int:
     from resoio.dash import DashClient
 
     async with DashClient(args.socket) as client:
-        print(_format_tabs(await client.list_tabs()))
+        tabs = await client.list_tabs()
+    if output.is_structured(args.format):
+        output.emit(list(tabs), args.format)
+    else:
+        print(_format_tabs(tabs))
     return 0
 
 
@@ -350,7 +376,10 @@ async def _run_tab(args: argparse.Namespace) -> int:
         if tab is None:
             return 2
         result = await client.set_tab(ref_id=tab.ref_id)
-    print(_format_result(result))
+    if output.is_structured(args.format):
+        output.emit(result, args.format)
+    else:
+        print(_format_result(result))
     return 0
 
 
@@ -359,7 +388,10 @@ async def _run_ls(args: argparse.Namespace) -> int:
 
     async with DashClient(args.socket) as client:
         controls = await client.list_controls(include_disabled=args.all)
-    print(_format_controls(controls))
+    if output.is_structured(args.format):
+        output.emit(list(controls), args.format)
+    else:
+        print(_format_controls(controls))
     return 0
 
 
@@ -381,7 +413,10 @@ async def _run_control_action(
         if control is None:
             return 2
         result = await action(client, control)
-    print(_format_result(result))
+    if output.is_structured(args.format):
+        output.emit(result, args.format)
+    else:
+        print(_format_result(result))
     return 0
 
 

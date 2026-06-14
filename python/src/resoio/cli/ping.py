@@ -6,6 +6,8 @@ import argparse
 import asyncio
 import sys
 
+from resoio.cli import output
+
 
 def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
@@ -44,6 +46,7 @@ def register(
         default=5.0,
         help="Per-ping timeout in seconds (default: 5.0).",
     )
+    output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
 
@@ -52,6 +55,9 @@ async def _run(args: argparse.Namespace) -> int:
     import time
 
     from resoio.connection import ConnectionClient
+
+    structured = output.is_structured(args.format)
+    results: list[dict[str, object]] = []
 
     async with ConnectionClient(args.socket) as client:
         for _ in range(args.count):
@@ -70,9 +76,21 @@ async def _run(args: argparse.Namespace) -> int:
                 return 1
             t1 = time.monotonic_ns()
             rtt_ms = (t1 - t0) / 1e6
-            print(
-                f"message={resp.message} "
-                f"server_unix_nanos={resp.server_unix_nanos} "
-                f"rtt_ms={rtt_ms:.3f}"
-            )
+            if structured:
+                results.append(
+                    {
+                        "message": resp.message,
+                        "server_unix_nanos": resp.server_unix_nanos,
+                        "rtt_ms": rtt_ms,
+                    }
+                )
+            else:
+                print(
+                    f"message={resp.message} "
+                    f"server_unix_nanos={resp.server_unix_nanos} "
+                    f"rtt_ms={rtt_ms:.3f}"
+                )
+
+    if structured:
+        output.emit(results, args.format)
     return 0

@@ -30,6 +30,8 @@ import tty
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, TextIO
 
+from resoio.cli import output
+
 if TYPE_CHECKING:
     from collections.abc import Generator
 
@@ -76,6 +78,7 @@ def register(
         default=0.0,
         help="Grab sphere radius in metres (<= 0 uses the server default).",
     )
+    output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
 
@@ -171,6 +174,17 @@ async def _run(args: argparse.Namespace) -> int:
     """Dispatch on ``args.action`` and print the resulting hold state."""
     action: str = args.action
     if action == "interactive":
+        # ``--format`` lives on the shared flat parser so grab/release/state
+        # can emit json, but the interactive loop is human-only (a carve-out):
+        # reject a structured request rather than silently ignoring it.
+        if output.is_structured(args.format):
+            print(
+                "resoio grab interactive: --format is not supported "
+                "(interactive output is human-only); use grab / release / "
+                "state for structured output.",
+                file=sys.stderr,
+            )
+            return 2
         return await _run_interactive(args)
 
     # Deferred to keep `resoio --help` and shell completion fast.
@@ -179,13 +193,28 @@ async def _run(args: argparse.Namespace) -> int:
     async with GrabberClient(args.socket) as client:
         if action == "grab":
             result = await client.grab(hand=args.hand, radius=args.radius)
-            print(f"grabbed={result.grabbed}")
-            print(_format_state(result.state))
+            if output.is_structured(args.format):
+                output.emit(
+                    {
+                        "grabbed": result.grabbed,
+                        "hand": result.state.hand,
+                        "is_holding": result.state.is_holding,
+                        "object_names": list(result.state.object_names),
+                        "unix_nanos": result.state.unix_nanos,
+                    },
+                    args.format,
+                )
+            else:
+                print(f"grabbed={result.grabbed}")
+                print(_format_state(result.state))
             return 0
         if action == "release":
             state = await client.release(hand=args.hand)
         else:
             state = await client.get_state(hand=args.hand)
 
-    print(_format_state(state))
+    if output.is_structured(args.format):
+        output.emit(state, args.format)
+    else:
+        print(_format_state(state))
     return 0

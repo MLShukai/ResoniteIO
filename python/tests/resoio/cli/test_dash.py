@@ -30,6 +30,7 @@ list to stderr and exits ``2``. The mutating-action result line keeps the
 documented ``ok=... found=... ref_id=... detail=...`` shape.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -778,3 +779,283 @@ def test_scroll_missing_deltas_is_a_parse_error():
 def test_unknown_subcommand_is_a_parse_error():
     """An unknown ``dash`` subcommand is a usage error (exit 2)."""
     assert _parse_error_code(["dash", "toggle"]) == 2
+
+
+# --- --format json --------------------------------------------------------
+#
+# ``--format json`` emits a single machine-readable document on stdout. The
+# bare summary builds an explicit ``{state, tabs[], controls[]}`` object; the
+# read commands emit the wrapper dataclass(es) directly (DashState, a
+# DashTab[] array, a DashControl[] array); the mutating actions emit the
+# DashActionResult shape. The wrapper field names are the contract, so the
+# expected dicts below are derived from the same fixtures the human-mode
+# tests use (no truncation: ``--all``/``--limit``/``--wide`` are human-only).
+
+
+def _sole_json_document(out: str) -> object:
+    """Parse ``out`` as exactly one JSON document and return it.
+
+    Pins the "stdout holds exactly ONE json document" contract: the
+    captured output must decode as a single top-level value with nothing
+    but trailing whitespace after it.
+    """
+    decoded, end = json.JSONDecoder().raw_decode(out)
+    assert out[end:].strip() == ""
+    return decoded
+
+
+def _tab_json(tab: PbDashTab) -> dict[str, object]:
+    """The documented json shape of one tab (wrapper field names)."""
+    return {
+        "ref_id": tab.ref_id,
+        "locale_key": tab.locale_key,
+        "name": tab.name,
+        "label": tab.label,
+        "is_current": tab.is_current,
+        "enabled": tab.enabled,
+    }
+
+
+def _control_json(control: PbDashControl) -> dict[str, object]:
+    """The documented json shape of one control (wrapper field names)."""
+    return {
+        "ref_id": control.ref_id,
+        "control_type": control.control_type,
+        "label": control.label,
+        "locale_key": control.locale_key,
+        "enabled": control.enabled,
+        "parent_ref_id": control.parent_ref_id,
+        "depth": control.depth,
+    }
+
+
+# get_state returns is_open=True, open_lerp=0.5 (0.5 is exact in float32).
+_STATE_JSON = {"is_open": True, "open_lerp": 0.5}
+
+
+async def test_summary_json_emits_state_tabs_and_controls_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``dash --format json`` returns one object combining the three reads:
+
+    ``{state, tabs:[...], controls:[...]}`` with full (untruncated) listings.
+    """
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "--format", "json"])
+        assert rc == 0
+
+        # Still exactly the three reads, no mutation.
+        assert len(fake.get_state_requests) == 1
+        assert len(fake.list_tabs_requests) == 1
+        assert len(fake.list_controls_requests) == 1
+        assert fake.set_tab_requests == []
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "state": _STATE_JSON,
+            "tabs": [_tab_json(t) for t in _TABS],
+            "controls": [_control_json(c) for c in _ENABLED_CONTROLS],
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_state_json_emits_dash_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "state", "--format", "json"])
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == _STATE_JSON
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_tabs_json_emits_full_tab_array(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``tabs --format json`` is a DashTab[] array with every field of every
+    tab (no ``*`` marker, no table footer)."""
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "tabs", "--format", "json"])
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == [_tab_json(t) for t in _TABS]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_ls_json_emits_full_control_array(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``ls --format json`` is a DashControl[] array; without ``--all`` only
+    the enabled controls are present."""
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "ls", "--format", "json"])
+        assert rc == 0
+
+        assert fake.list_controls_requests[0].include_disabled is False
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == [_control_json(c) for c in _ENABLED_CONTROLS]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_ls_all_json_includes_disabled_control(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``--all`` is a human listing toggle that still applies in json: the
+    disabled control joins the array."""
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "ls", "--all", "--format", "json"])
+        assert rc == 0
+
+        assert fake.list_controls_requests[0].include_disabled is True
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == [
+            _control_json(c) for c in [*_ENABLED_CONTROLS, _CTL_DISABLED]
+        ]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_tab_json_emits_action_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "tab", "contacts", "--format", "json"])
+        assert rc == 0
+
+        assert fake.set_tab_requests[0].ref_id == _TAB_CONTACTS.ref_id
+        payload = _sole_json_document(capsys.readouterr().out)
+        # DashActionResult shape; the resolved full ref_id is echoed.
+        assert payload == {
+            "ok": True,
+            "found": True,
+            "ref_id": _TAB_CONTACTS.ref_id,
+            "detail": "switched",
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_invoke_json_emits_action_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "invoke", "refresh", "--format", "json"])
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "ok": True,
+            "found": True,
+            "ref_id": _CTL_REFRESH.ref_id,
+            "detail": "pressed",
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_scroll_json_emits_action_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(
+            ["dash", "scroll", _CTL_SCROLL.ref_id, "0.0", "0.3", "--format", "json"]
+        )
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "ok": True,
+            "found": True,
+            "ref_id": _CTL_SCROLL.ref_id,
+            "detail": "scrolled",
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_highlight_json_emits_action_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-dash.sock"
+    fake = _FakeDash()
+    server = await _serve(socket_path, fake)
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        rc = await _run_cli(["dash", "highlight", "refresh", "--format", "json"])
+        assert rc == 0
+
+        payload = _sole_json_document(capsys.readouterr().out)
+        assert payload == {
+            "ok": True,
+            "found": True,
+            "ref_id": _CTL_REFRESH.ref_id,
+            "detail": "hovered",
+        }
+    finally:
+        server.close()
+        await server.wait_closed()

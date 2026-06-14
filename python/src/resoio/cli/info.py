@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from resoio.cli import output
+
 
 def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
@@ -25,6 +27,7 @@ def register(
             "the client runs under Wine/Proton."
         ),
     )
+    output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
 
@@ -46,10 +49,26 @@ async def _run(args: argparse.Namespace) -> int:
             return 1
         raise
 
-    print(f"mod_version={info.mod_version}")
-    print(f"engine_version={info.engine_version}")
-    print(f"platform={info.platform.value}")
-    print(f"is_wine={'true' if info.is_wine else 'false'}")
-    print(f"resonite_pid={info.resonite_pid}")
-    print(f"renderer_pid={info.renderer_pid}")
+    if output.is_structured(args.format):
+        # Build an explicit dict: `platform` must be the same string the
+        # human path prints (`info.platform.value`, e.g. "linux"), not the
+        # enum name `to_jsonable` would otherwise emit.
+        output.emit(
+            {
+                "mod_version": info.mod_version,
+                "engine_version": info.engine_version,
+                "platform": info.platform.value,
+                "is_wine": info.is_wine,
+                "resonite_pid": info.resonite_pid,
+                "renderer_pid": info.renderer_pid,
+            },
+            args.format,
+        )
+    else:
+        print(f"mod_version={info.mod_version}")
+        print(f"engine_version={info.engine_version}")
+        print(f"platform={info.platform.value}")
+        print(f"is_wine={'true' if info.is_wine else 'false'}")
+        print(f"resonite_pid={info.resonite_pid}")
+        print(f"renderer_pid={info.renderer_pid}")
     return 0

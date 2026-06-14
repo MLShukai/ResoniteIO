@@ -22,6 +22,9 @@ Two complementary layers are exercised:
 
 from __future__ import annotations
 
+import dataclasses
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -261,10 +264,20 @@ def test_thumbnail_output_short_flag_is_dash_o():
 
 
 def test_thumbnail_output_defaults_to_none():
-    """Without ``-o`` the bytes go to stdout, so the parsed output is None."""
+    """Without ``-o`` the parsed output is None, the sentinel the handler maps
+    to a CWD-relative date-stamped file (``-o -`` is the explicit stdout
+    sentinel; see the dispatch tests below)."""
     parser = _build_parser()
     args = parser.parse_args(["world", "thumbnail", "resdb:///abc"])
     assert args.output is None
+
+
+def test_thumbnail_output_dash_means_stdout():
+    """``-o -`` is the explicit stdout sentinel and parses verbatim as ``"-"``;
+    the handler writes raw bytes to stdout for it (no path line)."""
+    parser = _build_parser()
+    args = parser.parse_args(["world", "thumbnail", "resdb:///abc", "-o", "-"])
+    assert args.output == "-"
 
 
 def test_join_accepts_session_id():
@@ -833,11 +846,15 @@ async def test_records_limit_truncates_rows_and_prints_footer_to_stderr(
 # ---------------------------------------------------------------------------
 
 
-async def test_thumbnail_with_output_writes_file_and_reports_to_stderr(
+async def test_thumbnail_with_output_path_writes_file_and_prints_abspath(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
     """``thumbnail <uri> -o <path>`` fetches the bytes, writes them verbatim to
-    the file, and reports the byte count + content_type on STDERR."""
+    the file, and prints the saved file's **absolute path** as one line to
+    STDOUT (replacing the old stderr ``saved ...
+
+    -> path`` log).
+    """
     socket_path = tmp_path / "rio-world.sock"
     out_file = tmp_path / "thumb.webp"
     fake = _RecordingWorld()
@@ -859,19 +876,51 @@ async def test_thumbnail_with_output_writes_file_and_reports_to_stderr(
     assert fake.fetch_thumbnail_requests[0].uri == "resdb:///abc"
     assert out_file.read_bytes() == _THUMB_BYTES
 
-    err = capsys.readouterr().err
-    assert "saved" in err
-    assert _THUMB_CONTENT_TYPE in err
+    captured = capsys.readouterr()
+    # The absolute path is the sole stdout line; no stderr "saved" log remains.
+    assert captured.out.strip() == str(out_file.resolve())
+    assert captured.out.count("\n") == 1
+    assert "saved" not in captured.err
 
 
-async def test_thumbnail_without_output_writes_raw_bytes_to_stdout(
+async def test_thumbnail_output_dash_writes_raw_bytes_to_stdout_no_path_line(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsysbinary: pytest.CaptureFixture[bytes],
 ):
-    """Without ``-o`` the raw image bytes are written to the stdout buffer
-    verbatim (binary-safe), so the output can be piped to a file."""
+    """``-o -`` is the explicit stdout sentinel: the raw image bytes are
+    written to the stdout buffer verbatim (binary-safe) and **no** path line is
+    printed, so the output can be piped to a file."""
     socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "thumbnail", "resdb:///abc", "-o", "-"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert len(fake.fetch_thumbnail_requests) == 1
+    out = capsysbinary.readouterr().out
+    # Exactly the raw bytes — no trailing newline / abs-path line appended.
+    assert out == _THUMB_BYTES
+
+
+async def test_thumbnail_omitted_output_saves_dated_file_in_cwd_and_prints_abspath(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """With ``-o`` omitted the thumbnail is saved to the CWD as
+    ``thumbnail_YYYYMMDD_HHMMSS.<ext>`` (extension derived from the fetched
+    ``content_type``: ``image/webp`` -> ``webp``), and the saved file's
+    **absolute path** is printed as the sole stdout line."""
+    socket_path = tmp_path / "rio-world.sock"
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
     fake = _RecordingWorld()
     server = Server([fake])
     await server.start(path=str(socket_path))
@@ -885,8 +934,90 @@ async def test_thumbnail_without_output_writes_raw_bytes_to_stdout(
         await server.wait_closed()
 
     assert len(fake.fetch_thumbnail_requests) == 1
-    out = capsysbinary.readouterr().out
-    assert out == _THUMB_BYTES
+    # Exactly one date-stamped file landed in the CWD with the webp extension.
+    saved = list(cwd.iterdir())
+    assert len(saved) == 1
+    created = saved[0]
+    assert re.fullmatch(r"thumbnail_\d{8}_\d{6}\.webp", created.name)
+    assert created.read_bytes() == _THUMB_BYTES
+
+    captured = capsys.readouterr()
+    # The absolute path of the created file is the sole stdout line.
+    assert captured.out.strip() == str(created.resolve())
+    assert captured.out.count("\n") == 1
+
+
+class _ContentTypeWorld(WorldBase):
+    """World server whose ``fetch_thumbnail`` returns a configurable
+    ``content_type`` so the omitted-``-o`` extension mapping can be pinned."""
+
+    def __init__(self, content_type: str) -> None:
+        self._content_type = content_type
+
+    async def fetch_thumbnail(
+        self, message: FetchThumbnailRequest
+    ) -> FetchThumbnailResponse:
+        return FetchThumbnailResponse(
+            data=_THUMB_BYTES, content_type=self._content_type
+        )
+
+
+async def _run_thumbnail_omitted_ext(
+    content_type: str,
+    cwd: Path,
+    socket_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """Drive ``thumbnail <uri>`` (no ``-o``) against a server returning
+    ``content_type`` and return the created filename's extension."""
+    monkeypatch.chdir(cwd)
+    server = Server([_ContentTypeWorld(content_type)])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "thumbnail", "resdb:///abc"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    saved = list(cwd.iterdir())
+    assert len(saved) == 1
+    return saved[0].suffix.lstrip(".")
+
+
+async def test_thumbnail_omitted_output_png_content_type_uses_png_ext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    ext = await _run_thumbnail_omitted_ext(
+        "image/png", cwd, tmp_path / "rio-world.sock", monkeypatch
+    )
+    assert ext == "png"
+
+
+async def test_thumbnail_omitted_output_jpeg_content_type_uses_jpg_ext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    ext = await _run_thumbnail_omitted_ext(
+        "image/jpeg", cwd, tmp_path / "rio-world.sock", monkeypatch
+    )
+    assert ext == "jpg"
+
+
+async def test_thumbnail_omitted_output_unknown_content_type_uses_bin_ext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An unrecognized ``content_type`` falls back to the ``bin`` extension."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    ext = await _run_thumbnail_omitted_ext(
+        "application/octet-stream", cwd, tmp_path / "rio-world.sock", monkeypatch
+    )
+    assert ext == "bin"
 
 
 async def test_join_dispatch_sends_session_id_and_focus(
@@ -1035,3 +1166,385 @@ async def test_current_dispatch_calls_get_current(
         await server.wait_closed()
 
     assert len(fake.get_current_requests) == 1
+
+
+# ===========================================================================
+# --format json: structured leaves emit one JSON document on STDOUT.
+#
+# The binary 'thumbnail' leaf has NO --format; only the structured leaves
+# (sessions / records / list / join / start / focus / leave / current) do.
+# json mode always emits every row and every proto field with no truncation
+# and no footer — the --wide/--limit/--all flags are HUMAN-ONLY.
+# ===========================================================================
+
+# The full snake_case proto field-name sets. json mode must emit every field
+# (a regression guard against Message.to_dict() camelCasing / dropping
+# defaults). Derived from the proto contract, not from CLI internals.
+_OPEN_WORLD_FIELDS = {f.name for f in dataclasses.fields(OpenWorld)}
+_SESSION_FIELDS = {f.name for f in dataclasses.fields(WorldSession)}
+_RECORD_FIELDS = {f.name for f in dataclasses.fields(WorldRecord)}
+
+
+def _sole_json_document(stdout: str) -> object:
+    """Parse ``stdout`` as exactly one JSON document, asserting it is the only
+    thing written (one trailing newline, no extra trailing content)."""
+    assert stdout.endswith("\n")
+    body = stdout[:-1]
+    # A single json.dumps document never contains a bare top-level newline gap
+    # between two documents; json.loads of the whole buffer must succeed once.
+    return json.loads(body)
+
+
+async def test_sessions_json_emits_array_of_full_session_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``--format json`` on sessions emits a JSON array of the full proto
+    messages: every row, every snake_case field, no footer."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "sessions", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    payload = _sole_json_document(captured.out)
+    assert isinstance(payload, list)
+    # All 3 fake rows present (no truncation in json mode).
+    assert len(payload) == 3
+    for i, row in enumerate(payload):
+        assert isinstance(row, dict)
+        # Every proto field name is present (snake_case, no camelCase drift).
+        assert set(row.keys()) == _SESSION_FIELDS
+        assert row["session_id"] == f"S-{i + 1}"
+        assert row["name"] == f"Hub{i + 1}"
+        assert row["host_username"] == "alice"
+        assert row["active_users"] == 4
+        # thumbnail_url is included in json even though compact human hides it.
+        assert row["thumbnail_url"] == _SESSION_THUMB_URLS[i]
+    # No footer text leaked anywhere in json mode.
+    assert "showing" not in captured.out
+    assert "showing" not in captured.err
+
+
+async def test_sessions_json_ignores_wide_limit_all_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """The ``--wide`` / ``--limit`` / ``--all`` flags are human-only: json mode
+    emits every row and every field regardless, with no truncation footer."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "sessions", "--format", "json", "--limit", "1"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    payload = _sole_json_document(captured.out)
+    assert isinstance(payload, list)
+    # --limit 1 would cap human output to 1 row + footer; json keeps all 3.
+    assert len(payload) == 3
+    assert "showing" not in captured.err
+
+
+async def test_records_json_emits_array_of_full_record_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "records", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    payload = _sole_json_document(captured.out)
+    assert isinstance(payload, list)
+    assert len(payload) == 3
+    for i, row in enumerate(payload):
+        assert isinstance(row, dict)
+        assert set(row.keys()) == _RECORD_FIELDS
+        assert row["record_id"] == f"R-{i + 1}"
+        assert row["owner_id"] == "U-me"
+        assert row["thumbnail_url"] == _RECORD_THUMB_URLS[i]
+    assert "showing" not in captured.err
+
+
+async def test_list_json_emits_array_of_open_world_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "list", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == [
+        {
+            "handle": 2,
+            "session_id": "S-1",
+            "name": "Open",
+            "focused": True,
+            "user_count": 2,
+            "access_level": "Anyone",
+        }
+    ]
+
+
+async def test_join_json_emits_single_open_world_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``join --format json`` emits a single OpenWorld **object** (not an
+    array): all 6 fields, snake_case."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "join", "--session-id", "S-42", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert set(payload.keys()) == _OPEN_WORLD_FIELDS
+    assert payload["name"] == "Joined"
+
+
+async def test_start_json_emits_single_open_world_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "start", "--record-id", "R-9", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert set(payload.keys()) == _OPEN_WORLD_FIELDS
+    assert payload["name"] == "Started"
+
+
+async def test_focus_json_emits_single_open_world_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "focus", "5", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert set(payload.keys()) == _OPEN_WORLD_FIELDS
+    assert payload["handle"] == 5
+    assert payload["name"] == "Focused"
+
+
+async def test_leave_json_emits_handle_and_left_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``leave --format json`` emits ``{handle: <requested handle>, left:
+
+    true}`` — a synthesized acknowledgement (the wire LeaveResponse is
+    empty).
+    """
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "leave", "8", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == {"handle": 8, "left": True}
+
+
+async def test_current_json_focused_emits_single_open_world_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``current --format json`` with a focused world emits a single OpenWorld
+    object."""
+    socket_path = tmp_path / "rio-world.sock"
+    fake = _RecordingWorld()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "current", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert set(payload.keys()) == _OPEN_WORLD_FIELDS
+    assert payload["name"] == "Current"
+
+
+class _UserspaceWorld(WorldBase):
+    """World server reporting userspace (no focused world) for
+    ``get_current``."""
+
+    async def get_current(self, message: GetCurrentRequest) -> GetCurrentResponse:
+        return GetCurrentResponse(has_world=False)
+
+
+async def test_current_json_userspace_emits_null_document_with_rc_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """In userspace (no focused world), ``current --format json`` emits a JSON
+    ``null`` document and returns rc 0; the human stderr guidance does NOT
+    print in json mode."""
+    socket_path = tmp_path / "rio-world.sock"
+    server = Server([_UserspaceWorld()])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "current", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    captured = capsys.readouterr()
+    payload = _sole_json_document(captured.out)
+    assert payload is None
+    # The human-only "userspace" stderr guidance must be suppressed in json.
+    assert captured.err == ""
+
+
+async def test_sessions_json_preserves_non_ascii_world_name_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """``ensure_ascii=False``: a Japanese session name survives json round-trip
+    literally (not ``\\uXXXX`` escaped) and parses back to the same string."""
+    socket_path = tmp_path / "rio-world.sock"
+
+    class _JapaneseWorld(WorldBase):
+        async def list_sessions(
+            self, message: ListSessionsRequest
+        ) -> ListSessionsResponse:
+            return ListSessionsResponse(
+                sessions=[WorldSession(session_id="S-1", name="ホームワールド")],
+                total_count=1,
+            )
+
+    server = Server([_JapaneseWorld()])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "sessions", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    out = capsys.readouterr().out
+    # The literal (unescaped) glyphs appear in the raw stdout text...
+    assert "ホームワールド" in out
+    assert "\\u" not in out
+    # ...and the parsed value is the exact same string.
+    payload = _sole_json_document(out)
+    assert isinstance(payload, list)
+    assert payload[0]["name"] == "ホームワールド"
+
+
+async def test_records_json_round_trips_large_unix_nanos_exactly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """A ``last_modification_unix_nanos`` ~1.7e18 (> 2**53) round-trips through
+    json exactly — no lossy float coercion."""
+    large_nanos = 1_700_000_000_123_456_789
+    socket_path = tmp_path / "rio-world.sock"
+
+    class _NanosWorld(WorldBase):
+        async def list_records(
+            self, message: ListRecordsRequest
+        ) -> ListRecordsResponse:
+            return ListRecordsResponse(
+                records=[
+                    WorldRecord(
+                        record_id="R-1",
+                        name="W",
+                        last_modification_unix_nanos=large_nanos,
+                    )
+                ],
+                has_more=False,
+            )
+
+    server = Server([_NanosWorld()])
+    await server.start(path=str(socket_path))
+    try:
+        rc = await _run_world(
+            ["world", "records", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, list)
+    assert payload[0]["last_modification_unix_nanos"] == large_nanos
