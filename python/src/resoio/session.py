@@ -274,6 +274,13 @@ class SessionClient(_BaseClient[SessionStub]):
 
     Use as an async context manager so the gRPC channel closes
     deterministically.
+
+    Targeting (``kick`` / ``ban`` / ``silence`` / ``respawn`` / ``role``):
+    pass ``local=True`` to target yourself, otherwise ``user_id`` is tried
+    first and ``user_name`` is the fallback. ``user_name`` resolution
+    fails if several connected users share the name -- prefer ``user_id``
+    for guests. Moderation and settings writes are host-gated: calling them
+    without host permission raises gRPC ``PermissionDenied``.
     """
 
     _logger = _logger
