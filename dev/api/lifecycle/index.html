@@ -1247,6 +1247,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resoio.lifecycle.shutdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shutdown
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#resoio.lifecycle.terminate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1324,6 +1335,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resoio.lifecycle.shutdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shutdown
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1452,7 +1474,7 @@ raise :class:<code>SocketNotFoundError</code> or :class:<code>AmbiguousSocketErr
 and ACKs before the process tears down, so this returns promptly. It
 does <strong>not</strong> wait for the engine to exit; poll liveness (e.g. via
 :class:<code>resoio.ConnectionClient</code>) if you need to confirm the process is
-gone, or use :func:<code>terminate</code> for a one-call stop that also reports the
+gone, or use :func:<code>shutdown</code> for a one-call stop that also reports the
 engine PID.</p>
 
 
@@ -1537,9 +1559,7 @@ successful schedule as the engine exits — callers that only want
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/lifecycle.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-52">52</a></span>
-<span class="normal"><a href="#__codelineno-0-53">53</a></span>
-<span class="normal"><a href="#__codelineno-0-54">54</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-54">54</a></span>
 <span class="normal"><a href="#__codelineno-0-55">55</a></span>
 <span class="normal"><a href="#__codelineno-0-56">56</a></span>
 <span class="normal"><a href="#__codelineno-0-57">57</a></span>
@@ -1559,29 +1579,31 @@ successful schedule as the engine exits — callers that only want
 <span class="normal"><a href="#__codelineno-0-71">71</a></span>
 <span class="normal"><a href="#__codelineno-0-72">72</a></span>
 <span class="normal"><a href="#__codelineno-0-73">73</a></span>
-<span class="normal"><a href="#__codelineno-0-74">74</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-52" name="__codelineno-0-52"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShutdownResponse</span><span class="p">:</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Ask the engine to quit gracefully and return the ACK.</span>
-<a id="__codelineno-0-54" name="__codelineno-0-54"></a>
-<a id="__codelineno-0-55" name="__codelineno-0-55"></a><span class="sd">    The engine schedules ``Engine.RequestShutdown`` on its update thread</span>
-<a id="__codelineno-0-56" name="__codelineno-0-56"></a><span class="sd">    and ACKs before the process tears down, so this returns promptly. It</span>
-<a id="__codelineno-0-57" name="__codelineno-0-57"></a><span class="sd">    does **not** wait for the engine to exit; poll liveness (e.g. via</span>
-<a id="__codelineno-0-58" name="__codelineno-0-58"></a><span class="sd">    :class:`resoio.ConnectionClient`) if you need to confirm the process is</span>
-<a id="__codelineno-0-59" name="__codelineno-0-59"></a><span class="sd">    gone, or use :func:`terminate` for a one-call stop that also reports the</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60"></a><span class="sd">    engine PID.</span>
-<a id="__codelineno-0-61" name="__codelineno-0-61"></a>
-<a id="__codelineno-0-62" name="__codelineno-0-62"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63"></a><span class="sd">        The :class:`ShutdownResponse` whose ``accepted`` is ``True`` when</span>
-<a id="__codelineno-0-64" name="__codelineno-0-64"></a><span class="sd">        the shutdown was scheduled, or ``False`` when the engine had already</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65"></a><span class="sd">        begun shutting down (idempotent no-op).</span>
-<a id="__codelineno-0-66" name="__codelineno-0-66"></a>
-<a id="__codelineno-0-67" name="__codelineno-0-67"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-68" name="__codelineno-0-68"></a><span class="sd">        grpclib.exceptions.GRPCError: The RPC failed at the transport or</span>
-<a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="sd">            server layer. Note that the connection may drop right after a</span>
-<a id="__codelineno-0-70" name="__codelineno-0-70"></a><span class="sd">            successful schedule as the engine exits — callers that only want</span>
-<a id="__codelineno-0-71" name="__codelineno-0-71"></a><span class="sd">            &quot;make it stop&quot; can treat a post-ACK disconnect as success.</span>
-<a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-73" name="__codelineno-0-73"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
-<a id="__codelineno-0-74" name="__codelineno-0-74"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">ShutdownRequest</span><span class="p">())</span>
+<span class="normal"><a href="#__codelineno-0-74">74</a></span>
+<span class="normal"><a href="#__codelineno-0-75">75</a></span>
+<span class="normal"><a href="#__codelineno-0-76">76</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-54" name="__codelineno-0-54"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShutdownResponse</span><span class="p">:</span>
+<a id="__codelineno-0-55" name="__codelineno-0-55"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Ask the engine to quit gracefully and return the ACK.</span>
+<a id="__codelineno-0-56" name="__codelineno-0-56"></a>
+<a id="__codelineno-0-57" name="__codelineno-0-57"></a><span class="sd">    The engine schedules ``Engine.RequestShutdown`` on its update thread</span>
+<a id="__codelineno-0-58" name="__codelineno-0-58"></a><span class="sd">    and ACKs before the process tears down, so this returns promptly. It</span>
+<a id="__codelineno-0-59" name="__codelineno-0-59"></a><span class="sd">    does **not** wait for the engine to exit; poll liveness (e.g. via</span>
+<a id="__codelineno-0-60" name="__codelineno-0-60"></a><span class="sd">    :class:`resoio.ConnectionClient`) if you need to confirm the process is</span>
+<a id="__codelineno-0-61" name="__codelineno-0-61"></a><span class="sd">    gone, or use :func:`shutdown` for a one-call stop that also reports the</span>
+<a id="__codelineno-0-62" name="__codelineno-0-62"></a><span class="sd">    engine PID.</span>
+<a id="__codelineno-0-63" name="__codelineno-0-63"></a>
+<a id="__codelineno-0-64" name="__codelineno-0-64"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-65" name="__codelineno-0-65"></a><span class="sd">        The :class:`ShutdownResponse` whose ``accepted`` is ``True`` when</span>
+<a id="__codelineno-0-66" name="__codelineno-0-66"></a><span class="sd">        the shutdown was scheduled, or ``False`` when the engine had already</span>
+<a id="__codelineno-0-67" name="__codelineno-0-67"></a><span class="sd">        begun shutting down (idempotent no-op).</span>
+<a id="__codelineno-0-68" name="__codelineno-0-68"></a>
+<a id="__codelineno-0-69" name="__codelineno-0-69"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-70" name="__codelineno-0-70"></a><span class="sd">        grpclib.exceptions.GRPCError: The RPC failed at the transport or</span>
+<a id="__codelineno-0-71" name="__codelineno-0-71"></a><span class="sd">            server layer. Note that the connection may drop right after a</span>
+<a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">            successful schedule as the engine exits — callers that only want</span>
+<a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="sd">            &quot;make it stop&quot; can treat a post-ACK disconnect as success.</span>
+<a id="__codelineno-0-74" name="__codelineno-0-74"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-75" name="__codelineno-0-75"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">ShutdownRequest</span><span class="p">())</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1599,16 +1621,16 @@ successful schedule as the engine exits — callers that only want
 <div class="doc doc-object doc-function">
 
 
-<h2 id="resoio.lifecycle.terminate" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">resoio.lifecycle.terminate</span>
+<h2 id="resoio.lifecycle.shutdown" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">resoio.lifecycle.shutdown</span>
 
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
   </span>
 
-<a href="#resoio.lifecycle.terminate" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">terminate</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+<a href="#resoio.lifecycle.shutdown" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">shutdown</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1680,9 +1702,7 @@ anywhere the UDS is reachable (no host-native requirement).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/lifecycle.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-77"> 77</a></span>
-<span class="normal"><a href="#__codelineno-0-78"> 78</a></span>
-<span class="normal"><a href="#__codelineno-0-79"> 79</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-79"> 79</a></span>
 <span class="normal"><a href="#__codelineno-0-80"> 80</a></span>
 <span class="normal"><a href="#__codelineno-0-81"> 81</a></span>
 <span class="normal"><a href="#__codelineno-0-82"> 82</a></span>
@@ -1714,41 +1734,180 @@ anywhere the UDS is reachable (no host-native requirement).</p>
 <span class="normal"><a href="#__codelineno-0-108">108</a></span>
 <span class="normal"><a href="#__codelineno-0-109">109</a></span>
 <span class="normal"><a href="#__codelineno-0-110">110</a></span>
-<span class="normal"><a href="#__codelineno-0-111">111</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-77" name="__codelineno-0-77"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-78" name="__codelineno-0-78"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop the running Resonite client gracefully and return the engine&#39;s PID.</span>
-<a id="__codelineno-0-79" name="__codelineno-0-79"></a>
-<a id="__codelineno-0-80" name="__codelineno-0-80"></a><span class="sd">    Reads the engine&#39;s host PID from the ``Info`` RPC (for reporting), then</span>
-<a id="__codelineno-0-81" name="__codelineno-0-81"></a><span class="sd">    sends ``Lifecycle.Shutdown``. The engine schedules its own shutdown and</span>
-<a id="__codelineno-0-82" name="__codelineno-0-82"></a><span class="sd">    exits asynchronously; Steam/Proton reaps the renderer and launch wrappers,</span>
-<a id="__codelineno-0-83" name="__codelineno-0-83"></a><span class="sd">    so no OS signals are needed. Because this is a pure gRPC call it works from</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="sd">    anywhere the UDS is reachable (no host-native requirement).</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a>
-<a id="__codelineno-0-86" name="__codelineno-0-86"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">        socket_path: Explicit UDS path for the ``Info`` / ``Lifecycle`` RPCs;</span>
-<a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">            ``None`` resolves it via the usual env order.</span>
-<a id="__codelineno-0-89" name="__codelineno-0-89"></a>
-<a id="__codelineno-0-90" name="__codelineno-0-90"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="sd">        The engine&#39;s host PID, or ``None`` when no engine was reachable.</span>
-<a id="__codelineno-0-92" name="__codelineno-0-92"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-93" name="__codelineno-0-93"></a>    <span class="c1"># Lazy import keeps the module import graph acyclic (info pulls in _client).</span>
-<a id="__codelineno-0-94" name="__codelineno-0-94"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">resoio.info</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_server_info</span>
-<a id="__codelineno-0-95" name="__codelineno-0-95"></a>
-<a id="__codelineno-0-96" name="__codelineno-0-96"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-97" name="__codelineno-0-97"></a>        <span class="n">pid</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">get_server_info</span><span class="p">(</span><span class="n">socket_path</span><span class="p">))</span><span class="o">.</span><span class="n">resonite_pid</span>
-<a id="__codelineno-0-98" name="__codelineno-0-98"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-<a id="__codelineno-0-99" name="__codelineno-0-99"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No reachable Resonite engine to terminate (</span><span class="si">%s</span><span class="s2">).&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
-<a id="__codelineno-0-100" name="__codelineno-0-100"></a>        <span class="k">return</span> <span class="kc">None</span>
-<a id="__codelineno-0-101" name="__codelineno-0-101"></a>
-<a id="__codelineno-0-102" name="__codelineno-0-102"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-103" name="__codelineno-0-103"></a>        <span class="k">async</span> <span class="k">with</span> <span class="n">LifecycleClient</span><span class="p">(</span><span class="n">socket_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
-<a id="__codelineno-0-104" name="__codelineno-0-104"></a>            <span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
-<a id="__codelineno-0-105" name="__codelineno-0-105"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Lifecycle.Shutdown accepted=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">outcome</span><span class="o">.</span><span class="n">accepted</span><span class="p">)</span>
-<a id="__codelineno-0-106" name="__codelineno-0-106"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-<a id="__codelineno-0-107" name="__codelineno-0-107"></a>        <span class="c1"># The engine commonly drops the connection as it exits right after</span>
-<a id="__codelineno-0-108" name="__codelineno-0-108"></a>        <span class="c1"># ACKing the schedule — benign. We already have the PID to report.</span>
-<a id="__codelineno-0-109" name="__codelineno-0-109"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Lifecycle.Shutdown connection ended (</span><span class="si">%s</span><span class="s2">); engine exiting.&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
-<a id="__codelineno-0-110" name="__codelineno-0-110"></a>
-<a id="__codelineno-0-111" name="__codelineno-0-111"></a>    <span class="k">return</span> <span class="n">pid</span> <span class="ow">or</span> <span class="kc">None</span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-79" name="__codelineno-0-79"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-80" name="__codelineno-0-80"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop the running Resonite client gracefully and return the engine&#39;s PID.</span>
+<a id="__codelineno-0-81" name="__codelineno-0-81"></a>
+<a id="__codelineno-0-82" name="__codelineno-0-82"></a><span class="sd">    Reads the engine&#39;s host PID from the ``Info`` RPC (for reporting), then</span>
+<a id="__codelineno-0-83" name="__codelineno-0-83"></a><span class="sd">    sends ``Lifecycle.Shutdown``. The engine schedules its own shutdown and</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="sd">    exits asynchronously; Steam/Proton reaps the renderer and launch wrappers,</span>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="sd">    so no OS signals are needed. Because this is a pure gRPC call it works from</span>
+<a id="__codelineno-0-86" name="__codelineno-0-86"></a><span class="sd">    anywhere the UDS is reachable (no host-native requirement).</span>
+<a id="__codelineno-0-87" name="__codelineno-0-87"></a>
+<a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-89" name="__codelineno-0-89"></a><span class="sd">        socket_path: Explicit UDS path for the ``Info`` / ``Lifecycle`` RPCs;</span>
+<a id="__codelineno-0-90" name="__codelineno-0-90"></a><span class="sd">            ``None`` resolves it via the usual env order.</span>
+<a id="__codelineno-0-91" name="__codelineno-0-91"></a>
+<a id="__codelineno-0-92" name="__codelineno-0-92"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a><span class="sd">        The engine&#39;s host PID, or ``None`` when no engine was reachable.</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a>    <span class="c1"># Lazy import keeps the module import graph acyclic (info pulls in _client).</span>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">resoio.info</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_server_info</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a>        <span class="n">pid</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">get_server_info</span><span class="p">(</span><span class="n">socket_path</span><span class="p">))</span><span class="o">.</span><span class="n">resonite_pid</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No reachable Resonite engine to shut down (</span><span class="si">%s</span><span class="s2">).&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>        <span class="k">return</span> <span class="kc">None</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>        <span class="k">async</span> <span class="k">with</span> <span class="n">LifecycleClient</span><span class="p">(</span><span class="n">socket_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>            <span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Lifecycle.Shutdown accepted=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">outcome</span><span class="o">.</span><span class="n">accepted</span><span class="p">)</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>        <span class="c1"># The engine commonly drops the connection as it exits right after</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a>        <span class="c1"># ACKing the schedule — benign. We already have the PID to report.</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Lifecycle.Shutdown connection ended (</span><span class="si">%s</span><span class="s2">); engine exiting.&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a>    <span class="k">return</span> <span class="n">pid</span> <span class="ow">or</span> <span class="kc">None</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="resoio.lifecycle.terminate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">resoio.lifecycle.terminate</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.lifecycle.terminate" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">terminate</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Deprecated former name of :func:<code>shutdown</code>.</p>
+<p>Renamed to :func:<code>shutdown</code> to match Resonite's terminology and the
+<code>Lifecycle.Shutdown</code> RPC. This alias still forwards to :func:<code>shutdown</code>
+but is <strong>no longer maintained</strong> and will be removed in a future release;
+migrate to :func:<code>shutdown</code>.</p>
+<p>.. deprecated::
+    Use :func:<code>shutdown</code> instead.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>socket_path</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Forwarded to :func:<code>shutdown</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="int">int</span> | None</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The engine's host PID, or <code>None</code> when no engine was reachable.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/lifecycle.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#__codelineno-0-117">117</a></span>
+<span class="normal"><a href="#__codelineno-0-118">118</a></span>
+<span class="normal"><a href="#__codelineno-0-119">119</a></span>
+<span class="normal"><a href="#__codelineno-0-120">120</a></span>
+<span class="normal"><a href="#__codelineno-0-121">121</a></span>
+<span class="normal"><a href="#__codelineno-0-122">122</a></span>
+<span class="normal"><a href="#__codelineno-0-123">123</a></span>
+<span class="normal"><a href="#__codelineno-0-124">124</a></span>
+<span class="normal"><a href="#__codelineno-0-125">125</a></span>
+<span class="normal"><a href="#__codelineno-0-126">126</a></span>
+<span class="normal"><a href="#__codelineno-0-127">127</a></span>
+<span class="normal"><a href="#__codelineno-0-128">128</a></span>
+<span class="normal"><a href="#__codelineno-0-129">129</a></span>
+<span class="normal"><a href="#__codelineno-0-130">130</a></span>
+<span class="normal"><a href="#__codelineno-0-131">131</a></span>
+<span class="normal"><a href="#__codelineno-0-132">132</a></span>
+<span class="normal"><a href="#__codelineno-0-133">133</a></span>
+<span class="normal"><a href="#__codelineno-0-134">134</a></span>
+<span class="normal"><a href="#__codelineno-0-135">135</a></span>
+<span class="normal"><a href="#__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#__codelineno-0-139">139</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-116" name="__codelineno-0-116"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-117" name="__codelineno-0-117"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated former name of :func:`shutdown`.</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>
+<a id="__codelineno-0-119" name="__codelineno-0-119"></a><span class="sd">    Renamed to :func:`shutdown` to match Resonite&#39;s terminology and the</span>
+<a id="__codelineno-0-120" name="__codelineno-0-120"></a><span class="sd">    ``Lifecycle.Shutdown`` RPC. This alias still forwards to :func:`shutdown`</span>
+<a id="__codelineno-0-121" name="__codelineno-0-121"></a><span class="sd">    but is **no longer maintained** and will be removed in a future release;</span>
+<a id="__codelineno-0-122" name="__codelineno-0-122"></a><span class="sd">    migrate to :func:`shutdown`.</span>
+<a id="__codelineno-0-123" name="__codelineno-0-123"></a>
+<a id="__codelineno-0-124" name="__codelineno-0-124"></a><span class="sd">    .. deprecated::</span>
+<a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="sd">        Use :func:`shutdown` instead.</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">        socket_path: Forwarded to :func:`shutdown`.</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">        The engine&#39;s host PID, or ``None`` when no engine was reachable.</span>
+<a id="__codelineno-0-132" name="__codelineno-0-132"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-133" name="__codelineno-0-133"></a>    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a>        <span class="s2">&quot;resoio.terminate is deprecated and no longer maintained; use &quot;</span>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a>        <span class="s2">&quot;resoio.shutdown instead. It will be removed in a future release.&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a>        <span class="ne">DeprecationWarning</span><span class="p">,</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137"></a>        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<a id="__codelineno-0-138" name="__codelineno-0-138"></a>    <span class="p">)</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">shutdown</span><span class="p">(</span><span class="n">socket_path</span><span class="o">=</span><span class="n">socket_path</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
