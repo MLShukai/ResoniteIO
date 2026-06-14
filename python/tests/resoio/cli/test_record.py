@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
+import re
 import struct
 import sys
 import time
@@ -235,6 +237,9 @@ async def test_record_video_y4m_to_stdout(
         # 4:4:4 payload per frame: 16 * 8 * 3 = 384.
         for payload in chunks[1:]:
             assert len(payload) == 16 * 8 * 3
+        # The stdout target prints no abs-path line: the date-file filename
+        # token must never leak into the binary stream a consumer reads.
+        assert b"record_" not in data
     finally:
         server.close()
         await server.wait_closed()
@@ -269,7 +274,9 @@ async def test_record_video_threads_server_dimensions(
 
 
 async def test_record_video_mp4_to_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ):
     """``--video -o out.mp4`` produces an H.264 yuv420p mp4 readable by PyAV."""
     socket_path = tmp_path / "rio.sock"
@@ -287,6 +294,11 @@ async def test_record_video_mp4_to_file(
         rc = await _amain(args)
         assert rc == 0
         assert out_path.exists() and out_path.stat().st_size > 0
+
+        # File output reports its absolute path as exactly one stdout line
+        # once recording stops.
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(out_path))]
 
         container = av.open(str(out_path))
         try:
@@ -568,7 +580,9 @@ async def test_record_video_stdout_broken_pipe_clean_exit(
 
 
 async def test_record_audio_wav_to_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ):
     """End-to-end: 3 frames → ``.wav`` → parse header + sample bytes."""
     socket_path = tmp_path / "rio.sock"
@@ -582,6 +596,10 @@ async def test_record_audio_wav_to_file(
         args = _build_parser().parse_args(["record", "--audio", "-o", str(out_path)])
         rc = await _amain(args)
         assert rc == 0
+
+        # File output reports its absolute path as exactly one stdout line.
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(out_path))]
 
         data = out_path.read_bytes()
         header = _parse_wav_header(data)
@@ -628,6 +646,9 @@ async def test_record_audio_pcm_to_stdout(
         rc = await _amain(args)
         assert rc == 0
         captured = capsysbinary.readouterr()
+        # The stdout target prints no abs-path line: raw PCM only, with no
+        # date-file filename token glued onto the byte stream.
+        assert b"record_" not in captured.out
         samples = np.frombuffer(captured.out, dtype=np.float32).reshape(-1, _CHANNELS)
         assert samples.shape == (frame_count * _SAMPLES_PER_FRAME, 2)
         for i in range(frame_count):
@@ -813,7 +834,9 @@ class _MuxedStdout:
 
 
 async def test_record_muxed_mp4_to_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ):
     """Flag-less ``record -o out.mp4`` produces an H.264 + AAC mp4."""
     socket_path = tmp_path / "rio.sock"
@@ -830,6 +853,10 @@ async def test_record_muxed_mp4_to_file(
         rc = await _amain(args)
         assert rc == 0
         assert out_path.exists() and out_path.stat().st_size > 0
+
+        # File output reports its absolute path as exactly one stdout line.
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(out_path))]
 
         container = av.open(str(out_path))
         try:
@@ -1026,6 +1053,8 @@ async def test_record_muxed_audio_av_sync_t0_shared(
             audio = container.streams.audio[0]
             assert vs.start_time is not None
             assert audio.start_time is not None
+            assert vs.time_base is not None
+            assert audio.time_base is not None
             v_seconds = vs.start_time * float(vs.time_base)
             a_seconds = audio.start_time * float(audio.time_base)
             skew_ms = abs(v_seconds - a_seconds) * 1000.0
@@ -1075,6 +1104,8 @@ async def test_record_muxed_mp4_duration_matches_real_time(
             a = container.streams.audio[0]
             assert v.duration is not None
             assert a.duration is not None
+            assert v.time_base is not None
+            assert a.time_base is not None
             v_seconds = float(v.duration * v.time_base)
             a_seconds = float(a.duration * a.time_base)
             # The recording window is 0.4 s but flush + buffering can
@@ -1166,6 +1197,135 @@ async def test_record_muxed_stdout_broken_pipe_clean_exit(
         assert "Traceback" not in err
         assert "BrokenPipeError" not in err
         assert "PyAVCallbackError" not in err
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+# ===========================================================================
+# Default output target (`-o` omitted) — date-stamped file in the CWD.
+#
+# The `-o/--output` default flipped from "-" (stdout) to None: an omitted
+# target now writes record_YYYYMMDD_HHMMSS.<ext> to the current directory,
+# where <ext> is .wav for --audio and .mp4 for video / muxed. As with the
+# explicit-path branches, the absolute path is printed as exactly one
+# stdout line once recording stops.
+# ===========================================================================
+
+
+async def test_record_audio_default_filename_in_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``record --audio`` with no -o saves ``record_*.wav`` in the CWD.
+
+    The finite speaker ends the stream on its own, so the recording
+    stops without a --duration bound; the produced file's absolute path
+    is the sole stdout line.
+    """
+    socket_path = tmp_path / "rio.sock"
+    speaker = _make_finite_speaker(3)
+    server = Server([speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        monkeypatch.chdir(tmp_path)
+        args = _build_parser().parse_args(["record", "--audio"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        produced = list(tmp_path.glob("record_*"))
+        assert len(produced) == 1
+        assert re.fullmatch(r"record_\d{8}_\d{6}\.wav", produced[0].name)
+        # Real WAV round-trip: the date file holds a valid 48 kHz stereo
+        # float32 header, proving the audio route — not a stub — wrote it.
+        header = _parse_wav_header(produced[0].read_bytes())
+        assert header["format_tag"] == 0x0003
+        assert header["sample_rate"] == 48000
+
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(produced[0]))]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_video_default_filename_in_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``record --video`` with no -o saves ``record_*.mp4`` in the CWD.
+
+    The default extension for a video-bearing mode is ``.mp4`` (not the
+    stdout-only Y4M), so the omitted-target path produces a PyAV-readable
+    H.264 mp4 whose absolute path is the sole stdout line.
+    """
+    socket_path = tmp_path / "rio.sock"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    server = Server([camera()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        monkeypatch.chdir(tmp_path)
+        args = _build_parser().parse_args(["record", "--video", "--duration", "0.3"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        produced = list(tmp_path.glob("record_*"))
+        assert len(produced) == 1
+        assert re.fullmatch(r"record_\d{8}_\d{6}\.mp4", produced[0].name)
+        container = av.open(str(produced[0]))
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 0
+        finally:
+            container.close()
+
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(produced[0]))]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_record_muxed_default_filename_in_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Flag-less ``record`` with no -o saves a muxed ``record_*.mp4`` in CWD.
+
+    Supplying neither --video nor --audio is muxed mode, whose default
+    extension is ``.mp4`` (the stdout-only matroska is reserved for -o -).
+    The produced mp4 carries both an H.264 and an AAC stream and its
+    absolute path is the sole stdout line.
+    """
+    socket_path = tmp_path / "rio.sock"
+    camera = _make_infinite_camera(width=32, height=16, interval_s=0.005)
+    speaker = _make_infinite_speaker(interval_s=0.005)
+    server = Server([camera(), speaker()])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        monkeypatch.chdir(tmp_path)
+        args = _build_parser().parse_args(["record", "--duration", "0.3"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        produced = list(tmp_path.glob("record_*"))
+        assert len(produced) == 1
+        assert re.fullmatch(r"record_\d{8}_\d{6}\.mp4", produced[0].name)
+        container = av.open(str(produced[0]))
+        try:
+            assert len(container.streams.video) == 1
+            assert len(container.streams.audio) == 1
+        finally:
+            container.close()
+
+        out_lines = capsys.readouterr().out.splitlines()
+        assert out_lines == [os.path.abspath(str(produced[0]))]
     finally:
         server.close()
         await server.wait_closed()
