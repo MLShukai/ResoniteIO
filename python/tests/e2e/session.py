@@ -127,6 +127,22 @@ class TestSession:
                 # Overrides read path (may legitimately be empty).
                 await client.get_user_role_overrides()
 
+                # ResoniteLink: the state read is always available (disabled =>
+                # port 0). Enabling is best-effort: the world may lack the
+                # ResoniteLink permission role, so even the host gets
+                # PermissionDenied. Enable is irreversible within a session, but
+                # the fixture restarts Resonite per test so this stays ephemeral.
+                if not original.resonite_link_enabled:
+                    assert original.resonite_link_port == 0
+                    try:
+                        await client.apply_settings(resonite_link_enabled=True)
+                    except grpclib.exceptions.GRPCError as e:
+                        assert e.status is Status.PERMISSION_DENIED, e
+                    else:
+                        after = await client.get_settings()
+                        assert after.resonite_link_enabled
+                        assert 2000 <= after.resonite_link_port <= 65535
+
                 # Respawn self (target omitted == self). Host of the local
                 # world can always respawn; assert it does not raise.
                 await client.respawn_self()
