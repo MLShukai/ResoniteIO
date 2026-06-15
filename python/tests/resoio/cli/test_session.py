@@ -18,6 +18,7 @@ Two complementary layers, matching ``cli/test_world.py``:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -662,3 +663,154 @@ async def test_overrides_list_dispatches_get_user_role_overrides(
     out = capsys.readouterr().out
     assert "U-1" in out
     assert "Admin" in out
+
+
+# ===========================================================================
+# --format json: structured output on the result-producing leaves. The
+# side-effect leaves (user kick/ban/respawn) are carve-outs with no --format.
+# ===========================================================================
+
+
+async def test_settings_get_json_emits_settings_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "settings", "get", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert payload["world_name"] == "Hub"
+    # access_level is the value string ("anyone"), matching the human output —
+    # not the enum member name ("ANYONE").
+    assert payload["access_level"] == "anyone"
+
+
+async def test_users_list_json_emits_user_array(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "users", "list", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload, list)
+    assert [u["user_name"] for u in payload] == ["alice", "bob"]
+    assert payload[0]["is_host"] is True
+
+
+async def test_roles_list_json_emits_roles_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "roles", "list", "--format", "json"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert payload["default_host_role"] == "Admin"
+    assert payload["roles"][0]["role_name"] == "Admin"
+    assert payload["roles"][0]["is_highest"] is True
+
+
+async def test_overrides_list_json_emits_override_array(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "overrides", "list", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == [{"user_id": "U-1", "role_name": "Admin"}]
+
+
+async def test_user_silence_json_emits_user_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "user", "silence", "--self", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    assert payload["user_name"] == "alice"
+    assert payload["is_silenced"] is True
+
+
+async def test_user_role_json_emits_user_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-session.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_session(
+            ["session", "user", "role", "Admin", "--self", "--format", "json"],
+            socket_path,
+            monkeypatch,
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["user_name"] == "alice"
+    assert payload["role_name"] == "Admin"
+
+
+def test_user_kick_rejects_format_flag():
+    """``user kick`` is a side-effect-only carve-out: ``--format`` is not a
+    valid flag on it (argparse usage error), so a structured request cannot be
+    silently accepted-and-ignored."""
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(
+            ["session", "user", "kick", "--id", "U-1", "--format", "json"]
+        )
+    assert excinfo.value.code == 2

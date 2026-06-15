@@ -84,6 +84,7 @@ resoio screenshot -o - | feh -
 # Machine-readable output, piped to jq
 resoio info --format json | jq .platform
 resoio world sessions --format json | jq '.[].name'
+resoio session users list --format json | jq '.[].user_name'
 
 # Read the display settings, then cap the background fps
 resoio display get

@@ -13,7 +13,10 @@ so ``resoio --help`` stays fast.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from typing import TYPE_CHECKING
+
+from resoio.cli import output
 
 if TYPE_CHECKING:
     from resoio.session import (
@@ -66,11 +69,15 @@ def register(
     )
     session_subs = parser.add_subparsers(dest="session_command", required=True)
 
-    _register_settings(session_subs, common)
-    _register_users(session_subs, common)
-    _register_user(session_subs, common)
-    _register_roles(session_subs, common)
-    _register_overrides(session_subs, common)
+    # --format lives on the result-producing leaves only (settings get/set,
+    # users list, user silence/role, roles list, overrides list); the pure
+    # side-effect leaves (user kick/ban/respawn) print nothing and get none.
+    fmt = output.build_format_parent()
+    _register_settings(session_subs, common, fmt)
+    _register_users(session_subs, common, fmt)
+    _register_user(session_subs, common, fmt)
+    _register_roles(session_subs, common, fmt)
+    _register_overrides(session_subs, common, fmt)
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +88,7 @@ def register(
 def _register_settings(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "settings",
@@ -91,14 +99,14 @@ def _register_settings(
 
     get_parser = settings_subs.add_parser(
         "get",
-        parents=[common],
+        parents=[common, fmt],
         help="Print the current session settings.",
     )
     get_parser.set_defaults(func=_run_settings_get)
 
     set_parser = settings_subs.add_parser(
         "set",
-        parents=[common],
+        parents=[common, fmt],
         help="Patch the session settings (omitted flags are left unchanged).",
         description=(
             "Patch the session settings. Omitted flags are left unchanged. "
@@ -213,6 +221,7 @@ def _register_settings(
 def _register_users(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "users",
@@ -222,7 +231,7 @@ def _register_users(
     users_subs = parser.add_subparsers(dest="users_command", required=True)
     list_parser = users_subs.add_parser(
         "list",
-        parents=[common],
+        parents=[common, fmt],
         help="List the users connected to the session.",
     )
     list_parser.set_defaults(func=_run_users_list)
@@ -252,6 +261,7 @@ def _add_target_args(parser: argparse.ArgumentParser, *, required: bool) -> None
 def _register_user(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "user",
@@ -279,7 +289,7 @@ def _register_user(
     ban_parser.set_defaults(func=_run_user_ban)
 
     silence_parser = user_subs.add_parser(
-        "silence", parents=[common], help="Silence or unsilence a user."
+        "silence", parents=[common, fmt], help="Silence or unsilence a user."
     )
     _add_target_args(silence_parser, required=True)
     silence_parser.add_argument(
@@ -306,7 +316,7 @@ def _register_user(
     respawn_parser.set_defaults(func=_run_user_respawn)
 
     role_parser = user_subs.add_parser(
-        "role", parents=[common], help="Assign a role to a user."
+        "role", parents=[common, fmt], help="Assign a role to a user."
     )
     _add_target_args(role_parser, required=True)
     role_parser.add_argument("role_name", help="Role name to assign.")
@@ -321,6 +331,7 @@ def _register_user(
 def _register_roles(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "roles",
@@ -330,7 +341,7 @@ def _register_roles(
     roles_subs = parser.add_subparsers(dest="roles_command", required=True)
     list_parser = roles_subs.add_parser(
         "list",
-        parents=[common],
+        parents=[common, fmt],
         help="List the permission roles and default-role assignments.",
     )
     list_parser.set_defaults(func=_run_roles_list)
@@ -339,6 +350,7 @@ def _register_roles(
 def _register_overrides(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "overrides",
@@ -348,7 +360,7 @@ def _register_overrides(
     overrides_subs = parser.add_subparsers(dest="overrides_command", required=True)
     list_parser = overrides_subs.add_parser(
         "list",
-        parents=[common],
+        parents=[common, fmt],
         help="List the per-user default-role overrides.",
     )
     list_parser.set_defaults(func=_run_overrides_list)
@@ -357,6 +369,21 @@ def _register_overrides(
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
+
+
+def _settings_payload(settings: SessionSettings) -> dict[str, object]:
+    """Structured (``--format json``) form of ``settings``.
+
+    Mirrors the full field set; ``access_level`` is rendered as its value
+    string (e.g. ``"anyone"``) to match the human output rather than the
+    enum member name (``to_jsonable`` would otherwise emit ``"ANYONE"``).
+    """
+    payload: dict[str, object] = {
+        field.name: getattr(settings, field.name)
+        for field in dataclasses.fields(settings)
+    }
+    payload["access_level"] = settings.access_level.value
+    return payload
 
 
 def _format_settings(settings: SessionSettings) -> str:
@@ -434,7 +461,10 @@ async def _run_settings_get(args: argparse.Namespace) -> int:
 
     async with SessionClient(args.socket) as client:
         settings = await client.get_settings()
-    print(_format_settings(settings))
+    if output.is_structured(args.format):
+        output.emit(_settings_payload(settings), args.format)
+    else:
+        print(_format_settings(settings))
     return 0
 
 
@@ -486,7 +516,10 @@ async def _run_settings_set(args: argparse.Namespace) -> int:
             resonite_link_enabled=args.resonite_link_enabled,
         )
         settings = await client.get_settings()
-    print(_format_settings(settings))
+    if output.is_structured(args.format):
+        output.emit(_settings_payload(settings), args.format)
+    else:
+        print(_format_settings(settings))
     return 0
 
 
@@ -501,8 +534,11 @@ async def _run_users_list(args: argparse.Namespace) -> int:
 
     async with SessionClient(args.socket) as client:
         users = await client.list_users()
-    for user in users:
-        print(_format_user(user))
+    if output.is_structured(args.format):
+        output.emit(list(users), args.format)
+    else:
+        for user in users:
+            print(_format_user(user))
     return 0
 
 
@@ -542,7 +578,10 @@ async def _run_user_silence(args: argparse.Namespace) -> int:
             local=args.local,
             silenced=args.silenced,
         )
-    print(_format_user(user))
+    if output.is_structured(args.format):
+        output.emit(user, args.format)
+    else:
+        print(_format_user(user))
     return 0
 
 
@@ -570,7 +609,10 @@ async def _run_user_role(args: argparse.Namespace) -> int:
             user_name=args.user_name,
             local=args.local,
         )
-    print(_format_user(user))
+    if output.is_structured(args.format):
+        output.emit(user, args.format)
+    else:
+        print(_format_user(user))
     return 0
 
 
@@ -579,7 +621,10 @@ async def _run_roles_list(args: argparse.Namespace) -> int:
 
     async with SessionClient(args.socket) as client:
         roles = await client.list_roles()
-    print(_format_roles(roles))
+    if output.is_structured(args.format):
+        output.emit(roles, args.format)
+    else:
+        print(_format_roles(roles))
     return 0
 
 
@@ -588,6 +633,9 @@ async def _run_overrides_list(args: argparse.Namespace) -> int:
 
     async with SessionClient(args.socket) as client:
         overrides = await client.get_user_role_overrides()
-    for override in overrides:
-        print(f"{override.user_id}  {override.role_name}")
+    if output.is_structured(args.format):
+        output.emit(list(overrides), args.format)
+    else:
+        for override in overrides:
+            print(f"{override.user_id}  {override.role_name}")
     return 0
