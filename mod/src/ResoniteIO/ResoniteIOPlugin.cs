@@ -66,6 +66,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineCursorBridge? _cursorBridge;
     private FrooxEngineSessionBridge? _sessionBridge;
     private FrooxEngineContactBridge? _contactBridge;
+    private FrooxEngineAuthBridge? _authBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -148,6 +149,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _contactBridge = new FrooxEngineContactBridge(Engine.Current, _logSink);
 
+            _authBridge = new FrooxEngineAuthBridge(Engine.Current, _logSink);
+
             _grpcHost = GrpcHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -165,6 +168,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 cursorBridge: _cursorBridge,
                 sessionBridge: _sessionBridge,
                 contactBridge: _contactBridge,
+                authBridge: _authBridge,
                 infoBridge: _infoBridge,
                 lifecycleBridge: _lifecycleBridge
             );
@@ -251,6 +255,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // ContactBridge も engine 状態を保持せず (Cloud の Contacts / Users manager 参照を
         // 読むだけ、event 購読無し、Harmony 無し)、IDisposable でもないため参照 null 化のみで足りる。
         _contactBridge = null;
+
+        // AuthBridge も engine 状態を保持せず (cloud login/logout を one-shot で叩くだけ)、
+        // IDisposable でもないため参照 null 化のみで足りる。
+        _authBridge = null;
 
         // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
         // IDisposable でもない) ため、参照 null 化のみで足りる。

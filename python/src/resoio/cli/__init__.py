@@ -21,6 +21,7 @@ from types import ModuleType
 import argcomplete
 
 from resoio.cli import (
+    auth,
     contact,
     context_menu,
     cursor,
@@ -58,6 +59,7 @@ _COMMAND_MODULES: list[ModuleType] = [
     session,
     contact,
     inventory,
+    auth,
     shutdown,
     terminate,
 ]
