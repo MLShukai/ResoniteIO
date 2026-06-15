@@ -22,6 +22,7 @@ The interactive raw-tty loop is out of scope (hard to drive
 deterministically) and is not exercised here.
 """
 
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -316,3 +317,106 @@ def test_grab_rejects_removed_point_flag():
     """
     with pytest.raises(SystemExit):
         _build_parser().parse_args(["grab", "grab", "--point", "1", "2", "3"])
+
+
+# --- --format json --------------------------------------------------------
+#
+# ``--format json`` emits a single machine-readable document on stdout.
+# ``grab grab`` flattens GrabResult + GrabState into one object; ``grab
+# release`` / ``grab state`` emit the GrabState shape directly. ``hand`` is
+# the resolved string label ("primary"/"left"/"right"), object_names is an
+# array, and unix_nanos round-trips as an exact integer.
+
+
+def _sole_json_document(out: str) -> object:
+    """Parse ``out`` as exactly one JSON document and return it.
+
+    Pins the "stdout holds exactly ONE json document" contract: the
+    captured output must decode as a single top-level value with nothing
+    but trailing whitespace after it.
+    """
+    decoded, end = json.JSONDecoder().raw_decode(out)
+    assert out[end:].strip() == ""
+    return decoded
+
+
+async def test_grab_json_flattens_result_and_state_into_one_object(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    # GrabResult + GrabState flattened; default hand resolves to "primary".
+    assert payload == {
+        "grabbed": True,
+        "hand": "primary",
+        "is_holding": True,
+        "object_names": ["Cube"],
+        "unix_nanos": 1234,
+    }
+
+
+async def test_grab_json_reports_requested_hand_label(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "grab", "--hand", "left", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert isinstance(payload, dict)
+    # The hand echoed by the server surfaces as its string label, not an int.
+    assert payload["hand"] == "left"
+
+
+async def test_grab_release_json_emits_grab_state_shape(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "release", "--hand", "right", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == {
+        "hand": "right",
+        "is_holding": False,
+        "object_names": [],
+        "unix_nanos": 5678,
+    }
+
+
+async def test_grab_state_json_emits_grab_state_shape(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "state", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == {
+        "hand": "primary",
+        "is_holding": True,
+        "object_names": ["Cube", "Sphere"],
+        "unix_nanos": 9012,
+    }
+
+
+async def test_grab_interactive_rejects_structured_format(
+    capsys: pytest.CaptureFixture[str],
+):
+    """``grab interactive`` is a human-only carve-out.
+
+    ``--format`` lives on the shared flat ``grab`` parser (so grab/release/
+    state can emit json), but the interactive loop has no structured output.
+    Requesting ``--format json`` must fail with the usage exit code (2) and a
+    stderr note rather than silently running the REPL. The guard returns
+    before any stdin / RPC interaction, so no fake server or tty is needed.
+    """
+    rc = await _invoke(["grab", "interactive", "--format", "json"])
+    assert rc == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--format" in captured.err and "interactive" in captured.err

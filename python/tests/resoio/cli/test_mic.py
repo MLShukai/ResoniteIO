@@ -1,6 +1,7 @@
 """Tests for the ``resoio mic`` subcommand."""
 
 import asyncio
+import json
 import struct
 import time
 import wave
@@ -24,6 +25,10 @@ _CHUNK_SAMPLES = 1024
 _WARMUP_CHUNKS = 5
 _SAMPLE_RATE = 48000
 
+# A `unix_nanos` value past 2^53 — exercises that the end-of-stream summary
+# round-trips through json without the precision loss a float would suffer.
+_BIG_UNIX_NANOS = 1_700_000_000_123_456_789
+
 
 class _RecordingMicrophone(MicrophoneBase):
     """In-process fake that captures every received frame."""
@@ -42,6 +47,30 @@ class _RecordingMicrophone(MicrophoneBase):
             dropped_frames=0,
             unix_nanos=time.time_ns(),
         )
+
+
+class _FixedSummaryMicrophone(MicrophoneBase):
+    """Fake that returns a fixed, fully-populated end-of-stream summary.
+
+    Decouples the summary-output assertions from frame arithmetic: every
+    field is a distinct, non-zero, known constant so a transposed or
+    dropped field would surface, and ``unix_nanos`` is a large 64-bit
+    value that pins exact round-tripping.
+    """
+
+    summary = _WireSummary(
+        received_frames=3,
+        received_samples=3072,
+        dropped_frames=1,
+        unix_nanos=_BIG_UNIX_NANOS,
+    )
+
+    async def stream_audio(
+        self, messages: AsyncIterator[MicrophoneAudioFrame]
+    ) -> _WireSummary:
+        async for _ in messages:
+            pass
+        return self.summary
 
 
 def _decode_samples(frames: list[MicrophoneAudioFrame]) -> np.ndarray:
@@ -385,6 +414,174 @@ def test_mic_no_wait_flag_present(tmp_path: Path):
     assert args.no_wait is True
     assert args.input == str(tmp_path / "x.wav")
     assert args.duration is None
+
+
+def test_mic_format_defaults_to_human():
+    """``mic`` carries ``--format`` and defaults to human output."""
+    parser = _build_parser()
+    args = parser.parse_args(["mic", "--no-wait"])
+    assert args.format == "human"
+
+
+def test_mic_format_accepts_json():
+    parser = _build_parser()
+    args = parser.parse_args(["mic", "--no-wait", "--format", "json"])
+    assert args.format == "json"
+
+
+def test_mic_unknown_format_is_a_parse_error():
+    """``--format`` is a fixed choice set; an unknown value exits 2 at parse."""
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(["mic", "--no-wait", "--format", "yaml"])
+    assert excinfo.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# End-of-stream summary — the command result, on STDOUT in both modes
+# ---------------------------------------------------------------------------
+
+
+async def test_summary_human_goes_to_stdout_not_stderr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """The summary is the command result, so human mode writes it to stdout.
+
+    Same ``key=value`` content as before; only the stream changes
+    (previously stderr). stderr stays empty on a clean run.
+    """
+    socket_path = tmp_path / "rio-mic.sock"
+
+    fake = _FixedSummaryMicrophone()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        shim: Any = _StdinShim(b"")
+        monkeypatch.setattr("sys.stdin", shim)
+        args = _build_parser().parse_args(["mic", "-i", "-", "--no-wait"])
+        rc = await _amain(args)
+        assert rc == 0
+
+        captured = capsys.readouterr()
+        assert captured.out.strip() == (
+            f"received_frames=3 received_samples=3072 "
+            f"dropped_frames=1 unix_nanos={_BIG_UNIX_NANOS}"
+        )
+        assert captured.err == ""
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_summary_json_payload_on_stdout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``--format json`` emits the summary as the documented json object.
+
+    Field set and snake_case names mirror ``MicrophoneStreamSummary``;
+    the large ``unix_nanos`` round-trips through ``json.loads`` exactly.
+    """
+    socket_path = tmp_path / "rio-mic.sock"
+
+    fake = _FixedSummaryMicrophone()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        shim: Any = _StdinShim(b"")
+        monkeypatch.setattr("sys.stdin", shim)
+        args = _build_parser().parse_args(
+            ["mic", "-i", "-", "--no-wait", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload == {
+            "received_frames": 3,
+            "received_samples": 3072,
+            "dropped_frames": 1,
+            "unix_nanos": _BIG_UNIX_NANOS,
+        }
+        # The 64-bit timestamp must survive json exactly (no float coercion).
+        assert payload["unix_nanos"] == _BIG_UNIX_NANOS
+        assert captured.err == ""
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_summary_json_is_exactly_one_document(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Stdout in json mode holds exactly one json document, nothing else."""
+    socket_path = tmp_path / "rio-mic.sock"
+
+    fake = _FixedSummaryMicrophone()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        shim: Any = _StdinShim(b"")
+        monkeypatch.setattr("sys.stdin", shim)
+        args = _build_parser().parse_args(
+            ["mic", "-i", "-", "--no-wait", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+
+        stdout = capsys.readouterr().out
+        # A second document would make the buffer fail to parse as one value;
+        # JSONDecoder.raw_decode then confirms nothing trails the first doc.
+        decoder = json.JSONDecoder()
+        _, end = decoder.raw_decode(stdout)
+        assert stdout[end:].strip() == ""
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_input_format_error_json_keeps_stderr_and_emits_no_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Format errors stay on stderr and map to rc=2 even with ``--format
+    json``.
+
+    The summary is the only stdout document; a rejected input never
+    opens a stream, so stdout must be empty (no partial/empty json
+    object).
+    """
+    socket_path = tmp_path / "rio-mic.sock"
+    wav_path = tmp_path / "44k.wav"
+    _write_wav(wav_path, np.zeros(_CHUNK_SAMPLES, dtype=np.float32), sample_rate=44100)
+
+    fake = _FixedSummaryMicrophone()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["mic", "-i", str(wav_path), "--no-wait", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 2
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "44100" in captured.err
+        assert "48000" in captured.err
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 # ---------------------------------------------------------------------------

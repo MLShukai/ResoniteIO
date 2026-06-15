@@ -19,10 +19,12 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from resoio.cli import output
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from resoio.context_menu import ContextMenuItem
+    from resoio.context_menu import ContextMenuItem, ContextMenuState
 
 
 def _add_hand_arg(parser: argparse.ArgumentParser) -> None:
@@ -50,11 +52,12 @@ def register(
             "menu state is printed after every action."
         ),
     )
+    fmt = output.build_format_parent()
     menu_subs = parser.add_subparsers(dest="context_menu_command", required=True)
 
     open_parser = menu_subs.add_parser(
         "open",
-        parents=[common],
+        parents=[common, fmt],
         help="Open the context menu at the current cursor position.",
     )
     _add_hand_arg(open_parser)
@@ -62,7 +65,7 @@ def register(
 
     close_parser = menu_subs.add_parser(
         "close",
-        parents=[common],
+        parents=[common, fmt],
         help="Close the context menu.",
     )
     _add_hand_arg(close_parser)
@@ -70,7 +73,7 @@ def register(
 
     list_parser = menu_subs.add_parser(
         "list",
-        parents=[common],
+        parents=[common, fmt],
         help="List the context menu items and state.",
     )
     _add_hand_arg(list_parser)
@@ -78,7 +81,7 @@ def register(
 
     highlight_parser = menu_subs.add_parser(
         "highlight",
-        parents=[common],
+        parents=[common, fmt],
         help="Preview-select an item by index (no side effect).",
     )
     highlight_parser.add_argument(
@@ -91,7 +94,7 @@ def register(
 
     invoke_parser = menu_subs.add_parser(
         "invoke",
-        parents=[common],
+        parents=[common, fmt],
         help="Press an item's action by index (may open a submenu / switch tool).",
     )
     invoke_parser.add_argument(
@@ -127,13 +130,21 @@ def _check_index(index: int) -> bool:
     return True
 
 
+def _emit_state(state: ContextMenuState, fmt: str) -> None:
+    """Emit ``state`` as json or the existing text, per ``fmt``."""
+    if output.is_structured(fmt):
+        output.emit(state, fmt)
+    else:
+        print(_format_state(state.is_open, state.items, state.highlighted_index))
+
+
 async def _run_open(args: argparse.Namespace) -> int:
     # Deferred to keep `resoio --help` and shell completion fast.
     from resoio.context_menu import ContextMenuClient
 
     async with ContextMenuClient(args.socket) as client:
         state = await client.open(hand=args.hand)
-    print(_format_state(state.is_open, state.items, state.highlighted_index))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -142,7 +153,7 @@ async def _run_close(args: argparse.Namespace) -> int:
 
     async with ContextMenuClient(args.socket) as client:
         state = await client.close(hand=args.hand)
-    print(_format_state(state.is_open, state.items, state.highlighted_index))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -151,7 +162,7 @@ async def _run_list(args: argparse.Namespace) -> int:
 
     async with ContextMenuClient(args.socket) as client:
         state = await client.get_state(hand=args.hand)
-    print(_format_state(state.is_open, state.items, state.highlighted_index))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -163,7 +174,7 @@ async def _run_highlight(args: argparse.Namespace) -> int:
 
     async with ContextMenuClient(args.socket) as client:
         state = await client.highlight(args.index, hand=args.hand)
-    print(_format_state(state.is_open, state.items, state.highlighted_index))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -175,5 +186,5 @@ async def _run_invoke(args: argparse.Namespace) -> int:
 
     async with ContextMenuClient(args.socket) as client:
         state = await client.invoke(args.index, hand=args.hand)
-    print(_format_state(state.is_open, state.items, state.highlighted_index))
+    _emit_state(state, args.format)
     return 0

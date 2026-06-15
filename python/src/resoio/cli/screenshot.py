@@ -14,11 +14,16 @@ Output target:
 * (omitted)           → ``screenshot_YYYYMMDD_HHMMSS.png`` in the current
   directory, stamped with the local wall-clock time so repeated shots do
   not clobber each other.
+
+On a file save (default or explicit ``-o path``) the saved absolute path
+is printed on stdout as a single line so a caller can pick it up without
+guessing the timestamp; the ``-o -`` route prints no path line.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -144,6 +149,7 @@ async def _run(args: argparse.Namespace) -> int:
             path = target if target is not None else _default_filename()
             with open(path, "wb") as fh:
                 fh.write(png)
+            print(os.path.abspath(path))
     except BrokenPipeError:
         return 0
     return 0

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -241,3 +242,65 @@ async def test_set_with_only_socket_flag_exits_with_code_2(tmp_path: Path):
         args = parser.parse_args(["display", "set", "-s", sock])
         await _amain(args)
     assert excinfo.value.code == 2
+
+
+# ===========================================================================
+# json structured output (--format json) — payload {width, height, max_fps}.
+# ===========================================================================
+
+
+async def test_get_json_emits_single_object_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``display get --format json`` emits ONE json object holding the current
+    snapshot's three fields and applies nothing."""
+    socket_path = tmp_path / "rio-display.sock"
+    fake = _FakeDisplay(DisplayState(width=2560, height=1440, max_fps=144.0))
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["display", "get", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)  # one json document
+        assert payload == {"width": 2560, "height": 1440, "max_fps": 144.0}
+        assert fake.last_apply is None
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_json_emits_post_apply_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``display set --format json`` emits the SAME post-apply snapshot the
+    human path shows (the server-side merged state), not the requested values.
+
+    Only ``-F`` is given, so width/height appear only because get()
+    observed the server's retained state.
+    """
+    socket_path = tmp_path / "rio-display.sock"
+    fake = _FakeDisplay(DisplayState(width=1280, height=720, max_fps=60.0))
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["display", "set", "--max-fps", "120", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)  # one json document
+        assert payload == {"width": 1280, "height": 720, "max_fps": 120.0}
+        assert fake.last_apply is not None
+        assert fake.last_apply.width == 0
+        assert fake.last_apply.height == 0
+        assert fake.last_apply.max_fps == 120.0
+    finally:
+        server.close()
+        await server.wait_closed()

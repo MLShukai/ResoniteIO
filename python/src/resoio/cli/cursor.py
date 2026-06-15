@@ -21,6 +21,8 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from resoio.cli import output
+
 if TYPE_CHECKING:
     from resoio.cursor import CursorState
 
@@ -45,9 +47,11 @@ def register(
     )
     cursor_subs = parser.add_subparsers(dest="cursor_command", required=True)
 
+    fmt = output.build_format_parent()
+
     set_parser = cursor_subs.add_parser(
         "set",
-        parents=[common],
+        parents=[common, fmt],
         help="Move the cursor to normalized (x, y) and hold it until 'release'.",
     )
     set_parser.add_argument("x", type=float, help="Normalized x in [0,1].")
@@ -56,21 +60,21 @@ def register(
 
     center_parser = cursor_subs.add_parser(
         "center",
-        parents=[common],
+        parents=[common, fmt],
         help="Move the cursor to (0.5, 0.5) and hold it until 'release'.",
     )
     center_parser.set_defaults(func=_run_center)
 
     get_parser = cursor_subs.add_parser(
         "get",
-        parents=[common],
+        parents=[common, fmt],
         help="Print the current cursor position and hold state (no movement).",
     )
     get_parser.set_defaults(func=_run_get)
 
     release_parser = cursor_subs.add_parser(
         "release",
-        parents=[common],
+        parents=[common, fmt],
         help="Release the cursor hold (idempotent).",
     )
     release_parser.set_defaults(func=_run_release)
@@ -96,7 +100,7 @@ async def _run_set(args: argparse.Namespace) -> int:
 
     async with CursorClient(args.socket) as client:
         state = await client.set_position(args.x, args.y)
-    print(_format_state(state))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -105,7 +109,7 @@ async def _run_center(args: argparse.Namespace) -> int:
 
     async with CursorClient(args.socket) as client:
         state = await client.set_position(0.5, 0.5)
-    print(_format_state(state))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -114,7 +118,7 @@ async def _run_get(args: argparse.Namespace) -> int:
 
     async with CursorClient(args.socket) as client:
         state = await client.get_position()
-    print(_format_state(state))
+    _emit_state(state, args.format)
     return 0
 
 
@@ -123,5 +127,13 @@ async def _run_release(args: argparse.Namespace) -> int:
 
     async with CursorClient(args.socket) as client:
         state = await client.release()
-    print(_format_state(state))
+    _emit_state(state, args.format)
     return 0
+
+
+def _emit_state(state: CursorState, fmt: str) -> None:
+    if output.is_structured(fmt):
+        # CursorState is a dataclass -> to_jsonable walks its 5 fields.
+        output.emit(state, fmt)
+    else:
+        print(_format_state(state))

@@ -188,6 +188,7 @@ ______________________________________________________________________
 - `python/src/resoio/cli/` 配下に **action 名 flat command** で 1 ファイルずつ (`ping` / `record` / `mic` / `drive` / `grab` / `display` 形式)
 - subgroup 階層化はしない (例: `resoio voice` ではなく `resoio mic`)
 - 単体テストは `python/tests/resoio/cli/test_<action>.py`
+- **CLI の設計・出力規約 (argparse 構成 / `--format human|json` / `cli/output.py` シリアライザ / pid・path-only コマンド / interactive 除外 / exit code・stderr・stdout) の詳細は [`cli-design`](../cli-design/SKILL.md) skill を参照**
 
 ______________________________________________________________________
 

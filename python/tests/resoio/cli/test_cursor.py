@@ -16,6 +16,7 @@ unknown subcommand is an argparse usage error (SystemExit with code 2 at
 (``_run_cli`` normalizes parse-time SystemExit and runtime return codes).
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -203,6 +204,141 @@ async def test_socket_flag_routes_to_get_position(
         rc = await _amain(args)
         assert rc == 0
         assert len(fake.get_requests) == 1
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+# ===========================================================================
+# json structured output (--format json) — the full CursorState (5 fields)
+# {x, y, window_width, window_height, held} emitted as one json object.
+# ===========================================================================
+
+
+async def test_set_json_emits_full_cursor_state_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``cursor set --format json`` emits ONE json object with all five
+    ``CursorState`` fields; the held flag is a real json bool (``True`` after a
+    hold), not an int."""
+    socket_path = tmp_path / "rio-cursor.sock"
+    fake = _FakeCursor()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["cursor", "set", "0.5", "0.25", "--format", "json"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+        assert len(fake.set_requests) == 1
+        payload = json.loads(capsys.readouterr().out)  # one json document
+        assert payload == {
+            "x": pytest.approx(0.5),
+            "y": pytest.approx(0.25),
+            "window_width": 1920,
+            "window_height": 1080,
+            "held": True,
+        }
+        assert payload["held"] is True
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_center_json_emits_held_state_at_half_half(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``cursor center --format json`` moves to (0.5, 0.5) and emits the held
+    state as one json object."""
+    socket_path = tmp_path / "rio-cursor.sock"
+    fake = _FakeCursor()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["cursor", "center", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+        assert len(fake.set_requests) == 1
+        assert fake.set_requests[0].x == pytest.approx(0.5)
+        assert fake.set_requests[0].y == pytest.approx(0.5)
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "x": pytest.approx(0.5),
+            "y": pytest.approx(0.5),
+            "window_width": 1920,
+            "window_height": 1080,
+            "held": True,
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_get_json_emits_unheld_state_without_side_effects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``cursor get --format json`` reads the cursor (no set/release) and emits
+    the unheld state; ``held`` is json ``False``, not 0."""
+    socket_path = tmp_path / "rio-cursor.sock"
+    fake = _FakeCursor()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["cursor", "get", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+        assert len(fake.get_requests) == 1
+        assert fake.set_requests == []
+        assert fake.release_requests == []
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "x": pytest.approx(0.5),
+            "y": pytest.approx(0.25),
+            "window_width": 1920,
+            "window_height": 1080,
+            "held": False,
+        }
+        assert payload["held"] is False
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_release_json_emits_unheld_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``cursor release --format json`` issues the release RPC and emits the
+    resulting unheld state as one json object."""
+    socket_path = tmp_path / "rio-cursor.sock"
+    fake = _FakeCursor()
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["cursor", "release", "--format", "json"])
+        rc = await _amain(args)
+        assert rc == 0
+        assert len(fake.release_requests) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "x": pytest.approx(0.5),
+            "y": pytest.approx(0.25),
+            "window_width": 1920,
+            "window_height": 1080,
+            "held": False,
+        }
     finally:
         server.close()
         await server.wait_closed()

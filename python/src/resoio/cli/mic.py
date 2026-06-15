@@ -29,6 +29,7 @@ from typing import IO, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from resoio.cli import output
 from resoio.microphone import DTYPE, SAMPLE_RATE, paced
 
 if TYPE_CHECKING:
@@ -93,6 +94,7 @@ def register(
             f"FAILED_PRECONDITION for up to {_BRIDGE_READY_TIMEOUT_S:.0f}s)."
         ),
     )
+    output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
 
@@ -315,11 +317,15 @@ async def _run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    print(
-        f"received_frames={summary.received_frames} "
-        f"received_samples={summary.received_samples} "
-        f"dropped_frames={summary.dropped_frames} "
-        f"unix_nanos={summary.unix_nanos}",
-        file=sys.stderr,
-    )
+    if output.is_structured(args.format):
+        output.emit(summary, args.format)
+    else:
+        # Stream summary is the command result, so it goes to stdout in
+        # both modes (status/error messages stay on stderr).
+        print(
+            f"received_frames={summary.received_frames} "
+            f"received_samples={summary.received_samples} "
+            f"dropped_frames={summary.dropped_frames} "
+            f"unix_nanos={summary.unix_nanos}"
+        )
     return 0

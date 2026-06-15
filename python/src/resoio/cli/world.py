@@ -12,8 +12,12 @@ deferred into each handler so ``resoio --help`` stays fast.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from datetime import datetime
 from typing import TYPE_CHECKING
+
+from resoio.cli import output
 
 if TYPE_CHECKING:
     from resoio.world import OpenWorld, WorldRecord, WorldSession
@@ -74,24 +78,26 @@ def register(
     )
     world_subs = parser.add_subparsers(dest="world_command", required=True)
 
-    _register_sessions(world_subs, common)
-    _register_records(world_subs, common)
+    fmt = output.build_format_parent()
+    _register_sessions(world_subs, common, fmt)
+    _register_records(world_subs, common, fmt)
     _register_thumbnail(world_subs, common)
-    _register_join(world_subs, common)
-    _register_start(world_subs, common)
-    _register_list(world_subs, common)
-    _register_focus(world_subs, common)
-    _register_leave(world_subs, common)
-    _register_current(world_subs, common)
+    _register_join(world_subs, common, fmt)
+    _register_start(world_subs, common, fmt)
+    _register_list(world_subs, common, fmt)
+    _register_focus(world_subs, common, fmt)
+    _register_leave(world_subs, common, fmt)
+    _register_current(world_subs, common, fmt)
 
 
 def _register_sessions(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "sessions",
-        parents=[common],
+        parents=[common, fmt],
         help="List live sessions.",
     )
     parser.add_argument("--search", default="", help="Name substring filter.")
@@ -125,10 +131,11 @@ def _register_sessions(
 def _register_records(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "records",
-        parents=[common],
+        parents=[common, fmt],
         help="List world records.",
     )
     parser.add_argument(
@@ -189,7 +196,11 @@ def _register_thumbnail(
         "-o",
         "--output",
         default=None,
-        help="Write image to this path; default writes raw bytes to stdout.",
+        help=(
+            'Output target; "-" emits raw image bytes to stdout, a path '
+            "writes that file. Omitted: thumbnail_YYYYMMDD_HHMMSS.<ext> in "
+            "the current directory (extension derived from the content type)."
+        ),
     )
     parser.set_defaults(func=_run_thumbnail)
 
@@ -197,10 +208,11 @@ def _register_thumbnail(
 def _register_join(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "join",
-        parents=[common],
+        parents=[common, fmt],
         help="Join an existing session by id or url.",
     )
     target = parser.add_mutually_exclusive_group(required=True)
@@ -218,10 +230,11 @@ def _register_join(
 def _register_start(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "start",
-        parents=[common],
+        parents=[common, fmt],
         help="Start a new session from a world record.",
     )
     parser.add_argument(
@@ -242,10 +255,11 @@ def _register_start(
 def _register_list(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "list",
-        parents=[common],
+        parents=[common, fmt],
         help="List locally-open worlds.",
     )
     parser.set_defaults(func=_run_list)
@@ -254,10 +268,11 @@ def _register_list(
 def _register_focus(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "focus",
-        parents=[common],
+        parents=[common, fmt],
         help="Focus a locally-open world by handle.",
     )
     parser.add_argument("handle", type=int, help="World handle to focus.")
@@ -267,10 +282,11 @@ def _register_focus(
 def _register_leave(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "leave",
-        parents=[common],
+        parents=[common, fmt],
         help="Leave a locally-open world by handle.",
     )
     parser.add_argument("handle", type=int, help="World handle to leave.")
@@ -280,10 +296,11 @@ def _register_leave(
 def _register_current(
     subs: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
+    fmt: argparse.ArgumentParser,
 ) -> None:
     parser = subs.add_parser(
         "current",
-        parents=[common],
+        parents=[common, fmt],
         help="Show the currently focused world.",
     )
     parser.set_defaults(func=_run_current)
@@ -412,6 +429,19 @@ def _print_open_worlds(worlds: list[OpenWorld]) -> None:
     _print_table(_OPEN_HEADERS, rows)
 
 
+def _emit_open_worlds(worlds: list[OpenWorld], payload: object, fmt: str) -> None:
+    """Emit open worlds as json or the existing table text, per ``fmt``.
+
+    ``payload`` is what json serializes (a single :class:`OpenWorld` for
+    the result-producing commands, the list for ``list``); ``worlds`` is
+    always rendered as the table in human mode.
+    """
+    if output.is_structured(fmt):
+        output.emit(payload, fmt)
+    else:
+        _print_open_worlds(worlds)
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -449,9 +479,12 @@ async def _run_sessions(args: argparse.Namespace) -> int:
             page=args.page,
             page_size=args.page_size,
         )
-    _print_sessions(
-        page.sessions, wide=args.wide, limit=args.limit, show_all=args.show_all
-    )
+    if output.is_structured(args.format):
+        output.emit(page.sessions, args.format)
+    else:
+        _print_sessions(
+            page.sessions, wide=args.wide, limit=args.limit, show_all=args.show_all
+        )
     return 0
 
 
@@ -479,10 +512,32 @@ async def _run_records(args: argparse.Namespace) -> int:
             sort=sort,
             sort_direction=direction,
         )
-    _print_records(
-        page.records, wide=args.wide, limit=args.limit, show_all=args.show_all
-    )
+    if output.is_structured(args.format):
+        output.emit(page.records, args.format)
+    else:
+        _print_records(
+            page.records, wide=args.wide, limit=args.limit, show_all=args.show_all
+        )
     return 0
+
+
+_CONTENT_TYPE_EXTENSIONS = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+}
+
+
+def _thumbnail_extension(content_type: str) -> str:
+    """Map a thumbnail ``content_type`` to a file extension (``bin``
+    fallback)."""
+    return _CONTENT_TYPE_EXTENSIONS.get(content_type, "bin")
+
+
+def _default_thumbnail_filename(content_type: str) -> str:
+    """``thumbnail_YYYYMMDD_HHMMSS.<ext>`` stamped with the local time."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"thumbnail_{stamp}.{_thumbnail_extension(content_type)}"
 
 
 async def _run_thumbnail(args: argparse.Namespace) -> int:
@@ -490,16 +545,20 @@ async def _run_thumbnail(args: argparse.Namespace) -> int:
 
     async with WorldClient(args.socket) as client:
         thumb = await client.fetch_thumbnail(args.uri)
-    if args.output is None:
+
+    target: str | None = args.output
+    if target == "-":
         sys.stdout.buffer.write(thumb.data)
         sys.stdout.buffer.flush()
         return 0
-    with open(args.output, "wb") as fp:
-        fp.write(thumb.data)
-    print(
-        f"saved {len(thumb.data)} bytes ({thumb.content_type}) -> {args.output}",
-        file=sys.stderr,
+    path = (
+        target
+        if target is not None
+        else _default_thumbnail_filename(thumb.content_type)
     )
+    with open(path, "wb") as fp:
+        fp.write(thumb.data)
+    print(os.path.abspath(path))
     return 0
 
 
@@ -512,7 +571,7 @@ async def _run_join(args: argparse.Namespace) -> int:
             url=args.url or "",
             focus=not args.no_focus,
         )
-    _print_open_worlds([world])
+    _emit_open_worlds([world], world, args.format)
     return 0
 
 
@@ -525,7 +584,7 @@ async def _run_start(args: argparse.Namespace) -> int:
             owner_id=args.owner_id,
             focus=not args.no_focus,
         )
-    _print_open_worlds([world])
+    _emit_open_worlds([world], world, args.format)
     return 0
 
 
@@ -534,7 +593,7 @@ async def _run_list(args: argparse.Namespace) -> int:
 
     async with WorldClient(args.socket) as client:
         worlds = await client.list_open_worlds()
-    _print_open_worlds(worlds)
+    _emit_open_worlds(worlds, worlds, args.format)
     return 0
 
 
@@ -543,7 +602,7 @@ async def _run_focus(args: argparse.Namespace) -> int:
 
     async with WorldClient(args.socket) as client:
         world = await client.focus(args.handle)
-    _print_open_worlds([world])
+    _emit_open_worlds([world], world, args.format)
     return 0
 
 
@@ -552,6 +611,8 @@ async def _run_leave(args: argparse.Namespace) -> int:
 
     async with WorldClient(args.socket) as client:
         await client.leave(args.handle)
+    if output.is_structured(args.format):
+        output.emit({"handle": args.handle, "left": True}, args.format)
     return 0
 
 
@@ -560,6 +621,9 @@ async def _run_current(args: argparse.Namespace) -> int:
 
     async with WorldClient(args.socket) as client:
         world = await client.get_current()
+    if output.is_structured(args.format):
+        output.emit(world, args.format)
+        return 0
     if world is None:
         print("no focused world (userspace)", file=sys.stderr)
         return 0

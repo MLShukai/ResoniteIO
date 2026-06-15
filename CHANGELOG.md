@@ -43,6 +43,32 @@ GitHub Release body. The format follows
   quits itself and Steam/Proton reaps the renderer + launch wrappers. Prints /
   returns the engine's host PID, or "resonite not running" / `None` when no
   engine is reachable
+- **`resoio --format human|json`**: Commands that return structured data
+  (`ping`, `info`, `display`, `cursor`, `grab`, `context-menu`, `dash`, `world`,
+  `mic`, `session`) gained a `--format` flag. `human` (default) keeps the
+  existing text output unchanged; `json` prints one machine-readable document to
+  stdout (proto field names in snake_case, enums as their name, big ints exact,
+  non-ASCII preserved). `--format` is not added to pid/path-only commands
+  (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`),
+  interactive commands (`drive` / `grab interactive` / `inventory`), or the
+  side-effect-only `session user kick` / `ban` / `respawn` leaves
+
+### Changed
+
+- **`resoio record` default output is now a file (breaking)**: with no `-o`,
+  `record` saves `record_<timestamp>.mp4` (`.wav` for `--audio`) to the current
+  directory instead of streaming to stdout. Pass `-o -` for the previous stdout
+  behaviour, or `-o PATH` for an explicit file
+- **`screenshot` / `record` / `world thumbnail` print the saved path**: on a
+  file save these now print the saved absolute path to stdout (`screenshot` was
+  previously silent; `world thumbnail` previously logged to stderr), so a caller
+  can capture stdout to locate the artifact. `-o -` still streams raw bytes with
+  no path line. `world thumbnail` also gained the dated-default / `-o -` target
+  rules to match `screenshot` / `record`
+- **`resoio mic` summary moves to stdout**: the end-of-stream summary
+  (`received_frames` / `received_samples` / `dropped_frames` / `unix_nanos`) is
+  the command result and now prints to stdout in both formats (was stderr);
+  errors and status messages stay on stderr
 
 ### Deprecated
 

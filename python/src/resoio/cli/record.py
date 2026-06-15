@@ -14,6 +14,19 @@ codecs is out of scope. Muxed output therefore only supports mp4
 (file) and matroska (stdout) — the two containers PyAV can stream
 reliably while preserving A/V sync via a single shared ``t0``.
 
+Output target:
+
+* ``-o -``            → Y4M / raw float32 PCM / matroska on
+  ``sys.stdout.buffer`` per mode (pipeable).
+* ``-o path``         → that file (``.mp4`` for video / muxed, ``.wav``
+  for audio-only).
+* (omitted)           → ``record_YYYYMMDD_HHMMSS.<ext>`` in the current
+  directory, ``.wav`` for ``--audio`` and ``.mp4`` for video / muxed.
+
+On a file save (default or explicit ``-o path``) the saved absolute path
+is printed once on stdout after the recording stops; the ``-o -`` route
+prints no path line.
+
 This module owns the argparse surface, arg validation, frame pacing,
 and the per-route orchestration that wires the gRPC clients to the
 media-encoding primitives. Those primitives (Y4M / WAV writers, PyAV
@@ -24,9 +37,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import time
 from collections.abc import AsyncIterator
+from datetime import datetime
 from fractions import Fraction
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
@@ -52,6 +67,12 @@ if TYPE_CHECKING:
     from av.video.stream import VideoStream
 
     from resoio.camera import CameraClient, Frame
+
+
+# ``_suppress_teardown_errors`` is re-exported (aliased above) so tests can
+# import it via ``from resoio.cli.record import _suppress_teardown_errors``;
+# listing it in ``__all__`` marks that re-export as intentional for pyright.
+__all__ = ["register", "_suppress_teardown_errors"]
 
 
 Mode = Literal["muxed", "video", "audio"]
@@ -83,19 +104,22 @@ def register(
             "Record one or both of the Camera (video) and Speaker (audio) "
             "streams over the Resonite IO UDS. --video and --audio are "
             "filter flags (not exclusive); supplying neither records "
-            "muxed video+audio. Output target is chosen by extension: "
-            "stdout (-) emits Y4M / raw PCM / matroska per mode, files "
-            "must end in .mp4 (video/muxed) or .wav (audio)."
+            "muxed video+audio. With no -o the recording is saved to the "
+            "current directory as record_YYYYMMDD_HHMMSS.mp4 (.wav for "
+            "--audio); -o - emits Y4M / raw PCM / matroska to stdout per "
+            "mode; otherwise -o must end in .mp4 (video/muxed) or .wav "
+            "(audio)."
         ),
     )
     parser.add_argument(
         "-o",
         "--output",
-        default="-",
+        default=None,
         help=(
             'Output target; "-" emits Y4M / raw float32 PCM / matroska '
-            "to stdout per mode, else a path ending in .mp4 / .wav "
-            '(default: "-").'
+            "to stdout per mode, a path ending in .mp4 / .wav writes that "
+            "file. Omitted: record_YYYYMMDD_HHMMSS.mp4 (.wav for --audio) "
+            "in the current directory."
         ),
     )
     parser.add_argument(
@@ -171,6 +195,17 @@ def _resolve_mode(args: argparse.Namespace) -> Mode:
     return "audio"
 
 
+def _default_filename(mode: Mode) -> str:
+    """``record_YYYYMMDD_HHMMSS.<ext>`` stamped with the local time.
+
+    The extension follows the mode: ``.wav`` for audio-only, ``.mp4``
+    for video-only and muxed (the two container formats the file routes
+    write).
+    """
+    ext = "wav" if mode == "audio" else "mp4"
+    return f"record_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+
+
 def _validate_args(args: argparse.Namespace) -> int | None:
     """Validate flag/extension consistency.
 
@@ -180,6 +215,9 @@ def _validate_args(args: argparse.Namespace) -> int | None:
 
     1. ``--fps`` / ``-v`` while ``mode == "audio"`` → reject.
     2. Output path (when not ``"-"``) extension mismatch per mode.
+
+    A ``None`` target (the omitted default → date file) is always
+    valid; only an explicit file path is extension-checked.
     """
     mode = _resolve_mode(args)
     if mode == "audio" and (args.fps is not None or args.verbose):
@@ -189,8 +227,8 @@ def _validate_args(args: argparse.Namespace) -> int | None:
         )
         return 2
 
-    target: str = args.output
-    if target == "-":
+    target: str | None = args.output
+    if target is None or target == "-":
         return None
 
     lower = target.lower()
@@ -666,15 +704,32 @@ async def _run(args: argparse.Namespace) -> int:
         return rc
     mode = _resolve_mode(args)
 
+    # Resolve the omitted default (None) into a date-stamped file in the
+    # current directory so the file routes treat it like an explicit
+    # path; "-" (stdout) and explicit paths pass through unchanged.
+    if args.output is None:
+        args.output = _default_filename(mode)
+    file_path: str | None = args.output if args.output != "-" else None
+
     try:
         if args.duration is None:
-            return await _dispatch(args, mode)
-        # wait_for's cancel unwinds the async client context managers
-        # cleanly; the resulting TimeoutError is the normal end-of-record
-        # signal.
-        try:
-            return await asyncio.wait_for(_dispatch(args, mode), timeout=args.duration)
-        except TimeoutError:
-            return 0
+            rc = await _dispatch(args, mode)
+        else:
+            # wait_for's cancel unwinds the async client context managers
+            # cleanly; the resulting TimeoutError is the normal
+            # end-of-record signal.
+            try:
+                rc = await asyncio.wait_for(
+                    _dispatch(args, mode), timeout=args.duration
+                )
+            except TimeoutError:
+                rc = 0
     except BrokenPipeError:
         return 0
+
+    # The recording has stopped and the file is fully written; emit the
+    # saved absolute path once. The "-" (stdout binary) route prints no
+    # path line.
+    if file_path is not None:
+        print(os.path.abspath(file_path))
+    return rc
