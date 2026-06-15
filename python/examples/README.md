@@ -52,6 +52,7 @@ uv run python python/examples/context_menu_interact.py
 uv run python python/examples/dash_navigate.py
 uv run python python/examples/inventory_manage.py
 uv run python python/examples/cursor_move.py
+uv run python python/examples/auth_status.py
 ```
 
 各 example の内容:
@@ -71,6 +72,7 @@ uv run python python/examples/cursor_move.py
 | `dash_navigate.py`         | Esc dash を open → list_screens → set_screen(key) → get_tree → invoke(first) → close        |
 | `inventory_manage.py`      | 一時 dir を mkdir → cp -r → mv → list で確認 → finally で rm -r 後片付け                    |
 | `cursor_move.py`           | get_position → center(0.5,0.5) → move(0.25,0.25) → 元位置に restore                         |
+| `auth_status.py`           | `Auth.Status` を 1 回呼んで login 状態 (signed-in user / session expiry) を print           |
 
 ## FAILED_PRECONDITION について
 
@@ -120,3 +122,4 @@ examples では「最短コード」を優先しているため、以下は意�
 | `dash_navigate.py`         | [`cli/dash.py`](../src/resoio/cli/dash.py)                  | [`tests/e2e/dash.py`](../tests/e2e/dash.py)                             |
 | `inventory_manage.py`      | [`cli/inventory.py`](../src/resoio/cli/inventory.py)        | [`tests/e2e/inventory.py`](../tests/e2e/inventory.py)                   |
 | `cursor_move.py`           | [`cli/cursor.py`](../src/resoio/cli/cursor.py)              | [`tests/e2e/cursor.py`](../tests/e2e/cursor.py)                         |
+| `auth_status.py`           | [`cli/auth.py`](../src/resoio/cli/auth.py)                  | [`tests/e2e/auth.py`](../tests/e2e/auth.py)                             |

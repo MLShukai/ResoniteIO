@@ -43,6 +43,8 @@ pytestmark = pytest.mark.api_contract
 # stays minimal when a single name is added or removed.
 _EXPECTED_PUBLIC_NAMES = (
     "AmbiguousSocketError",
+    "AuthClient",
+    "AuthStatus",
     "CameraClient",
     "ConnectionClient",
     "ContextMenuClient",
@@ -155,6 +157,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
     "client_name",
     [
         "ConnectionClient",
+        "AuthClient",
         "CameraClient",
         "SpeakerClient",
         "MicrophoneClient",

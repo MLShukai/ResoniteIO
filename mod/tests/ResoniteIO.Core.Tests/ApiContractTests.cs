@@ -1,4 +1,5 @@
 using System.Reflection;
+using ResoniteIO.Core.Auth;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
@@ -65,6 +66,12 @@ public sealed class ApiContractTests
 
         var expected = new[]
         {
+            "ResoniteIO.Core.Auth.AuthFailedException",
+            "ResoniteIO.Core.Auth.AuthNotReadyException",
+            "ResoniteIO.Core.Auth.AuthService",
+            "ResoniteIO.Core.Auth.AuthStatusSnapshot",
+            "ResoniteIO.Core.Auth.AuthTotpRequiredException",
+            "ResoniteIO.Core.Auth.IAuthBridge",
             "ResoniteIO.Core.Camera.CameraFrame",
             "ResoniteIO.Core.Camera.CameraFrameFormat",
             "ResoniteIO.Core.Camera.CameraNotReadyException",
@@ -205,6 +212,13 @@ public sealed class ApiContractTests
         {
             "ResoniteIO.V1.ApplySettingsResponse",
             "ResoniteIO.V1.AudioFrame",
+            "ResoniteIO.V1.Auth",
+            "ResoniteIO.V1.Auth+AuthBase",
+            "ResoniteIO.V1.AuthLoginRequest",
+            "ResoniteIO.V1.AuthLogoutRequest",
+            "ResoniteIO.V1.AuthReflection",
+            "ResoniteIO.V1.AuthStatus",
+            "ResoniteIO.V1.AuthStatusRequest",
             "ResoniteIO.V1.BanUserRequest",
             "ResoniteIO.V1.BanUserResponse",
             "ResoniteIO.V1.Camera",
@@ -446,6 +460,9 @@ public sealed class ApiContractTests
     /// 階層変更は契約破壊として扱う。
     /// </summary>
     [Theory]
+    [InlineData(typeof(AuthNotReadyException))]
+    [InlineData(typeof(AuthFailedException))]
+    [InlineData(typeof(AuthTotpRequiredException))]
     [InlineData(typeof(CameraNotReadyException))]
     [InlineData(typeof(SpeakerNotReadyException))]
     [InlineData(typeof(MicrophoneNotReadyException))]
@@ -752,6 +769,48 @@ public sealed class ApiContractTests
             ),
             ("ListRolesAsync", new[] { typeof(CancellationToken) }),
             ("GetUserRoleOverridesAsync", new[] { typeof(CancellationToken) })
+        );
+    }
+
+    /// <summary>
+    /// <c>Auth</c> service が宣言する RPC 名一覧を固定する。RPC のリネーム / 追加 / 削除を
+    /// wire 契約破壊として検出する (login / logout / status の 3 RPC)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void Auth_Service_DeclaresExpectedRpcs()
+    {
+        var methodNames = ResoniteIO
+            .V1.AuthReflection.Descriptor.Services.Single(s => s.Name == "Auth")
+            .Methods.Select(m => m.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(new[] { "Login", "Logout", "Status" }, methodNames);
+    }
+
+    /// <summary>
+    /// <see cref="IAuthBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IAuthBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IAuthBridge),
+            (
+                "LoginAsync",
+                new[]
+                {
+                    typeof(string),
+                    typeof(string),
+                    typeof(string),
+                    typeof(bool),
+                    typeof(CancellationToken),
+                }
+            ),
+            ("LogoutAsync", new[] { typeof(CancellationToken) }),
+            ("GetStatusAsync", new[] { typeof(CancellationToken) })
         );
     }
 

@@ -64,6 +64,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineInventoryBridge? _inventoryBridge;
     private FrooxEngineCursorBridge? _cursorBridge;
     private FrooxEngineSessionBridge? _sessionBridge;
+    private FrooxEngineAuthBridge? _authBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -144,6 +145,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
 
+            _authBridge = new FrooxEngineAuthBridge(Engine.Current, _logSink);
+
             _grpcHost = GrpcHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -160,6 +163,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge,
                 sessionBridge: _sessionBridge,
+                authBridge: _authBridge,
                 infoBridge: _infoBridge,
                 lifecycleBridge: _lifecycleBridge
             );
@@ -242,6 +246,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // dispatch は world.RunSynchronously の one-shot)、IDisposable でもないため
         // 参照 null 化のみで足りる。
         _sessionBridge = null;
+
+        // AuthBridge も engine 状態を保持せず (cloud login/logout を one-shot で叩くだけ)、
+        // IDisposable でもないため参照 null 化のみで足りる。
+        _authBridge = null;
 
         // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
         // IDisposable でもない) ため、参照 null 化のみで足りる。

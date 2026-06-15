@@ -9,6 +9,21 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **`Auth` modality**: A new unary modality for Resonite cloud authentication —
+  sign in / out and read the auth status — driving `Engine.Cloud.Session`
+  directly (`Login` / `Logout` / `Status`, all returning a unified `AuthStatus`
+  of `logged_in` / `user_id` / `user_name` / `session_expires_unix_nanos`).
+  `login` takes a credential (username / email / `U-` id) and a password (plus an
+  optional `totp` for 2FA) and `remember_me` (default true), which delegates
+  session persistence to the engine — **resoio stores no credentials on disk**.
+  Wrong credentials return `Unauthenticated`; a 2FA-enabled account with no/blank
+  code returns `FailedPrecondition`, and the CLI then prompts for the code and
+  retries once. Exposed as `AuthClient` and the nested `resoio auth login` /
+  `logout` / `status` CLI. **Security**: the plaintext password is never
+  persisted, logged, placed in an exception / gRPC status detail, or
+  `--format json` output, and there is **no `--password` CLI flag** — the
+  password comes only from `RESONITE_IO_PASSWORD`, piped stdin, or a hidden
+  prompt. All three leaves support `--format human|json`; the human `status` output renders the session expiry as a UTC datetime, and the `--format json` document adds a derived ISO-8601 `session_expires_iso` next to the exact `session_expires_unix_nanos`. When the credential is omitted, the interactive prompt reads `Username or Email` — a username, email, or user id is accepted
 - **`Session` modality**: A new unary userspace modality that drives the dash
   "Session" dialog — the connected session's Settings, Users, and Permissions
   tabs — by reading/writing `World.Configuration` / `World.AllUsers` /

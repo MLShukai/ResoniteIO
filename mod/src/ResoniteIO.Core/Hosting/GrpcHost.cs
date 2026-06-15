@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using ResoniteIO.Core.Auth;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
 using ResoniteIO.Core.ContextMenu;
@@ -95,6 +96,7 @@ public sealed class GrpcHost : IAsyncDisposable
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null,
         ISessionBridge? sessionBridge = null,
+        IAuthBridge? authBridge = null,
         ILifecycleBridge? lifecycleBridge = null
     )
     {
@@ -151,6 +153,7 @@ public sealed class GrpcHost : IAsyncDisposable
         Register(inventoryBridge, "Inventory");
         Register(cursorBridge, "Cursor");
         Register(sessionBridge, "Session");
+        Register(authBridge, "Auth");
         Register(lifecycleBridge, "Lifecycle");
 
         builder.WebHost.ConfigureKestrel(opts =>
@@ -176,6 +179,7 @@ public sealed class GrpcHost : IAsyncDisposable
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();
         app.MapGrpcService<SessionService>();
+        app.MapGrpcService<AuthService>();
         app.MapGrpcService<LifecycleService>();
 
         log.LogInfo($"GrpcHost binding UDS at {socketPath}");
