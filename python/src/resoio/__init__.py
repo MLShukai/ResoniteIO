@@ -3,6 +3,7 @@
 from importlib.metadata import version as _version
 
 from resoio._client import AmbiguousSocketError, SocketNotFoundError
+from resoio.auth import AuthClient, AuthStatus
 from resoio.camera import CameraClient, Frame
 from resoio.connection import ConnectionClient
 from resoio.context_menu import (
@@ -72,6 +73,8 @@ __version__: str = _version("resonite-io")
 
 __all__ = [
     "AmbiguousSocketError",
+    "AuthClient",
+    "AuthStatus",
     "CameraClient",
     "ConnectionClient",
     "ContextMenuClient",
