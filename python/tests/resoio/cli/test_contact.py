@@ -85,6 +85,21 @@ def test_list_search_defaults_to_empty_string():
     assert args.search == ""
 
 
+def test_list_collects_include_hidden_flag():
+    """``--include-hidden`` is a store_true flag landing on
+    ``args.include_hidden`` so the dash-hidden (ignored / blocked) contacts are
+    requested."""
+    parser = _build_parser()
+    args = parser.parse_args(["contact", "list", "--include-hidden"])
+    assert args.include_hidden is True
+
+
+def test_list_include_hidden_defaults_to_false():
+    parser = _build_parser()
+    args = parser.parse_args(["contact", "list"])
+    assert args.include_hidden is False
+
+
 def test_list_filter_choices_reject_unknown_value():
     """``--filter`` is constrained to all/accepted/requests; an unknown value
     must be rejected at parse time rather than silently forwarded."""
@@ -382,6 +397,26 @@ async def test_list_default_filter_dispatches_unspecified(
     assert len(fake.list_requests) == 1
     # Default 'all' maps to the wire no-filter sentinel.
     assert fake.list_requests[0].filter == WireContactFilter.UNSPECIFIED
+    # No --include-hidden: the default dash-hidden exclusion is left in effect.
+    assert fake.list_requests[0].include_hidden is False
+
+
+async def test_list_include_hidden_flag_dispatches_include_hidden_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    socket_path = tmp_path / "rio-contact.sock"
+    server, fake = await _serve(socket_path)
+    try:
+        rc = await _run_contact(
+            ["contact", "list", "--include-hidden"], socket_path, monkeypatch
+        )
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert len(fake.list_requests) == 1
+    assert fake.list_requests[0].include_hidden is True
 
 
 async def test_get_dispatch_sends_user_id(

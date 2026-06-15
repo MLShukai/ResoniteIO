@@ -1,4 +1,5 @@
 using Grpc.Core;
+using ResoniteIO.Core.Contact;
 using ResoniteIO.Core.Tests.Common;
 using ResoniteIO.Core.Tests.Common.Fakes;
 using ResoniteIO.V1;
@@ -175,6 +176,168 @@ public sealed class ContactServiceTests
         // search で 0 件でも counts は snapshot 値のまま。
         Assert.Equal(1, response.ContactCount);
         Assert.Equal(1, response.RequestCount);
+    }
+
+    // ===================================================================
+    //  ListContacts — hidden (dash-hidden None/Ignored/Blocked) exclusion
+    //
+    //  仕様: ListContacts は既定で IsHidden==true の snapshot を除外し、
+    //  include_hidden=true でのみ全件返す。除外は filter / search より先に
+    //  効き、ContactInfo.is_hidden は wire を往復し、counts は snapshot 値のまま。
+    // ===================================================================
+
+    /// <summary>
+    /// 既定 Fake の Alice/Bob (どちらも IsHidden==false) に、IsHidden==true の連絡先を
+    /// 1 件足した snapshot を仕込む。hidden は Accepted 扱いにして「hidden な Accepted は
+    /// ACCEPTED filter でも出ない」ケースまで検証できるようにする。
+    /// </summary>
+    private static FakeContactBridge BridgeWithHiddenContact()
+    {
+        var bridge = new FakeContactBridge
+        {
+            ListResult = new ContactListSnapshot(
+                Contacts: new[]
+                {
+                    new ContactSnapshot(
+                        UserId: "U-alice",
+                        Username: "Alice",
+                        AlternateUsernames: Array.Empty<string>(),
+                        Status: Core.Contact.ContactStatus.Accepted,
+                        IsAccepted: true,
+                        IsContactRequest: false,
+                        OnlineStatus: Core.Contact.OnlineStatus.Online,
+                        CurrentSessionName: "",
+                        CurrentSessionAccessLevel: "",
+                        IsHidden: false
+                    ),
+                    new ContactSnapshot(
+                        UserId: "U-blocked",
+                        Username: "Blocked",
+                        AlternateUsernames: Array.Empty<string>(),
+                        Status: Core.Contact.ContactStatus.Accepted,
+                        IsAccepted: true,
+                        IsContactRequest: false,
+                        OnlineStatus: Core.Contact.OnlineStatus.Offline,
+                        CurrentSessionName: "",
+                        CurrentSessionAccessLevel: "",
+                        IsHidden: true
+                    ),
+                },
+                ContactCount: 2,
+                RequestCount: 0,
+                ListLoaded: true
+            ),
+        };
+        return bridge;
+    }
+
+    [Fact]
+    public async Task ListContacts_default_excludes_hidden_contacts()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        // include_hidden を立てない既定リクエスト。
+        var response = await client.ListContactsAsync(new ListContactsRequest());
+
+        // IsHidden==true の U-blocked は除外され、Alice のみ残る。
+        var contact = Assert.Single(response.Contacts);
+        Assert.Equal("U-alice", contact.UserId);
+        Assert.DoesNotContain(response.Contacts, c => c.UserId == "U-blocked");
+    }
+
+    [Fact]
+    public async Task ListContacts_with_include_hidden_returns_hidden_contacts_too()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        var response = await client.ListContactsAsync(
+            new ListContactsRequest { IncludeHidden = true }
+        );
+
+        // include_hidden=true なら hidden な U-blocked も含めて全件。
+        Assert.Equal(2, response.Contacts.Count);
+        Assert.Contains(response.Contacts, c => c.UserId == "U-alice");
+        Assert.Contains(response.Contacts, c => c.UserId == "U-blocked");
+    }
+
+    [Fact]
+    public async Task ListContacts_round_trips_is_hidden_flag_on_wire()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        // include_hidden=true で hidden 連絡先を含めて取得し、is_hidden を観測する。
+        var response = await client.ListContactsAsync(
+            new ListContactsRequest { IncludeHidden = true }
+        );
+
+        var alice = Assert.Single(response.Contacts, c => c.UserId == "U-alice");
+        Assert.False(alice.IsHidden);
+        var blocked = Assert.Single(response.Contacts, c => c.UserId == "U-blocked");
+        Assert.True(blocked.IsHidden);
+    }
+
+    [Fact]
+    public async Task ListContacts_hidden_exclusion_does_not_alter_counts()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        var response = await client.ListContactsAsync(new ListContactsRequest());
+
+        // hidden 除外で contacts は 1 件に絞られても counts は snapshot 値のまま。
+        Assert.Single(response.Contacts);
+        Assert.Equal(2, response.ContactCount);
+        Assert.Equal(0, response.RequestCount);
+        Assert.True(response.ListLoaded);
+    }
+
+    [Fact]
+    public async Task ListContacts_hidden_accepted_contact_is_absent_under_accepted_filter()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        // U-blocked は Status==Accepted だが IsHidden==true。hidden 除外が filter より
+        // 先に効くので、ACCEPTED filter でも hidden な Accepted は出てこない。
+        var response = await client.ListContactsAsync(
+            new ListContactsRequest { Filter = V1.ContactFilter.Accepted }
+        );
+
+        var contact = Assert.Single(response.Contacts);
+        Assert.Equal("U-alice", contact.UserId);
+        Assert.DoesNotContain(response.Contacts, c => c.UserId == "U-blocked");
+    }
+
+    [Fact]
+    public async Task ListContacts_include_hidden_keeps_hidden_accepted_under_accepted_filter()
+    {
+        var bridge = BridgeWithHiddenContact();
+        await using var host = await ContactServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Contact.ContactClient(channel);
+
+        // include_hidden=true なら hidden 除外を飛ばすので、hidden な Accepted も
+        // ACCEPTED filter を通る (両方 Accepted なので 2 件)。
+        var response = await client.ListContactsAsync(
+            new ListContactsRequest { IncludeHidden = true, Filter = V1.ContactFilter.Accepted }
+        );
+
+        Assert.Equal(2, response.Contacts.Count);
+        Assert.Contains(response.Contacts, c => c.UserId == "U-alice");
+        Assert.Contains(response.Contacts, c => c.UserId == "U-blocked");
     }
 
     // ===================================================================

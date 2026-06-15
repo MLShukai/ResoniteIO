@@ -35,7 +35,8 @@ internal sealed class FakeContactBridge : IContactBridge
                     IsContactRequest: false,
                     OnlineStatus: OnlineStatus.Online,
                     CurrentSessionName: "Home",
-                    CurrentSessionAccessLevel: "Private"
+                    CurrentSessionAccessLevel: "Private",
+                    IsHidden: false
                 ),
                 new ContactSnapshot(
                     UserId: "U-bob",
@@ -46,7 +47,8 @@ internal sealed class FakeContactBridge : IContactBridge
                     IsContactRequest: true,
                     OnlineStatus: OnlineStatus.Away,
                     CurrentSessionName: "",
-                    CurrentSessionAccessLevel: ""
+                    CurrentSessionAccessLevel: "",
+                    IsHidden: false
                 ),
             },
             ContactCount: 1,
@@ -67,7 +69,8 @@ internal sealed class FakeContactBridge : IContactBridge
             IsContactRequest: false,
             OnlineStatus: OnlineStatus.Sociable,
             CurrentSessionName: "Home",
-            CurrentSessionAccessLevel: "Private"
+            CurrentSessionAccessLevel: "Private",
+            IsHidden: false
         );
 
     /// <summary><see cref="SearchUsersAsync"/> が返す検索結果。</summary>
@@ -89,7 +92,8 @@ internal sealed class FakeContactBridge : IContactBridge
             IsContactRequest: false,
             OnlineStatus: OnlineStatus.Online,
             CurrentSessionName: "",
-            CurrentSessionAccessLevel: ""
+            CurrentSessionAccessLevel: "",
+            IsHidden: false
         );
 
     /// <summary><see cref="AcceptRequestAsync"/> が返す snapshot。</summary>
@@ -103,7 +107,8 @@ internal sealed class FakeContactBridge : IContactBridge
             IsContactRequest: false,
             OnlineStatus: OnlineStatus.Online,
             CurrentSessionName: "",
-            CurrentSessionAccessLevel: ""
+            CurrentSessionAccessLevel: "",
+            IsHidden: false
         );
 
     public List<string> Calls { get; } = new();

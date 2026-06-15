@@ -678,6 +678,9 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "online_status": 7,
         "current_session_name": 8,
         "current_session_access_level": 9,
+        # is_hidden mirrors engine Contact.ShouldBeHidden (None/Ignored/Blocked);
+        # dash tabs hide these. Appended at 10 so the prior wire stays stable.
+        "is_hidden": 10,
     },
     UserSearchResult: {
         "user_id": 1,
@@ -687,6 +690,9 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     ListContactsRequest: {
         "search": 1,
         "filter": 2,
+        # include_hidden=true bypasses the default exclusion of dash-hidden
+        # (None/Ignored/Blocked) contacts; appended at 3 to keep the wire stable.
+        "include_hidden": 3,
     },
     ListContactsResponse: {
         "contacts": 1,

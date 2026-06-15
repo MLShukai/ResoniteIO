@@ -281,6 +281,54 @@ class TestListContacts:
         assert len(fake.list_requests) == 1
         assert fake.list_requests[0].search == "alice"
 
+    async def test_request_defaults_include_hidden_false(self, uds_server: UdsServer):
+        """No ``include_hidden`` arg: the request rides with
+        ``include_hidden=False`` so the mod applies its default dash-hidden
+        (None/Ignored/Blocked) exclusion."""
+        fake = _FakeContact()
+        await uds_server(fake)
+        async with ContactClient() as client:
+            await client.list_contacts()
+
+        assert len(fake.list_requests) == 1
+        assert fake.list_requests[0].include_hidden is False
+
+    async def test_request_carries_include_hidden_true_when_requested(
+        self, uds_server: UdsServer
+    ):
+        """``include_hidden=True`` rides on the wire so the mod returns every
+        contact, including the dash-hidden (ignored / blocked) ones."""
+        fake = _FakeContact()
+        await uds_server(fake)
+        async with ContactClient() as client:
+            await client.list_contacts(include_hidden=True)
+
+        assert fake.list_requests[0].include_hidden is True
+
+    async def test_response_surfaces_is_hidden_flag(self, uds_server: UdsServer):
+        """``ContactInfo.is_hidden`` reflects whether the dash Contacts tab
+        hides this contact (engine ``Contact.ShouldBeHidden``); it rides back
+        verbatim so the caller can tell a blocked/ignored contact apart from a
+        visible one."""
+        fake = _FakeContact(
+            list_response=ListContactsResponse(
+                contacts=[
+                    ContactInfo(user_id="U-visible", username="Visible"),
+                    ContactInfo(
+                        user_id="U-blocked", username="Blocked", is_hidden=True
+                    ),
+                ],
+            )
+        )
+        await uds_server(fake)
+        async with ContactClient() as client:
+            response = await client.list_contacts(include_hidden=True)
+
+        visible = next(c for c in response.contacts if c.user_id == "U-visible")
+        blocked = next(c for c in response.contacts if c.user_id == "U-blocked")
+        assert visible.is_hidden is False
+        assert blocked.is_hidden is True
+
     async def test_request_maps_accepted_filter(self, uds_server: UdsServer):
         fake = _FakeContact()
         await uds_server(fake)
