@@ -314,9 +314,7 @@ internal sealed class FrooxEngineContactBridge : IContactBridge
         return new ContactSnapshot(
             UserId: contact.ContactUserId ?? string.Empty,
             Username: contact.ContactUsername ?? string.Empty,
-            AlternateUsernames: contact.AlternateUsernames is null
-                ? Array.Empty<string>()
-                : contact.AlternateUsernames.ToArray(),
+            AlternateUsernames: contact.AlternateUsernames?.ToArray() ?? Array.Empty<string>(),
             Status: MapStatus(contact.ContactStatus),
             IsAccepted: contact.IsAccepted,
             IsContactRequest: contact.IsContactRequest,
