@@ -62,6 +62,11 @@ message SessionSettings {
   repeated string tags = 13;
   string session_id = 14;
   bool is_host = 15;
+  // ResoniteLink (engine が公開する localhost WebSocket 連携エンドポイント) の
+  // 状態 (読み取り専用)。World.ResoniteLink が null なら disabled。
+  bool resonite_link_enabled = 16;
+  // ResoniteLink の待受ポート。無効時は 0 (有効時は 2000-65535 の動的割当)。
+  int32 resonite_link_port = 17;
 }
 
 // ApplySettings の部分更新 request。set された field のみ engine に書き込む。
@@ -87,6 +92,11 @@ message SessionSettingsPatch {
   // (空配列で全消し可能)。replace_tags=false なら tags は無視。
   bool replace_tags = 13;
   repeated string tags = 14;
+  // ResoniteLink の有効化。true で engine の World.StartResoniteLink() を呼ぶ
+  // (host + ResoniteLink 権限が必須、冪等)。**engine は runtime での無効化を
+  // 提供しない** (dash UI にも Enable ボタンのみ) ため、false を送ると Service は
+  // FailedPrecondition を返す。未指定なら変更しない。
+  optional bool resonite_link_enabled = 15;
 }
 
 message GetSettingsRequest {}

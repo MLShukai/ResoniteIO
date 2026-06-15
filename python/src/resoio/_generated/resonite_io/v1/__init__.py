@@ -2449,6 +2449,17 @@ class SessionSettings(betterproto2.Message):
 
     is_host: "bool" = betterproto2.field(15, betterproto2.TYPE_BOOL)
 
+    resonite_link_enabled: "bool" = betterproto2.field(16, betterproto2.TYPE_BOOL)
+    """
+    ResoniteLink (engine が公開する localhost WebSocket 連携エンドポイント) の
+    状態 (読み取り専用)。World.ResoniteLink が null なら disabled。
+    """
+
+    resonite_link_port: "int" = betterproto2.field(17, betterproto2.TYPE_INT32)
+    """
+    ResoniteLink の待受ポート。無効時は 0 (有効時は 2000-65535 の動的割当)。
+    """
+
 
 default_message_pool.register_message(
     "resonite_io.v1", "SessionSettings", SessionSettings
@@ -2523,6 +2534,16 @@ class SessionSettingsPatch(betterproto2.Message):
     """
 
     tags: "list[str]" = betterproto2.field(14, betterproto2.TYPE_STRING, repeated=True)
+
+    resonite_link_enabled: "bool | None" = betterproto2.field(
+        15, betterproto2.TYPE_BOOL, optional=True
+    )
+    """
+    ResoniteLink の有効化。true で engine の World.StartResoniteLink() を呼ぶ
+    (host + ResoniteLink 権限が必須、冪等)。**engine は runtime での無効化を
+    提供しない** (dash UI にも Enable ボタンのみ) ため、false を送ると Service は
+    FailedPrecondition を返す。未指定なら変更しない。
+    """
 
 
 default_message_pool.register_message(
