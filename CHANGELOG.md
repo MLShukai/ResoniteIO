@@ -9,6 +9,21 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **`Contact` modality**: A new unary modality that drives the dash "Contacts"
+  tab by reading/writing the cloud contact list (`Engine.Cloud.Contacts` /
+  `Engine.Cloud.Users`) directly — no UI automation. `ListContacts` returns the
+  synced contacts with presence (online status + current session name / access
+  level) plus the contact / request counts and a list-loaded flag, with
+  client-side `search` (username / alternate-username substring) and `filter`
+  (accepted friends / incoming requests); `GetContact` fetches one by user id
+  (absent → `found=false`). `SearchUsers` queries the cloud for users to add
+  (exact or substring, read-only). `AddContact` (resolving the username mod-side
+  when omitted), `AcceptRequest`, and `RemoveContact` (decline a request /
+  delete a friend) mutate the list. Unknown ids return `NotFound`, cloud
+  failures `Internal`, and an unavailable cloud `FailedPrecondition`. Exposed as
+  `ContactClient` and the nested `resoio contact` CLI
+  (`list` / `get` / `search` / `add` / `accept` / `remove`, each with
+  `--format human|json`)
 - **`Session` modality**: A new unary userspace modality that drives the dash
   "Session" dialog — the connected session's Settings, Users, and Permissions
   tabs — by reading/writing `World.Configuration` / `World.AllUsers` /

@@ -25,6 +25,7 @@ resoio --help
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Interactive REPL: browse (`ls`/`cd`), mutate (`mkdir`/`cp`/`mv`/`rm`), `spawn`, and `thumb` (save an item's thumbnail image). |
 | `resoio session` | Session | unary | Configure the connected session via nested subcommands: `settings get`/`set` (partial apply; `set --resonite-link` enables ResoniteLink — enable-only, the engine has no runtime disable), `users list`, `user kick`/`ban`/`silence`/`respawn`/`role` (target with `--id`/`--name`/`--self`; `respawn` defaults to self), `roles list`, `overrides list`. |
+| `resoio contact` | Contact | unary | Browse and manage contacts (friends) via nested subcommands: `list` (`--search` / `--filter all\|accepted\|requests`), `get`, `search` (`--exact`), `add` (`--username`), `accept`, `remove`. The mutating ops (`add` / `accept` / `remove`) write the real cloud contact list. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
 | `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
 | `resoio terminate` | Lifecycle | unary | **Deprecated** alias of `shutdown` (no longer maintained, removed in a future release). Behaves identically but prints a deprecation notice on stderr. |
@@ -85,6 +86,7 @@ resoio screenshot -o - | feh -
 resoio info --format json | jq .platform
 resoio world sessions --format json | jq '.[].name'
 resoio session users list --format json | jq '.[].user_name'
+resoio contact list --filter requests --format json | jq '.[].username'
 
 # Read the display settings, then cap the background fps
 resoio display get
