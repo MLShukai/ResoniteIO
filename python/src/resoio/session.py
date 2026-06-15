@@ -85,8 +85,9 @@ class KickKind(enum.Enum):
 class SessionSettings:
     """Snapshot of the current session settings (Settings tab).
 
-    ``session_id`` / ``is_host`` are read-only metadata; the rest mirror
-    the engine ``WorldConfiguration``.
+    ``session_id`` / ``is_host`` / ``resonite_link_enabled`` /
+    ``resonite_link_port`` are read-only metadata; the rest mirror the
+    engine ``WorldConfiguration``.
     """
 
     world_name: str
@@ -104,6 +105,8 @@ class SessionSettings:
     tags: tuple[str, ...]
     session_id: str
     is_host: bool
+    resonite_link_enabled: bool
+    resonite_link_port: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +219,8 @@ def _settings_from_proto(pb: _PbSessionSettings) -> SessionSettings:
         tags=tuple(pb.tags),
         session_id=pb.session_id,
         is_host=pb.is_host,
+        resonite_link_enabled=pb.resonite_link_enabled,
+        resonite_link_port=pb.resonite_link_port,
     )
 
 
@@ -311,6 +316,7 @@ class SessionClient(_BaseClient[SessionStub]):
         auto_cleanup_enabled: bool | None = None,
         auto_cleanup_interval_seconds: float | None = None,
         tags: Sequence[str] | None = None,
+        resonite_link_enabled: bool | None = None,
     ) -> None:
         """Patch the session settings; ``None`` kwargs are left unchanged.
 
@@ -320,6 +326,12 @@ class SessionClient(_BaseClient[SessionStub]):
         unchanged"); a concrete value sets it. ``tags`` is replace-all: pass
         a sequence to replace the tag set (empty clears it) or ``None`` to
         leave the tags untouched.
+
+        ``resonite_link_enabled=True`` starts the engine ResoniteLink
+        endpoint (host + ResoniteLink permission required; idempotent).
+        ``resonite_link_enabled=False`` is rejected by the server with gRPC
+        ``FailedPrecondition``: the engine exposes no runtime-disable API.
+        ``None`` leaves it unchanged.
 
         Returns ``None`` by contract: the engine applies settings on its own
         thread, so a post-apply snapshot is not reliable in the same RPC.
@@ -346,6 +358,7 @@ class SessionClient(_BaseClient[SessionStub]):
             auto_cleanup_interval_seconds=auto_cleanup_interval_seconds,
             replace_tags=tags is not None,
             tags=list(tags) if tags is not None else [],
+            resonite_link_enabled=resonite_link_enabled,
         )
         await stub.apply_settings(patch)
 

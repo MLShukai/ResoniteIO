@@ -9,8 +9,9 @@ namespace ResoniteIO.Core.Session;
 /// <see cref="ISessionBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
 /// Core 単体テストや session 非対応 engine 構成も成立させる (InventoryService と同 pattern)。
 /// 各 RPC は engine を知らず、proto を Core POCO に変換して bridge に渡すだけ。例外翻訳は
-/// <see cref="SessionNotReadyException"/> / <see cref="SessionAmbiguousUserException"/>
-/// → <c>FailedPrecondition</c>、<see cref="SessionUserNotFoundException"/> /
+/// <see cref="SessionNotReadyException"/> / <see cref="SessionAmbiguousUserException"/> /
+/// <see cref="SessionResoniteLinkException"/> → <c>FailedPrecondition</c>、
+/// <see cref="SessionUserNotFoundException"/> /
 /// <see cref="SessionRoleNotFoundException"/> → <c>NotFound</c>、
 /// <see cref="SessionPermissionDeniedException"/> → <c>PermissionDenied</c>、
 /// <see cref="ArgumentException"/> (max_users 範囲外) → <c>InvalidArgument</c>、その他 → <c>Internal</c>。
@@ -282,6 +283,15 @@ public sealed class SessionService : V1.Session.SessionBase
                     "role not found",
                     roleNotFound
                 );
+            case SessionResoniteLinkException resoniteLink:
+                return BridgeFault.Translate(
+                    _log,
+                    "Session",
+                    rpc,
+                    StatusCode.FailedPrecondition,
+                    "resonite link",
+                    resoniteLink
+                );
             case SessionPermissionDeniedException denied:
                 return BridgeFault.Translate(
                     _log,
@@ -345,6 +355,9 @@ public sealed class SessionService : V1.Session.SessionBase
                 ? request.AutoCleanupIntervalSeconds
                 : null,
             Tags = tags,
+            ResoniteLinkEnabled = request.HasResoniteLinkEnabled
+                ? request.ResoniteLinkEnabled
+                : (bool?)null,
         };
     }
 
@@ -371,6 +384,8 @@ public sealed class SessionService : V1.Session.SessionBase
             AutoCleanupIntervalSeconds = snapshot.AutoCleanupIntervalSeconds,
             SessionId = snapshot.SessionId,
             IsHost = snapshot.IsHost,
+            ResoniteLinkEnabled = snapshot.ResoniteLinkEnabled,
+            ResoniteLinkPort = snapshot.ResoniteLinkPort,
         };
         settings.Tags.AddRange(snapshot.Tags);
         return settings;
