@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://mlshukai.github.io/ResoniteIO/dev/architecture/overview/">
+        <link rel="canonical" href="https://mlshukai.github.io/ResoniteIO/dev/api/auth/">
       
       
-        <link rel="prev" href="../../getting-started/quickstart/">
+        <link rel="prev" href="../session/">
       
       
-        <link rel="next" href="../modalities/">
+        <link rel="next" href="../cursor/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Overview - ResoniteIO</title>
+        <title>Auth - ResoniteIO</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#architecture-overview" class="md-skip">
+        <a href="#auth" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Overview
+              Auth
             
           </span>
         </div>
@@ -272,13 +272,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../architecture/overview/" class="md-tabs__link">
           
   
   
@@ -315,11 +313,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../api/connection/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../connection/" class="md-tabs__link">
           
   
   
@@ -529,10 +529,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -546,22 +544,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
@@ -579,7 +574,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -594,37 +589,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Overview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../architecture/overview/" class="md-nav__link">
         
   
   
@@ -640,70 +608,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#why-grpc-over-uds" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why gRPC over UDS
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#proto-is-the-single-source-of-truth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        proto is the single source of truth
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#coremod-two-layer-design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Core/Mod two-layer design
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#timestamps-instead-of-a-global-clock" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Timestamps instead of a global clock
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -716,7 +620,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../modalities/" class="md-nav__link">
+      <a href="../../architecture/modalities/" class="md-nav__link">
         
   
   
@@ -744,7 +648,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../csharp-mod/" class="md-nav__link">
+      <a href="../../architecture/csharp-mod/" class="md-nav__link">
         
   
   
@@ -803,8 +707,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -844,19 +750,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
             
   
   
@@ -874,7 +783,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -892,7 +801,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/connection/" class="md-nav__link">
+      <a href="../connection/" class="md-nav__link">
         
   
   
@@ -920,7 +829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/info/" class="md-nav__link">
+      <a href="../info/" class="md-nav__link">
         
   
   
@@ -948,7 +857,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/camera/" class="md-nav__link">
+      <a href="../camera/" class="md-nav__link">
         
   
   
@@ -976,7 +885,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/speaker/" class="md-nav__link">
+      <a href="../speaker/" class="md-nav__link">
         
   
   
@@ -1004,7 +913,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/microphone/" class="md-nav__link">
+      <a href="../microphone/" class="md-nav__link">
         
   
   
@@ -1032,7 +941,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/locomotion/" class="md-nav__link">
+      <a href="../locomotion/" class="md-nav__link">
         
   
   
@@ -1060,7 +969,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/grabber/" class="md-nav__link">
+      <a href="../grabber/" class="md-nav__link">
         
   
   
@@ -1088,7 +997,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/display/" class="md-nav__link">
+      <a href="../display/" class="md-nav__link">
         
   
   
@@ -1116,7 +1025,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/world/" class="md-nav__link">
+      <a href="../world/" class="md-nav__link">
         
   
   
@@ -1144,7 +1053,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/context_menu/" class="md-nav__link">
+      <a href="../context_menu/" class="md-nav__link">
         
   
   
@@ -1172,7 +1081,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/dash/" class="md-nav__link">
+      <a href="../dash/" class="md-nav__link">
         
   
   
@@ -1200,7 +1109,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/inventory/" class="md-nav__link">
+      <a href="../inventory/" class="md-nav__link">
         
   
   
@@ -1228,7 +1137,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/session/" class="md-nav__link">
+      <a href="../session/" class="md-nav__link">
         
   
   
@@ -1253,10 +1162,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../api/auth/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1272,6 +1208,104 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AuthClient
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AuthClient">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        login
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.logout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        logout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resoio.auth.AuthStatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AuthStatus
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AuthStatus">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthStatus.session_expires" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session_expires
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1284,7 +1318,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/cursor/" class="md-nav__link">
+      <a href="../cursor/" class="md-nav__link">
         
   
   
@@ -1312,7 +1346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/lifecycle/" class="md-nav__link">
+      <a href="../lifecycle/" class="md-nav__link">
         
   
   
@@ -1367,46 +1401,80 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-grpc-over-uds" class="md-nav__link">
+  <a href="#resoio.auth.AuthClient" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why gRPC over UDS
+        AuthClient
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AuthClient">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        login
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#proto-is-the-single-source-of-truth" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.logout" class="md-nav__link">
     <span class="md-ellipsis">
       
-        proto is the single source of truth
+        logout
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#coremod-two-layer-design" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthClient.status" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Core/Mod two-layer design
+        status
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#timestamps-instead-of-a-global-clock" class="md-nav__link">
+  <a href="#resoio.auth.AuthStatus" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Timestamps instead of a global clock
+        AuthStatus
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="AuthStatus">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resoio.auth.AuthStatus.session_expires" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session_expires
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1430,69 +1498,329 @@
   
 
 
-<h1 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
-<p>ResoniteIO connects two processes — the Resonite client and your agent code — over gRPC on
-a Unix Domain Socket (UDS).</p>
-<pre class="mermaid"><code>flowchart LR
-    subgraph client["Resonite client (C#)"]
-        direction TB
-        bridge["ResoniteIO mod&lt;br/&gt;FrooxEngine&amp;lt;Modality&amp;gt;Bridge"]
-        core["ResoniteIO.Core&lt;br/&gt;gRPC server (Kestrel)&lt;br/&gt;&amp;lt;Modality&amp;gt;Service"]
-        bridge --- core
-    end
-    subgraph agent["Your agent (Python)"]
-        py["resoio&lt;br/&gt;&amp;lt;Modality&amp;gt;Client&lt;br/&gt;grpclib (async)"]
-    end
-    core &lt;--&gt;|"gRPC over UDS"| py</code></pre>
-<h2 id="why-grpc-over-uds">Why gRPC over UDS<a class="headerlink" href="#why-grpc-over-uds" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>gRPC</strong> gives a typed, multi-language contract with first-class streaming, which maps
-  cleanly onto the streaming modalities (Camera, Speaker, Microphone, Locomotion).</li>
-<li><strong>A Unix Domain Socket</strong> keeps the transport local and avoids exposing a TCP port. The
-  socket lives under <code>~/.resonite-io/</code> for production IPC and <code>~/.resonite-io-debug/</code> for the
-  debug bridge. (Under Steam/Proton, <code>/run/user/&lt;UID&gt;</code> and <code>/tmp</code> are not shared with the
-  game's filesystem namespace, which is why a <code>$HOME</code>-rooted path is used.)</li>
-</ul>
-<h2 id="proto-is-the-single-source-of-truth">proto is the single source of truth<a class="headerlink" href="#proto-is-the-single-source-of-truth" title="Permanent link">&para;</a></h2>
-<p>The wire contract lives in <code>proto/resonite_io/v1/*.proto</code>, one file per modality. Code is
-generated from it on both sides:</p>
-<ul>
-<li><strong>C#</strong>: generated at build time by <code>Grpc.Tools</code> (server stubs only; not committed).</li>
-<li><strong>Python</strong>: generated by <code>betterproto2</code> into <code>python/src/resoio/_generated/</code> and <strong>committed</strong>.</li>
-</ul>
-<p>Regenerate the Python side with <code>just gen-proto</code> whenever a <code>.proto</code> changes.</p>
-<h2 id="coremod-two-layer-design">Core/Mod two-layer design<a class="headerlink" href="#coremod-two-layer-design" title="Permanent link">&para;</a></h2>
-<p>The C# code is deliberately split so that almost all logic is testable without Resonite:</p>
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Project</th>
-<th>Responsibility</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Core</td>
-<td><code>ResoniteIO.Core</code></td>
-<td>gRPC server, <code>&lt;Modality&gt;Service</code>, proto mapping, domain logic. <strong>No Resonite dependency.</strong></td>
-</tr>
-<tr>
-<td>Mod</td>
-<td><code>ResoniteIO</code></td>
-<td>BepInEx plugin: starts the server on engine ready, and the <code>FrooxEngine&lt;Modality&gt;Bridge</code> engine adapters.</td>
-</tr>
-</tbody>
-</table>
-<p>The dependency direction is strictly <strong>Core ← Mod</strong>; Core never references the mod. Each
-service talks to the engine only through a <code>I&lt;Modality&gt;Bridge</code> interface, so Core tests can
-inject a fake bridge and exercise the full Kestrel round-trip over a real UDS. See the
-<a href="../csharp-mod/">C# Mod</a> page for details.</p>
-<h2 id="timestamps-instead-of-a-global-clock">Timestamps instead of a global clock<a class="headerlink" href="#timestamps-instead-of-a-global-clock" title="Permanent link">&para;</a></h2>
-<p>There is no global clock or barrier. Each stream stamps its frames with UTC nanoseconds
-(server-side <code>UnixNanosClock</code>), and any cross-modality synchronization is the receiver's
-responsibility. This keeps modalities fully independent — you can use just one without the
-others.</p>
+<h1 id="auth">Auth<a class="headerlink" href="#auth" title="Permanent link">&para;</a></h1>
+<div class="admonition example">
+<p class="admonition-title">Runnable example</p>
+<p><a href="https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/auth_status.py"><code>python/examples/auth_status.py</code></a> — read the current Resonite cloud auth state (signed-in user / session expiry), read-only.</p>
+</div>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="resoio.auth.AuthClient" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.auth.AuthClient</span>
+
+
+<a href="#resoio.auth.AuthClient" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">AuthClient</span><span class="p">(</span><span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="resoio._client._BaseClient">_BaseClient</span>[<span title="resoio._generated.resonite_io.v1.AuthStub">AuthStub</span>]</code></p>
+
+
+
+        <p>Async client for the Resonite IO <code>Auth</code> service over a UDS.</p>
+<p>Use as an async context manager so the gRPC channel closes
+deterministically.</p>
+<p>The password passed to :meth:<code>login</code> is a plaintext secret and is never
+logged. <code>remember_me=True</code> asks the engine to persist the session; this
+client itself stores nothing on disk.</p>
+
+
+
+
+
+
+
+
+                  <details class="mkdocstrings-source">
+                    <summary>Source code in <code>src/resoio/_client.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-181">181</a></span>
+<span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span>
+<span class="normal"><a href="#__codelineno-0-185">185</a></span>
+<span class="normal"><a href="#__codelineno-0-186">186</a></span>
+<span class="normal"><a href="#__codelineno-0-187">187</a></span>
+<span class="normal"><a href="#__codelineno-0-188">188</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="c1"># Defer resolution to __aenter__ so env vars patched between</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="c1"># construction and connection are honoured, and so resolution</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>    <span class="c1"># errors surface at the connect site.</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">socket_path</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Channel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_stub</span><span class="p">:</span> <span class="n">TStub</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_resolved_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.auth.AuthClient.login" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">login</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.auth.AuthClient.login" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">login</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">credential</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">totp</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">remember_me</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Sign in to Resonite cloud and return the resulting status.</p>
+<p><code>credential</code> is a username, email, or user ID (<code>U-xxx</code>);
+<code>password</code> is the plaintext secret (never logged). Pass <code>totp</code> for
+2FA-enabled accounts; omitting it on such an account makes the server
+return gRPC <code>FailedPrecondition</code>. Bad credentials return
+<code>Unauthenticated</code>. <code>remember_me=True</code> delegates session
+persistence to the engine.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/auth.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#__codelineno-0-114">114</a></span>
+<span class="normal"><a href="#__codelineno-0-115">115</a></span>
+<span class="normal"><a href="#__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#__codelineno-0-117">117</a></span>
+<span class="normal"><a href="#__codelineno-0-118">118</a></span>
+<span class="normal"><a href="#__codelineno-0-119">119</a></span>
+<span class="normal"><a href="#__codelineno-0-120">120</a></span>
+<span class="normal"><a href="#__codelineno-0-121">121</a></span>
+<span class="normal"><a href="#__codelineno-0-122">122</a></span>
+<span class="normal"><a href="#__codelineno-0-123">123</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-99" name="__codelineno-0-99"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">login</span><span class="p">(</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a>    <span class="n">credential</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>    <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>    <span class="n">totp</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="n">remember_me</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span><span class="p">:</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Sign in to Resonite cloud and return the resulting status.</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a><span class="sd">    ``credential`` is a username, email, or user ID (``U-xxx``);</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a><span class="sd">    ``password`` is the plaintext secret (never logged). Pass ``totp`` for</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a><span class="sd">    2FA-enabled accounts; omitting it on such an account makes the server</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a><span class="sd">    return gRPC ``FailedPrecondition``. Bad credentials return</span>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a><span class="sd">    ``Unauthenticated``. ``remember_me=True`` delegates session</span>
+<a id="__codelineno-0-114" name="__codelineno-0-114"></a><span class="sd">    persistence to the engine.</span>
+<a id="__codelineno-0-115" name="__codelineno-0-115"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-117" name="__codelineno-0-117"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">AuthLoginRequest</span><span class="p">(</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>        <span class="n">credential</span><span class="o">=</span><span class="n">credential</span><span class="p">,</span>
+<a id="__codelineno-0-119" name="__codelineno-0-119"></a>        <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span>
+<a id="__codelineno-0-120" name="__codelineno-0-120"></a>        <span class="n">totp</span><span class="o">=</span><span class="n">totp</span><span class="p">,</span>
+<a id="__codelineno-0-121" name="__codelineno-0-121"></a>        <span class="n">remember_me</span><span class="o">=</span><span class="n">remember_me</span><span class="p">,</span>
+<a id="__codelineno-0-122" name="__codelineno-0-122"></a>    <span class="p">)</span>
+<a id="__codelineno-0-123" name="__codelineno-0-123"></a>    <span class="k">return</span> <span class="n">_status_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.auth.AuthClient.logout" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">logout</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.auth.AuthClient.logout" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">logout</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Log out of the current session; returns the updated status.</p>
+<p>Idempotent: returns <code>logged_in=False</code> even if no session was active.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/auth.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-125">125</a></span>
+<span class="normal"><a href="#__codelineno-0-126">126</a></span>
+<span class="normal"><a href="#__codelineno-0-127">127</a></span>
+<span class="normal"><a href="#__codelineno-0-128">128</a></span>
+<span class="normal"><a href="#__codelineno-0-129">129</a></span>
+<span class="normal"><a href="#__codelineno-0-130">130</a></span>
+<span class="normal"><a href="#__codelineno-0-131">131</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">logout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span><span class="p">:</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Log out of the current session; returns the updated status.</span>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">    Idempotent: returns ``logged_in=False`` even if no session was active.</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a>    <span class="k">return</span> <span class="n">_status_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">logout</span><span class="p">(</span><span class="n">AuthLogoutRequest</span><span class="p">()))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.auth.AuthClient.status" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">status</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.auth.AuthClient.status" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">status</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the current authentication status without modifying it.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/auth.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-133">133</a></span>
+<span class="normal"><a href="#__codelineno-0-134">134</a></span>
+<span class="normal"><a href="#__codelineno-0-135">135</a></span>
+<span class="normal"><a href="#__codelineno-0-136">136</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-133" name="__codelineno-0-133"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthStatus</span><span class="p">:</span>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the current authentication status without modifying it.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a>    <span class="n">stub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_stub</span><span class="p">()</span>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a>    <span class="k">return</span> <span class="n">_status_from_proto</span><span class="p">(</span><span class="k">await</span> <span class="n">stub</span><span class="o">.</span><span class="n">status</span><span class="p">(</span><span class="n">AuthStatusRequest</span><span class="p">()))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="resoio.auth.AuthStatus" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">resoio.auth.AuthStatus</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#resoio.auth.AuthStatus" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">AuthStatus</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">logged_in</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">user_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">session_expires_unix_nanos</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Snapshot of the Resonite cloud authentication state.</p>
+<p><code>user_id</code> / <code>user_name</code> are empty and <code>session_expires_unix_nanos</code>
+is <code>0</code> when not logged in.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="resoio.auth.AuthStatus.session_expires" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">session_expires</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#resoio.auth.AuthStatus.session_expires" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">session_expires</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Session expiry as a timezone-aware UTC :class:<code>~datetime.datetime</code>.</p>
+<p><code>None</code> when not logged in or the expiry is unknown
+(<code>session_expires_unix_nanos</code> is <code>0</code>). Resolution is microseconds;
+use <code>session_expires_unix_nanos</code> for the exact nanosecond value.</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 
