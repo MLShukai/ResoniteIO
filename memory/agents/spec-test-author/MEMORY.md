@@ -12,3 +12,6 @@
 - [Engine 入力依存 RPC のテスト分担](pattern_engine_input_mode_tests.md) — fake は hit/miss を script のみ / mode 拒否は status+substring pin / 削除 flag は SystemExit pin / proto 欠番は reserved コメント
 - [Thumbnail RPC test pattern](pattern_thumbnail_rpc_tests.md) — `<Modality>Client.fetch_thumbnail` を real UDS で testする定型 (World を mirror); arg verbatim / empty content_type 許容 / not-connected
 - [betterproto test traps](feedback_betterproto_test_traps.md) — real-UDS test の 2 罠: all-default proto は falsy (`x or default` 厳禁) / proto `float` は float32 で 0.8→0.800000011920929
+- [Contact modality V1 proto type list](reference_contact_v1_types.md) — exact ResoniteIO.V1.\* reflection entries for Contact, for the ApiContract snapshot
+- [Core.Tests grpc gen split](feedback_core_tests_grpc_gen_split.md) — test asm gen Client stubs, Core src gen server +XxxBase; ApiContract pins Core asm
+- [Public vs wire enum pins](pattern_public_vs_wire_enum_pins.md) — re-export 型 enum は proto pin のみ、offset-fold 型は proto+api_contract 両方にピンする判定
