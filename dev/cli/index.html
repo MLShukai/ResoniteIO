@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -1251,6 +1253,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api/contact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contact
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api/auth/" class="md-nav__link">
         
   
@@ -1521,6 +1551,12 @@
 <td>Configure the connected session via nested subcommands: <code>settings get</code>/<code>set</code> (partial apply; <code>set --resonite-link</code> enables ResoniteLink — enable-only, the engine has no runtime disable), <code>users list</code>, <code>user kick</code>/<code>ban</code>/<code>silence</code>/<code>respawn</code>/<code>role</code> (target with <code>--id</code>/<code>--name</code>/<code>--self</code>; <code>respawn</code> defaults to self), <code>roles list</code>, <code>overrides list</code>.</td>
 </tr>
 <tr>
+<td><code>resoio contact</code></td>
+<td>Contact</td>
+<td>unary</td>
+<td>Browse and manage contacts (friends) via nested subcommands: <code>list</code> (<code>--search</code> / <code>--filter all\|accepted\|requests</code> / <code>--include-hidden</code>), <code>get</code>, <code>search</code> (<code>--exact</code>), <code>add</code> (<code>--username</code>), <code>accept</code>, <code>remove</code>. <code>list</code> hides dash-hidden (ignored / blocked) contacts by default; <code>--include-hidden</code> shows them. The mutating ops (<code>add</code> / <code>accept</code> / <code>remove</code>) write the real cloud contact list.</td>
+</tr>
+<tr>
 <td><code>resoio auth</code></td>
 <td>Auth</td>
 <td>unary</td>
@@ -1639,19 +1675,20 @@ accept <code>--format</code> (<code>grab interactive --format json</code> exits 
 <a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>resoio<span class="w"> </span>info<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.platform
 <a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>resoio<span class="w"> </span>world<span class="w"> </span>sessions<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].name&#39;</span>
 <a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>resoio<span class="w"> </span>session<span class="w"> </span>users<span class="w"> </span>list<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].user_name&#39;</span>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>
-<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="c1"># Read the display settings, then cap the background fps</span>
-<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>resoio<span class="w"> </span>display<span class="w"> </span>get
-<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>resoio<span class="w"> </span>display<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-fps<span class="w"> </span><span class="m">30</span>
-<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>
-<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a><span class="c1"># Aim with the held cursor, grab at the ray hit point, then release</span>
-<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
-<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>resoio<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
-<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
-<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
-<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>
-<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a><span class="c1"># Ask the engine to quit gracefully (prints the engine host PID)</span>
-<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a>resoio<span class="w"> </span>shutdown
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>resoio<span class="w"> </span>contact<span class="w"> </span>list<span class="w"> </span>--filter<span class="w"> </span>requests<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].username&#39;</span>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="c1"># Read the display settings, then cap the background fps</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>resoio<span class="w"> </span>display<span class="w"> </span>get
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>resoio<span class="w"> </span>display<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-fps<span class="w"> </span><span class="m">30</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a><span class="c1"># Aim with the held cursor, grab at the ray hit point, then release</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>resoio<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
+<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a>
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="c1"># Ask the engine to quit gracefully (prints the engine host PID)</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>resoio<span class="w"> </span>shutdown
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>
