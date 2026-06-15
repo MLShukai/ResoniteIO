@@ -32,6 +32,10 @@ import pytest
 
 from resoio._generated.resonite_io.v1 import (
     AudioFrame,
+    AuthLoginRequest,
+    AuthLogoutRequest,
+    AuthStatus,
+    AuthStatusRequest,
     BanUserRequest,
     CameraFrame,
     CameraFrameFormat,
@@ -419,6 +423,24 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     PingResponse: {
         "message": 1,
         "server_unix_nanos": 2,
+    },
+    # Auth. `password` (field 2) is a plaintext secret on the wire; `totp`
+    # (field 3) is proto3 `optional` so its absence is distinct from an empty
+    # code. The C# peer maps Engine.Cloud.Session onto AuthStatus; renumbering
+    # silently misreports the auth state to old clients.
+    AuthLoginRequest: {
+        "credential": 1,
+        "password": 2,
+        "totp": 3,
+        "remember_me": 4,
+    },
+    AuthLogoutRequest: {},
+    AuthStatusRequest: {},
+    AuthStatus: {
+        "logged_in": 1,
+        "user_id": 2,
+        "user_name": 3,
+        "session_expires_unix_nanos": 4,
     },
     # Info
     GetServerInfoRequest: {},
