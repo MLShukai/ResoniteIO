@@ -38,15 +38,19 @@ public sealed class ContactService : V1.Contact.ContactBase
             )
             .ConfigureAwait(false);
 
+        // dash の Contacts タブが隠す連絡先 (None / Ignored / Blocked) は include_hidden=true
+        // でない限り除外する。counts は除外前の総数なので上書きしない。
+        IEnumerable<ContactSnapshot> contacts = request.IncludeHidden
+            ? snapshot.Contacts
+            : snapshot.Contacts.Where(c => !c.IsHidden);
+
         // filter は Service 側で適用する。Accepted=承認済みのみ、Requests=受信リクエストのみ、
         // Unspecified=全件。counts は filter / search 前の総数なので上書きしない。
-        IEnumerable<ContactSnapshot> contacts = request.Filter switch
+        contacts = request.Filter switch
         {
-            V1.ContactFilter.Accepted => snapshot.Contacts.Where(c =>
-                c.Status == ContactStatus.Accepted
-            ),
-            V1.ContactFilter.Requests => snapshot.Contacts.Where(c => c.IsContactRequest),
-            _ => snapshot.Contacts,
+            V1.ContactFilter.Accepted => contacts.Where(c => c.Status == ContactStatus.Accepted),
+            V1.ContactFilter.Requests => contacts.Where(c => c.IsContactRequest),
+            _ => contacts,
         };
 
         // search が非空なら username / alternate_usernames に部分一致するものだけ残す。
@@ -231,6 +235,7 @@ public sealed class ContactService : V1.Contact.ContactBase
             OnlineStatus = MapOnline(s.OnlineStatus),
             CurrentSessionName = s.CurrentSessionName,
             CurrentSessionAccessLevel = s.CurrentSessionAccessLevel,
+            IsHidden = s.IsHidden,
         };
         info.AlternateUsernames.AddRange(s.AlternateUsernames);
         return info;

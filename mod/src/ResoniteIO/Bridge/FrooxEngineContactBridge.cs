@@ -263,7 +263,8 @@ internal sealed class FrooxEngineContactBridge : IContactBridge
                 IsContactRequest: false,
                 OnlineStatus: CoreOnlineStatus.Offline,
                 CurrentSessionName: string.Empty,
-                CurrentSessionAccessLevel: string.Empty
+                CurrentSessionAccessLevel: string.Empty,
+                IsHidden: false
             );
         }
         return BuildSnapshot(contact, FindContactData(contacts, userId));
@@ -320,7 +321,8 @@ internal sealed class FrooxEngineContactBridge : IContactBridge
             IsContactRequest: contact.IsContactRequest,
             OnlineStatus: MapOnline(online),
             CurrentSessionName: sessionName,
-            CurrentSessionAccessLevel: sessionAccessLevel
+            CurrentSessionAccessLevel: sessionAccessLevel,
+            IsHidden: contact.ShouldBeHidden
         );
     }
 

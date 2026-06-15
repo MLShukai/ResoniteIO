@@ -72,6 +72,12 @@ def _register_list(
         default="all",
         help="Contact filter (default: all).",
     )
+    parser.add_argument(
+        "--include-hidden",
+        action="store_true",
+        dest="include_hidden",
+        help="Include dash-hidden contacts (ignored / blocked).",
+    )
     parser.set_defaults(func=_run_list)
 
 
@@ -216,7 +222,11 @@ async def _run_list(args: argparse.Namespace) -> int:
 
     filter_value = ContactFilter[_CONTACT_FILTER_BY_NAME[args.filter]]
     async with ContactClient(args.socket) as client:
-        resp = await client.list_contacts(search=args.search, filter=filter_value)
+        resp = await client.list_contacts(
+            search=args.search,
+            filter=filter_value,
+            include_hidden=args.include_hidden,
+        )
     if output.is_structured(args.format):
         output.emit(resp.contacts, args.format)
     else:

@@ -918,6 +918,12 @@ class ContactInfo(betterproto2.Message):
     現在参加中セッションの公開レベル名 (例 "Private" / "Anyone")。不明なら空。
     """
 
+    is_hidden: "bool" = betterproto2.field(10, betterproto2.TYPE_BOOL)
+    """
+    dash の Contacts タブが非表示にする連絡先 (None / Ignored / Blocked 等、
+    engine の Contact.ShouldBeHidden)。ListContacts は既定でこれらを除外する。
+    """
+
 
 default_message_pool.register_message("resonite_io.v1", "ContactInfo", ContactInfo)
 
@@ -2063,6 +2069,12 @@ class ListContactsRequest(betterproto2.Message):
     filter: "ContactFilter" = betterproto2.field(
         2, betterproto2.TYPE_ENUM, default_factory=lambda: ContactFilter(0)
     )
+
+    include_hidden: "bool" = betterproto2.field(3, betterproto2.TYPE_BOOL)
+    """
+    true なら dash タブが隠す連絡先 (None / Ignored / Blocked = ShouldBeHidden)
+    も含める。既定 (false) は dash の Contacts タブと同じく非表示にする。
+    """
 
 
 default_message_pool.register_message(

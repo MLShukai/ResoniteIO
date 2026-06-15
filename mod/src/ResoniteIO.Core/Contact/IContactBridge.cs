@@ -32,7 +32,9 @@ public sealed record ContactSnapshot(
     bool IsContactRequest,
     OnlineStatus OnlineStatus,
     string CurrentSessionName,
-    string CurrentSessionAccessLevel
+    string CurrentSessionAccessLevel,
+    /// <summary>dash の Contacts タブで非表示になる対象か (engine <c>Contact.ShouldBeHidden</c>: None / Ignored / Blocked)。</summary>
+    bool IsHidden
 );
 
 /// <summary>連絡先一覧 + ContactManager のカウントの snapshot (proto ListContactsResponse 由来)。</summary>

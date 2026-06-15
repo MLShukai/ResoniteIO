@@ -59,6 +59,9 @@ message ContactInfo {
   string current_session_name = 8;
   // 現在参加中セッションの公開レベル名 (例 "Private" / "Anyone")。不明なら空。
   string current_session_access_level = 9;
+  // dash の Contacts タブが非表示にする連絡先 (None / Ignored / Blocked 等、
+  // engine の Contact.ShouldBeHidden)。ListContacts は既定でこれらを除外する。
+  bool is_hidden = 10;
 }
 
 // ユーザー検索結果 1 件 (連絡先化される前のユーザー)。
@@ -72,6 +75,9 @@ message ListContactsRequest {
   // username 部分一致 (大文字小文字無視、Service 側でフィルタ)。空なら全件。
   string search = 1;
   ContactFilter filter = 2;
+  // true なら dash タブが隠す連絡先 (None / Ignored / Blocked = ShouldBeHidden)
+  // も含める。既定 (false) は dash の Contacts タブと同じく非表示にする。
+  bool include_hidden = 3;
 }
 
 message ListContactsResponse {

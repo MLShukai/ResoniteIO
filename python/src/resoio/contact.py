@@ -103,12 +103,19 @@ class ContactClient(_BaseClient[ContactStub]):
         *,
         search: str = "",
         filter: ContactFilter = ContactFilter.ALL,
+        include_hidden: bool = False,
     ) -> ListContactsResponse:
-        """List contacts with presence (search / filter applied mod-side)."""
+        """List contacts with presence (search / filter applied mod-side).
+
+        By default this hides the same contacts the in-game dash Contacts
+        tab hides (ignored / blocked); pass ``include_hidden=True`` to
+        return every contact regardless.
+        """
         stub = self._require_stub()
         request = ListContactsRequest(
             search=search,
             filter=_CONTACT_FILTER_TO_WIRE[filter],
+            include_hidden=include_hidden,
         )
         return await stub.list_contacts(request)
 
