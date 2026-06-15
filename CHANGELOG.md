@@ -45,12 +45,13 @@ GitHub Release body. The format follows
   engine is reachable
 - **`resoio --format human|json`**: Commands that return structured data
   (`ping`, `info`, `display`, `cursor`, `grab`, `context-menu`, `dash`, `world`,
-  `mic`) gained a `--format` flag. `human` (default) keeps the existing text
-  output unchanged; `json` prints one machine-readable document to stdout (proto
-  field names in snake_case, enums as their name, big ints exact, non-ASCII
-  preserved). `--format` is not added to pid/path-only commands
-  (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`) or
-  interactive commands (`drive` / `grab interactive` / `inventory`)
+  `mic`, `session`) gained a `--format` flag. `human` (default) keeps the
+  existing text output unchanged; `json` prints one machine-readable document to
+  stdout (proto field names in snake_case, enums as their name, big ints exact,
+  non-ASCII preserved). `--format` is not added to pid/path-only commands
+  (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`),
+  interactive commands (`drive` / `grab interactive` / `inventory`), or the
+  side-effect-only `session user kick` / `ban` / `respawn` leaves
 
 ### Changed
 
