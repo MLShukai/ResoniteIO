@@ -13,6 +13,7 @@ using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Lifecycle;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Microphone;
+using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 
 namespace ResoniteIO.Core.Tests.Common;
@@ -59,6 +60,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null,
+        ISessionBridge? sessionBridge = null,
         ILifecycleBridge? lifecycleBridge = null
     ) =>
         StartAsync(
@@ -75,6 +77,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
             inventoryBridge,
             cursorBridge,
             infoBridge,
+            sessionBridge,
             lifecycleBridge
         );
 
@@ -92,6 +95,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null,
+        ISessionBridge? sessionBridge = null,
         ILifecycleBridge? lifecycleBridge = null
     )
     {
@@ -117,6 +121,7 @@ internal sealed class GrpcHostHarness : IAsyncDisposable
                 inventoryBridge: inventoryBridge,
                 cursorBridge: cursorBridge,
                 infoBridge: infoBridge,
+                sessionBridge: sessionBridge,
                 lifecycleBridge: lifecycleBridge
             );
         }

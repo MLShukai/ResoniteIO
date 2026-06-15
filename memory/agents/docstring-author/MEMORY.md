@@ -3,3 +3,5 @@
 - [resonite-io doc conventions](doc_conventions.md) — C# XML doc is Japanese / Python English; docs/api pages render per-symbol only (module docstrings invisible on site); `:class:` role style.
 - [Examples drift after breaking changes](project_examples_drift.md) — python/examples/ scripts get missed; check them, report logic fixes.
 - [Doc verification pass pattern](feedback_doc_pass_pattern.md) — source docs follow spec verbatim; effort goes to docs/ pages + examples; no Bash here.
+- [C# RPC override doc altitude](feedback_csharp_override_doc_altitude.md) — Core Service RPC overrides carry NO `<summary>`; only class + conversion helpers do (no CS1591).
+- [Modality client class contracts](feedback_modality_client_class_contracts.md) — hoist shared targeting/permission/statelessness contracts to the class/module docstring, not per method.

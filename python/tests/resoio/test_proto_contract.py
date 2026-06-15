@@ -32,6 +32,7 @@ import pytest
 
 from resoio._generated.resonite_io.v1 import (
     AudioFrame,
+    BanUserRequest,
     CameraFrame,
     CameraFrameFormat,
     CameraStreamRequest,
@@ -70,6 +71,7 @@ from resoio._generated.resonite_io.v1 import (
     GetCurrentRequest,
     GetCurrentResponse,
     GetServerInfoRequest,
+    GetUserRoleOverridesResponse,
     GrabberGetStateRequest,
     GrabberGrabRequest,
     GrabberGrabResult,
@@ -89,14 +91,18 @@ from resoio._generated.resonite_io.v1 import (
     InventorySpawnResult,
     JoinRequest,
     JoinResponse,
+    KickKind,
+    KickUserRequest,
     LeaveRequest,
     LeaveResponse,
     ListOpenWorldsRequest,
     ListOpenWorldsResponse,
     ListRecordsRequest,
     ListRecordsResponse,
+    ListRolesResponse,
     ListSessionsRequest,
     ListSessionsResponse,
+    ListUsersResponse,
     LocomotionCommand,
     LocomotionDriveSummary,
     LocomotionResetRequest,
@@ -111,12 +117,23 @@ from resoio._generated.resonite_io.v1 import (
     RecordSource,
     ServerInfo,
     ServerPlatform,
+    SessionAccessLevel,
     SessionFilter,
+    SessionRole,
+    SessionSettings,
+    SessionSettingsPatch,
+    SessionUser,
+    SetUserRoleRequest,
+    SetUserRoleResponse,
     ShutdownRequest,
     ShutdownResponse,
+    SilenceUserRequest,
+    SilenceUserResponse,
     SpeakerStreamRequest,
     StartWorldRequest,
     StartWorldResponse,
+    UserRoleOverride,
+    UserTarget,
     WorldRecord,
     WorldSession,
 )
@@ -527,6 +544,109 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "data": 1,
         "content_type": 2,
     },
+    # Session. SessionSettings (GetSettings snapshot) and SessionSettingsPatch
+    # (ApplySettings partial update) intentionally share field numbers 1-12 for
+    # the same logical fields so the two messages stay readable side by side;
+    # only tags differs (Settings uses a single `tags=13`, the Patch adds a
+    # `replace_tags=13` gate and shifts `tags` to 14 for replace-all semantics).
+    SessionSettings: {
+        "world_name": 1,
+        "world_description": 2,
+        "max_users": 3,
+        "access_level": 4,
+        "hide_from_listing": 5,
+        "mobile_friendly": 6,
+        "away_kick_enabled": 7,
+        "away_kick_minutes": 8,
+        "auto_save_enabled": 9,
+        "auto_save_interval_minutes": 10,
+        "auto_cleanup_enabled": 11,
+        "auto_cleanup_interval_seconds": 12,
+        "tags": 13,
+        "session_id": 14,
+        "is_host": 15,
+        "resonite_link_enabled": 16,
+        "resonite_link_port": 17,
+    },
+    SessionSettingsPatch: {
+        "world_name": 1,
+        "world_description": 2,
+        "max_users": 3,
+        "access_level": 4,
+        "hide_from_listing": 5,
+        "mobile_friendly": 6,
+        "away_kick_enabled": 7,
+        "away_kick_minutes": 8,
+        "auto_save_enabled": 9,
+        "auto_save_interval_minutes": 10,
+        "auto_cleanup_enabled": 11,
+        "auto_cleanup_interval_seconds": 12,
+        "replace_tags": 13,
+        "tags": 14,
+        "resonite_link_enabled": 15,
+    },
+    SessionUser: {
+        "user_id": 1,
+        "user_name": 2,
+        "is_host": 3,
+        "is_local_user": 4,
+        "is_present_in_world": 5,
+        "is_silenced": 6,
+        "local_volume": 7,
+        "role_name": 8,
+        "platform": 9,
+        "head_device": 10,
+    },
+    UserTarget: {
+        "user_id": 1,
+        "user_name": 2,
+        "local": 3,
+    },
+    ListUsersResponse: {
+        "users": 1,
+    },
+    KickUserRequest: {
+        "target": 1,
+        "kind": 2,
+    },
+    BanUserRequest: {
+        "target": 1,
+    },
+    SilenceUserRequest: {
+        "target": 1,
+        "silenced": 2,
+    },
+    SilenceUserResponse: {
+        "user": 1,
+    },
+    SetUserRoleRequest: {
+        "target": 1,
+        "role_name": 2,
+    },
+    SetUserRoleResponse: {
+        "user": 1,
+    },
+    SessionRole: {
+        "role_name": 1,
+        "role_description": 2,
+        "is_highest": 3,
+        "is_lowest": 4,
+    },
+    ListRolesResponse: {
+        "roles": 1,
+        "default_anonymous_role": 2,
+        "default_visitor_role": 3,
+        "default_contact_role": 4,
+        "default_host_role": 5,
+        "default_owner_role": 6,
+    },
+    UserRoleOverride: {
+        "user_id": 1,
+        "role_name": 2,
+    },
+    GetUserRoleOverridesResponse: {
+        "overrides": 1,
+    },
 }
 
 
@@ -611,6 +731,26 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "UNSPECIFIED": 0,
         "DESCENDING": 1,
         "ASCENDING": 2,
+    },
+    # Session wire enums. Like the World enums these carry an extra
+    # UNSPECIFIED=0 slot the public resoio enums omit (SessionAccessLevel maps
+    # UNSPECIFIED -> "leave unchanged" on ApplySettings; KickKind maps it to the
+    # engine default). The C# peer maps SkyFrost.Base.SessionAccessLevel /
+    # KickRequestState onto these values, so renumbering silently misinterprets
+    # historical wire data on the consumer.
+    SessionAccessLevel: {
+        "UNSPECIFIED": 0,
+        "PRIVATE": 1,
+        "LAN": 2,
+        "CONTACTS": 3,
+        "CONTACTS_PLUS": 4,
+        "REGISTERED_USERS": 5,
+        "ANYONE": 6,
+    },
+    KickKind: {
+        "UNSPECIFIED": 0,
+        "KICK": 1,
+        "KICK_AND_REVOKE": 2,
     },
 }
 

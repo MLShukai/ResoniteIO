@@ -17,6 +17,7 @@ using ResoniteIO.Core.Lifecycle;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Microphone;
+using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
 
@@ -93,6 +94,7 @@ public sealed class GrpcHost : IAsyncDisposable
         IInventoryBridge? inventoryBridge = null,
         ICursorBridge? cursorBridge = null,
         IInfoBridge? infoBridge = null,
+        ISessionBridge? sessionBridge = null,
         ILifecycleBridge? lifecycleBridge = null
     )
     {
@@ -148,6 +150,7 @@ public sealed class GrpcHost : IAsyncDisposable
         Register(grabberBridge, "Grabber");
         Register(inventoryBridge, "Inventory");
         Register(cursorBridge, "Cursor");
+        Register(sessionBridge, "Session");
         Register(lifecycleBridge, "Lifecycle");
 
         builder.WebHost.ConfigureKestrel(opts =>
@@ -172,6 +175,7 @@ public sealed class GrpcHost : IAsyncDisposable
         app.MapGrpcService<GrabberService>();
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();
+        app.MapGrpcService<SessionService>();
         app.MapGrpcService<LifecycleService>();
 
         log.LogInfo($"GrpcHost binding UDS at {socketPath}");

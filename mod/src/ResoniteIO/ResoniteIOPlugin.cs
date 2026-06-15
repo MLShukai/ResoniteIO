@@ -63,6 +63,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineWorldBridge? _worldBridge;
     private FrooxEngineInventoryBridge? _inventoryBridge;
     private FrooxEngineCursorBridge? _cursorBridge;
+    private FrooxEngineSessionBridge? _sessionBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -141,6 +142,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _cursorBridge = new FrooxEngineCursorBridge(Engine.Current, _logSink);
 
+            _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
+
             _grpcHost = GrpcHost.Start(
                 _logSink,
                 _hostCts.Token,
@@ -156,6 +159,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 grabberBridge: _grabberBridge,
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge,
+                sessionBridge: _sessionBridge,
                 infoBridge: _infoBridge,
                 lifecycleBridge: _lifecycleBridge
             );
@@ -233,6 +237,11 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // GrpcHost を畳む前に Dispose して lock 解除の queue + unpatch を行う。
         SafeDispose(_cursorBridge, nameof(_cursorBridge));
         _cursorBridge = null;
+
+        // SessionBridge も engine 状態を保持せず (manager 参照を読むだけ、event 購読無し、
+        // dispatch は world.RunSynchronously の one-shot)、IDisposable でもないため
+        // 参照 null 化のみで足りる。
+        _sessionBridge = null;
 
         // InfoBridge は ctor で確定した不変 snapshot を返すだけ (event 購読無し、
         // IDisposable でもない) ため、参照 null 化のみで足りる。

@@ -108,6 +108,7 @@ nav:
       - Context Menu: api/context_menu.md
       - Dash: api/dash.md
       - Inventory: api/inventory.md
+      - Session: api/session.md
       - Cursor: api/cursor.md
       - Lifecycle: api/lifecycle.md
 

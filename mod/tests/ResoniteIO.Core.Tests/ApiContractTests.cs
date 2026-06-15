@@ -12,6 +12,7 @@ using ResoniteIO.Core.Inventory;
 using ResoniteIO.Core.Locomotion;
 using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Microphone;
+using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Speaker;
 using ResoniteIO.Core.World;
 using Xunit;
@@ -134,6 +135,23 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Microphone.MicrophoneFrame",
             "ResoniteIO.Core.Microphone.MicrophoneNotReadyException",
             "ResoniteIO.Core.Microphone.MicrophoneService",
+            "ResoniteIO.Core.Session.ISessionBridge",
+            "ResoniteIO.Core.Session.KickKind",
+            "ResoniteIO.Core.Session.SessionAccessLevel",
+            "ResoniteIO.Core.Session.SessionAmbiguousUserException",
+            "ResoniteIO.Core.Session.SessionNotReadyException",
+            "ResoniteIO.Core.Session.SessionPermissionDeniedException",
+            "ResoniteIO.Core.Session.SessionResoniteLinkException",
+            "ResoniteIO.Core.Session.SessionRoleNotFoundException",
+            "ResoniteIO.Core.Session.SessionRoleSnapshot",
+            "ResoniteIO.Core.Session.SessionRolesSnapshot",
+            "ResoniteIO.Core.Session.SessionService",
+            "ResoniteIO.Core.Session.SessionSettingsPatchSnapshot",
+            "ResoniteIO.Core.Session.SessionSettingsSnapshot",
+            "ResoniteIO.Core.Session.SessionUserNotFoundException",
+            "ResoniteIO.Core.Session.SessionUserSnapshot",
+            "ResoniteIO.Core.Session.UserRoleOverrideSnapshot",
+            "ResoniteIO.Core.Session.UserTargetSpec",
             "ResoniteIO.Core.Speaker.AudioFrame",
             "ResoniteIO.Core.Speaker.ISpeakerBridge",
             "ResoniteIO.Core.Speaker.PushedAudioFrameSpeakerBridge",
@@ -185,7 +203,10 @@ public sealed class ApiContractTests
 
         var expected = new[]
         {
+            "ResoniteIO.V1.ApplySettingsResponse",
             "ResoniteIO.V1.AudioFrame",
+            "ResoniteIO.V1.BanUserRequest",
+            "ResoniteIO.V1.BanUserResponse",
             "ResoniteIO.V1.Camera",
             "ResoniteIO.V1.Camera+CameraBase",
             "ResoniteIO.V1.CameraFrame",
@@ -245,6 +266,9 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.GetCurrentRequest",
             "ResoniteIO.V1.GetCurrentResponse",
             "ResoniteIO.V1.GetServerInfoRequest",
+            "ResoniteIO.V1.GetSettingsRequest",
+            "ResoniteIO.V1.GetUserRoleOverridesRequest",
+            "ResoniteIO.V1.GetUserRoleOverridesResponse",
             "ResoniteIO.V1.Grabber",
             "ResoniteIO.V1.Grabber+GrabberBase",
             "ResoniteIO.V1.GrabberGetStateRequest",
@@ -275,6 +299,9 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.InventoryThumbnailResponse",
             "ResoniteIO.V1.JoinRequest",
             "ResoniteIO.V1.JoinResponse",
+            "ResoniteIO.V1.KickKind",
+            "ResoniteIO.V1.KickUserRequest",
+            "ResoniteIO.V1.KickUserResponse",
             "ResoniteIO.V1.LeaveRequest",
             "ResoniteIO.V1.LeaveResponse",
             "ResoniteIO.V1.Lifecycle",
@@ -284,8 +311,12 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.ListOpenWorldsResponse",
             "ResoniteIO.V1.ListRecordsRequest",
             "ResoniteIO.V1.ListRecordsResponse",
+            "ResoniteIO.V1.ListRolesRequest",
+            "ResoniteIO.V1.ListRolesResponse",
             "ResoniteIO.V1.ListSessionsRequest",
             "ResoniteIO.V1.ListSessionsResponse",
+            "ResoniteIO.V1.ListUsersRequest",
+            "ResoniteIO.V1.ListUsersResponse",
             "ResoniteIO.V1.Locomotion",
             "ResoniteIO.V1.Locomotion+LocomotionBase",
             "ResoniteIO.V1.LocomotionCommand",
@@ -304,17 +335,33 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.RecordSort",
             "ResoniteIO.V1.RecordSortDirection",
             "ResoniteIO.V1.RecordSource",
+            "ResoniteIO.V1.RespawnUserRequest",
+            "ResoniteIO.V1.RespawnUserResponse",
             "ResoniteIO.V1.ServerInfo",
             "ResoniteIO.V1.ServerPlatform",
+            "ResoniteIO.V1.Session",
+            "ResoniteIO.V1.Session+SessionBase",
+            "ResoniteIO.V1.SessionAccessLevel",
             "ResoniteIO.V1.SessionFilter",
+            "ResoniteIO.V1.SessionReflection",
+            "ResoniteIO.V1.SessionRole",
+            "ResoniteIO.V1.SessionSettings",
+            "ResoniteIO.V1.SessionSettingsPatch",
+            "ResoniteIO.V1.SessionUser",
+            "ResoniteIO.V1.SetUserRoleRequest",
+            "ResoniteIO.V1.SetUserRoleResponse",
             "ResoniteIO.V1.ShutdownRequest",
             "ResoniteIO.V1.ShutdownResponse",
+            "ResoniteIO.V1.SilenceUserRequest",
+            "ResoniteIO.V1.SilenceUserResponse",
             "ResoniteIO.V1.Speaker",
             "ResoniteIO.V1.Speaker+SpeakerBase",
             "ResoniteIO.V1.SpeakerReflection",
             "ResoniteIO.V1.SpeakerStreamRequest",
             "ResoniteIO.V1.StartWorldRequest",
             "ResoniteIO.V1.StartWorldResponse",
+            "ResoniteIO.V1.UserRoleOverride",
+            "ResoniteIO.V1.UserTarget",
             "ResoniteIO.V1.World",
             "ResoniteIO.V1.World+WorldBase",
             "ResoniteIO.V1.WorldRecord",
@@ -410,6 +457,11 @@ public sealed class ApiContractTests
     [InlineData(typeof(GrabberNotReadyException))]
     [InlineData(typeof(WorldNotReadyException))]
     [InlineData(typeof(WorldNotFoundException))]
+    [InlineData(typeof(SessionNotReadyException))]
+    [InlineData(typeof(SessionUserNotFoundException))]
+    [InlineData(typeof(SessionAmbiguousUserException))]
+    [InlineData(typeof(SessionPermissionDeniedException))]
+    [InlineData(typeof(SessionRoleNotFoundException))]
     [Trait("Category", "ApiContract")]
     public void PublicNotReadyException_DerivesDirectlyFromException(Type exceptionType)
     {
@@ -634,6 +686,72 @@ public sealed class ApiContractTests
             ("LeaveAsync", new[] { typeof(int), typeof(CancellationToken) }),
             ("GetCurrentAsync", new[] { typeof(CancellationToken) }),
             ("FetchThumbnailAsync", new[] { typeof(string), typeof(CancellationToken) })
+        );
+    }
+
+    /// <summary>
+    /// <c>Session</c> service が宣言する RPC 名一覧を固定する。RPC のリネーム / 追加 / 削除を
+    /// wire 契約破壊として検出する (3 タブ = Settings / Users / Permissions に対応する 10 RPC)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void Session_Service_DeclaresExpectedRpcs()
+    {
+        var methodNames = ResoniteIO
+            .V1.SessionReflection.Descriptor.Services.Single(s => s.Name == "Session")
+            .Methods.Select(m => m.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "ApplySettings",
+                "BanUser",
+                "GetSettings",
+                "GetUserRoleOverrides",
+                "KickUser",
+                "ListRoles",
+                "ListUsers",
+                "RespawnUser",
+                "SetUserRole",
+                "SilenceUser",
+            },
+            methodNames
+        );
+    }
+
+    /// <summary>
+    /// <see cref="ISessionBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void ISessionBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(ISessionBridge),
+            ("GetSettingsAsync", new[] { typeof(CancellationToken) }),
+            (
+                "ApplySettingsAsync",
+                new[] { typeof(SessionSettingsPatchSnapshot), typeof(CancellationToken) }
+            ),
+            ("ListUsersAsync", new[] { typeof(CancellationToken) }),
+            (
+                "KickUserAsync",
+                new[] { typeof(UserTargetSpec), typeof(KickKind), typeof(CancellationToken) }
+            ),
+            ("BanUserAsync", new[] { typeof(UserTargetSpec), typeof(CancellationToken) }),
+            (
+                "SilenceUserAsync",
+                new[] { typeof(UserTargetSpec), typeof(bool), typeof(CancellationToken) }
+            ),
+            ("RespawnUserAsync", new[] { typeof(UserTargetSpec), typeof(CancellationToken) }),
+            (
+                "SetUserRoleAsync",
+                new[] { typeof(UserTargetSpec), typeof(string), typeof(CancellationToken) }
+            ),
+            ("ListRolesAsync", new[] { typeof(CancellationToken) }),
+            ("GetUserRoleOverridesAsync", new[] { typeof(CancellationToken) })
         );
     }
 
