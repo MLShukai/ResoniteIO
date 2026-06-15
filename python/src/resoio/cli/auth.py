@@ -110,7 +110,7 @@ def _resolve_credential(positional: str | None) -> str | None:
     """Resolve the login credential.
 
     The positional wins when given. Otherwise, if stdin is a tty, prompt
-    ``Username: ``. With no positional and a non-tty stdin there is no way to
+    ``Username or Email: ``. With no positional and a non-tty stdin there is no way to
     obtain it (stdin is reserved for the password), so return ``None`` and let
     the caller error with exit 2.
     """
@@ -119,7 +119,7 @@ def _resolve_credential(positional: str | None) -> str | None:
     if sys.stdin.isatty():
         # プロンプト文字列は stderr に出す (stdout は結果 payload 専用。--format json の
         # 1 ドキュメント契約を壊さないため)。
-        print("Username: ", end="", file=sys.stderr, flush=True)
+        print("Username or Email: ", end="", file=sys.stderr, flush=True)
         try:
             return input()
         except EOFError:
