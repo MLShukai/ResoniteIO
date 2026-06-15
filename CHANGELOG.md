@@ -9,6 +9,33 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **`Session` modality**: A new unary userspace modality that drives the dash
+  "Session" dialog — the connected session's Settings, Users, and Permissions
+  tabs — by reading/writing `World.Configuration` / `World.AllUsers` /
+  `World.Permissions` directly (no UI automation). Settings use a get +
+  partial-apply model (`GetSettings` / `ApplySettings`): world name/description,
+  max users, access level, hide-from-listing, mobile-friendly, away-kick,
+  auto-save, auto-cleanup, and tags. Partial updates use `proto3 optional`
+  presence, so `false` / `0` can be set explicitly and unset fields are left
+  untouched (`tags` use a `replace_tags` gate); `ApplySettings` returns nothing —
+  call `GetSettings` to read the new state. Users expose `ListUsers` plus
+  host-gated `KickUser` / `BanUser` / `SilenceUser` / `RespawnUser` /
+  `SetUserRole`; targets resolve by `user_id` (preferred), `user_name`, or
+  `local` (self), and `respawn` defaults to self. Permissions expose `ListRoles`
+  (with the default anonymous/visitor/contact/host/owner roles) and
+  `GetUserRoleOverrides`. Host-gated operations return `PermissionDenied` when
+  the local user lacks the right, and out-of-range `max_users` returns
+  `InvalidArgument`. Exposed as `SessionClient` and the nested `resoio session`
+  CLI (`settings get`/`set`, `users list`,
+  `user kick`/`ban`/`silence`/`respawn`/`role`, `roles list`, `overrides list`)
+- **ResoniteLink enable in `Session` settings**: `SessionSettings` now reports
+  `resonite_link_enabled` / `resonite_link_port` (read from `World.ResoniteLink`,
+  port normalized to `0` when off), and `ApplySettings` can turn ResoniteLink on
+  via `World.StartResoniteLink()` (host + ResoniteLink-permission gated,
+  idempotent) using `apply_settings(resonite_link_enabled=True)` or
+  `resoio session settings set --resonite-link`. **Enable-only**: the engine
+  exposes no runtime stop API (the dash itself offers only an Enable button), so
+  requesting disable returns `FailedPrecondition`
 - **`resoio shutdown` / `resoio.shutdown`**: The graceful-stop command and
   convenience function are now named `shutdown`, matching Resonite's terminology
   and the `Lifecycle.Shutdown` RPC. Behaviour is unchanged — it reads the engine
