@@ -20,6 +20,7 @@ any subset.
 | ContextMenu | request/response | unary | [`ContextMenuClient`](../api/context_menu.md) | Open/select the radial context menu. |
 | Dash | request/response | unary | [`DashClient`](../api/dash.md) | Drive the ESC dash overlay (Userspace). |
 | Inventory | request/response | unary | [`InventoryClient`](../api/inventory.md) | Browse, spawn, and fetch thumbnail images of inventory items. |
+| Session | request/response | unary | [`SessionClient`](../api/session.md) | Configure the connected session: settings (get/partial apply), users (kick/ban/silence/respawn/role), and permission roles. |
 | Cursor | request/response | unary | [`CursorClient`](../api/cursor.md) | Set/hold/release/get the desktop cursor in normalized coords. |
 | Lifecycle | Python → Resonite | unary | [`LifecycleClient`](../api/lifecycle.md) | Ask the engine to quit gracefully (`shutdown`); `resoio.shutdown` wraps it with engine-PID reporting (`resoio.terminate` is the deprecated former name). |
 
