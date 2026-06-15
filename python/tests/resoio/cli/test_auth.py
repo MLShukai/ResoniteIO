@@ -484,6 +484,7 @@ async def test_login_json_emits_status_object_with_exact_large_nanos(
     assert payload["user_id"] == "U-alice"
     assert payload["user_name"] == "alice"
     assert payload["session_expires_unix_nanos"] == 1_700_000_000_123_456_789
+    assert payload["session_expires_iso"] == "2023-11-14T22:13:20.123456+00:00"
 
 
 async def test_status_json_emits_status_object(
@@ -508,6 +509,7 @@ async def test_status_json_emits_status_object(
     assert payload["user_id"] == "U-alice"
     assert payload["user_name"] == "alice"
     assert payload["session_expires_unix_nanos"] == 1_700_000_000_123_456_789
+    assert payload["session_expires_iso"] == "2023-11-14T22:13:20.123456+00:00"
 
 
 async def test_login_json_password_never_appears_in_output(
@@ -535,3 +537,25 @@ async def test_login_json_password_never_appears_in_output(
     assert "topsecret-xyz" not in out
     # Sanity: the emitted document is still the real status payload.
     assert json.loads(out)["user_name"] == "alice"
+
+
+async def test_status_human_renders_expiry_as_datetime_not_nanos(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``auth status`` (human) renders the session expiry as a UTC datetime,
+    not the raw unix-nanos integer."""
+    socket_path = tmp_path / "rio-auth.sock"
+    server, _fake = await _serve(socket_path)
+    try:
+        rc = await _run_auth(["auth", "status"], socket_path, monkeypatch)
+        assert rc == 0
+    finally:
+        server.close()
+        await server.wait_closed()
+    out = capsys.readouterr().out
+    # 1_700_000_000_123_456_789 ns -> 2023-11-14 22:13:20 UTC (microsecond floor).
+    assert "Session expires at 2023-11-14 22:13:20 UTC" in out
+    # The raw nanos integer must NOT appear in the human output.
+    assert "1700000000123456789" not in out

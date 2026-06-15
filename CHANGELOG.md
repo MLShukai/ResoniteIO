@@ -23,7 +23,7 @@ GitHub Release body. The format follows
   persisted, logged, placed in an exception / gRPC status detail, or
   `--format json` output, and there is **no `--password` CLI flag** — the
   password comes only from `RESONITE_IO_PASSWORD`, piped stdin, or a hidden
-  prompt. All three leaves support `--format human|json`
+  prompt. All three leaves support `--format human|json`; the human `status` output renders the session expiry as a UTC datetime, and the `--format json` document adds a derived ISO-8601 `session_expires_iso` next to the exact `session_expires_unix_nanos`
 - **`Session` modality**: A new unary userspace modality that drives the dash
   "Session" dialog — the connected session's Settings, Users, and Permissions
   tabs — by reading/writing `World.Configuration` / `World.AllUsers` /

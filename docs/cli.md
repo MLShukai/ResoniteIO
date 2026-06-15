@@ -51,7 +51,10 @@ mirroring how a `gh auth login`-style flow works. It has three nested leaves:
     2. piped **stdin** (e.g. `printf '%s' "$pw" | resoio auth login alice`),
     3. an interactive **hidden prompt** (no echo) when neither of the above is provided.
 - `resoio auth logout` — sign the engine out.
-- `resoio auth status` — report whether the engine is logged in, and for whom.
+- `resoio auth status` — report whether the engine is logged in, and for whom. The human
+  output renders the session expiry as a UTC datetime; `--format json` carries both the exact
+  `session_expires_unix_nanos` and a derived ISO-8601 `session_expires_iso` (`null` when there
+  is no expiry).
 
 `login` flags:
 

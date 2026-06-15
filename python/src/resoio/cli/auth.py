@@ -159,22 +159,32 @@ async def _resolve_password() -> str:
 def _emit_status(status: AuthStatus, fmt: str) -> None:
     """Emit ``status`` in the requested format.
 
-    json: hand the :class:`AuthStatus` dataclass straight to ``emit`` so
-    ``to_jsonable`` expands its snake_case fields (the big
-    ``session_expires_unix_nanos`` int round-trips exactly).
+    json: emit the four ``AuthStatus`` fields plus a derived
+    ``session_expires_iso`` (an ISO-8601 UTC string, ``null`` when there is no
+    expiry); the exact ``session_expires_unix_nanos`` is kept for precision.
 
-    human (gh-auth-like): one ``Logged in as ...`` line plus an expiry line
-    when the session has a non-zero expiry, or ``Not logged in``.
+    human (gh-auth-like): one ``Logged in as ...`` line plus, when the session
+    has an expiry, a ``Session expires at <UTC datetime>`` line; otherwise
+    ``Not logged in``.
     """
     if output.is_structured(fmt):
-        output.emit(status, fmt)
+        expires = status.session_expires
+        output.emit(
+            {
+                "logged_in": status.logged_in,
+                "user_id": status.user_id,
+                "user_name": status.user_name,
+                "session_expires_unix_nanos": status.session_expires_unix_nanos,
+                "session_expires_iso": None if expires is None else expires.isoformat(),
+            },
+            fmt,
+        )
         return
     if status.logged_in:
         print(f"Logged in as {status.user_name} ({status.user_id})")
-        if status.session_expires_unix_nanos > 0:
-            print(
-                f"Session expires at {status.session_expires_unix_nanos} (unix nanos)"
-            )
+        expires = status.session_expires
+        if expires is not None:
+            print(f"Session expires at {expires:%Y-%m-%d %H:%M:%S} UTC")
     else:
         print("Not logged in")
 

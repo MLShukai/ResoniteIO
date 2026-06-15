@@ -52,10 +52,8 @@ async def main() -> None:
     status = await wait_for_ready()
     if status.logged_in:
         print(f"logged in as {status.user_name} ({status.user_id})")
-        if status.session_expires_unix_nanos > 0:
-            print(
-                f"session expires at {status.session_expires_unix_nanos} (unix nanos)"
-            )
+        if status.session_expires is not None:
+            print(f"session expires at {status.session_expires:%Y-%m-%d %H:%M:%S} UTC")
     else:
         print("not logged in")
 

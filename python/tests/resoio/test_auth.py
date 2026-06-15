@@ -26,6 +26,7 @@ here.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import pytest
@@ -290,3 +291,31 @@ class TestStatus:
         client = AuthClient()
         with pytest.raises(RuntimeError, match="not connected"):
             await client.status()
+
+
+# ===========================================================================
+# AuthStatus.session_expires: nanos -> tz-aware UTC datetime (pure dataclass).
+# ===========================================================================
+
+
+class TestSessionExpires:
+    def test_converts_nanos_to_utc_datetime(self):
+        status = AuthStatus(
+            logged_in=True,
+            user_id="U-1",
+            user_name="alice",
+            session_expires_unix_nanos=1_700_000_000_123_456_789,
+        )
+        # Microsecond resolution (nanos // 1000); the trailing 789 ns is dropped.
+        assert status.session_expires == datetime(
+            2023, 11, 14, 22, 13, 20, 123456, tzinfo=timezone.utc
+        )
+
+    def test_is_none_when_zero(self):
+        status = AuthStatus(
+            logged_in=False,
+            user_id="",
+            user_name="",
+            session_expires_unix_nanos=0,
+        )
+        assert status.session_expires is None

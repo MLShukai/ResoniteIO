@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import override
 
 from grpclib.client import Channel
@@ -36,6 +37,9 @@ __all__ = [
 
 _logger = logging.getLogger("resoio.auth")
 
+# Unix epoch as a tz-aware UTC datetime, for deriving session_expires.
+_UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
 
 @dataclass(frozen=True, slots=True)
 class AuthStatus:
@@ -49,6 +53,20 @@ class AuthStatus:
     user_id: str
     user_name: str
     session_expires_unix_nanos: int
+
+    @property
+    def session_expires(self) -> datetime | None:
+        """Session expiry as a timezone-aware UTC :class:`~datetime.datetime`.
+
+        ``None`` when not logged in or the expiry is unknown
+        (``session_expires_unix_nanos`` is ``0``). Resolution is microseconds;
+        use ``session_expires_unix_nanos`` for the exact nanosecond value.
+        """
+        if self.session_expires_unix_nanos <= 0:
+            return None
+        return _UNIX_EPOCH + timedelta(
+            microseconds=self.session_expires_unix_nanos // 1000
+        )
 
 
 def _status_from_proto(pb: _PbAuthStatus) -> AuthStatus:
