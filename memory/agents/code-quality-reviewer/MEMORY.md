@@ -18,3 +18,5 @@
 - [skew-tolerance needs evidence](feedback_skew_tolerance_needs_evidence.md) — A/V sync などの quantitative threshold を spec から広げる場合、実測値を 1 行残す
 - [verify regression test actually fails](feedback_verify_regression_test_actually_fails.md) — implementer の「stash で fail 確認した」報告を信じず、修正を 1 行 disable して再現する
 - [session.py は既に規約準拠](feedback_session_py_already_at_convention.md) — session.py / cli/session.py は実装時点で world.py 系規約に一致。flag_values tuple 畳みは lateral か型安全性低下なので手を入れない
+- [CLI handler conventions](reference_cli_conventions.md) — cli/<modality>.py の handler/output/GRPCError/--format json 契約。input(prompt) は stdout に書くので json 経路を汚す点に注意
+- [UnixNanos DateTime 変換の重複/精度ドリフト](feedback_unixnanos_dt_conversion.md) — World/Inventory は ticks(100ns)、Auth は ms 精度で inline 再実装。新 bridge の DateTime→nanos は精度/Kind 差を flag

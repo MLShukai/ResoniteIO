@@ -25,6 +25,7 @@ resoio --help
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Interactive REPL: browse (`ls`/`cd`), mutate (`mkdir`/`cp`/`mv`/`rm`), `spawn`, and `thumb` (save an item's thumbnail image). |
 | `resoio session` | Session | unary | Configure the connected session via nested subcommands: `settings get`/`set` (partial apply; `set --resonite-link` enables ResoniteLink — enable-only, the engine has no runtime disable), `users list`, `user kick`/`ban`/`silence`/`respawn`/`role` (target with `--id`/`--name`/`--self`; `respawn` defaults to self), `roles list`, `overrides list`. |
+| `resoio auth` | Auth | unary | Resonite cloud sign-in via nested subcommands: `login` (credential positional; password via env/stdin/prompt, never a flag), `logout`, `status`. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
 | `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
 | `resoio terminate` | Lifecycle | unary | **Deprecated** alias of `shutdown` (no longer maintained, removed in a future release). Behaves identically but prints a deprecation notice on stderr. |
@@ -37,6 +38,50 @@ reachable. A graceful shutdown is enough to stop the whole client — there is n
 fallback, because the engine's own PID is not discoverable by name (`pgrep -f Resonite.exe`
 matches the Steam/Proton launch wrappers, which must not be signalled). `terminate` is the
 deprecated former name of this command; prefer `shutdown`.
+
+## `auth`
+
+`resoio auth` signs the engine in and out of the Resonite cloud account (Python → Resonite),
+mirroring how a `gh auth login`-style flow works. It has three nested leaves:
+
+- `resoio auth login [credential]` — authenticate. `credential` is an optional positional
+  (username or email). The **password is never a flag** and never appears on `argv`; it is read
+  from, in order:
+    1. the `RESONITE_IO_PASSWORD` environment variable,
+    2. piped **stdin** (e.g. `printf '%s' "$pw" | resoio auth login alice`),
+    3. an interactive **hidden prompt** (no echo) when neither of the above is provided.
+- `resoio auth logout` — sign the engine out.
+- `resoio auth status` — report whether the engine is logged in, and for whom.
+
+`login` flags:
+
+- `--totp CODE` — two-factor one-time code, when the account has 2FA enabled.
+- `--no-remember` — do not persist the session. By default the login asks the engine to
+  remember the session (`remember_me=True`); persistence is delegated entirely to the engine.
+
+All three leaves accept `--format human|json` (see below).
+
+**Security stance.** The password is never passed on the command line or written to logs — only
+the env var, piped stdin, or the hidden prompt can supply it. `--no-remember` controls only
+whether the **engine** persists the session; `resoio` itself stores no credentials and keeps no
+session state. When `remember_me` is set, persistence is the engine's responsibility, not the
+CLI's.
+
+```bash
+# Sign in (hidden password prompt; nothing sensitive on argv)
+resoio auth login alice@example.com
+
+# Non-interactive: feed the password via env or piped stdin
+RESONITE_IO_PASSWORD="$pw" resoio auth login alice@example.com
+printf '%s' "$pw" | resoio auth login alice@example.com --totp 123456
+
+# Don't let the engine persist this session
+resoio auth login alice@example.com --no-remember
+
+# Inspect / tear down
+resoio auth status --format json | jq .logged_in
+resoio auth logout
+```
 
 ## Output format (`--format`)
 
