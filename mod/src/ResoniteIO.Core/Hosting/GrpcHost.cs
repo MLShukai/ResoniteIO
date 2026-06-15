@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Auth;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
+using ResoniteIO.Core.Contact;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
@@ -97,7 +98,8 @@ public sealed class GrpcHost : IAsyncDisposable
         IInfoBridge? infoBridge = null,
         ISessionBridge? sessionBridge = null,
         IAuthBridge? authBridge = null,
-        ILifecycleBridge? lifecycleBridge = null
+        ILifecycleBridge? lifecycleBridge = null,
+        IContactBridge? contactBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -149,6 +151,7 @@ public sealed class GrpcHost : IAsyncDisposable
         Register(contextMenuBridge, "ContextMenu");
         Register(dashBridge, "Dash");
         Register(worldBridge, "World");
+        Register(contactBridge, "Contact");
         Register(grabberBridge, "Grabber");
         Register(inventoryBridge, "Inventory");
         Register(cursorBridge, "Cursor");
@@ -175,6 +178,7 @@ public sealed class GrpcHost : IAsyncDisposable
         app.MapGrpcService<ContextMenuService>();
         app.MapGrpcService<DashService>();
         app.MapGrpcService<WorldService>();
+        app.MapGrpcService<ContactService>();
         app.MapGrpcService<GrabberService>();
         app.MapGrpcService<InventoryService>();
         app.MapGrpcService<CursorService>();

@@ -6,6 +6,14 @@ from resoio._client import AmbiguousSocketError, SocketNotFoundError
 from resoio.auth import AuthClient, AuthStatus
 from resoio.camera import CameraClient, Frame
 from resoio.connection import ConnectionClient
+from resoio.contact import (
+    ContactClient,
+    ContactFilter,
+    ContactInfo,
+    ContactStatus,
+    OnlineStatus,
+    UserSearchResult,
+)
 from resoio.context_menu import (
     ContextMenuClient,
     ContextMenuItem,
@@ -77,6 +85,10 @@ __all__ = [
     "AuthStatus",
     "CameraClient",
     "ConnectionClient",
+    "ContactClient",
+    "ContactFilter",
+    "ContactInfo",
+    "ContactStatus",
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
@@ -111,6 +123,7 @@ __all__ = [
     "LocomotionClient",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OnlineStatus",
     "OpenWorld",
     "RecordSort",
     "RecordSortDirection",
@@ -129,6 +142,7 @@ __all__ = [
     "SpeakerChunk",
     "SpeakerClient",
     "UserRoleOverride",
+    "UserSearchResult",
     "WorldClient",
     "WorldRecord",
     "WorldSession",

@@ -2,6 +2,7 @@ using System.Reflection;
 using ResoniteIO.Core.Auth;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
+using ResoniteIO.Core.Contact;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Cursor;
 using ResoniteIO.Core.Dash;
@@ -80,6 +81,16 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Camera.PushedFrameCameraBridge",
             "ResoniteIO.Core.Connection.ConnectionService",
             "ResoniteIO.Core.Connection.IConnectionBridge",
+            "ResoniteIO.Core.Contact.ContactListSnapshot",
+            "ResoniteIO.Core.Contact.ContactNotFoundException",
+            "ResoniteIO.Core.Contact.ContactNotReadyException",
+            "ResoniteIO.Core.Contact.ContactOperationException",
+            "ResoniteIO.Core.Contact.ContactService",
+            "ResoniteIO.Core.Contact.ContactSnapshot",
+            "ResoniteIO.Core.Contact.ContactStatus",
+            "ResoniteIO.Core.Contact.IContactBridge",
+            "ResoniteIO.Core.Contact.OnlineStatus",
+            "ResoniteIO.Core.Contact.UserSearchSnapshot",
             "ResoniteIO.Core.ContextMenu.ContextMenuHandSelector",
             "ResoniteIO.Core.ContextMenu.ContextMenuItemSnapshot",
             "ResoniteIO.Core.ContextMenu.ContextMenuNotReadyException",
@@ -210,6 +221,10 @@ public sealed class ApiContractTests
 
         var expected = new[]
         {
+            "ResoniteIO.V1.AcceptRequestRequest",
+            "ResoniteIO.V1.AcceptRequestResponse",
+            "ResoniteIO.V1.AddContactRequest",
+            "ResoniteIO.V1.AddContactResponse",
             "ResoniteIO.V1.ApplySettingsResponse",
             "ResoniteIO.V1.AudioFrame",
             "ResoniteIO.V1.Auth",
@@ -230,6 +245,12 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.Connection",
             "ResoniteIO.V1.Connection+ConnectionBase",
             "ResoniteIO.V1.ConnectionReflection",
+            "ResoniteIO.V1.Contact",
+            "ResoniteIO.V1.Contact+ContactBase",
+            "ResoniteIO.V1.ContactFilter",
+            "ResoniteIO.V1.ContactInfo",
+            "ResoniteIO.V1.ContactReflection",
+            "ResoniteIO.V1.ContactStatus",
             "ResoniteIO.V1.ContextMenu",
             "ResoniteIO.V1.ContextMenu+ContextMenuBase",
             "ResoniteIO.V1.ContextMenuCloseRequest",
@@ -277,6 +298,8 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.FetchThumbnailResponse",
             "ResoniteIO.V1.FocusRequest",
             "ResoniteIO.V1.FocusResponse",
+            "ResoniteIO.V1.GetContactRequest",
+            "ResoniteIO.V1.GetContactResponse",
             "ResoniteIO.V1.GetCurrentRequest",
             "ResoniteIO.V1.GetCurrentResponse",
             "ResoniteIO.V1.GetServerInfoRequest",
@@ -321,6 +344,8 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.Lifecycle",
             "ResoniteIO.V1.Lifecycle+LifecycleBase",
             "ResoniteIO.V1.LifecycleReflection",
+            "ResoniteIO.V1.ListContactsRequest",
+            "ResoniteIO.V1.ListContactsResponse",
             "ResoniteIO.V1.ListOpenWorldsRequest",
             "ResoniteIO.V1.ListOpenWorldsResponse",
             "ResoniteIO.V1.ListRecordsRequest",
@@ -343,14 +368,19 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.MicrophoneAudioFrame",
             "ResoniteIO.V1.MicrophoneReflection",
             "ResoniteIO.V1.MicrophoneStreamSummary",
+            "ResoniteIO.V1.OnlineStatus",
             "ResoniteIO.V1.OpenWorld",
             "ResoniteIO.V1.PingRequest",
             "ResoniteIO.V1.PingResponse",
             "ResoniteIO.V1.RecordSort",
             "ResoniteIO.V1.RecordSortDirection",
             "ResoniteIO.V1.RecordSource",
+            "ResoniteIO.V1.RemoveContactRequest",
+            "ResoniteIO.V1.RemoveContactResponse",
             "ResoniteIO.V1.RespawnUserRequest",
             "ResoniteIO.V1.RespawnUserResponse",
+            "ResoniteIO.V1.SearchUsersRequest",
+            "ResoniteIO.V1.SearchUsersResponse",
             "ResoniteIO.V1.ServerInfo",
             "ResoniteIO.V1.ServerPlatform",
             "ResoniteIO.V1.Session",
@@ -375,6 +405,7 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.StartWorldRequest",
             "ResoniteIO.V1.StartWorldResponse",
             "ResoniteIO.V1.UserRoleOverride",
+            "ResoniteIO.V1.UserSearchResult",
             "ResoniteIO.V1.UserTarget",
             "ResoniteIO.V1.World",
             "ResoniteIO.V1.World+WorldBase",
@@ -479,6 +510,9 @@ public sealed class ApiContractTests
     [InlineData(typeof(SessionAmbiguousUserException))]
     [InlineData(typeof(SessionPermissionDeniedException))]
     [InlineData(typeof(SessionRoleNotFoundException))]
+    [InlineData(typeof(ContactNotReadyException))]
+    [InlineData(typeof(ContactNotFoundException))]
+    [InlineData(typeof(ContactOperationException))]
     [Trait("Category", "ApiContract")]
     public void PublicNotReadyException_DerivesDirectlyFromException(Type exceptionType)
     {
@@ -769,6 +803,55 @@ public sealed class ApiContractTests
             ),
             ("ListRolesAsync", new[] { typeof(CancellationToken) }),
             ("GetUserRoleOverridesAsync", new[] { typeof(CancellationToken) })
+        );
+    }
+
+    /// <summary>
+    /// <c>Contact</c> service が宣言する RPC 名一覧を固定する。RPC のリネーム / 追加 / 削除を
+    /// wire 契約破壊として検出する (Contacts タブの 6 操作)。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void Contact_Service_DeclaresExpectedRpcs()
+    {
+        var methodNames = ResoniteIO
+            .V1.ContactReflection.Descriptor.Services.Single(s => s.Name == "Contact")
+            .Methods.Select(m => m.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "AcceptRequest",
+                "AddContact",
+                "GetContact",
+                "ListContacts",
+                "RemoveContact",
+                "SearchUsers",
+            },
+            methodNames
+        );
+    }
+
+    /// <summary>
+    /// <see cref="IContactBridge"/> の method signature を固定する。
+    /// </summary>
+    [Fact]
+    [Trait("Category", "ApiContract")]
+    public void IContactBridge_MethodSignatures_MatchSnapshot()
+    {
+        AssertMethodSignatures(
+            typeof(IContactBridge),
+            ("ListContactsAsync", new[] { typeof(CancellationToken) }),
+            ("GetContactAsync", new[] { typeof(string), typeof(CancellationToken) }),
+            ("SearchUsersAsync", new[] { typeof(string), typeof(bool), typeof(CancellationToken) }),
+            (
+                "AddContactAsync",
+                new[] { typeof(string), typeof(string), typeof(CancellationToken) }
+            ),
+            ("AcceptRequestAsync", new[] { typeof(string), typeof(CancellationToken) }),
+            ("RemoveContactAsync", new[] { typeof(string), typeof(CancellationToken) })
         );
     }
 

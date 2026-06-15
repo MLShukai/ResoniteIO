@@ -109,6 +109,7 @@ nav:
       - Dash: api/dash.md
       - Inventory: api/inventory.md
       - Session: api/session.md
+      - Contact: api/contact.md
       - Auth: api/auth.md
       - Cursor: api/cursor.md
       - Lifecycle: api/lifecycle.md

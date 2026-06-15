@@ -47,6 +47,10 @@ _EXPECTED_PUBLIC_NAMES = (
     "AuthStatus",
     "CameraClient",
     "ConnectionClient",
+    "ContactClient",
+    "ContactFilter",
+    "ContactInfo",
+    "ContactStatus",
     "ContextMenuClient",
     "ContextMenuItem",
     "ContextMenuState",
@@ -81,6 +85,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "LocomotionClient",
     "MicrophoneClient",
     "MicrophoneStreamSummary",
+    "OnlineStatus",
     "OpenWorld",
     "RecordSort",
     "RecordSortDirection",
@@ -99,6 +104,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "SpeakerChunk",
     "SpeakerClient",
     "UserRoleOverride",
+    "UserSearchResult",
     "WorldClient",
     "WorldRecord",
     "WorldSession",
@@ -164,6 +170,7 @@ def test_ambiguous_socket_error_extends_runtime_error():
         "LocomotionClient",
         "DisplayClient",
         "ContextMenuClient",
+        "ContactClient",
         "CursorClient",
         "DashClient",
         "GrabberClient",
@@ -240,6 +247,32 @@ def test_public_world_enum_members_match_snapshot(
     enum_cls = getattr(resoio, enum_name)
     actual = {member.name: member.value for member in enum_cls}
     assert actual == expected
+
+
+# ---------------------------------------------------------------------------
+# Public Contact enums
+#
+# ``ContactFilter`` is the *public* (resoio-namespace) request enum: like
+# ``SessionFilter`` it is offset from the wire by the extra ``UNSPECIFIED = 0``
+# slot, which it folds into the documented ``ALL`` head (ALL -> wire
+# UNSPECIFIED; the wire mapping is pinned in test_proto_contract.py).
+# ``ContactStatus`` / ``OnlineStatus``, by contrast, are re-exported as the
+# generated wire enums verbatim (response statuses surface untranslated), so
+# their member values include the wire ``UNSPECIFIED = 0`` and are pinned with
+# the wire enums in test_proto_contract.py — only the offset ``ContactFilter``
+# is pinned here. This is a contract pin, not a behaviour test.
+# ---------------------------------------------------------------------------
+
+
+def test_public_contact_filter_members_match_snapshot():
+    """Pin the public ``ContactFilter`` member-name -> value (offset from the
+    wire enum by the folded ``UNSPECIFIED`` slot, so ``ALL = 0``)."""
+    actual = {member.name: member.value for member in resoio.ContactFilter}
+    assert actual == {
+        "ALL": 0,
+        "ACCEPTED": 1,
+        "REQUESTS": 2,
+    }
 
 
 # ---------------------------------------------------------------------------

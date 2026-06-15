@@ -1,0 +1,149 @@
+// Contact service: Resonite の「Dash → Contacts タブ」相当の操作を engine API
+// 直叩きで提供する modality。UI は駆動せず、FrooxEngine の Cloud.Contacts
+// (SkyFrost.Base.ContactManager) / Cloud.Users (UsersManager) を直接叩く。
+//
+// ContactManager はメモリ内に同期済みの連絡先リストを保持しており、一覧
+// (ListContacts) / 単一取得 (GetContact) はキャッシュ即時読み出し (presence 付き)。
+// ユーザー検索 (SearchUsers) は cloud のユーザー検索 REST、追加 / 承認 / 削除
+// (AddContact / AcceptRequest / RemoveContact) は cloud への非同期書き込み。
+//
+// search / filter は Service 側で適用する (counts は ContactManager の値を使う)。
+// RPC は全て unary。presence は enum で表現しタイムスタンプは載せない。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// 連絡先のステータス (engine ContactManager の ContactStatus を +1 シフトで写す)。
+// 0=UNSPECIFIED は proto3 の必須スロットで、engine の None..Accepted が 1..6 に並ぶ。
+enum ContactStatus {
+  CONTACT_STATUS_UNSPECIFIED = 0;
+  CONTACT_STATUS_NONE = 1;
+  CONTACT_STATUS_SEARCH_RESULT = 2;
+  CONTACT_STATUS_REQUESTED = 3;
+  CONTACT_STATUS_IGNORED = 4;
+  CONTACT_STATUS_BLOCKED = 5;
+  CONTACT_STATUS_ACCEPTED = 6;
+}
+
+// 連絡先の presence (engine OnlineStatus を +1 シフトで写す)。
+enum OnlineStatus {
+  ONLINE_STATUS_UNSPECIFIED = 0;
+  ONLINE_STATUS_OFFLINE = 1;
+  ONLINE_STATUS_INVISIBLE = 2;
+  ONLINE_STATUS_AWAY = 3;
+  ONLINE_STATUS_BUSY = 4;
+  ONLINE_STATUS_ONLINE = 5;
+  ONLINE_STATUS_SOCIABLE = 6;
+}
+
+// ListContacts の絞り込み (Service 側で適用)。UNSPECIFIED は全件。
+enum ContactFilter {
+  CONTACT_FILTER_UNSPECIFIED = 0;
+  CONTACT_FILTER_ACCEPTED = 1; // 承認済みフレンドのみ
+  CONTACT_FILTER_REQUESTS = 2; // 受信中リクエストのみ
+}
+
+// 連絡先 1 件 (presence 付き)。service 名 `Contact` と衝突しないよう `ContactInfo`。
+message ContactInfo {
+  string user_id = 1;
+  string username = 2;
+  repeated string alternate_usernames = 3;
+  ContactStatus status = 4;
+  bool is_accepted = 5;
+  // 受信中のフレンドリクエスト (Contact.IsContactRequest)。
+  bool is_contact_request = 6;
+  OnlineStatus online_status = 7;
+  // 現在参加中セッション名 (presence)。不明なら空。
+  string current_session_name = 8;
+  // 現在参加中セッションの公開レベル名 (例 "Private" / "Anyone")。不明なら空。
+  string current_session_access_level = 9;
+  // dash の Contacts タブが非表示にする連絡先 (None / Ignored / Blocked 等、
+  // engine の Contact.ShouldBeHidden)。ListContacts は既定でこれらを除外する。
+  bool is_hidden = 10;
+}
+
+// ユーザー検索結果 1 件 (連絡先化される前のユーザー)。
+message UserSearchResult {
+  string user_id = 1;
+  string username = 2;
+  bool is_verified = 3;
+}
+
+message ListContactsRequest {
+  // username 部分一致 (大文字小文字無視、Service 側でフィルタ)。空なら全件。
+  string search = 1;
+  ContactFilter filter = 2;
+  // true なら dash タブが隠す連絡先 (None / Ignored / Blocked = ShouldBeHidden)
+  // も含める。既定 (false) は dash の Contacts タブと同じく非表示にする。
+  bool include_hidden = 3;
+}
+
+message ListContactsResponse {
+  repeated ContactInfo contacts = 1;
+  // ContactManager のカウント (filter / search 適用前の総数)。
+  int32 contact_count = 2;
+  int32 request_count = 3;
+  // 連絡先リストが cloud から同期済みか。
+  bool list_loaded = 4;
+}
+
+message GetContactRequest {
+  string user_id = 1;
+}
+
+message GetContactResponse {
+  ContactInfo contact = 1;
+  // user_id が連絡先キャッシュに無ければ false (contact は既定値)。
+  bool found = 2;
+}
+
+message SearchUsersRequest {
+  string query = 1;
+  // true なら username 完全一致のみ (GetUserByName)。
+  bool exact_match = 2;
+}
+
+message SearchUsersResponse {
+  repeated UserSearchResult results = 1;
+}
+
+message AddContactRequest {
+  string user_id = 1;
+  // 省略時は mod 側が cloud から username を解決する。
+  string username = 2;
+}
+
+message AddContactResponse {
+  ContactInfo contact = 1;
+}
+
+message AcceptRequestRequest {
+  string user_id = 1;
+}
+
+message AcceptRequestResponse {
+  ContactInfo contact = 1;
+}
+
+message RemoveContactRequest {
+  string user_id = 1;
+}
+
+message RemoveContactResponse {}
+
+service Contact {
+  // 連絡先一覧 (presence 付き)。search / filter は Service 側で適用。
+  rpc ListContacts(ListContactsRequest) returns (ListContactsResponse);
+  // 単一連絡先をキャッシュから取得。未登録は found=false。
+  rpc GetContact(GetContactRequest) returns (GetContactResponse);
+  // cloud のユーザー検索 (連絡先追加の前段、副作用なし)。
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  // フレンド追加 (status を Accepted にして送信)。
+  rpc AddContact(AddContactRequest) returns (AddContactResponse);
+  // 受信中フレンドリクエストを承認。
+  rpc AcceptRequest(AcceptRequestRequest) returns (AcceptRequestResponse);
+  // 連絡先を削除 / リクエストを拒否 (status を Ignored に)。
+  rpc RemoveContact(RemoveContactRequest) returns (RemoveContactResponse);
+}

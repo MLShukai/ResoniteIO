@@ -31,6 +31,10 @@ from typing import Any
 import pytest
 
 from resoio._generated.resonite_io.v1 import (
+    AcceptRequestRequest,
+    AcceptRequestResponse,
+    AddContactRequest,
+    AddContactResponse,
     AudioFrame,
     AuthLoginRequest,
     AuthLogoutRequest,
@@ -40,6 +44,9 @@ from resoio._generated.resonite_io.v1 import (
     CameraFrame,
     CameraFrameFormat,
     CameraStreamRequest,
+    ContactFilter,
+    ContactInfo,
+    ContactStatus,
     ContextMenuCloseRequest,
     ContextMenuGetStateRequest,
     ContextMenuHand,
@@ -72,6 +79,8 @@ from resoio._generated.resonite_io.v1 import (
     FetchThumbnailResponse,
     FocusRequest,
     FocusResponse,
+    GetContactRequest,
+    GetContactResponse,
     GetCurrentRequest,
     GetCurrentResponse,
     GetServerInfoRequest,
@@ -99,6 +108,8 @@ from resoio._generated.resonite_io.v1 import (
     KickUserRequest,
     LeaveRequest,
     LeaveResponse,
+    ListContactsRequest,
+    ListContactsResponse,
     ListOpenWorldsRequest,
     ListOpenWorldsResponse,
     ListRecordsRequest,
@@ -113,12 +124,17 @@ from resoio._generated.resonite_io.v1 import (
     LocomotionResetSummary,
     MicrophoneAudioFrame,
     MicrophoneStreamSummary,
+    OnlineStatus,
     OpenWorld,
     PingRequest,
     PingResponse,
     RecordSort,
     RecordSortDirection,
     RecordSource,
+    RemoveContactRequest,
+    RemoveContactResponse,
+    SearchUsersRequest,
+    SearchUsersResponse,
     ServerInfo,
     ServerPlatform,
     SessionAccessLevel,
@@ -137,6 +153,7 @@ from resoio._generated.resonite_io.v1 import (
     StartWorldRequest,
     StartWorldResponse,
     UserRoleOverride,
+    UserSearchResult,
     UserTarget,
     WorldRecord,
     WorldSession,
@@ -669,6 +686,73 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     GetUserRoleOverridesResponse: {
         "overrides": 1,
     },
+    # Contact. The connecting message is `ContactInfo` (the service is named
+    # `Contact`, so the contact message takes the `Info` suffix to avoid a
+    # name clash). The C# peer maps SkyFrost.Base.Contact / Friend onto these
+    # values, so renumbering silently misreads historical wire data.
+    ContactInfo: {
+        "user_id": 1,
+        "username": 2,
+        "alternate_usernames": 3,
+        "status": 4,
+        "is_accepted": 5,
+        "is_contact_request": 6,
+        "online_status": 7,
+        "current_session_name": 8,
+        "current_session_access_level": 9,
+        # is_hidden mirrors engine Contact.ShouldBeHidden (None/Ignored/Blocked);
+        # dash tabs hide these. Appended at 10 so the prior wire stays stable.
+        "is_hidden": 10,
+    },
+    UserSearchResult: {
+        "user_id": 1,
+        "username": 2,
+        "is_verified": 3,
+    },
+    ListContactsRequest: {
+        "search": 1,
+        "filter": 2,
+        # include_hidden=true bypasses the default exclusion of dash-hidden
+        # (None/Ignored/Blocked) contacts; appended at 3 to keep the wire stable.
+        "include_hidden": 3,
+    },
+    ListContactsResponse: {
+        "contacts": 1,
+        "contact_count": 2,
+        "request_count": 3,
+        "list_loaded": 4,
+    },
+    GetContactRequest: {
+        "user_id": 1,
+    },
+    GetContactResponse: {
+        "contact": 1,
+        "found": 2,
+    },
+    SearchUsersRequest: {
+        "query": 1,
+        "exact_match": 2,
+    },
+    SearchUsersResponse: {
+        "results": 1,
+    },
+    AddContactRequest: {
+        "user_id": 1,
+        "username": 2,
+    },
+    AddContactResponse: {
+        "contact": 1,
+    },
+    AcceptRequestRequest: {
+        "user_id": 1,
+    },
+    AcceptRequestResponse: {
+        "contact": 1,
+    },
+    RemoveContactRequest: {
+        "user_id": 1,
+    },
+    RemoveContactResponse: {},
 }
 
 
@@ -773,6 +857,37 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "UNSPECIFIED": 0,
         "KICK": 1,
         "KICK_AND_REVOKE": 2,
+    },
+    # Contact wire enums. ContactStatus / OnlineStatus are re-exported as the
+    # PUBLIC enums verbatim (no offset fold, unlike the World/Session enums) —
+    # the public resoio.contact.ContactStatus / OnlineStatus IS the wire enum.
+    # ContactFilter, by contrast, carries the extra UNSPECIFIED=0 slot that the
+    # public ContactFilter folds into its ALL head (ALL -> UNSPECIFIED; pinned
+    # in test_api_contract.py). The C# peer maps SkyFrost.Base.ContactStatus /
+    # OnlineStatus onto these values, so renumbering silently misreads
+    # historical wire data on the consumer.
+    ContactStatus: {
+        "UNSPECIFIED": 0,
+        "NONE": 1,
+        "SEARCH_RESULT": 2,
+        "REQUESTED": 3,
+        "IGNORED": 4,
+        "BLOCKED": 5,
+        "ACCEPTED": 6,
+    },
+    OnlineStatus: {
+        "UNSPECIFIED": 0,
+        "OFFLINE": 1,
+        "INVISIBLE": 2,
+        "AWAY": 3,
+        "BUSY": 4,
+        "ONLINE": 5,
+        "SOCIABLE": 6,
+    },
+    ContactFilter: {
+        "UNSPECIFIED": 0,
+        "ACCEPTED": 1,
+        "REQUESTS": 2,
     },
 }
 

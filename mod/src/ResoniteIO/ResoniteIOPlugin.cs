@@ -10,6 +10,7 @@ using FrooxEngine;
 using ResoniteIO.Bridge;
 using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Connection;
+using ResoniteIO.Core.Contact;
 using ResoniteIO.Core.ContextMenu;
 using ResoniteIO.Core.Display;
 using ResoniteIO.Core.Grabber;
@@ -64,6 +65,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private FrooxEngineInventoryBridge? _inventoryBridge;
     private FrooxEngineCursorBridge? _cursorBridge;
     private FrooxEngineSessionBridge? _sessionBridge;
+    private FrooxEngineContactBridge? _contactBridge;
     private FrooxEngineAuthBridge? _authBridge;
 
     /// <remarks>
@@ -145,6 +147,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
 
+            _contactBridge = new FrooxEngineContactBridge(Engine.Current, _logSink);
+
             _authBridge = new FrooxEngineAuthBridge(Engine.Current, _logSink);
 
             _grpcHost = GrpcHost.Start(
@@ -163,6 +167,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
                 inventoryBridge: _inventoryBridge,
                 cursorBridge: _cursorBridge,
                 sessionBridge: _sessionBridge,
+                contactBridge: _contactBridge,
                 authBridge: _authBridge,
                 infoBridge: _infoBridge,
                 lifecycleBridge: _lifecycleBridge
@@ -246,6 +251,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // dispatch は world.RunSynchronously の one-shot)、IDisposable でもないため
         // 参照 null 化のみで足りる。
         _sessionBridge = null;
+
+        // ContactBridge も engine 状態を保持せず (Cloud の Contacts / Users manager 参照を
+        // 読むだけ、event 購読無し、Harmony 無し)、IDisposable でもないため参照 null 化のみで足りる。
+        _contactBridge = null;
 
         // AuthBridge も engine 状態を保持せず (cloud login/logout を one-shot で叩くだけ)、
         // IDisposable でもないため参照 null 化のみで足りる。
