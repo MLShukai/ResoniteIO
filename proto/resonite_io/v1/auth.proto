@@ -1,0 +1,63 @@
+// Auth service: Resonite クラウドへの login / logout / 認証状態取得を engine API
+// (Engine.Cloud.Session) 直叩きで操作する unary modality。`gh auth` 的な質感で
+// `resoio auth login` / `logout` / `status` を提供する。全 RPC は unary。
+//
+// セキュリティ規約 (実装で厳守):
+//   - `AuthLoginRequest.password` は **平文の機密**。ログ・例外メッセージ・--format
+//     json 出力・例外の Status.Detail に **絶対に含めない**。Service の例外翻訳
+//     (BridgeFault.Translate) は ex.Message を Detail/ログに転写するため、Auth 系
+//     例外の Message は password を含まない汎用文言にする。
+//   - resoio 側は credential をディスクに保存しない。`remember_me=true` のとき
+//     Resonite engine 自身が LocalDB に machine-bound + 暗号化でセッションを永続化する。
+//   - wire は UDS local (0700) のみ。ネットワークに出ないため TLS は用いない。
+//
+// 認証失敗は Unauthenticated、2FA(TOTP) が要求されたが totp 未指定のときは
+// FailedPrecondition (client が totp を prompt して再試行する signal)、engine 未準備は
+// FailedPrecondition、bridge 未注入は Unavailable を返す。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// login / logout / status いずれも現在の認証状態 (AuthStatus) を返す統一契約。
+service Auth {
+  // credential + password (+ 任意 totp) でクラウドにログインする。成功時は
+  // logged_in=true の AuthStatus を返す。認証失敗 → Unauthenticated、2FA 要求だが
+  // totp 未指定 → FailedPrecondition。
+  rpc Login(AuthLoginRequest) returns (AuthStatus);
+  // 現在のセッションからログアウトする。成功時は logged_in=false の AuthStatus を返す
+  // (未ログインでも冪等に logged_in=false を返す)。
+  rpc Logout(AuthLogoutRequest) returns (AuthStatus);
+  // 現在の認証状態を返す (副作用なし)。
+  rpc Status(AuthStatusRequest) returns (AuthStatus);
+}
+
+message AuthLoginRequest {
+  // username / email / user ID (U-xxx) のいずれか。engine の Login が解決する。
+  string credential = 1;
+  // ★ 平文 password。ログ・json・例外メッセージに出さないこと (上部規約参照)。
+  string password = 2;
+  // 2FA (TOTP) コード。未設定 (presence なし) なら totp 無しでログインを試みる。
+  // アカウントが 2FA 有効で totp が無い場合、Service は FailedPrecondition を返す。
+  optional string totp = 3;
+  // true で engine にセッションを永続化させる (再起動後も自動再ログイン)。CLI は
+  // 既定 true。proto3 の bool 既定は false (= 永続化しない) である点に注意。
+  bool remember_me = 4;
+}
+
+message AuthLogoutRequest {}
+
+message AuthStatusRequest {}
+
+// login 成功 / status / logout 後の認証状態を表す統一 snapshot。
+message AuthStatus {
+  // ログイン中なら true。
+  bool logged_in = 1;
+  // 現在のユーザー ID (U-xxx)。未ログインなら空。
+  string user_id = 2;
+  // 現在のユーザー名。未ログインなら空。
+  string user_name = 3;
+  // セッション有効期限の Unix 時刻 (ナノ秒)。未ログイン / 期限不明なら 0。
+  int64 session_expires_unix_nanos = 4;
+}
