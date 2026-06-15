@@ -97,6 +97,8 @@ def _full_settings_pb() -> PbSessionSettings:
         tags=["game", "social"],
         session_id="S-abc",
         is_host=True,
+        resonite_link_enabled=True,
+        resonite_link_port=2345,
     )
 
 
@@ -211,7 +213,53 @@ class TestGetSettings:
             tags=("game", "social"),
             session_id="S-abc",
             is_host=True,
+            resonite_link_enabled=True,
+            resonite_link_port=2345,
         )
+
+    async def test_maps_resonite_link_metadata_into_the_dataclass(
+        self, uds_server: UdsServer
+    ):
+        """ResoniteLink is read-only metadata on the GetSettings snapshot:
+
+        ``resonite_link_enabled`` (the engine endpoint is running) and
+        ``resonite_link_port`` (the bound port, 0 when not yet bound) must
+        ride from the wire into the dataclass.
+        """
+        await uds_server(
+            _FakeSession(
+                settings=PbSessionSettings(
+                    access_level=PbSessionAccessLevel.ANYONE,
+                    resonite_link_enabled=True,
+                    resonite_link_port=4567,
+                )
+            )
+        )
+        async with SessionClient() as client:
+            settings = await client.get_settings()
+        assert settings.resonite_link_enabled is True
+        assert settings.resonite_link_port == 4567
+
+    async def test_resonite_link_disabled_maps_to_false_with_zero_port(
+        self, uds_server: UdsServer
+    ):
+        """When the endpoint is not running the snapshot reports
+        ``resonite_link_enabled=False`` with a normalised
+        ``resonite_link_port`` of 0 (the bridge floors the engine's unbound -1
+        to 0)."""
+        await uds_server(
+            _FakeSession(
+                settings=PbSessionSettings(
+                    access_level=PbSessionAccessLevel.ANYONE,
+                    resonite_link_enabled=False,
+                    resonite_link_port=0,
+                )
+            )
+        )
+        async with SessionClient() as client:
+            settings = await client.get_settings()
+        assert settings.resonite_link_enabled is False
+        assert settings.resonite_link_port == 0
 
     async def test_tags_are_decoded_as_a_tuple(self, uds_server: UdsServer):
         """``tags`` is exposed as an immutable tuple (the dataclass is frozen),
@@ -327,6 +375,60 @@ class TestApplySettings:
         assert patch.auto_save_interval_minutes is None
         assert patch.auto_cleanup_enabled is None
         assert patch.auto_cleanup_interval_seconds is None
+        assert patch.resonite_link_enabled is None
+
+    async def test_resonite_link_enabled_true_rides_on_the_wire(
+        self, uds_server: UdsServer
+    ):
+        """``resonite_link_enabled=True`` is a real intent ("start the engine
+        ResoniteLink endpoint"); proto3 ``optional`` must carry it as True,
+        distinct from None, so the server starts the endpoint."""
+        fake = _FakeSession()
+        await uds_server(fake)
+        async with SessionClient() as client:
+            await client.apply_settings(resonite_link_enabled=True)
+        patch = fake.last_patch
+        assert patch is not None
+        assert patch.resonite_link_enabled is True
+        # Untouched fields stay absent — proves presence is per-field.
+        assert patch.world_name is None
+
+    async def test_resonite_link_enabled_omitted_stays_off_the_wire(
+        self, uds_server: UdsServer
+    ):
+        """``resonite_link_enabled=None`` (the default) means "leave
+        unchanged":
+
+        the optional flag must stay off so the server does not touch the
+        endpoint state.
+        """
+        fake = _FakeSession()
+        await uds_server(fake)
+        async with SessionClient() as client:
+            await client.apply_settings(world_name="X")  # resonite_link omitted
+        patch = fake.last_patch
+        assert patch is not None
+        assert patch.resonite_link_enabled is None
+
+    async def test_resonite_link_enabled_false_rides_on_the_wire(
+        self, uds_server: UdsServer
+    ):
+        """``resonite_link_enabled=False`` is a distinct intent ("disable")
+        that must cross the wire as False, not collapse to None.
+
+        The engine exposes no runtime-disable API, so the server answers
+        FailedPrecondition — but that rejection is the *server's* job;
+        the client must still put the explicit False on the wire for the
+        server to see and reject. (The fake here only records the
+        patch.)
+        """
+        fake = _FakeSession()
+        await uds_server(fake)
+        async with SessionClient() as client:
+            await client.apply_settings(resonite_link_enabled=False)
+        patch = fake.last_patch
+        assert patch is not None
+        assert patch.resonite_link_enabled is False
 
     async def test_explicit_false_bool_rides_on_the_wire(self, uds_server: UdsServer):
         """``hide_from_listing=False`` is a real intent ("make it visible"),

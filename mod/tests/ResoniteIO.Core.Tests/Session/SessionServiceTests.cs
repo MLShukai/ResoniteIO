@@ -123,6 +123,7 @@ public sealed class SessionServiceTests
         Assert.Null(patch.AutoCleanupEnabled);
         Assert.Null(patch.AutoCleanupIntervalSeconds);
         Assert.Null(patch.Tags);
+        Assert.Null(patch.ResoniteLinkEnabled);
     }
 
     // ===================================================================
@@ -213,6 +214,91 @@ public sealed class SessionServiceTests
 
         var patch = Assert.IsType<Core.Session.SessionSettingsPatchSnapshot>(bridge.LastApplyPatch);
         Assert.Null(patch.Tags);
+    }
+
+    // ===================================================================
+    //  ResoniteLink — GetSettings state + ApplySettings enable/disable
+    // ===================================================================
+
+    [Fact]
+    public async Task GetSettings_carries_resonite_link_disabled_state_with_zero_port()
+    {
+        // 既定 (未起動) では disabled かつ port=0 が snapshot に載る契約。
+        var bridge = new FakeSessionBridge();
+        await using var host = await SessionServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
+
+        var settings = await client.GetSettingsAsync(new GetSettingsRequest());
+
+        Assert.False(settings.ResoniteLinkEnabled);
+        Assert.Equal(0, settings.ResoniteLinkPort);
+    }
+
+    [Fact]
+    public async Task GetSettings_after_enable_carries_resonite_link_enabled_with_nonzero_port()
+    {
+        // 有効化後の GetSettings は enabled=true かつ port>0 を載せる
+        // (read-only な ResoniteLinkPort が wire を越えて伝わることの確認)。
+        var bridge = new FakeSessionBridge();
+        await using var host = await SessionServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
+
+        await client.ApplySettingsAsync(new SessionSettingsPatch { ResoniteLinkEnabled = true });
+        var settings = await client.GetSettingsAsync(new GetSettingsRequest());
+
+        Assert.True(settings.ResoniteLinkEnabled);
+        Assert.True(settings.ResoniteLinkPort > 0);
+    }
+
+    [Fact]
+    public async Task ApplySettings_with_resonite_link_enabled_true_passes_true_to_bridge()
+    {
+        // optional bool の presence: 明示 true が patch に non-null true として届く。
+        var bridge = new FakeSessionBridge();
+        await using var host = await SessionServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
+
+        await client.ApplySettingsAsync(new SessionSettingsPatch { ResoniteLinkEnabled = true });
+
+        var patch = Assert.IsType<Core.Session.SessionSettingsPatchSnapshot>(bridge.LastApplyPatch);
+        Assert.True(patch.ResoniteLinkEnabled);
+    }
+
+    [Fact]
+    public async Task ApplySettings_with_resonite_link_enabled_false_returns_FailedPrecondition()
+    {
+        // engine は runtime disable を提供しないため、false は FailedPrecondition
+        // (SessionResoniteLinkException の翻訳) になる契約。
+        var bridge = new FakeSessionBridge();
+        await using var host = await SessionServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.ApplySettingsAsync(
+                new SessionSettingsPatch { ResoniteLinkEnabled = false }
+            )
+        );
+
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task ApplySettings_without_resonite_link_field_leaves_resonite_link_enabled_null()
+    {
+        // 未指定 (optional 非 set) は「変更しない」→ patch.ResoniteLinkEnabled == null。
+        var bridge = new FakeSessionBridge();
+        await using var host = await SessionServiceHost.StartAsync(bridge);
+        using var channel = host.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
+
+        await client.ApplySettingsAsync(new SessionSettingsPatch { WorldName = "x" });
+
+        var patch = Assert.IsType<Core.Session.SessionSettingsPatchSnapshot>(bridge.LastApplyPatch);
+        Assert.Null(patch.ResoniteLinkEnabled);
     }
 
     // ===================================================================

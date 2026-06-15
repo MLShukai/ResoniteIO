@@ -565,6 +565,8 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "tags": 13,
         "session_id": 14,
         "is_host": 15,
+        "resonite_link_enabled": 16,
+        "resonite_link_port": 17,
     },
     SessionSettingsPatch: {
         "world_name": 1,
@@ -581,6 +583,7 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "auto_cleanup_interval_seconds": 12,
         "replace_tags": 13,
         "tags": 14,
+        "resonite_link_enabled": 15,
     },
     SessionUser: {
         "user_id": 1,

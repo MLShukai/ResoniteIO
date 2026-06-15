@@ -141,6 +141,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Session.SessionAmbiguousUserException",
             "ResoniteIO.Core.Session.SessionNotReadyException",
             "ResoniteIO.Core.Session.SessionPermissionDeniedException",
+            "ResoniteIO.Core.Session.SessionResoniteLinkException",
             "ResoniteIO.Core.Session.SessionRoleNotFoundException",
             "ResoniteIO.Core.Session.SessionRoleSnapshot",
             "ResoniteIO.Core.Session.SessionRolesSnapshot",

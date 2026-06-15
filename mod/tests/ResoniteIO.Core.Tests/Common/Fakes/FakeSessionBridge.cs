@@ -34,8 +34,17 @@ internal sealed class FakeSessionBridge : ISessionBridge
         AutoCleanupIntervalSeconds: 120f,
         Tags: new[] { "social", "test" },
         SessionId: "S-test-session",
-        IsHost: true
+        IsHost: true,
+        ResoniteLinkEnabled: false,
+        ResoniteLinkPort: 0
     );
+
+    /// <summary>
+    /// ResoniteLink を有効化したときに engine が割り当てるポートを模した値。
+    /// 実 engine は 2000-65535 の動的割当だが、Fake では決定的な値を返す
+    /// (snapshot に「有効時 port は &gt; 0」が載ることを観測するための代理値)。
+    /// </summary>
+    private const int ResoniteLinkEnabledPort = 50000;
 
     private readonly List<SessionUserSnapshot> _users = new()
     {
@@ -117,6 +126,24 @@ internal sealed class FakeSessionBridge : ISessionBridge
         LastApplyPatch = patch;
         TripIfArmed();
 
+        // ResoniteLink: true=有効化 (冪等), false=runtime disable 不可 (例外),
+        // null=変更しない。engine 契約 (ISessionBridge / session.proto) に準拠。
+        var resoniteLinkEnabled = _settings.ResoniteLinkEnabled;
+        var resoniteLinkPort = _settings.ResoniteLinkPort;
+        switch (patch.ResoniteLinkEnabled)
+        {
+            case true:
+                resoniteLinkEnabled = true;
+                resoniteLinkPort = ResoniteLinkEnabledPort;
+                break;
+            case false:
+                throw new SessionResoniteLinkException(
+                    "ResoniteLink cannot be disabled at runtime (the engine exposes no stop API)."
+                );
+            case null:
+                break;
+        }
+
         _settings = _settings with
         {
             WorldName = patch.WorldName ?? _settings.WorldName,
@@ -134,6 +161,8 @@ internal sealed class FakeSessionBridge : ISessionBridge
             AutoCleanupIntervalSeconds =
                 patch.AutoCleanupIntervalSeconds ?? _settings.AutoCleanupIntervalSeconds,
             Tags = patch.Tags ?? _settings.Tags,
+            ResoniteLinkEnabled = resoniteLinkEnabled,
+            ResoniteLinkPort = resoniteLinkPort,
         };
 
         return Task.CompletedTask;
