@@ -809,6 +809,8 @@
       
         
       
+        
+      
     
     
     
@@ -1197,6 +1199,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api/session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api/cursor/" class="md-nav__link">
         
   
@@ -1409,6 +1439,12 @@
 <td>Inventory</td>
 <td>unary</td>
 <td>Interactive REPL: browse (<code>ls</code>/<code>cd</code>), mutate (<code>mkdir</code>/<code>cp</code>/<code>mv</code>/<code>rm</code>), <code>spawn</code>, and <code>thumb</code> (save an item's thumbnail image).</td>
+</tr>
+<tr>
+<td><code>resoio session</code></td>
+<td>Session</td>
+<td>unary</td>
+<td>Configure the connected session via nested subcommands: <code>settings get</code>/<code>set</code> (partial apply; <code>set --resonite-link</code> enables ResoniteLink — enable-only, the engine has no runtime disable), <code>users list</code>, <code>user kick</code>/<code>ban</code>/<code>silence</code>/<code>respawn</code>/<code>role</code> (target with <code>--id</code>/<code>--name</code>/<code>--self</code>; <code>respawn</code> defaults to self), <code>roles list</code>, <code>overrides list</code>.</td>
 </tr>
 <tr>
 <td><code>resoio cursor</code></td>
