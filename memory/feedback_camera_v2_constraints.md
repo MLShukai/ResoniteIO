@@ -79,20 +79,24 @@ WineHQ の roadmap でも対応予定なし。pressure-vessel の filesystem 共
 等価な共有メモリ機構) を第一選択にする。UDS / domain socket 系の API を見たら
 ためらわず除外する。
 
-## 3. Steam Launch Options が WINEDLLOVERRIDES の唯一の経路
+## 3. WINEDLLOVERRIDES の経路 (host Steam 起動の場合のみ必須)
 
 Renderer 側 BepInEx (BepInExRenderer 5.4+) を起動させる doorstop hook 版
-`winhttp.dll` を Wine に load させるには:
+`winhttp.dll` を Wine に load させる方法は起動経路で異なる:
+
+- **container 内 `just resonite-start` 経路**: `scripts/resonite-run.sh` が
+  `--doorstop-target-assembly` を umu-run の CLI に直接渡すため
+  WINEDLLOVERRIDES は **不要**。
+- **host Steam 経由起動の場合のみ**: doorstop hook 版 `winhttp.dll` を読ませる
+  には Steam で Resonite を選択 → Properties → Launch Options に以下を
+  **設定する以外の経路は無い**:
 
 ```text
 WINEDLLOVERRIDES="winhttp=n,b" %command%
 ```
 
-を Steam で Resonite を選択 → Properties → Launch Options に **設定する以外の
-経路は無い**。
-
-- `host_agent.py` から env 経由で渡しても **Steam が sanitize する** ため
-  通らない (実証済み)
+- (host Steam 経由起動の場合) env 経由で渡しても **Steam が sanitize する**
+  ため通らない (実証済み)
 - `/proc/<pid>/environ` で確認しても env に乗らないため debug 困難。root
   cause が "Launch Options が空" だと気付くまでに時間がかかる
 - Wine は system 同梱の `winhttp.dll` を優先する仕様。override しない限り

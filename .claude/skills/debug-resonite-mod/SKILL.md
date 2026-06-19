@@ -1,20 +1,20 @@
 ---
 name: debug-resonite-mod
-description: "Use when debugging resonite-io mod runtime — adding logs, decompiling Resonite DLLs, starting/stopping Resonite from container, tailing BepInEx logs. Triggers: 'just log', 'just decompile', 'host-agent', 'Resonite を起動', 'Resonite を停止', 'BepInEx LogOutput', 'AssemblyLoadContext', 'mod の挙動を確認', 'TypeLoadException', 'Renderer の挙動'."
+description: "Use when debugging resonite-io mod runtime — adding logs, decompiling Resonite DLLs, starting/stopping Resonite in the container, tailing BepInEx logs. Triggers: 'just log', 'just decompile', 'just resonite-start', 'just resonite-stop', 'Resonite を起動', 'Resonite を停止', 'BepInEx LogOutput', 'AssemblyLoadContext', 'mod の挙動を確認', 'TypeLoadException', 'Renderer の挙動'."
 version: 0.1.0
 ---
 
 # Debug Resonite-IO Mod
 
-mod は Resonite (host プロセス) に in-process でロードされるため、container 内から直接 attach する経路はない。基本戦略は **print-debug + ログ tailing**。
+mod は Resonite プロセスに in-process でロードされ、Resonite 自体は devcontainer 内で起動する (`just resonite-start`)。.NET debugger attach は未整備なので、基本戦略は **print-debug + ログ tailing**。
 
 ______________________________________________________________________
 
 ## 1. ログ追従 (print-debug の主経路)
 
 - C# 側は `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) から `LogInfo` / `LogDebug` 等を出す
-- 出力先: Gale 経由起動時 **`gale/BepInEx/LogOutput.log`** (プロファイル側)
-- host 側で `just log` を別ターミナルで走らせ、`tail -F` で追従 (Resonite 再起動・ログローテーションを跨いで再 attach)
+- 出力先: Gale 経由起動時 **`gale/BepInEx/LogOutput.log`** (プロファイル側)。umu/Proton 自体の起動ノイズは別ファイル `gale/BepInEx/umu-launch.log`
+- container 内で `just log` を別ターミナルで走らせ、`tail -F` で追従 (Resonite 再起動・ログローテーションを跨いで再 attach)
 - Python 側は通常の `logging` でクライアント側の挙動を確認
 
 `.NET debugger attach` (host IDE → Resonite プロセス) は必要になった時に整備する (print-debug + `just log` で多くは足りる)。PDB は `deploy-mod` 時に DLL と一緒に配置済みなのでシンボル解決の前提は満たしている。
@@ -32,22 +32,16 @@ Camera readback など Renderite 周辺の実装は **decompile を読みなが�
 
 ______________________________________________________________________
 
-## 3. Container → Host bridge (Resonite start/stop)
+## 3. container 内 Resonite control (start/stop/status)
 
-container 内 shell から host の Resonite を Gale 経由で起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。
+container 内で mod 込み Resonite を起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。`scripts/resonite-ctl.sh` を `just` レシピ越しに叩く。
 
-> mod (BepInEx) 検証はこの host bridge 経路を使う。なお devcontainer 内で **vanilla Resonite を直接起動** する `just resonite-up` もあるが、現状 mod は載らない (vanilla まで) ため mod debug には使わない (setup-resonite-env skill §5 参照)。
-
-- **host 側**: GUI session の端末で `just host-agent` を foreground 常駐させる
-  - **gale CLI は `--no-gui` 指定時もディスプレイを要求する** ため、SSH only / TTY only セッションでは起動できない (Python 内で DISPLAY/WAYLAND_DISPLAY を検査して fail-fast する)
-  - Ctrl+C で停止、socket は自動 unlink
-- **container 側**:
-  - `just resonite-start [--profile NAME]` で起動
-  - `just resonite-stop` で停止 (`Resonite.exe` / `Renderite.Renderer.exe` を SIGTERM → 3 秒待ち → SIGKILL の二段構え)
-  - `just resonite-status` で実行状態を JSON 表示
-- **設定**: `.env` の `GaleProfile=<name>` を既定 profile に使う (`--profile` で都度 override 可)。`gale` バイナリが PATH 上に無い場合 (AppImage 等) は `.env` の `GaleBin=/abs/path/to/Gale.AppImage` で絶対パス指定
-- **トランスポート**: 本番 gRPC IPC の `$HOME/.resonite-io/` とは分離した `$HOME/.resonite-io-debug/host-agent.sock` を使う (両方とも pressure-vessel が通す `$HOME` 配下を採用)。mod 側 socket 探索ロジック (`resonite-*.sock`) と命名衝突しない設計
-- **kill 範囲**: 名前ベース pkill のみで Proton / pressure-vessel / reaper は触らない (Steam セッションを壊さないため Steam reaper の自走回収に委ねる)
+- `just resonite-start` で **mod 込み**を **background** 起動 (即 return)。Gale プロファイル `./gale` (= `/workspace/gale`) を hookfxr + doorstop で読む。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため Steam Launch Options (WINEDLLOVERRIDES) は不要
+- `just resonite-stop` で停止 (`Resonite.exe` / `Renderite.Renderer.exe` を `pkill` で SIGTERM → 3 秒待ち → SIGKILL の二段構え)
+- `just resonite-status` で実行状態を表示 (`pgrep -af` の出力)
+- mod を読まない素の起動が要るときは `just resonite-vanilla` (foreground、起動確認用、setup-resonite-env skill §5 参照)
+- **ログ**: mod 本体は `gale/BepInEx/LogOutput.log` (`just log`)、umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log`
+- **kill 範囲**: 名前ベース `pkill` のみ。umu-run ラッパも cmdline に "Resonite.exe" を含むため一緒に落ちるが、container には守るべき Steam セッションが無いので launch chain ごとクリーンに片付く
 
 ______________________________________________________________________
 
@@ -59,7 +53,7 @@ ______________________________________________________________________
 
 ### Camera v2 / Renderer 側 plugin が load されない
 
-- まず Steam Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` が入っているか確認 (これが無いと Renderer 側 BepInEx は起動しない)
+- container 内 `just resonite-start` 経路では doorstop を CLI で渡すため WINEDLLOVERRIDES は不要 (Renderer preloader が検出できていれば自動で渡る)。host Steam 経由起動の場合のみ Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` が要る (これが無いと Renderer 側 BepInEx は起動しない)
 - `gale/Renderer/BepInEx/LogOutput.log` を確認 (Renderer 側ログは engine 側と別ファイル)
 - InterprocessLib の callback signature は `Action<T[]?>` で、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず `-=`。詳細: [`feedback_interprocesslib_callback_signature.md`](../../memory/feedback_interprocesslib_callback_signature.md)
 
@@ -67,7 +61,7 @@ ______________________________________________________________________
 
 - `just check-gale` で必須 plugin 6 個 (+ BepInExRenderer framework) を確認
 - `gale/BepInEx/plugins/ResoniteIO/` に DLL + PDB が居るか
-- Vanilla 起動 (Steam 直起動) になっていないか — Gale 経由でなければ mod は読まれない
+- Vanilla 起動 (`just resonite-vanilla` / host Steam 直起動) になっていないか — mod 込みは `just resonite-start` で起動する
 - 詳細な setup 周りは `setup-resonite-env` skill 参照
 
 ### Camera readback / Renderite の挙動が不明

@@ -21,10 +21,11 @@ flowchart LR
 
 - **gRPC** gives a typed, multi-language contract with first-class streaming, which maps
   cleanly onto the streaming modalities (Camera, Speaker, Microphone, Locomotion).
-- **A Unix Domain Socket** keeps the transport local and avoids exposing a TCP port. The
-  socket lives under `~/.resonite-io/` for production IPC and `~/.resonite-io-debug/` for the
-  debug bridge. (Under Steam/Proton, `/run/user/<UID>` and `/tmp` are not shared with the
-  game's filesystem namespace, which is why a `$HOME`-rooted path is used.)
+- **A Unix Domain Socket** keeps the transport local and avoids exposing a TCP port. The mod
+  creates the socket under `~/.resonite-io/` and the Python client connects to it there; both
+  run on the same host (the dev container, when Resonite is launched in-container). (Under
+  Steam/Proton, `/run/user/<UID>` and `/tmp` are not shared with the game's filesystem
+  namespace, which is why a `$HOME`-rooted path is used.)
 
 ## proto is the single source of truth
 

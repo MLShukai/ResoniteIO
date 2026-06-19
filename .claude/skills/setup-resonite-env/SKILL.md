@@ -26,13 +26,13 @@ ______________________________________________________________________
 
 初回 setup フロー:
 
-1. `.env.example` を `.env` にコピーし、`ResonitePath` を Steam の Resonite 実行ファイルディレクトリ絶対パスに設定。必要に応じて `GaleProfile` / `GaleBin` も
+1. `.env.example` を `.env` にコピーし、`ResonitePath` を Resonite 実行ファイルディレクトリ絶対パスに設定 (container 内 Resonite 起動では `/resonite:ro` bind の source として再利用される)
 2. `just init` を host 側で実行 — docker / docker compose v2 検出 → `.env` 検証 → `ResonitePath` 検証 → Gale プロファイル確認を冪等に実施
 3. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash` (`@devcontainers/cli`、既定では未インストール)
 4. devcontainer が自動実行する:
-   - `initializeCommand` (host 側・作成前、`.devcontainer/initialize.sh`): `~/.resonite-io{,-debug}/` を 0700 で事前作成し、host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。加えて container 内 Resonite 起動のために **AppArmor の非特権 user namespace 制限を hard fail チェック** (§6 参照)、`DISPLAY` / X auth cookie (FamilyWild 書換えで `.xauth`) / render・video GID / GPU ベンダを検出して `.env` に記録し、`compose.gpu.yml` symlink を貼る
+   - `initializeCommand` (host 側・作成前、`.devcontainer/initialize.sh`): host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。加えて container 内 Resonite 起動のために **AppArmor の非特権 user namespace 制限を hard fail チェック** (§6 参照)、`DISPLAY` / X auth cookie (FamilyWild 書換えで `.xauth`) / render・video GID / GPU ベンダを検出して `.env` に記録し、`compose.gpu.yml` symlink を貼る。本番 gRPC UDS dir は **host 側に作らない** — Resonite は container 内で起動し、mod (GrpcHost) が container 内 `~/.resonite-io/` を bind 前に自分で mkdir する
    - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
-5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する。devcontainer 内で vanilla Resonite を起動する場合は `just resonite-up` (§5)
+5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する。devcontainer 内で Resonite を起動する場合は `just resonite-vanilla` (mod なし) / `just resonite-start` (mod 込み) (§5)
 
 ______________________________________________________________________
 
@@ -69,34 +69,42 @@ UnityEngine.CoreModule が非再配布で CI build 不可のため、配布物 (
 
 ______________________________________________________________________
 
-## 3. Steam Launch Options (Camera v2 で必須)
+## 3. WINEDLLOVERRIDES (host Steam 起動の場合のみ必須)
 
-Steam で Resonite を選択 → Properties → Launch Options に以下を設定する:
+Camera v2 の Renderer 側 BepInEx を起動させる doorstop hook 版 `winhttp.dll` を Wine に読ませる方法は起動経路で異なる:
+
+- **container 内 `just resonite-start` 経路**: `scripts/resonite-run.sh` が `--doorstop-target-assembly` を umu-run の CLI に直接渡すため WINEDLLOVERRIDES は **不要**
+- **host Steam 経由起動の場合のみ**: Steam で Resonite を選択 → Properties → Launch Options に以下を設定する:
 
 ```text
 WINEDLLOVERRIDES="winhttp=n,b" %command%
 ```
 
-- **なぜ必須**: Wine は system 同梱 `winhttp.dll` を優先するため、RenderiteHook が deploy した hook 版 `winhttp.dll` (= doorstop) を読ませるには Launch Options で override が必要。これが無いと Renderer 側 BepInEx は永遠に起動せず、Camera v2 の renderer-side plugin が load されない
+- **なぜ必須 (host Steam の場合)**: Wine は system 同梱 `winhttp.dll` を優先するため、RenderiteHook が deploy した hook 版 `winhttp.dll` (= doorstop) を読ませるには Launch Options で override が必要。これが無いと Renderer 側 BepInEx は永遠に起動せず、Camera v2 の renderer-side plugin が load されない
 - **debug が困難**: 真の原因が Steam Launch Options 漏れであることは `/proc/<pid>/environ` で確認できないと見抜けない (Wine プロセスの env を host から見るのが面倒)
-- **代替経路は無い**: `host_agent.py` から env で `WINEDLLOVERRIDES` を渡しても Steam が sanitize するため通らない。Steam Launch Options が唯一の経路
+- **代替経路は無い (host Steam の場合)**: env で `WINEDLLOVERRIDES` を渡しても Steam が sanitize するため通らない。Steam Launch Options が唯一の経路
 
 ______________________________________________________________________
 
 ## 4. UDS パスと pressure-vessel sandbox
 
-- 本番 gRPC IPC は **`$HOME/.resonite-io/`**、container ↔ host debug bridge は **`$HOME/.resonite-io-debug/`** で host/container 同一絶対パスの bind 共有
+- 本番 gRPC IPC は **`$HOME/.resonite-io/`**。Resonite を container 内で起動するため host とは共有せず、container 内 `/home/dev/.resonite-io/` に mod (GrpcHost) が socket を作り、同 container 内の Python client がそこへ connect する
 - `$XDG_RUNTIME_DIR/` (= `/run/user/<UID>/`) は **pressure-vessel sandbox が通さない**ため不採用
 - `/tmp/` も通らない。`$HOME/` 配下のみが安全
 - 詳細は [`reference_pressure_vessel_paths.md`](../../memory/reference_pressure_vessel_paths.md)
 
 ______________________________________________________________________
 
-## 5. devcontainer 内で Resonite を起動 (`just resonite-up`)
+## 5. devcontainer 内で Resonite を起動 (`just resonite-vanilla` / `just resonite-start`)
 
-mod 開発の従来フロー (build/deploy) は host Steam + Gale が主軸だが、devcontainer 内で **vanilla Resonite** を直接起動することもできる。`scripts/resonite-run.sh` が ro bind の `/resonite` を書込可能な `/opt/resonite` に rsync してから `umu-run` (umu-launcher/Proton) で `Resonite.exe -SkipIntroTutorial` を起動する。初回は GE-Proton の DL と install コピー (~2GB) で時間がかかり、2 回目以降は差分のみ転送する。
+devcontainer 内で Resonite を直接起動できる。`scripts/resonite-run.sh` が ro bind の `/resonite` を書込可能な `/opt/resonite` に rsync してから `umu-run` (umu-launcher/Proton) で `Resonite.exe -SkipIntroTutorial` を起動する。初回は GE-Proton の DL と install コピー (~2GB) で時間がかかり、2 回目以降は差分のみ転送する。
 
-**起動できるのは現状 vanilla まで**。ResoniteIO mod (BepInEx) を container 内 Resonite にロードするのは次フェーズで、mod 開発は引き続き host Steam + Gale + `just deploy-mod` を使う。
+2 つの起動経路がある:
+
+- **`just resonite-vanilla`**: mod を読まない素の Resonite を **foreground** 起動 (起動確認・切り分け用)
+- **`just resonite-start` / `resonite-stop` / `resonite-status`** (`scripts/resonite-ctl.sh`): Gale プロファイル (`./gale` = `/workspace/gale`) から **mod 込み**で **background** 起動する lifecycle。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため Steam Launch Options (WINEDLLOVERRIDES) は不要。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。停止は SIGTERM → 3s → SIGKILL の二段構え
+
+`just resonite-start` で起動した mod のログは `gale/BepInEx/LogOutput.log` (`just log` で tail)、umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log` に分離される。
 
 ### 前提 (host 側)
 
@@ -136,4 +144,4 @@ ______________________________________________________________________
 
 ## 8. 実機 mod load 検証手順
 
-`just resonite-start` (host-agent 経由で Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Claude が container 内から host-agent bridge 経由で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。
+`just deploy-mod` → `just resonite-start` (container 内で mod 込み Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Claude が container 内で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。

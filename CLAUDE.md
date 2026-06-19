@@ -96,13 +96,13 @@ LLM コーディングで陥りがちなミスを減らすための行動指針�
 
 実装済みの主要要素 (概観):
 
-- 開発環境: `.devcontainer/` (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / `justfile` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container ↔ host Resonite bridge) / `scripts/resonite-run.sh` (devcontainer 内で vanilla Resonite を umu-run 起動: `just resonite-up`)
+- 開発環境: `.devcontainer/` (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / `justfile` / `scripts/resonite-run.sh` (devcontainer 内で Resonite を umu-run 起動: `--vanilla` で素の Resonite を foreground、既定は Gale プロファイル `./gale` から mod 込みで起動) + `scripts/resonite-ctl.sh` (mod 込み Resonite の start/stop/status lifecycle: `just resonite-{start,stop,status}`)
 - C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を `<Modality>/` 配下にまとめる (Connection / Camera / Speaker / Microphone / Locomotion / Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor)。共通基盤として `UnixNanosClock` / `ILogSink` (`Logging/`) と汎用 gRPC host `GrpcHost` (`Hosting/`)
 - C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で GrpcHost 起動、SafeShutdown で partial-failure / ProcessExit を統合) / `Bridge/FrooxEngine<Modality>Bridge`
 - Python (`python/src/resoio/`): モダリティごとに `<Modality>Client` (`ConnectionClient` / `CameraClient` / `SpeakerClient` / `MicrophoneClient` / `LocomotionClient` / `GrabberClient` / `DisplayClient` / `WorldClient` / `ContextMenuClient` / `DashClient` / `InventoryClient` / `CursorClient`) と `_socket.py` / `_generated/`
 - CLI (`python/src/resoio/cli/`): action 名 flat command (`resoio ping` / `info` / `record` / `mic` / `drive` / `grab` / `display` / `world` / `context-menu` / `dash` / `inventory` / `cursor`)。subgroup 階層化はしない。`record` は `--video` / `--audio` の filter フラグ (両方未指定で muxed mp4/mkv) で Camera/Speaker を取得する Resonite→Python 方向、`mic` は Microphone を Python→Resonite に流す独立コマンド、`drive` は対話 WASD 運転 (旧 `locomotion drive` の平坦化)、`grab` は action 省略時 grab でフラグ位置自由 (旧 `manipulate`)、`display` は `get` / `set` subcommand (`set` は `-W/-H/-F` を 1 つ以上必須)、`cursor` は desktop カーソルを set/center/get/release する (set は release まで保持)
 - proto: `proto/resonite_io/v1/{connection,camera,locomotion,speaker,microphone,grabber,display,world,context_menu,dash,inventory,cursor}.proto`
-- UDS path: 本番 gRPC IPC は `$HOME/.resonite-io/`、debug bridge は `$HOME/.resonite-io-debug/`
+- UDS path: 本番 gRPC IPC は container 内 `$HOME/.resonite-io/` (= `/home/dev/.resonite-io/`)。Resonite を container 内で動かすので host とは共有しない。mod (GrpcHost) が bind 前にこのディレクトリを自分で作り `resonite-{pid}.sock` を bind、同 container 内の Python client がそこへ connect する
 - Camera v2 Renderer plugin: UnityEngine.CoreModule が非再配布なため CI で build できず、Resonite のあるローカルで build した成果物を **committed prebuilt** (`mod/prebuilt/renderer/`) として commit し配布物 (Thunderstore zip) に同梱する。更新は `just renderer-prebuild` (Resonite 必須)、prebuilt と Renderer ソースの drift は `just check-renderer-prebuilt` (`just run` ゲートに含む) と CI (`publish.yml` build ジョブ / `dotnet.yml`) の drift guard で検出する
 
 リポジトリ実構造:
@@ -118,7 +118,7 @@ resonite-io/
 │   └── tests/                 # Core.Tests (Kestrel ラウンドトリップ) / Tests (smoke) / manual/
 ├── python/                    # Python 側 (uv + betterproto2 + grpclib)
 │   └── src/resoio/            # Client 群 + cli/ + _generated/
-├── scripts/                   # gen_proto / decompile / host_agent / resonite_cli
+├── scripts/                   # gen_proto / decompile / resonite-run / resonite-ctl
 ├── memory/                    # プロジェクト memory (MEMORY.md index + feedback_/reference_*.md + agents/<agent-type>/)
 ├── gale/                      # Gale (Resonite mod manager) profile (gitignore)
 ├── decompiled/                # ILSpy 出力 (gitignore)
@@ -131,23 +131,24 @@ resonite-io/
 - C# (mod): **.NET 10 SDK** + BepisLoader 公式 Template (`dotnet new bep6resonite`) 準拠。フォーマッタ `csharpier`、配布 `tcli` (`.config/dotnet-tools.json` の local tool)。テスト `xunit`、`Nullable=enable` + `TreatWarningsAsErrors=true`
 - Python (resoio): **`uv`** + Python `>=3.12`。gRPC は **`betterproto2[grpclib]`** (async)。`pyright` strict、`ruff` (line-length 88、ダブルクォート、isort + combine-as-imports)、`pytest` + `pytest-asyncio`/`pytest-cov`/`pytest-mock`
 - proto: C# 側は csproj の `<Protobuf>` で `dotnet build` 時に自動生成 (Server スタブのみ、commit しない)。Python 側は `just gen-proto` で `python/src/resoio/_generated/` に書き、**commit する**。lint は `buf` (`SERVICE_SUFFIX` / `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except)
-- Docker 開発環境: `debian:13-slim` (trixie) ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`.devcontainer/compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く (compose / build context とも `.devcontainer/`)。devcontainer 内で **vanilla Resonite を起動できる** (`just resonite-up`、umu-run/Proton。host の graphical session + PipeWire/PulseAudio + AppArmor 緩和が前提、GPU は NVIDIA/AMD/Intel を `initialize.sh` が自動検出して compose overlay を切替)。ResoniteIO mod のコンテナ内ロードは次フェーズで、mod 開発は引き続き host Steam + Gale + `just deploy-mod`。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
+- Docker 開発環境: `debian:13-slim` (trixie) ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`.devcontainer/compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く (compose / build context とも `.devcontainer/`)。devcontainer 内で **Resonite を起動できる** (umu-run/Proton。host の graphical session + PipeWire/PulseAudio + AppArmor 緩和が前提、GPU は NVIDIA/AMD/Intel を `initialize.sh` が自動検出して compose overlay を切替)。素の Resonite は `just resonite-vanilla` (foreground)、**mod 込み** は Gale プロファイル `./gale` から `just resonite-{start,stop,status}` (background lifecycle) で起動する。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため container 経路では Steam Launch Options (`WINEDLLOVERRIDES`) は不要。mod 開発の deploy は引き続き `just deploy-mod`、host Steam + Gale GUI 直起動も従来どおり可能。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
 - CI / リリース: `.github/workflows/` に品質ゲート (`pre-commit` / `test` (Python 3.12-3.14) / `type-check` / `dotnet` / `proto-check`) と tag-driven リリース (`publish.yml`) を配置。`v*` tag の push で Thunderstore mod + PyPI パッケージを同時公開する。手順は [RELEASE.md](RELEASE.md) と [release-resonite skill](.claude/skills/release-resonite/SKILL.md) 参照 (正規 version = csproj `<Version>`、`python/pyproject.toml` は lockstep)
 
 ## コマンド
 
 `just` レシピが C# / Python / proto をまたぐ作業をラップする。主要レシピ:
 
-| レシピ                                                  | 役割                                                                                                                    |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `just run`                                              | `format` → `gen-proto` → `build` → `test` → `type` を直列実行 (コミット前の必須 check)                                  |
-| `just gen-proto`                                        | `.proto` から Python 側コードを生成 (C# 側は csproj が build-time 生成)                                                 |
-| `just deploy-mod`                                       | mod build + `gale/BepInEx/plugins/ResoniteIO/` へ DLL+PDB 配置                                                          |
-| `just log`                                              | host 側で `gale/BepInEx/LogOutput.log` を tail -F (print-debug の主経路)                                                |
-| `just decompile`                                        | Resonite first-party DLL を ILSpy で `decompiled/` に展開                                                               |
-| `just init`                                             | host 側で初回 setup (docker / docker compose v2 検出 / `.env` 作成・検証 / `ResonitePath` 検証 / Gale プロファイル確認) |
-| `just check-gale`                                       | Gale プロファイルに必須 plugin が揃っているか検証                                                                       |
-| `just host-agent` / `just resonite-{start,stop,status}` | container ↔ host Resonite 起動・停止 bridge (debug 用)                                                                  |
+| レシピ                              | 役割                                                                                                                         |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `just run`                          | `format` → `gen-proto` → `build` → `test` → `type` を直列実行 (コミット前の必須 check)                                       |
+| `just gen-proto`                    | `.proto` から Python 側コードを生成 (C# 側は csproj が build-time 生成)                                                      |
+| `just deploy-mod`                   | mod build + `gale/BepInEx/plugins/ResoniteIO/` へ DLL+PDB 配置                                                               |
+| `just log`                          | `gale/BepInEx/LogOutput.log` を tail -F (print-debug の主経路。umu/Proton 起動ノイズは `gale/BepInEx/umu-launch.log` に分離) |
+| `just decompile`                    | Resonite first-party DLL を ILSpy で `decompiled/` に展開                                                                    |
+| `just init`                         | host 側で初回 setup (docker / docker compose v2 検出 / `.env` 作成・検証 / `ResonitePath` 検証 / Gale プロファイル確認)      |
+| `just check-gale`                   | Gale プロファイルに必須 plugin が揃っているか検証                                                                            |
+| `just resonite-vanilla`             | container 内で素の Resonite を foreground 起動 (mod なし、起動確認用)                                                        |
+| `just resonite-{start,stop,status}` | container 内で Gale プロファイル (`./gale`) から mod 込み Resonite を background で起動・停止・状態確認                      |
 
 全レシピは `just --list` で取得可能。サブコマンド分離 (`just py-test` / `just mod-build` 等) は troubleshooting 時のフォールバック。
 
@@ -155,13 +156,13 @@ resonite-io/
 
 ## 実行環境
 
-**ホスト側に必要なものは `docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。mod 開発の従来フロー (build / deploy) は host Steam + Gale が主軸だが、devcontainer 内で **vanilla Resonite を直接起動** することもできる (`just resonite-up`、現状は vanilla まで・mod ロードは次フェーズ)。コンテナ内起動には host の graphical session (X11 / Xwayland) と PipeWire/PulseAudio、そして `kernel.apparmor_restrict_unprivileged_userns=0` が要る (未設定だと pressure-vessel が非特権 user namespace を作れず起動が hard fail する)。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリ絶対パスを指定 (コンテナ内起動では `/resonite:ro` の source として再利用される)。
+**ホスト側に必要なものは `docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。devcontainer 内で **Resonite を直接起動** できる: 素の Resonite は `just resonite-vanilla` (foreground)、**ResoniteIO mod 込み** は Gale プロファイル `./gale` から `just resonite-{start,stop,status}` (background lifecycle)。mod 検証は container 内で完結し (mod (GrpcHost) が container 内 `~/.resonite-io/` に socket を作り、同 container 内の Python client が connect する)、host を経由しない。host Steam + Gale GUI 直起動や `just deploy-mod` も従来どおり可能。コンテナ内起動には host の graphical session (X11 / Xwayland) と PipeWire/PulseAudio、そして `kernel.apparmor_restrict_unprivileged_userns=0` が要る (未設定だと pressure-vessel が非特権 user namespace を作れず起動が hard fail する)。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリ絶対パスを指定 (コンテナ内起動では `/resonite:ro` の source として再利用される)。
 
 開発環境の入り方は devcontainer 方式:
 
 1. host で一度 `just init` (docker / docker compose v2 検出、`.env` 作成・検証、`ResonitePath` 検証、Gale プロファイル確認)
 2. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash`
-3. devcontainer が自動実行する: `initializeCommand` (host 側・作成前) が `~/.resonite-io{,-debug}/` を 0700 で作成し host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致、deploy 成果物が host 所有になる)、`postCreateCommand` (container 内・作成後) が `scripts/container-init.sh` を実行 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
+3. devcontainer が自動実行する: `initializeCommand` (host 側・作成前) が host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致、deploy 成果物が host 所有になる)、`postCreateCommand` (container 内・作成後) が `scripts/container-init.sh` を実行 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
 4. コンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` / `just run` 等を従来どおり実行
 5. 後片付けは VS Code / Zed の devcontainer 停止操作、または CLI なら `docker compose` を直接叩く
 

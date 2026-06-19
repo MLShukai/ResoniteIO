@@ -53,8 +53,8 @@ resonite-io プロジェクトの規約・知見・ユーザーの好みを記�
 
 ### 検証フロー
 
-- [Codex が e2e 検証を回す](feedback_codex_drives_e2e_verification.md) — host-agent bridge で Resonite を Codex が自動起動・停止・撮影できるので、検証は Codex が完結させる。`mod/tests/manual/*.md` は本質的に人間しかできない確認 (UI 手動切替・voice 受信確認等) に限定する。
-- [問いかける前に resonite-status を実行](feedback_resonite_status_before_asking.md) — e2e/実機の可否を聞く前に必ず `just resonite-status` を先に実行する。host-agent は常駐前提なので「立ち上げた?」と毎回聞かない。
+- [Codex が e2e 検証を回す](feedback_codex_drives_e2e_verification.md) — container 内 `just resonite-start/stop` + `resoio screenshot` で Resonite を Codex が自動起動・停止・撮影できるので、検証は Codex が完結させる。`mod/tests/manual/*.md` は本質的に人間しかできない確認 (UI 手動切替・voice 受信確認等) に限定する。
+- [問いかける前に resonite-status を実行](feedback_resonite_status_before_asking.md) — e2e/実機の可否を聞く前に必ず `just resonite-status` を先に実行する。Resonite は container 内で `just resonite-start` 起動できるので「立ち上げた?」と毎回聞かない。
 - [sign-in 必須 e2e は 1 boot に畳む](feedback_e2e_single_signin_per_boot.md) — resonite_session fixture は test ごとに Resonite を再起動するが、連続 2 回目の boot は cloud sign-in が確実に通らない。Inventory/World 等 sign-in を要する e2e は 1 file = 1 test に統合して 1 boot / 1 sign-in に閉じる。
 - [e2e は不可逆な cloud write を実行しない](feedback_e2e_no_irreversible_cloud_writes.md) — フレンド申請/承認/拒否・ban 等、相手や cloud に取り消せない副作用を出す操作は e2e で撃たない。状態変化系は fake bridge の integration test のみで検証し、e2e は read-only に限定する。
 
