@@ -5,8 +5,15 @@
 # ホストの Resonite install (/resonite:ro bind) を書込可能な /opt/resonite に
 # rsync したうえで umu-run 経由で Resonite.exe を起動する。
 #
+# 既定は **Gale プロファイル (./gale = /workspace/gale) を読み込んで mod 込みで起動**
+# する。engine 側は hookfxr (--hookfxr-enable --bepinex-target)、Renderer 側は
+# doorstop (--doorstop-target-assembly) を CLI で渡す。Steam Launch Options の
+# WINEDLLOVERRIDES は不要 (doorstop config を CLI で直接渡すため)。
+#
+# --vanilla を付けると mod を読まない素の Resonite を起動する (起動確認用)。
+#
 # Usage:
-#   scripts/resonite-run.sh [ARGS...]
+#   scripts/resonite-run.sh [--vanilla] [ARGS...]
 #
 # ARGS は Resonite.exe にそのまま渡される追加引数 (省略可)。
 
@@ -20,6 +27,15 @@ source "$SCRIPT_DIR/lib.sh"
 
 RESONITE_SRC="/resonite"
 APP_DIR="/opt/resonite"
+# Gale プロファイル (mod 一式の在処)。compose が GalePath=/workspace/gale を渡す。
+GALE_DIR="${GalePath:-/workspace/gale}"
+
+# mode (mod / vanilla) は先頭引数 --vanilla で切替える。剥がした残りは Resonite に forward。
+VANILLA=0
+if [[ "${1:-}" == "--vanilla" ]]; then
+  VANILLA=1
+  shift
+fi
 
 # ===== 事前チェック =============================================================
 check_resonite_src() {
@@ -33,6 +49,15 @@ check_resonite_src() {
 check_umu_run() {
   have umu-run || die "umu-run が PATH に見つかりません。" \
     "devcontainer を rebuild して umu-launcher が正しくインストールされているか確認してください。"
+}
+
+# mod mode は Gale プロファイルの BepInEx を必須とする (vanilla fallback はしない)。
+check_gale_profile() {
+  if [[ ! -d "$GALE_DIR/BepInEx" ]]; then
+    die "$GALE_DIR/BepInEx が見つかりません (mod 起動には Gale プロファイルが必要)。" \
+      "'just deploy-mod' で mod を配置し、'just check-gale' で必須部品を確認してください。" \
+      "素の Resonite を起動するだけなら 'just resonite-vanilla' を使ってください。"
+  fi
 }
 
 # ===== Resonite install を書込可能コピーに同期 ===================================
@@ -61,11 +86,55 @@ sync_resonite() {
   fi
 }
 
+# ===== mod 起動引数 =============================================================
+# engine 側 = hookfxr (LinuxBootstrap.sh が "$@" 経由で BepisLoader に渡す)。
+# Renderer 側 = doorstop (winhttp proxy)。--doorstop-target-assembly の CLI 指定が
+# install 内 Renderer/doorstop_config.ini を上書きするので、Unix 絶対パスを渡せる
+# (cd /opt/resonite で CWD ドライブが Z:→/ になり Wine が正しく解決する)。
+build_mod_args() {
+  MOD_ARGS=(--hookfxr-enable --bepinex-target "$GALE_DIR/BepInEx")
+  local core pre f
+  core="$GALE_DIR/Renderer/BepInEx/core"
+  # Renderer 側 preloader を先頭マッチで 1 つ拾う (BepInEx.Preloader.dll 等)。
+  # nullglob 非依存にするため [[ -f ]] で literal pattern 残りを弾く。
+  pre=""
+  for f in "$core"/BepInEx.*Preloader*.dll "$core"/BepInEx.*IL2CPP*.dll; do
+    if [[ -f "$f" ]]; then
+      pre="$f"
+      break
+    fi
+  done
+  if [[ -n "$pre" ]]; then
+    MOD_ARGS+=(--doorstop-enabled true --doorstop-target-assembly "$pre")
+    log "mod 起動: bepinex-target=$GALE_DIR/BepInEx doorstop=$pre"
+  else
+    warn "Renderer preloader 未検出 ($core)。Camera v2 (Renderer 側 plugin) は無効で起動します。"
+    log "mod 起動: bepinex-target=$GALE_DIR/BepInEx doorstop=<none>"
+  fi
+}
+
 # ===== エントリポイント =========================================================
 main() {
-  # 引数チェックは行わない: $@ はそのまま Resonite.exe に forward する (下の exec)。
+  # 引数チェックは行わない: --vanilla を剥がした残りはそのまま Resonite.exe に forward。
   check_resonite_src
   check_umu_run
+
+  MOD_ARGS=()
+  if [[ "$VANILLA" -eq 1 ]]; then
+    log "vanilla mode: mod を読み込まずに起動します。"
+  else
+    check_gale_profile
+    build_mod_args
+    # engine / Renderer は pressure-vessel (Steam Linux Runtime) の sandbox 内で動く。
+    # pressure-vessel は既定で $HOME と game dir (/opt/resonite) しか bind しないため、
+    # /workspace 配下の Gale プロファイルは sandbox から見えず BepisLoader が core DLL を
+    # load できずに死ぬ。PRESSURE_VESSEL_FILESYSTEMS_RW で profile を sandbox に bind する。
+    # (host の Gale 起動では ./gale が $HOME 配下なので bind 不要だった。詳細:
+    #  memory/reference_pressure_vessel_paths.md)
+    export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW:+$PRESSURE_VESSEL_FILESYSTEMS_RW:}$GALE_DIR"
+    log "pressure-vessel に $GALE_DIR を bind 共有 (sandbox から mod を可視化)"
+  fi
+
   sync_resonite
 
   # APP_DIR に cd することで CWD ドライブが Z: (→ /) になり、
@@ -73,7 +142,7 @@ main() {
   cd "$APP_DIR"
 
   log "Starting Resonite via umu-run..."
-  exec umu-run /opt/resonite/Resonite.exe -SkipIntroTutorial "$@"
+  exec umu-run /opt/resonite/Resonite.exe -SkipIntroTutorial "${MOD_ARGS[@]}" "$@"
 }
 
 main "$@"

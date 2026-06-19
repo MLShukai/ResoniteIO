@@ -47,7 +47,7 @@ py-test:
 py-type:
     cd python && uv run pyright
 
-# e2e テストを実行する (実機 Resonite + host-agent が前提)。
+# e2e テストを実行する (container 内 `just resonite-start` で起動する実機 Resonite が前提)。
 # - 引数なし (name="all"): tests/e2e/ ディレクトリ配下を全て走らせる
 # - 引数あり (例: `just e2e-test connection`): tests/e2e/<name>.py のみ走らせる
 # tests/e2e/ 配下のファイルは `test_` prefix を持たず `<scenario>.py` 命名としている。
@@ -257,11 +257,10 @@ check-gale:
     fi; \
     echo "[check-gale] All required Gale components present."
 
-# Resonite (host 側プロセス) の BepInEx ログを追従する。print-debug の主経路。
+# Resonite mod の BepInEx ログを追従する。print-debug の主経路。
 # `tail -F` は inode 切り替え (ローテーション / Resonite 再起動) を跨いで再追従する。
-# host 側で起動する想定 (Resonite が動いているのは container ではなく host)。
-# Gale 経由起動時のログは profile 側 (gale/BepInEx/LogOutput.log) に出る。
-# Gale が将来仕様変更する場合は要再確認。
+# container 内 `just resonite-start` で起動した mod がここ (gale/BepInEx/LogOutput.log)
+# にログを書く。umu/Proton 自体の起動ノイズは別ファイル (gale/BepInEx/umu-launch.log)。
 log:
     @GALE_ROOT="${GalePath:-./gale}"; \
     LOG="$GALE_ROOT/BepInEx/LogOutput.log"; \
@@ -312,10 +311,8 @@ clean-py:
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
 
 # ===== Resonite (devcontainer 内起動) =========================================
-
-# devcontainer 内から Resonite を直接起動する (umu-launcher / GE-Proton 経由)。
 #
-# 前提:
+# 共通前提 (resonite-vanilla / resonite-start とも):
 #   - devcontainer 内で実行すること (umu-run が PATH に必要)
 #   - ホスト側で GUI session (X11 / Xwayland) と audio (PipeWire / PulseAudio) が動いていること
 #   - initialize.sh が DISPLAY / XAUTHORITY_HOST 等を .env に自動設定済みであること
@@ -323,47 +320,26 @@ clean-py:
 # 初回実行時は GE-Proton のダウンロード + ~2GB の Resonite install コピーが走るため
 # 数分かかる。2 回目以降は差分のみ転送するため速い。
 #
-# ※ host 上の Gale 経由で Resonite を起動する debug 経路 (`just resonite-start` 等) とは
-#    別物。このレシピはコンテナ内から直接 umu で Resonite を起動する。
-resonite-up *ARGS:
-    bash scripts/resonite-run.sh {{ARGS}}
+# 役割分担:
+#   - resonite-vanilla : mod を読まない素の Resonite を foreground 起動 (起動確認用)
+#   - resonite-start/stop/status : Gale プロファイル (./gale) から mod 込みで起動する
+#     background lifecycle。mod が無ければ fail-fast。
 
-# ===== Host bridge (Resonite debug) =========================================
-#
-# host 常駐 daemon (`scripts/host_agent.py`) と container 側 client
-# (`scripts/resonite_cli.py`) を組み合わせて、container 内 shell から host
-# 上の Resonite を Gale 経由で start/stop/status する debug 経路。
-# UDS は本番 gRPC IPC とは分離した $XDG_RUNTIME_DIR/resonite-io-debug/ を使う。
+# 素の Resonite を foreground 起動する (mod なし)。起動確認・切り分け用。
+resonite-vanilla *ARGS:
+    bash scripts/resonite-run.sh --vanilla {{ARGS}}
 
-# container 側 `just resonite-*` のための debug bridge daemon を host で
-# foreground 起動する。Ctrl+C で停止、socket は自動 unlink。環境変数の検査は
-# host_agent.py 内で行う (DISPLAY / WAYLAND_DISPLAY / GaleBin が必要)。
-# **GUI session の端末から実行** (gale は --no-gui でもディスプレイを要求)。
-#
-# screenshot action のために host 側専用 `pyscreenshot` を `scripts/.venv/` (uv venv
-# 管理) に入れる。venv は冪等に確保 + 同期し、最新 deps で agent を起動する。
-# scripts/.venv は host 専用 (container 側からは使わない、gitignore 済み)。
-host-agent:
-    @test -x scripts/.venv/bin/python || uv venv scripts/.venv --python 3.12
-    @uv pip install --python scripts/.venv/bin/python -r scripts/requirements.txt --quiet
-    scripts/.venv/bin/python scripts/host_agent.py
-
-# container 内 shell (または host) から host の Resonite を起動する。
-# profile 名は .env の GaleProfile を既定値とし、`--profile <name>` で override。
-# 例: `just resonite-start` / `just resonite-start --profile my-profile`
+# mod 込み Resonite を background 起動する (即 return)。
+# Gale プロファイルは ./gale (= /workspace/gale) を直接読む。BepInEx が無ければ
+# fail-fast。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため
+# Steam Launch Options (WINEDLLOVERRIDES) は不要。
 resonite-start *ARGS:
-    python3 scripts/resonite_cli.py start {{ARGS}}
+    bash scripts/resonite-ctl.sh start {{ARGS}}
 
-# container 内 shell (または host) から Resonite / Renderite を停止する。
-# SIGTERM → 3 秒待ち → SIGKILL の二段構え。Proton 系プロセスは触らない。
+# Resonite / Renderite を停止する (SIGTERM → 3 秒待ち → SIGKILL の二段構え)。
 resonite-stop:
-    python3 scripts/resonite_cli.py stop
+    bash scripts/resonite-ctl.sh stop
 
-# Resonite / Renderite の実行状態を JSON で表示する。
+# Resonite / Renderite の実行状態を表示する。
 resonite-status:
-    python3 scripts/resonite_cli.py status
-
-# host_agent に screenshot RPC を投げて PNG を repo-relative path に書き出す。
-# 例: `just resonite-screenshot output=tmp/e2e/desktop.png`
-resonite-screenshot output:
-    python3 scripts/resonite_cli.py screenshot --output {{ output }}
+    bash scripts/resonite-ctl.sh status
