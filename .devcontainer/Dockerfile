@@ -38,12 +38,15 @@ RUN dpkg --add-architecture i386
 # dbus-x11 は dbus-launch を提供する (Steam Linux Runtime の launcher-service が必要)。
 # rsync は entrypoint.sh が Resonite インストールを named volume にコピーするために使う。
 # x11-apps は X11 接続の smoke test 用 (xeyes 等)。
+# locales + locale-gen は VS Code 等が転送する en_US.UTF-8 ロケールを生成し、
+# bash 起動時の "cannot change locale" 警告を抑止する (slim は C.utf8 のみ同梱)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         curl \
         unzip \
         tar \
         tmux \
+        procps \
         ca-certificates \
         xz-utils \
         bash-completion \
@@ -60,6 +63,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         rsync \
         x11-apps \
         libpulse0 \
+        locales \
+ && sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
+ && locale-gen \
  && rm -rf /var/lib/apt/lists/*
 
 # GPU ユーザースペース (GL/Vulkan ローダ 32/64bit + 条件付き Mesa)。
