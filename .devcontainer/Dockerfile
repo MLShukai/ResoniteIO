@@ -92,9 +92,11 @@ RUN set -eux; \
 # /home/dev/.claude は container-init.sh が settings.container.json への symlink を
 # 張る前提でディレクトリだけ用意する。/home/dev/.codex は Codex CLI の
 # 認証・設定 state を compose volume に載せるため先行作成する。
+# /home/dev/.config/gh は gh CLI の認証情報 (hosts.yml) を compose volume に載せ、
+# コンテナ再ビルドをまたいで永続化するため dev 所有で先行作成する。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
- && mkdir -p /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude /home/dev/.codex \
+ && mkdir -p /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude /home/dev/.codex /home/dev/.config/gh \
  && chown -R dev:dev /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
  && chmod 0440 /etc/sudoers.d/dev
