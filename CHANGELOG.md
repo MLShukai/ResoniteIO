@@ -16,8 +16,10 @@ GitHub Release body. The format follows
   `just resonite-vanilla` runs **vanilla** Resonite in the foreground, while
   `just resonite-start` / `-stop` / `-status` launch and manage Resonite **with
   the ResoniteIO mod loaded** from the `./gale` Gale profile (background; engine
-  side via hookfxr, renderer side via doorstop passed on the CLI, so **no Steam
-  `WINEDLLOVERRIDES` is needed** on this path). With in-container launch the whole
+  side via hookfxr, renderer side via a doorstop `winhttp.dll` —
+  `scripts/resonite-run.sh` exports `WINEDLLOVERRIDES="winhttp=n,b"`
+  automatically, so **no manual Steam-style `WINEDLLOVERRIDES` setup is needed**
+  on this path). With in-container launch the whole
   mod loop runs inside the container: the mod (GrpcHost) creates its gRPC socket
   under the container's `~/.resonite-io/` (it makes the directory itself before
   binding) and the Python client connects there — no host bind-share. The mod's

@@ -83,8 +83,10 @@ renderer-side plugin never loads and Camera v2 stays dark. Wine prefers the syst
 `winhttp.dll`, so it must be overridden; Steam sanitizes env passed any other way, making the
 launch option the only working path.
 
-The **in-container** launcher (`just resonite-start`) does not need this — it passes the
-doorstop config to the renderer on the CLI, so no `WINEDLLOVERRIDES` is required.
+The **in-container** launcher (`just resonite-start`) needs the same override — the doorstop
+is a hook `winhttp.dll` proxy that Wine only loads with `WINEDLLOVERRIDES="winhttp=n,b"` — but
+`scripts/resonite-run.sh` sets it for you, so no manual setup is required. `umu-run` passes the
+env through (unlike Steam, which sanitizes it), so the launcher can export it directly.
 
 ### 2. Open the dev container
 
@@ -148,9 +150,11 @@ sync only deltas.
 - **`just resonite-start`** launches Resonite **with the ResoniteIO mod loaded** from the
   `./gale` Gale profile in the background (returns immediately); `just resonite-stop` /
   `-status` manage its lifecycle. The engine side uses hookfxr
-  (`--hookfxr-enable --bepinex-target ./gale/BepInEx`) and the renderer side gets the doorstop
-  config on the CLI, so **no Steam `WINEDLLOVERRIDES` is needed** on this path. It fail-fasts
-  if the Gale profile has no `BepInEx/` — deploy the mod first with `just deploy-mod`.
+  (`--hookfxr-enable --bepinex-target ./gale/BepInEx`) and the renderer side uses the doorstop
+  (a hook `winhttp.dll`). `scripts/resonite-run.sh` sets `WINEDLLOVERRIDES="winhttp=n,b"`
+  automatically (it is still required for the renderer to load it; `umu-run` passes env
+  through, unlike Steam), so **no manual `WINEDLLOVERRIDES` setup is needed** on this path. It
+  fail-fasts if the Gale profile has no `BepInEx/` — deploy the mod first with `just deploy-mod`.
 
 The mod's BepInEx log is `gale/BepInEx/LogOutput.log` (`just log`); umu/Proton launch noise is
 separated into `gale/BepInEx/umu-launch.log`. For mod development you can still use host Steam +

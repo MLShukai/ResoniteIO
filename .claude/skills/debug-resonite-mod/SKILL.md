@@ -36,7 +36,7 @@ ______________________________________________________________________
 
 container 内で mod 込み Resonite を起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。`scripts/resonite-ctl.sh` を `just` レシピ越しに叩く。
 
-- `just resonite-start` で **mod 込み**を **background** 起動 (即 return)。Gale プロファイル `./gale` (= `/workspace/gale`) を hookfxr + doorstop で読む。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため Steam Launch Options (WINEDLLOVERRIDES) は不要
+- `just resonite-start` で **mod 込み**を **background** 起動 (即 return)。Gale プロファイル `./gale` (= `/workspace/gale`) を hookfxr + doorstop で読む。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`) で、`resonite-run.sh` が `WINEDLLOVERRIDES="winhttp=n,b"` を自動 export するため Steam Launch Options の手動設定は不要 (host Steam 起動では手動設定が要る)
 - `just resonite-stop` で停止 (`Resonite.exe` / `Renderite.Renderer.exe` を `pkill` で SIGTERM → 3 秒待ち → SIGKILL の二段構え)
 - `just resonite-status` で実行状態を表示 (`pgrep -af` の出力)
 - mod を読まない素の起動が要るときは `just resonite-vanilla` (foreground、起動確認用、setup-resonite-env skill §5 参照)
@@ -53,7 +53,7 @@ ______________________________________________________________________
 
 ### Camera v2 / Renderer 側 plugin が load されない
 
-- container 内 `just resonite-start` 経路では doorstop を CLI で渡すため WINEDLLOVERRIDES は不要 (Renderer preloader が検出できていれば自動で渡る)。host Steam 経由起動の場合のみ Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` が要る (これが無いと Renderer 側 BepInEx は起動しない)
+- `WINEDLLOVERRIDES="winhttp=n,b"` は **両経路で必要** (これが無いと hook 版 `winhttp.dll` doorstop が読まれず Renderer 側 BepInEx は起動しない、2026-06-19 実機検証)。container 内 `just resonite-start` 経路では `resonite-run.sh` が自動で export するため手動設定は不要。host Steam 経由起動の場合のみ Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` を手で設定する (Steam は env を sanitize するため)
 - `gale/Renderer/BepInEx/LogOutput.log` を確認 (Renderer 側ログは engine 側と別ファイル)
 - InterprocessLib の callback signature は `Action<T[]?>` で、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず `-=`。詳細: [`feedback_interprocesslib_callback_signature.md`](../../memory/feedback_interprocesslib_callback_signature.md)
 
