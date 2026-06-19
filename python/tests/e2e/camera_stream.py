@@ -7,9 +7,10 @@ MP4 / H.264 は alpha 非対応のため ``cv2.cvtColor(RGBA2BGR)`` で alpha �
 3-channel BGR で書く (visual verification 目的なので alpha drop で十分。alpha
 込みで保存したい場合は MOV + PNG codec や個別 PNG dump が必要)。
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations

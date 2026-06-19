@@ -1,4 +1,4 @@
-"""Fixtures owning the live Resonite + host-agent lifecycle for e2e tests."""
+"""Fixtures owning the in-container live Resonite lifecycle for e2e tests."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ SOCKET_GLOB = "resonite-*.sock"
 SOCKET_APPEAR_TIMEOUT_S = 120.0
 SOCKET_APPEAR_POLL_S = 1.0
 POST_SOCKET_STARTUP_SETTLE_S = 30.0
-DEBUG_SOCKET: Path = Path.home() / ".resonite-io-debug" / "host-agent.sock"
+# The Gale profile e2e starts Resonite from. `just resonite-start` reads the mod
+# (BepInEx + ResoniteIO plugin) from here; without a deployed mod no UDS is bound
+# and every scenario would hard-fail on the socket-wait timeout instead of
+# skipping cleanly.
+GALE_DIR: Path = Path(os.environ.get("GalePath", "/workspace/gale"))
 
 
 def _wait_for_socket(directory: Path, timeout_s: float) -> Path:
@@ -61,11 +65,13 @@ def _purge_stale_sockets(directory: Path) -> None:
 
 
 @pytest.fixture(autouse=True)
-def require_host_agent() -> None:
-    if not DEBUG_SOCKET.exists():
+def require_mod_deployed() -> None:
+    # `just resonite-start` boots Resonite from the ./gale profile; without the
+    # mod deployed there the GrpcHost never binds the UDS, so skip rather than
+    # let resonite_session hard-fail on the socket-wait timeout.
+    if not (GALE_DIR / "BepInEx").is_dir():
         pytest.skip(
-            "host-agent is not running on host (expected socket at "
-            f"{DEBUG_SOCKET}). Start it with `just host-agent` on the host."
+            f"mod not deployed to {GALE_DIR} (no BepInEx dir); run `just deploy-mod`"
         )
 
 
