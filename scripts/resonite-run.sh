@@ -7,8 +7,9 @@
 #
 # 既定は **Gale プロファイル (./gale = /workspace/gale) を読み込んで mod 込みで起動**
 # する。engine 側は hookfxr (--hookfxr-enable --bepinex-target)、Renderer 側は
-# doorstop (--doorstop-target-assembly) を CLI で渡す。Steam Launch Options の
-# WINEDLLOVERRIDES は不要 (doorstop config を CLI で直接渡すため)。
+# doorstop (--doorstop-target-assembly + WINEDLLOVERRIDES="winhttp=n,b" で hook 版
+# winhttp プロキシを Wine に読ませる) で mod をロードする。加えて pressure-vessel に
+# Gale プロファイルを bind 共有する (main() 参照)。
 #
 # --vanilla を付けると mod を読まない素の Resonite を起動する (起動確認用)。
 #
@@ -133,6 +134,13 @@ main() {
     #  memory/reference_pressure_vessel_paths.md)
     export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW:+$PRESSURE_VESSEL_FILESYSTEMS_RW:}$GALE_DIR"
     log "pressure-vessel に $GALE_DIR を bind 共有 (sandbox から mod を可視化)"
+    # Renderer 側 (Wine プロセス) の doorstop は winhttp.dll プロキシ。Wine は system
+    # 同梱の winhttp を優先するため、hook 版 winhttp を読ませるには WINEDLLOVERRIDES が
+    # 要る。これが無いと Renderer 側 BepInEx が起動せず Camera v2 plugin が load されない
+    # (--doorstop-* CLI は doorstop の挙動を設定するだけで、winhttp の読み込み自体は
+    #  この override が必須)。host Steam 経由では Launch Options で渡していたもの。
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+$WINEDLLOVERRIDES;}winhttp=n,b"
+    log "WINEDLLOVERRIDES=$WINEDLLOVERRIDES (Renderer doorstop の winhttp プロキシ用)"
   fi
 
   sync_resonite
