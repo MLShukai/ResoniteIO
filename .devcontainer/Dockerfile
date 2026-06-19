@@ -150,6 +150,8 @@ RUN set -eux; \
 #   /home/dev/.local/share : SteamRT / Proton + Resonite ユーザーデータ
 #   /home/dev/prefix  : Wine prefix (WINEPREFIX)
 # /home/dev/.cache は resonite-cache volume のマウント先 (cache-uv とネスト)。
+# /home/dev/.config/gh は gh CLI の認証情報 (hosts.yml) を compose volume に載せ、
+# コンテナ再ビルドをまたいで永続化するため dev 所有で先行作成する。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
  && mkdir -p \
@@ -157,6 +159,7 @@ RUN groupadd -g ${USER_GID} dev \
       /home/dev/.cache/uv \
       /home/dev/.claude \
       /home/dev/.codex \
+      /home/dev/.config/gh \
  && install -d -o dev -g dev \
       /opt/resonite \
       /home/dev/.local \
