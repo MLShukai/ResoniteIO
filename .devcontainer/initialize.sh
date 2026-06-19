@@ -7,9 +7,11 @@
 #   1. .env の存在を確認 (無ければ `just init` を促して fail-fast)
 #   1b. compose 変数補間用に .devcontainer/.env -> ../.env symlink を張る
 #   2. AppArmor による非特権 user namespace 制限の hard fail チェック
-#   3. 本番 / debug 用 UDS dir を 0700 で作成
-#   4. host の uid/gid / X11 / audio / GPU 情報を .env に冪等 upsert
-#   5. GPU ベンダ検出 → .devcontainer/compose.gpu.yml symlink 作成
+#   3. host の uid/gid / X11 / audio / GPU 情報を .env に冪等 upsert
+#   4. GPU ベンダ検出 → .devcontainer/compose.gpu.yml symlink 作成
+#
+# 本番 gRPC UDS dir は host 側に作らない: Resonite は container 内で起動し、mod
+# (GrpcHost) が container 内 `~/.resonite-io/` を bind 前に自分で作成する。
 
 set -euo pipefail
 
@@ -46,14 +48,6 @@ if ! unshare --user --map-root-user --mount true 2>/dev/null; then
   echo "  Persistent: echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/99-resonite-userns.conf && sudo sysctl --system" >&2
   exit 1
 fi
-
-# ---------------------------------------------------------------------------
-# 3. UDS socket 用 host ディレクトリを 0700 で先に作る
-# ---------------------------------------------------------------------------
-#   ~/.resonite-io/      : gRPC IPC (mod ↔ Python)
-#   ~/.resonite-io-debug/: debug bridge (container ↔ host-agent)
-mkdir -p "$HOME/.resonite-io" "$HOME/.resonite-io-debug"
-chmod 0700 "$HOME/.resonite-io" "$HOME/.resonite-io-debug"
 
 # ---------------------------------------------------------------------------
 # ヘルパ関数群
@@ -197,7 +191,7 @@ detect_gpu_vendor() {
 }
 
 # ---------------------------------------------------------------------------
-# 4. 各種プローブ & .env への冪等 upsert
+# 3. 各種プローブ & .env への冪等 upsert
 # ---------------------------------------------------------------------------
 
 DISPLAY_DETECTED="$(detect_display)"
@@ -288,7 +282,7 @@ if [ ! -S "$PULSE_SOCK" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 5. GPU ベンダ検出 → .devcontainer/compose.gpu.yml symlink 作成
+# 4. GPU ベンダ検出 → .devcontainer/compose.gpu.yml symlink 作成
 # ---------------------------------------------------------------------------
 GPU_VENDOR="$(detect_gpu_vendor)"
 echo "info: GPU ベンダ検出: ${GPU_VENDOR}"

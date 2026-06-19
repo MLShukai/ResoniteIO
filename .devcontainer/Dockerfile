@@ -32,8 +32,8 @@ ENV DOTNET_NOLOGO=1
 RUN dpkg --add-architecture i386
 
 # uv が独自 Python を引くため build-essential は不要。
-# python3 は debug bridge client (scripts/resonite_cli.py) 専用で、uv 管理の
-# Python 環境とは分離した stdlib 実行用 (PYTHONPATH も share しない)。
+# python3 は補助スクリプト用の stdlib Python (uv 管理の Python 環境とは分離)。
+# procps は pgrep/pkill を提供する (scripts/resonite-ctl.sh の起動・停止判定で使用)。
 # libicu76 は .NET SDK の globalization 初期化に必要 (debian 13 trixie の ICU)。
 # dbus-x11 は dbus-launch を提供する (Steam Linux Runtime の launcher-service が必要)。
 # rsync は entrypoint.sh が Resonite インストールを named volume にコピーするために使う。

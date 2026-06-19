@@ -8,7 +8,8 @@
 #   2. コンテナ毎にユニークな machine-id を生成。
 #   3. compose の command (sleep infinity) を exec で引き継ぐ。
 #
-# Resonite 実際の起動は scripts/resonite-run.sh が行う (justfile の resonite-up レシピ)。
+# Resonite 実際の起動は scripts/resonite-run.sh が行う
+# (justfile の resonite-vanilla / resonite-start レシピ)。
 
 set -euo pipefail
 

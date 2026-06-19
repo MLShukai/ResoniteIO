@@ -13,19 +13,13 @@
 # - build-arg の ${HOST_UID} / ${HOST_GID} は `.devcontainer/initialize.sh` が
 #   `id -u` / `id -g` から .env に冪等 upsert する。compose 方式の devcontainer
 #   では updateRemoteUserUID が効かないため、build-arg 経由で UID/GID を揃える。
-# - 本番 gRPC UDS の socket dir は host の `${HOME}/.resonite-io/`。pressure-vessel
-#   は host の `/home/$USER` を sandbox に bind-mount するため Resonite 上の mod
-#   からも同じパスで書き込める。container 側では username が異なる
-#   (host=任意 / container=`dev`) ので `/home/dev/.resonite-io/` に bind する
-#   ことで、3 つの mount namespace (host / pressure-vessel / container) が
-#   同じ inode に到達できるようにする。
-#   host 側ディレクトリは `.devcontainer/initialize.sh` が 0700 で先に作成する
-#   (Docker 任せだと root 所有で作られ、mod が bind できなくなる)。
-# - `${HOME}/.resonite-io-debug` も同様に rw bind する。こちらは
-#   container 内 `scripts/resonite_cli.py` から host 常駐の `scripts/host_agent.py`
-#   を叩く debug bridge 専用 UDS (`host-agent.sock`)。本番 gRPC IPC とは
-#   ディレクトリ単位で分離し、mod 側の socket 探索が誤って拾わないようにする。
-# - bind source の `${HOME}` は docker compose が host の環境変数から展開する。
+# - 本番 gRPC UDS は host と共有しない。Resonite を container 内で起動する構成
+#   になったため、mod (GrpcHost) が container 内 `/home/dev/.resonite-io/` に
+#   `resonite-{pid}.sock` を作り、同 container 内の Python client がそこへ connect
+#   する (host を介さない)。GrpcHost が bind 前に dir を作成するので、host bind や
+#   事前 mkdir は不要。
+# - bind source の `${HOME}` は docker compose が host の環境変数から展開する
+#   (X11 / audio socket 等で使用)。
 # - X11 描画: host の /tmp/.X11-unix を ro bind し、DISPLAY / XAUTHORITY を渡す。
 #   X auth cookie は initialize.sh が FamilyWild (ffff) 書換えで .xauth に用意する。
 # - 音声: host の PipeWire/PulseAudio socket を /tmp/pulse-native に bind し、
@@ -88,26 +82,10 @@ services:
       - ${XAUTHORITY_HOST:-/dev/null}:/tmp/.Xauthority:ro
       # PipeWire/PulseAudio ソケット (Resonite の音声バックエンド向け)。
       - /run/user/${HOST_UID:-1000}/pulse/native:/tmp/pulse-native
-      # 本番 gRPC UDS 共有: host の Resonite mod が `$HOME/.resonite-io/` に作る
-      # socket を container 内の Python `~/.resonite-io/` から connect する。
-      # host=任意ユーザー / container=`dev` で username が異なるため、同じ
-      # 物理ディレクトリを container 内では `/home/dev/.resonite-io/` に bind
-      # することで、双方の `Path.home()` / `$HOME` 解決が同じ inode を指す。
-      # host 側ディレクトリは .devcontainer/initialize.sh が事前に 0700 で作成する
-      # (Docker 任せだと root 所有で生成される)。create_host_path: false で
-      # 未作成時に fail-fast。
-      - type: bind
-        source: ${HOME}/.resonite-io
-        target: /home/dev/.resonite-io
-        bind:
-          create_host_path: false
-      # Debug bridge UDS 共有: container 内 scripts/resonite_cli.py が host 常駐の
-      # scripts/host_agent.py を叩く debug 専用 socket dir。本番 IPC とは別 dir。
-      - type: bind
-        source: ${HOME}/.resonite-io-debug
-        target: /home/dev/.resonite-io-debug
-        bind:
-          create_host_path: false
+      # 本番 gRPC UDS は host と共有しない: Resonite を container 内で起動するため、
+      # mod (GrpcHost) が container 内 `/home/dev/.resonite-io/` に socket を作り、
+      # 同 container 内の Python `~/.resonite-io/` がそこへ connect する。dir は
+      # GrpcHost が bind 前に作成するので bind mount も事前 mkdir も不要。
       # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
       - cache-nuget:/home/dev/.nuget
       - cache-uv:/home/dev/.cache/uv
