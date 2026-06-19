@@ -41,13 +41,16 @@ ______________________________________________________________________
 手動セットアップ手順:
 
 1. Gale で profile を新規作成し、パスを `<repo>/gale` に指定 (**指定先は EMPTY である必要があり、`./gale/` を事前に作らない**)
-2. profile に以下 6 個を install:
-   - `ResoniteModding-BepisLoader` (>=1.5.1)
-   - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
-   - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
-   - `ResoniteModding-BepInExRenderer` (>=5.4) ← Camera v2 で追加 (Renderer 側 BepInEx 5 framework、`Renderer/BepInEx/core/` に framework deploy)
-   - `ResoniteModding-RenderiteHook` (>=1.1.1) ← Camera v2 で追加 (engine → Renderer doorstop inject)
-   - `Nytra-InterprocessLib` (>=3.0.0) ← Camera v2 で追加 (engine ↔ Renderer shared-mem queue)
+2. profile に必須 mod を投入する:
+   - **推奨**: 作成した profile を選択した状態で **Import > ... profile from file** を選び、`<repo>/GaleProfile.r2z` (必須 mod を版指定込みで含む repo 同梱の profile snapshot) を選んで profile を overwrite する。これで必須 mod 一式が一括で投入される
+   - **フォールバック (手動)**: snapshot が mod 更新に追従して古くなった場合等は、以下 6 個を個別に install する:
+     - `ResoniteModding-BepisLoader` (>=1.5.1)
+     - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
+     - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
+     - `ResoniteModding-BepInExRenderer` (>=5.4) ← Camera v2 で追加 (Renderer 側 BepInEx 5 framework、`Renderer/BepInEx/core/` に framework deploy)
+     - `ResoniteModding-RenderiteHook` (>=1.1.1) ← Camera v2 で追加 (engine → Renderer doorstop inject)
+     - `Nytra-InterprocessLib` (>=3.0.0) ← Camera v2 で追加 (engine ↔ Renderer shared-mem queue)
+   - `GaleProfile.r2z` はあくまで利便のための snapshot であり、必須部品の正本は `just check-gale` (下記 step 4)
 3. Gale で Resonite を起動すると `LinuxBootstrap.sh` がプロファイル版に差し替わり、BepInEx が有効化される
 4. `just check-gale` (または `just init`) で必須 DLL の在中を検証
 5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される (deploy 先 dir は csproj の `<Copy>` が自動 mkdir する)
