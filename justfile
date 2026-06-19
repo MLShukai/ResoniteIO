@@ -7,67 +7,12 @@ default:
 
 # ===== 環境構築 =========================================================
 
-# 初回 setup: host tooling 検証 / .env セットアップ / Gale プロファイル確認を
-# 1 コマンドで行う。host 上で実行する想定 (container は要らない)。冪等。
-#
-#   1. docker / docker compose v2 の存在確認
-#   2. .env が無ければ .env.example をコピーし $EDITOR (既定 vi) で開かせる。
-#      その場合は exit 0 で抜け、ユーザーに `just init` 再実行を促す
-#      (set dotenv-load の解釈はパース時のため、同一実行内で再 source できないため)
-#   3. ResonitePath が指すディレクトリの実在を検証
-#   4. ./gale/ を空ディレクトリとして用意 (Gale は profile path に空 dir を要求するが
-#      存在自体は許容する。先回りで作っておくと Gale GUI でパス指定が楽になる)
-#   5. ./gale/BepisLoader.dll を見て Gale プロファイル設置を判定:
-#      - 既設なら `check-gale` を呼び全部品を厳密チェック
-#      - 未設なら手順を stderr に出して非 0 exit
+# 初回 host setup を 1 コマンドで実行する (host 上で実行、container 不要、冪等)。
+# 詳細ロジックは scripts/init.sh に集約している:
+#   docker / docker compose v2 検出 → .env 作成・検証 → ResonitePath 検証 →
+#   Gale プロファイル確認 (未設置なら GaleProfile.r2z の import 手順を案内)。
 init:
-    @echo "[init] Checking host tooling ..."
-    @command -v docker >/dev/null 2>&1 || { echo "ERROR: docker が見つかりません。" >&2; exit 1; }
-    @docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose v2 が必要です。" >&2; exit 1; }
-    @if [ ! -f .env ]; then \
-        cp .env.example .env; \
-        echo "[init] .env を .env.example から作成しました。"; \
-        if [ -t 0 ] && [ -t 1 ]; then \
-            echo "[init] '${EDITOR:-vi}' で開きます。保存後、もう一度 'just init' を実行してください。"; \
-            "${EDITOR:-vi}" .env; \
-        else \
-            echo "[init] 非対話 shell のため editor は起動しません。.env を編集してから 'just init' を再実行してください。" >&2; \
-        fi; \
-        exit 0; \
-    fi
-    @echo "[init] .env exists."
-    @: "${ResonitePath:?ResonitePath が .env に設定されていません。.env を編集してから 'just init' を再実行してください。}"
-    @[ -d "$ResonitePath" ] || { echo "ERROR: ResonitePath=$ResonitePath はディレクトリではありません。" >&2; exit 1; }
-    @echo "[init] ResonitePath OK: $ResonitePath"
-    @mkdir -p gale
-    @if [ ! -f gale/BepisLoader.dll ]; then \
-        echo "" >&2; \
-        echo "ERROR: ./gale に Gale profile が未設置です (ディレクトリは空のまま用意済み)。" >&2; \
-        echo "" >&2; \
-        echo "  以下を host 上で実施してください:" >&2; \
-        echo "    1. Gale v1.5.4+ をインストール (https://github.com/Kesomannen/gale)" >&2; \
-        echo "    2. Gale GUI で 'Create profile' を選び、パスに <repo>/gale を指定" >&2; \
-        echo "       (このディレクトリは空である必要があり、just init が用意した状態が" >&2; \
-        echo "        まさにそれにあたる)" >&2; \
-        echo "    3. プロファイルに以下 6 つの mod を install:" >&2; \
-        echo "         - ResoniteModding-BepisLoader (>=1.5.1)" >&2; \
-        echo "         - ResoniteModding-BepInExResoniteShim (>=0.9.3)" >&2; \
-        echo "         - ResoniteModding-BepisResoniteWrapper (>=1.0.2)" >&2; \
-        echo "         - ResoniteModding-BepInExRenderer (>=5.4)   — Camera v2 用 Renderer 側 BepInEx 5" >&2; \
-        echo "         - ResoniteModding-RenderiteHook (>=1.1.1)   — Renderer プロセスへの doorstop inject" >&2; \
-        echo "         - Nytra-InterprocessLib (>=3.0.0)           — engine ↔ Renderer 共有メモリ queue" >&2; \
-        echo "    4. Steam で Resonite の Launch Options に以下を設定:" >&2; \
-        echo "         WINEDLLOVERRIDES=\"winhttp=n,b\" %command%" >&2; \
-        echo "       (これが無いと Renderer 側 BepInEx が永遠に起動しない)" >&2; \
-        echo "    5. 完了後 'just init' を再実行" >&2; \
-        exit 1; \
-    fi
-    @just check-gale
-    @echo ""
-    @echo "[init] All preconditions satisfied. Next, open the dev container:"
-    @echo "    VS Code: コマンドパレットから 'Dev Containers: Reopen in Container'"
-    @echo "    Zed:     dev container として開く"
-    @echo "    CLI:     devcontainer up --workspace-folder .   # 任意"
+    bash scripts/init.sh
 
 # proto から Python 側の生成コードを再生成する。C# 側は dotnet build で自動生成。
 gen-proto:
