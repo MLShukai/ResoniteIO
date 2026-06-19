@@ -121,11 +121,12 @@ ______________________________________________________________________
 ### B. 開発ツールチェーン (Docker 化)
 
 ホスト側に必要なのは **`docker` / `docker compose v2` / `just` の 3 つだけ**。
-.NET SDK / uv / protoc / pre-commit はすべて `debian:bookworm-slim` ベースの単一 image に同梱。
+.NET SDK / uv / protoc / pre-commit はすべて `debian:13-slim` (trixie) ベースの単一 image に同梱。
 
-- [x] `.devcontainer/Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt)
-- [x] `compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照。`build:` は `context: .devcontainer` / `dockerfile: Dockerfile`)
-- [x] `.devcontainer/devcontainer.json` (compose 参照) + `.devcontainer/initialize.sh` (host 側 pre-create フック)
+- [x] `.devcontainer/Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt + X11/GPU/audio/umu-launcher。GPU ユーザースペースは build-arg `GPU` で分岐)
+- [x] `.devcontainer/compose.yml` (`name: resonite-io`、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照。`build:` は `context: .` (= `.devcontainer/`) / `dockerfile: Dockerfile`。GPU 固有設定は `compose.{nvidia,amd,intel}.yml` overlay に分離し、`initialize.sh` が host GPU を検出して `compose.gpu.yml` symlink を貼る)
+- [x] `scripts/resonite-run.sh` (devcontainer 内で vanilla Resonite を起動: `/resonite:ro` を `/opt/resonite` に rsync → `umu-run` で `Resonite.exe -SkipIntroTutorial`。`just resonite-up`。現状 vanilla まで、mod ロードは次フェーズ)
+- [x] `.devcontainer/devcontainer.json` (compose 参照) + `.devcontainer/initialize.sh` (host 側 pre-create フック: UDS dir 作成 + uid/gid 注入に加え、AppArmor 非特権 user namespace の hard fail チェック、DISPLAY / X auth cookie の FamilyWild 書換え / render・video GID / GPU ベンダ検出を `.env` に記録、`compose.gpu.yml` symlink 作成) + `.devcontainer/entrypoint.sh` (container 内でも AppArmor チェックを二段で hard fail)
 - [x] `scripts/container-init.sh` (container 内 deps restore: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink。devcontainer の `postCreateCommand` から呼ばれる)
 - [x] `just init` (host 側 one-time setup: docker / `.env` / Gale プロファイル確認)
 - [x] dotnet local tools (`.config/dotnet-tools.json`): `csharpier`, `tcli` (Thunderstore packaging), `ilspycmd` (decompile)
@@ -146,12 +147,14 @@ ______________________________________________________________________
 
 ```text
 resonite-io/
-├── compose.yml                    # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath ro bind / ~/.resonite-io{,-debug}/ rw bind、build context は .devcontainer/)
 ├── .devcontainer/
 │   ├── devcontainer.json          # compose 参照 (initializeCommand / postCreateCommand)
-│   ├── Dockerfile                 # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-│   └── initialize.sh              # host 側 pre-create フック (~/.resonite-io{,-debug}/ 0700 作成 + uid/gid を .env に記録)
-├── justfile                       # ルートタスクランナー (build / test / resonite-* / host-agent)
+│   ├── compose.yml                # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath ro bind / ~/.resonite-io{,-debug}/ rw bind / X11+audio+GPU。build context は .devcontainer/)
+│   ├── compose.{nvidia,amd,intel}.yml  # GPU ベンダ別 overlay (compose.gpu.yml symlink で切替)
+│   ├── Dockerfile                 # 開発コンテナ image (debian:13-slim + .NET 10 + uv + protoc + X11/GPU/umu-launcher)
+│   ├── initialize.sh              # host 側 pre-create フック (~/.resonite-io{,-debug}/ 0700 作成 + uid/gid/DISPLAY/GPU を .env に記録 + AppArmor チェック)
+│   └── entrypoint.sh              # container 内エントリポイント (AppArmor 二段チェック + machine-id 生成)
+├── justfile                       # ルートタスクランナー (build / test / resonite-up / resonite-* / host-agent)
 ├── buf.yaml                       # proto lint/breaking (modules: proto/、SERVICE_SUFFIX + RPC_*_STANDARD_NAME を except)
 ├── .pre-commit-config.yaml
 ├── .env.example                   # ResonitePath / GaleProfile / GaleBin の雛形 (.env は gitignore)
@@ -288,7 +291,7 @@ ______________________________________________________________________
 - ✅ 各モダリティは独立非同期ストリーム (RL `step()` なし)
 - ✅ ワールド非依存・単一ユーザー操作スコープ
 - ✅ 通信データ型は pyright strict 準拠
-- ✅ **開発環境は Docker 化** (`debian:bookworm-slim` ベース単一 image)。ホストには `docker` / `docker compose v2` / `just` の 3 つだけ要求。当初想定していた `setup.sh` は廃止
+- ✅ **開発環境は Docker 化** (`debian:13-slim` (trixie) ベース単一 image)。ホストには `docker` / `docker compose v2` / `just` の 3 つだけ要求。当初想定していた `setup.sh` は廃止。devcontainer 内で vanilla Resonite を起動する経路も追加済み (`just resonite-up`、umu-run/Proton。host の graphical session + audio + AppArmor 緩和が前提。mod ロードは次フェーズ)
 - ✅ 補助ツール: ライセンス MIT、formatter (csharpier / ruff)、type-check (pyright strict)、test (xunit / pytest)
 - ✅ **C# Linter/Analyzer**: csharpier + Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
 - ✅ **C# Mod SDK**: `Microsoft.NET.Sdk` + BepisLoader 公式 Template の NuGet 群 (`BepInEx.ResonitePluginInfoProps` / `ResoniteModding.BepInExResoniteShim` / `ResoniteModding.BepisResoniteWrapper`)。当初検討した `Remora.Resonite.Sdk` は不採用

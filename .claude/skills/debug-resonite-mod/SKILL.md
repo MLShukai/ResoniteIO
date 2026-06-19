@@ -36,6 +36,8 @@ ______________________________________________________________________
 
 container 内 shell から host の Resonite を Gale 経由で起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。
 
+> mod (BepInEx) 検証はこの host bridge 経路を使う。なお devcontainer 内で **vanilla Resonite を直接起動** する `just resonite-up` もあるが、現状 mod は載らない (vanilla まで) ため mod debug には使わない (setup-resonite-env skill §5 参照)。
+
 - **host 側**: GUI session の端末で `just host-agent` を foreground 常駐させる
   - **gale CLI は `--no-gui` 指定時もディスプレイを要求する** ため、SSH only / TTY only セッションでは起動できない (Python 内で DISPLAY/WAYLAND_DISPLAY を検査して fail-fast する)
   - Ctrl+C で停止、socket は自動 unlink

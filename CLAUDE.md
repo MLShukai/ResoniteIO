@@ -96,7 +96,7 @@ LLM コーディングで陥りがちなミスを減らすための行動指針�
 
 実装済みの主要要素 (概観):
 
-- 開発環境: `compose.yml` / `.devcontainer/` (devcontainer.json / Dockerfile / initialize.sh) / `justfile` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container ↔ host Resonite bridge)
+- 開発環境: `.devcontainer/` (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / `justfile` / `scripts/host_agent.py` + `scripts/resonite_cli.py` (container ↔ host Resonite bridge) / `scripts/resonite-run.sh` (devcontainer 内で vanilla Resonite を umu-run 起動: `just resonite-up`)
 - C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を `<Modality>/` 配下にまとめる (Connection / Camera / Speaker / Microphone / Locomotion / Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor)。共通基盤として `UnixNanosClock` / `ILogSink` (`Logging/`) と汎用 gRPC host `GrpcHost` (`Hosting/`)
 - C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で GrpcHost 起動、SafeShutdown で partial-failure / ProcessExit を統合) / `Bridge/FrooxEngine<Modality>Bridge`
 - Python (`python/src/resoio/`): モダリティごとに `<Modality>Client` (`ConnectionClient` / `CameraClient` / `SpeakerClient` / `MicrophoneClient` / `LocomotionClient` / `GrabberClient` / `DisplayClient` / `WorldClient` / `ContextMenuClient` / `DashClient` / `InventoryClient` / `CursorClient`) と `_socket.py` / `_generated/`
@@ -109,7 +109,7 @@ LLM コーディングで陥りがちなミスを減らすための行動指針�
 
 ```text
 resonite-io/
-├── compose.yml / .devcontainer/ (devcontainer.json / Dockerfile / initialize.sh) / justfile / .env.example / buf.yaml
+├── .devcontainer/ (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / justfile / .env.example / buf.yaml
 ├── resonite_io_plan.md        # 全体計画書 (Step 0〜8、決定事項、リスク)
 ├── proto/resonite_io/v1/      # *.proto (single source of truth)
 ├── mod/                       # C# 側 (.NET 10、Core/Mod 二層)
@@ -131,7 +131,7 @@ resonite-io/
 - C# (mod): **.NET 10 SDK** + BepisLoader 公式 Template (`dotnet new bep6resonite`) 準拠。フォーマッタ `csharpier`、配布 `tcli` (`.config/dotnet-tools.json` の local tool)。テスト `xunit`、`Nullable=enable` + `TreatWarningsAsErrors=true`
 - Python (resoio): **`uv`** + Python `>=3.12`。gRPC は **`betterproto2[grpclib]`** (async)。`pyright` strict、`ruff` (line-length 88、ダブルクォート、isort + combine-as-imports)、`pytest` + `pytest-asyncio`/`pytest-cov`/`pytest-mock`
 - proto: C# 側は csproj の `<Protobuf>` で `dotnet build` 時に自動生成 (Server スタブのみ、commit しない)。Python 側は `just gen-proto` で `python/src/resoio/_generated/` に書き、**commit する**。lint は `buf` (`SERVICE_SUFFIX` / `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except)
-- Docker 開発環境: `debian:bookworm-slim` ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
+- Docker 開発環境: `debian:13-slim` (trixie) ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`.devcontainer/compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く (compose / build context とも `.devcontainer/`)。devcontainer 内で **vanilla Resonite を起動できる** (`just resonite-up`、umu-run/Proton。host の graphical session + PipeWire/PulseAudio + AppArmor 緩和が前提、GPU は NVIDIA/AMD/Intel を `initialize.sh` が自動検出して compose overlay を切替)。ResoniteIO mod のコンテナ内ロードは次フェーズで、mod 開発は引き続き host Steam + Gale + `just deploy-mod`。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
 - CI / リリース: `.github/workflows/` に品質ゲート (`pre-commit` / `test` (Python 3.12-3.14) / `type-check` / `dotnet` / `proto-check`) と tag-driven リリース (`publish.yml`) を配置。`v*` tag の push で Thunderstore mod + PyPI パッケージを同時公開する。手順は [RELEASE.md](RELEASE.md) と [release-resonite skill](.claude/skills/release-resonite/SKILL.md) 参照 (正規 version = csproj `<Version>`、`python/pyproject.toml` は lockstep)
 
 ## コマンド
@@ -155,7 +155,7 @@ resonite-io/
 
 ## 実行環境
 
-**ホスト側に必要なものは `docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。Resonite 自体は host で起動 (Steam)、コンテナは build / deploy 専用。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリ絶対パスを指定。
+**ホスト側に必要なものは `docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。mod 開発の従来フロー (build / deploy) は host Steam + Gale が主軸だが、devcontainer 内で **vanilla Resonite を直接起動** することもできる (`just resonite-up`、現状は vanilla まで・mod ロードは次フェーズ)。コンテナ内起動には host の graphical session (X11 / Xwayland) と PipeWire/PulseAudio、そして `kernel.apparmor_restrict_unprivileged_userns=0` が要る (未設定だと pressure-vessel が非特権 user namespace を作れず起動が hard fail する)。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリ絶対パスを指定 (コンテナ内起動では `/resonite:ro` の source として再利用される)。
 
 開発環境の入り方は devcontainer 方式:
 

@@ -22,7 +22,16 @@ container**. On the host you only need:
 - A way to open a dev container: VS Code (Dev Containers extension), Zed, or the
   [`@devcontainers/cli`](https://github.com/devcontainers/cli)
 
-Resonite itself runs on the host (via Steam); the container is for build/deploy only.
+The container builds and deploys the mod, and can also launch **vanilla Resonite** itself
+(`just resonite-up`, see below). Mod development still uses host Steam + Gale + `just deploy-mod`;
+loading the ResoniteIO mod into the container's Resonite is a later phase.
+
+To run Resonite inside the container the host needs a few extra things:
+
+- A **graphical session** (X11 or Xwayland) and **PipeWire/PulseAudio** — the container
+  reuses the host's X display and audio socket; there is no headless rendering path.
+- **`kernel.apparmor_restrict_unprivileged_userns=0`** (see [AppArmor](#apparmor) below).
+- A GPU. NVIDIA, AMD, and Intel are all supported; the vendor is detected automatically.
 
 ## Dev environment
 
@@ -88,26 +97,61 @@ On startup the container runs:
 
 Inside the container, drive everything through `just`:
 
-| Recipe            | Role                                                                       |
-| ----------------- | -------------------------------------------------------------------------- |
-| `just init`       | Host setup (docker / `.env` / Gale profile checks)                         |
-| `just gen-proto`  | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`) |
-| `just format`     | Format both sides (ruff for Python, csharpier for C#)                      |
-| `just test`       | Run both test suites (pytest+cov, dotnet test)                             |
-| `just type`       | Run pyright in strict mode                                                 |
-| `just build`      | `dotnet build -c Release` for the mod                                      |
-| `just run`        | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)   |
-| `just deploy-mod` | Copy DLL+PDB into the Gale profile (`gale/BepInEx/plugins/ResoniteIO/`)    |
-| `just check-gale` | Verify BepisLoader and the required plugins are present                    |
-| `just docs-serve` | Preview the docs site (MkDocs) with live reload                            |
-| `just docs-build` | Build the docs site with `--strict`                                        |
-| `just clean`      | Remove build/cache output on both sides                                    |
+| Recipe             | Role                                                                       |
+| ------------------ | -------------------------------------------------------------------------- |
+| `just init`        | Host setup (docker / `.env` / Gale profile checks)                         |
+| `just gen-proto`   | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`) |
+| `just format`      | Format both sides (ruff for Python, csharpier for C#)                      |
+| `just test`        | Run both test suites (pytest+cov, dotnet test)                             |
+| `just type`        | Run pyright in strict mode                                                 |
+| `just build`       | `dotnet build -c Release` for the mod                                      |
+| `just run`         | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)   |
+| `just deploy-mod`  | Copy DLL+PDB into the Gale profile (`gale/BepInEx/plugins/ResoniteIO/`)    |
+| `just check-gale`  | Verify BepisLoader and the required plugins are present                    |
+| `just resonite-up` | Launch vanilla Resonite inside the container (see below)                   |
+| `just docs-serve`  | Preview the docs site (MkDocs) with live reload                            |
+| `just docs-build`  | Build the docs site with `--strict`                                        |
+| `just clean`       | Remove build/cache output on both sides                                    |
 
 `just --list` shows everything; per-side sub-recipes (`py-test`, `mod-build`, …) are
 fallbacks for running one half. Container start/stop is handled by the dev container tooling,
 not by `just`.
 
 **Always run `just run` before committing** — all checks must be green.
+
+### 4. Run Resonite in the container (optional)
+
+`just resonite-up` launches **vanilla Resonite** inside the dev container: `scripts/resonite-run.sh`
+rsyncs the read-only `/resonite` bind into a writable `/opt/resonite`, then starts
+`Resonite.exe -SkipIntroTutorial` via `umu-run` (umu-launcher / Proton). The first run pulls
+GE-Proton and copies the ~2 GB install, so it is slow; later runs sync only deltas.
+
+This loads **vanilla** Resonite only — the ResoniteIO mod is **not** loaded into the container's
+Resonite yet (a later phase). For mod development, keep using host Steam + Gale + `just deploy-mod`.
+The host-bridge recipes (`just resonite-start` / `-stop` / `-status`) still drive Resonite on
+the host via Gale.
+
+#### AppArmor
+
+pressure-vessel (the Steam Linux Runtime) needs unprivileged user namespaces, which Ubuntu 24.04+
+restricts by default. `kernel.apparmor_restrict_unprivileged_userns` must be `0` or the container
+fails to start (hard-failed both host-side in `initialize.sh` and container-side in `entrypoint.sh`):
+
+```sh
+# temporary (until reboot)
+sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
+# persistent
+echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/99-resonite-userns.conf
+sudo sysctl --system
+```
+
+#### GPU
+
+NVIDIA, AMD, and Intel are all supported. `initialize.sh` detects the host GPU vendor and writes
+the matching `.env` values, picks the build-arg, and links `.devcontainer/compose.gpu.yml` to the
+right per-vendor overlay (`compose.{nvidia,amd,intel}.yml`). NVIDIA relies on
+`nvidia-container-toolkit` to inject the host driver; AMD (Mesa RADV) and Intel (Mesa ANV)
+userspace drivers are baked into the image. None of this normally needs manual `.env` edits.
 
 ## C# mod (`mod/`)
 

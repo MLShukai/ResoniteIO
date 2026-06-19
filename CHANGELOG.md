@@ -9,6 +9,22 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **Run Resonite inside the dev container**: the dev container can now launch
+  **vanilla** Resonite itself via `just resonite-up` (`scripts/resonite-run.sh`
+  rsyncs the read-only `/resonite` bind into a writable `/opt/resonite`, then
+  starts `Resonite.exe -SkipIntroTutorial` through `umu-run` / Proton — the first
+  run pulls GE-Proton and copies the ~2 GB install). This is **vanilla only**; the
+  ResoniteIO mod is not loaded into the container's Resonite yet (a later phase),
+  so mod development still uses host Steam + Gale + `just deploy-mod`. Rendering
+  needs a host graphical session (X11 / Xwayland) and PipeWire/PulseAudio for
+  audio. **NVIDIA / AMD / Intel** GPUs are all supported — `initialize.sh` detects
+  the vendor and selects the matching per-vendor compose overlay
+  (`.devcontainer/compose.{nvidia,amd,intel}.yml` via the `compose.gpu.yml`
+  symlink). **Requires `kernel.apparmor_restrict_unprivileged_userns=0`** on the
+  host (pressure-vessel needs unprivileged user namespaces, which Ubuntu 24.04+
+  restricts by default); the container start hard-fails without it. The dev image
+  base also moved from `debian:bookworm-slim` to `debian:13-slim` (trixie), and
+  `compose.yml` moved from the repo root to `.devcontainer/compose.yml`
 - **`Contact` modality**: A new unary modality that drives the dash "Contacts"
   tab by reading/writing the cloud contact list (`Engine.Cloud.Contacts` /
   `Engine.Cloud.Users`) directly — no UI automation. `ListContacts` returns the

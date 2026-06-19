@@ -12,11 +12,13 @@ ______________________________________________________________________
 
 ## 1. Docker 開発環境
 
-開発ツール (.NET 10 SDK / uv / protoc / dotnet local tools / pre-commit) は **`debian:bookworm-slim` ベースの単一 image** に同梱し、host にはインストールしない。
+開発ツール (.NET 10 SDK / uv / protoc / dotnet local tools / pre-commit) は **`debian:13-slim` (trixie) ベースの単一 image** に同梱し、host にはインストールしない。同 image には devcontainer 内で Resonite を起動するための X11 / GPU ユーザースペース / audio / umu-launcher (Proton) も同梱する。
 
-- `compose.yml` は `name: resonite-io-${USER}` で **user 単位の名前空間** に分離 (同一ホストの複数アカウント / 複数 worktree が衝突しない)。`.devcontainer/devcontainer.json` がこの compose を参照する
+- `compose.yml` は `.devcontainer/compose.yml` に置き (`name: resonite-io`)、`.devcontainer/devcontainer.json` がこれを参照する。build context も `.devcontainer/`
+- GPU 固有設定 (`runtime: nvidia` / `devices` / Mesa 環境変数等) は `.devcontainer/compose.{nvidia,amd,intel}.yml` overlay に分離し、`initialize.sh` が host GPU ベンダを検出して `.devcontainer/compose.gpu.yml` symlink を貼る (NVIDIA / AMD / Intel 対応。NVIDIA はドライバを nvidia-container-toolkit が inject、AMD は Mesa RADV / Intel は Mesa ANV を build-arg `GPU` で image に同梱)
 - 作業ディレクトリは **host repo を `/workspace` に直接 rw bind**。host 側の編集が即座に container 側に反映され、container 内の build 成果物 (`bin/`, `obj/`, `python/.venv/` 等) も `.gitignore` 経由で host 側に出る
-- Resonite フォルダは `/resonite` に **read-only bind** のみ (FrooxEngine.dll 等の HintPath 参照専用; mod の deploy 先ではない)
+- Resonite フォルダは `/resonite` に **read-only bind** のみ (FrooxEngine.dll 等の HintPath 参照用、かつ container 内 Resonite 起動時の rsync source。mod の deploy 先ではない)
+- Resonite 用 named volume: `resonite-app` (`/opt/resonite` インストールコピー) / `resonite-share` (`~/.local/share`、SteamRT/Proton + ユーザーデータ) / `resonite-cache` (`~/.cache`) / `resonite-prefix` (`~/prefix`、Wine prefix)
 - Gale プロファイル (`./gale/`) は `/workspace/gale` 経由で参照する (`environment.GalePath: /workspace/gale` が csproj の deploy 先を解決)
 - コンテナ内 `dev` user の **UID/GID を host user に一致** させて build (`HOST_UID` / `HOST_GID` を build-arg で渡す)。これにより `deploy-mod` で出力された DLL/PDB が host user 所有になり、host 側 git からそのまま見える
 - NuGet / uv のキャッシュは **named volume** にマウントして再ビルドを高速化 (`/home/dev/.nuget` / `/home/dev/.cache/uv`)
@@ -28,9 +30,9 @@ ______________________________________________________________________
 2. `just init` を host 側で実行 — docker / docker compose v2 検出 → `.env` 検証 → `ResonitePath` 検証 → Gale プロファイル確認を冪等に実施
 3. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash` (`@devcontainers/cli`、既定では未インストール)
 4. devcontainer が自動実行する:
-   - `initializeCommand` (host 側・作成前): `~/.resonite-io{,-debug}/` を 0700 で事前作成し、host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)
+   - `initializeCommand` (host 側・作成前、`.devcontainer/initialize.sh`): `~/.resonite-io{,-debug}/` を 0700 で事前作成し、host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。加えて container 内 Resonite 起動のために **AppArmor の非特権 user namespace 制限を hard fail チェック** (§6 参照)、`DISPLAY` / X auth cookie (FamilyWild 書換えで `.xauth`) / render・video GID / GPU ベンダを検出して `.env` に記録し、`compose.gpu.yml` symlink を貼る
    - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Codex settings symlink)
-5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する
+5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する。devcontainer 内で vanilla Resonite を起動する場合は `just resonite-up` (§5)
 
 ______________________________________________________________________
 
@@ -87,7 +89,40 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5. 関連 memory
+## 5. devcontainer 内で Resonite を起動 (`just resonite-up`)
+
+mod 開発の従来フロー (build/deploy) は host Steam + Gale が主軸だが、devcontainer 内で **vanilla Resonite** を直接起動することもできる。`scripts/resonite-run.sh` が ro bind の `/resonite` を書込可能な `/opt/resonite` に rsync してから `umu-run` (umu-launcher/Proton) で `Resonite.exe -SkipIntroTutorial` を起動する。初回は GE-Proton の DL と install コピー (~2GB) で時間がかかり、2 回目以降は差分のみ転送する。
+
+**起動できるのは現状 vanilla まで**。ResoniteIO mod (BepInEx) を container 内 Resonite にロードするのは次フェーズで、mod 開発は引き続き host Steam + Gale + `just deploy-mod` を使う。
+
+### 前提 (host 側)
+
+- **graphical session (X11 / Xwayland)**: Resonite の描画に必要。`initialize.sh` が `DISPLAY` を検出し、X auth cookie を FamilyWild (ffff) 書換えで `.xauth` に用意する (container hostname がランダムで MIT-MAGIC-COOKIE の hostname マッチに失敗するため)
+- **PipeWire/PulseAudio**: 音声に必要 (無いと初回オンボーディングで固まることがある)
+- **AppArmor 緩和**: `kernel.apparmor_restrict_unprivileged_userns=0` が必須 (§6 参照)
+- **GPU**: NVIDIA / AMD / Intel いずれも対応。`initialize.sh` がベンダを検出して compose overlay を切替える
+
+### `.env` 変数 (通常は手動設定不要)
+
+`initialize.sh` が自動検出して `.env` に upsert するため通常は触らない: `DISPLAY` / `XAUTHORITY_HOST` / `RENDER_GID` / `VIDEO_GID` / `NVIDIA_GPU_UUID` / `AMD_RENDER_NODE` / `AMD_VK_DEVICE_SELECT` / `AMD_DRI_PRIME`。既存の `ResonitePath` はそのまま (`/resonite:ro` bind の source として再利用される)。
+
+______________________________________________________________________
+
+## 6. AppArmor: 非特権 user namespace
+
+pressure-vessel (Steam Linux Runtime) は非特権 user namespace を必要とする。Ubuntu 24.04+ は既定でこれを AppArmor で制限するため、`kernel.apparmor_restrict_unprivileged_userns=0` が無いと container 起動が **失敗する** (host 側 `initialize.sh` と container 側 `entrypoint.sh` の二段で hard fail)。
+
+```bash
+# 一時 (再起動でリセット)
+sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
+# 永続
+echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/99-resonite-userns.conf
+sudo sysctl --system
+```
+
+______________________________________________________________________
+
+## 7. 関連 memory
 
 - [`reference_pressure_vessel_paths.md`](../../../memory/reference_pressure_vessel_paths.md) — pressure-vessel の filesystem 共有経路
 - [`reference_resonite_modding.md`](../../../memory/reference_resonite_modding.md) — BepisLoader / BepInEx / `bep6resonite` テンプレ / `ResoniteHooks` / Thunderstore packaging
@@ -96,6 +131,6 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6. 実機 mod load 検証手順
+## 8. 実機 mod load 検証手順
 
 `just resonite-start` (host-agent 経由で Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Codex が container 内から host-agent bridge 経由で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。
