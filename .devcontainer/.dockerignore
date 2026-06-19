@@ -1,0 +1,5 @@
+# build context は .devcontainer/。Dockerfile が COPY するのは entrypoint.sh のみなので、
+# それ以外 (compose*.yml / initialize.sh / devcontainer.json / .env symlink 等) は
+# build context から除外して最小化する。
+*
+!entrypoint.sh

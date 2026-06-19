@@ -366,6 +366,23 @@ clean-py:
     find python -type d -name '__pycache__' -prune -exec rm -rf {} +
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
 
+# ===== Resonite (devcontainer 内起動) =========================================
+
+# devcontainer 内から Resonite を直接起動する (umu-launcher / GE-Proton 経由)。
+#
+# 前提:
+#   - devcontainer 内で実行すること (umu-run が PATH に必要)
+#   - ホスト側で GUI session (X11 / Xwayland) と audio (PipeWire / PulseAudio) が動いていること
+#   - initialize.sh が DISPLAY / XAUTHORITY_HOST 等を .env に自動設定済みであること
+#
+# 初回実行時は GE-Proton のダウンロード + ~2GB の Resonite install コピーが走るため
+# 数分かかる。2 回目以降は差分のみ転送するため速い。
+#
+# ※ host 上の Gale 経由で Resonite を起動する debug 経路 (`just resonite-start` 等) とは
+#    別物。このレシピはコンテナ内から直接 umu で Resonite を起動する。
+resonite-up *ARGS:
+    bash scripts/resonite-run.sh {{ARGS}}
+
 # ===== Host bridge (Resonite debug) =========================================
 #
 # host 常駐 daemon (`scripts/host_agent.py`) と container 側 client
