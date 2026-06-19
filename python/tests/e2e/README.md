@@ -7,21 +7,23 @@ when explicitly targeted.
 
 ## Prerequisites
 
-1. **Host-agent running on host (GUI session, foreground):**
+Run everything from inside the dev container.
+
+1. **Mod deployed to `./gale`:**
 
    ```bash
-   just host-agent
+   just deploy-mod
    ```
 
-   This brings up the debug bridge daemon (`~/.resonite-io-debug/host-agent.sock`).
-   See `scripts/host_agent.py` for details.
+   `just resonite-start` boots Resonite from the `./gale` Gale profile, so
+   the `ResoniteIO` mod (BepInEx + plugin) must be present there. The
+   `require_mod_deployed` autouse fixture skips with a clear message when
+   `./gale/BepInEx` is absent.
 
-2. **`.env` configured** with a `GaleProfile` that has BepisLoader + the
-   `ResoniteIO` mod installed (`just deploy-mod` deploys the local build
-   into the Gale profile).
-
-3. **Resonite installed** (Linux native FrooxEngine + Proton-managed
-   Renderite). `just init` walks through the host-side preconditions.
+2. **Resonite installed** and the in-container launch prerequisites met
+   (host graphical session + PipeWire/PulseAudio, AppArmor userns relaxation,
+   `.env`'s `ResonitePath`). `just init` walks through the host-side
+   preconditions; see the setup-resonite-env skill for details.
 
 ## Run
 
@@ -38,16 +40,17 @@ in its own `<name>.py` to keep the run target self-describing.
 
 `connection.py` orchestrates:
 
-- `just resonite-start` (boots Resonite via Gale)
+- `just resonite-start` (boots Resonite in the container via
+  `scripts/resonite-run.sh`: umu-run + hookfxr loads the mod from `./gale`).
 - Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
   (up to 120 s).
-- Waits 45 s after the UDS appears so the focused home world can finish
+- Waits 30 s after the UDS appears so the focused home world can finish
   loading before a scenario starts.
 - Calls `Connection.Ping("e2e-smoke")` once via `ConnectionClient`.
 - `just resonite-stop` in `finally:` so Resonite is stopped even on
   failure.
 
-If host-agent is not running on host, the test will skip with a clear
+If the mod is not deployed to `./gale`, the test will skip with a clear
 message.
 
 ## Scope (Step 2)

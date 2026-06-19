@@ -28,19 +28,21 @@ releases it and leaves it in place; the local home world resets on the
 next Resonite start (the ``resonite_session`` fixture restarts Resonite
 per test anyway).
 
-Screenshots are taken purely for the record (the desktop view around the
-spawn/grab/release calls); the hard assertions are the RPC contract and
-the positive grab, not pixel content.
+An in-engine Camera frame (``CameraClient.shot`` / ``resoio screenshot``)
+is grabbed around the spawn/grab/release calls as a reference-only,
+human-viewable artifact; the hard assertions are the RPC contract and the
+positive grab, not pixel content (the object visually following the hand
+is left to manual inspection).
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -51,10 +53,8 @@ from grpclib.const import Status
 from resoio.cursor import CursorClient
 from resoio.grabber import GrabberClient, GrabResult, GrabState
 from resoio.inventory import InventoryClient
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-# parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # UDS bind and Grabber/LocalUser readiness race: while the engine is still
@@ -75,8 +75,8 @@ _HOME_LOAD_SETTLE_S = 20.0
 # in front of the avatar; wait before aiming at it (5 s verified on hardware).
 _SPAWN_SETTLE_S = 5.0
 
-# Give the renderer a frame to present before grabbing the desktop, so
-# screenshots are not torn mid-update.
+# Let the grab/release tween settle + the renderer present a frame before
+# grabbing the Camera frame, so the capture is not torn mid-update.
 _SETTLE_S = 0.4
 
 # Inventory path of a known grabbable: the Resonite Essentials Mirror spawns
@@ -94,20 +94,6 @@ _AIM_POINTS: tuple[tuple[float, float], ...] = (
     (0.55, 0.4),
 )
 _GRAB_RADIUS = 0.5
-
-
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    path = out_dir / name
-    subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "screenshot", "--output", str(path)],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
 
 
 def _format_state(state: GrabState) -> str:
@@ -162,7 +148,7 @@ class TestGrabber:
 
         async def settle_shot(name: str) -> None:
             await asyncio.sleep(_SETTLE_S)
-            _screenshot(out_dir, f"{name}.png")
+            await save_camera_shot(out_dir / f"{name}.png")
 
         async def grab_with_aim_retries(
             client: GrabberClient, cursor: CursorClient

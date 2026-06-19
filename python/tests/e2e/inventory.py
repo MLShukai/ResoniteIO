@@ -15,8 +15,10 @@ bug-fixed in the mod bridge:
   created under the test dir and listed back; this used to hang forever at
   the server before the path was URL-encoded.
 * **Spawn** — the real ``DragonFruit`` object at ``/Inventory/DragonFruit``
-  is spawned (validating the ``ToWorld`` engine-thread fix) and the host
-  desktop is screenshotted so the spawned item can be confirmed visually.
+  is spawned (validating the ``ToWorld`` engine-thread fix); the returned
+  spawned-slot id/name is the asserted ground truth, and an in-engine Camera
+  frame (``CameraClient.shot`` / ``resoio screenshot``) is kept so the spawned
+  item can be confirmed visually.
 * **Thumbnail fetch** — the ``DragonFruit`` object's thumbnail image is
   fetched via ``FetchThumbnail`` (resolving ``Record.ThumbnailURI`` and
   downloading it server-side), asserting non-empty bytes + a content type,
@@ -29,9 +31,11 @@ Finally — the "visual" verification enabled by the Dash modality landing on
 ``main`` — it opens the **Esc dash** (via ``DashClient``), navigates to the
 Inventory tab, and asserts the test folder actually *renders* in the live
 ``InventoryBrowser`` panel: a structural assert that the folder name appears
-as an element label in the dash UI tree, plus desktop screenshots kept as
-human-viewable artifacts. This proves a cloud mutation made through
-``InventoryClient`` is reflected in the in-client UI a human would see.
+as an element label in the dash UI tree, plus in-engine Camera frames
+(``CameraClient.shot`` / ``resoio screenshot``) kept as human-viewable
+artifacts. This proves a cloud mutation made through ``InventoryClient`` is
+reflected in the in-client UI a human would see (the dash control listing is
+the asserted ground truth).
 
 It all runs in one Resonite session (a single cloud sign-in): a second
 back-to-back client restart does not reliably re-authenticate, so the dash
@@ -42,15 +46,15 @@ present and are skipped (logged) otherwise, so the test is not brittle to
 account state. Spawned objects land in the world (the local user's space),
 which is expected and not cleaned by inventory ops.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live, signed-in Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live, signed-in Resonite started by ``just resonite-start`` from the ``./gale``
+profile; the ``require_mod_deployed`` autouse fixture skips when the mod is not
+deployed there.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from collections.abc import Coroutine
 from datetime import datetime
@@ -62,9 +66,8 @@ from grpclib.const import Status
 
 from resoio.dash import DashClient, DashControl
 from resoio.inventory import InventoryClient, InventoryEntryKind, InventoryListing
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 _TEST_DIR = "/Inventory/__resoio_e2e__"
@@ -111,23 +114,6 @@ _T = TypeVar("_T")
 async def _op(coro: Coroutine[object, object, _T]) -> _T:
     """Await an inventory RPC under a hard timeout (hang regression guard)."""
     return await asyncio.wait_for(coro, timeout=_OP_TIMEOUT_S)
-
-
-def _screenshot(out_dir: Path, name: str) -> None:
-    subprocess.run(
-        [
-            "python3",
-            "scripts/resonite_cli.py",
-            "screenshot",
-            "--output",
-            str(out_dir / name),
-        ],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
 
 
 def _format_controls(controls: list[DashControl]) -> str:
@@ -269,7 +255,7 @@ class TestInventory:
                             f"({spawned.spawned_slot_name!r})"
                         )
                         await asyncio.sleep(_SETTLE_S)
-                        _screenshot(out_dir, "spawned.png")
+                        await save_camera_shot(out_dir / "spawned.png")
 
                     # Thumbnail fetch (FetchThumbnail RPC): resolve the
                     # DragonFruit item's Record.ThumbnailURI server-side,
@@ -338,7 +324,7 @@ class TestInventory:
                             "(unexpected logged-out / minimal tab set)"
                         )
                         await asyncio.sleep(_PANEL_SETTLE_S)
-                        _screenshot(out_dir, "dash_inventory_panel.png")
+                        await save_camera_shot(out_dir / "dash_inventory_panel.png")
 
                         # Poll the current tab's controls until the folder's
                         # label shows (tiles populate asynchronously). Include
@@ -360,7 +346,7 @@ class TestInventory:
                         (out_dir / "dash_controls.txt").write_text(
                             _format_controls(controls), encoding="utf-8"
                         )
-                        _screenshot(out_dir, "dash_folder_visible.png")
+                        await save_camera_shot(out_dir / "dash_folder_visible.png")
                         assert found, (
                             "test folder '__resoio_e2e__' did not render in the "
                             f"dash Inventory panel ({len(controls)} controls; "

@@ -1,25 +1,26 @@
-"""E2E: drive the World modality against a live Resonite and screenshot.
+"""E2E: drive the World modality against a live Resonite.
 
 Exercises the real ``WorldClient`` over the live UDS: browse live
 sessions / records, join a session (Nest), inspect open worlds, focus a
 different one, and leave. Each state-changing step asserts the API return
-value AND grabs a host-side desktop screenshot so the world transition
-(loading screen, the joined world's environment, the focus switch) can be
-confirmed visually — an in-world Camera frame would only show one world's
-render, whereas the desktop window shows whichever world is focused.
+value (joined/focused snapshots, open-world membership, the focus switch)
+AND grabs an in-engine Camera frame (``CameraClient.shot`` / ``resoio
+screenshot``) so the world transition (loading screen, the joined world's
+environment, the focus switch) is kept as a reference-only, human-viewable
+artifact. The hard contract is the returned snapshots; the captures are not
+asserted on.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live, **logged-in** Resonite client; the
-``require_host_agent`` autouse fixture skips when the agent is absent. The
-cloud-dependent steps (sessions / records) degrade to a clear skip when
-the account sees an empty cloud, but the join/focus/leave asserts are the
-core of the scenario.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live, **logged-in** Resonite started by ``just resonite-start`` from the
+``./gale`` profile; the ``require_mod_deployed`` autouse fixture skips when the
+mod is not deployed there. The cloud-dependent steps (sessions / records)
+degrade to a clear skip when the account sees an empty cloud, but the
+join/focus/leave asserts are the core of the scenario.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -36,10 +37,8 @@ from resoio.world import (
     WorldClient,
     WorldSession,
 )
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-# parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # UDS bind + cloud/engine readiness race: while the engine is still booting
@@ -50,29 +49,14 @@ _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
 
 # The bridge becomes ready before the home world has finished loading +
-# presenting. Give the home world time to settle so the first screenshots
-# show a fully rendered desktop.
+# presenting. Give the home world time to settle before driving the scenario.
 _HOME_LOAD_SETTLE_S = 20.0
 
 # Joining / focusing / leaving a world triggers async world load + present.
-# Give the renderer a generous window to finish the transition before the
-# screenshot so the captured frame is the target world, not a loading
-# screen.
+# Give the renderer a generous window to finish the transition before the next
+# state read + Camera capture, so both the snapshot and the captured frame
+# reflect the target world, not a loading screen.
 _WORLD_TRANSITION_SETTLE_S = 15.0
-
-
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    path = out_dir / name
-    subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "screenshot", "--output", str(path)],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
 
 
 def _format_world(world: OpenWorld | None) -> str:
@@ -181,7 +165,7 @@ class TestWorld:
 
         async def settle_shot(step: str, settle_s: float) -> None:
             await asyncio.sleep(settle_s)
-            _screenshot(out_dir, f"{step}.png")
+            await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
             # 0. baseline: engine ready, home world loaded + presented.

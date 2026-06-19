@@ -1,7 +1,7 @@
 {
   // resonite-io 開発環境。compose ベース (compose.yml の dev サービスを使う)。
   "name": "resonite-io",
-  "dockerComposeFile": ["../compose.yml"],
+  "dockerComposeFile": ["compose.yml", "compose.gpu.yml"],
   "service": "dev",
   "workspaceFolder": "/workspace",
   "remoteUser": "dev",

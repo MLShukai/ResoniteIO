@@ -79,20 +79,30 @@ WineHQ の roadmap でも対応予定なし。pressure-vessel の filesystem 共
 等価な共有メモリ機構) を第一選択にする。UDS / domain socket 系の API を見たら
 ためらわず除外する。
 
-## 3. Steam Launch Options が WINEDLLOVERRIDES の唯一の経路
+## 3. WINEDLLOVERRIDES は両経路で必須 (container は自動 export、host Steam は手動)
 
-Renderer 側 BepInEx (BepInExRenderer 5.4+) を起動させる doorstop hook 版
-`winhttp.dll` を Wine に load させるには:
+Renderer 側 BepInEx (BepInExRenderer 5.4+) を起動させる doorstop は
+hook 版 `winhttp.dll` プロキシで、Wine に system 同梱でなく hook 版
+`winhttp.dll` を読ませるには **どちらの起動経路でも `WINEDLLOVERRIDES="winhttp=n,b"`
+が要る** (2026-06-19 実機検証)。`--doorstop-*` の CLI 引数は doorstop の
+*挙動* を設定するだけで、`winhttp.dll` の *読み込み自体* はこの override
+が前提。経路で違うのは「誰が override を設定するか」だけ:
+
+- **container 内 `just resonite-start` 経路**: `scripts/resonite-run.sh` が
+  mod 起動時に `WINEDLLOVERRIDES="winhttp=n,b"` を自動で `export` するため
+  **利用者の手動設定は不要**。umu-run は Steam と違い env を素通しするので
+  env 経由で渡せる。
+- **host Steam 経由起動の場合**: doorstop hook 版 `winhttp.dll` を読ませる
+  には Steam で Resonite を選択 → Properties → Launch Options に以下を
+  **設定する以外の経路は無い** (Steam は env を sanitize するため):
 
 ```text
 WINEDLLOVERRIDES="winhttp=n,b" %command%
 ```
 
-を Steam で Resonite を選択 → Properties → Launch Options に **設定する以外の
-経路は無い**。
-
-- `host_agent.py` から env 経由で渡しても **Steam が sanitize する** ため
-  通らない (実証済み)
+- (host Steam 経由起動の場合) env 経由で渡しても **Steam が sanitize する**
+  ため通らない (実証済み)。umu-run は素通しなので container では env で渡せる
+  という違い
 - `/proc/<pid>/environ` で確認しても env に乗らないため debug 困難。root
   cause が "Launch Options が空" だと気付くまでに時間がかかる
 - Wine は system 同梱の `winhttp.dll` を優先する仕様。override しない限り
@@ -100,17 +110,19 @@ WINEDLLOVERRIDES="winhttp=n,b" %command%
   永遠に起動せず Camera v2 全体が silent fail する
 
 **Why:** Steam の sanitize policy は env を proton-fixed のものに上書き
-するため。Launch Options だけが Steam → Proton → Wine への明示的な
-DLL override 引数として通る。
+するため Launch Options だけが通る。umu-run にはこの sanitize が無いので
+`resonite-run.sh` が env を直接 export して渡せる。
 
 **How to apply:**
 
-- README / AGENTS.md / `just init` の手順表示で **Launch Options 必須** を
-  人間に伝える (commit `cf05254` で実施済み)
+- container 経路は `resonite-run.sh` が自動設定するので人間の操作は不要。
+  host Steam 経路は README / AGENTS.md / `just init` の手順表示で
+  **Launch Options 必須** を人間に伝える (commit `cf05254` で実施済み)
 - Renderer 側 BepInEx ログ (`gale/Renderer/BepInEx/LogOutput.log`) が空 /
-  生成されない症状を見たら 99% Launch Options を疑う
+  生成されない症状を見たら 99% override の漏れを疑う (host Steam なら
+  Launch Options、container なら `resonite-run.sh` の export)
 - 切り分け手順は `just resonite-start` → `just log` (BepInEx LogOutput) で
-  Renderer plugin ロード行を grep。表示されなければ Steam Launch Options を確認
+  Renderer plugin ロード行を grep。表示されなければ override を確認
 
 ## 4. `IDisplayTextureSource.UnityTexture` は外部 desktop 取り込み用 (誤解しない)
 

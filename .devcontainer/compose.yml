@@ -1,0 +1,124 @@
+# Docker Compose 開発環境定義 (devcontainer の裏で動く dev サービス)。
+#
+# - `.devcontainer/devcontainer.json` がこの compose を参照する。host 側の
+#   準備 (UDS dir 作成 / uid/gid 注入) は devcontainer の initializeCommand
+#   (`.devcontainer/initialize.sh`) が行う。
+# - host repo を `/workspace` に rw bind する。dev ユーザーの UID/GID を host と
+#   一致させているため、container 内で生成した成果物は host から所有権そのまま見える。
+# - host 側 ${ResonitePath} (Resonite 実行ディレクトリ) を ro bind するのは
+#   FrooxEngine.dll 等の HintPath 参照用 (csproj が `/resonite` を見に行く)。
+#   コンテナ内では `environment: ResonitePath: /resonite` で上書きする。
+# - mod の deploy 先は `/workspace/gale` (= host repo 直下の Gale プロファイル)。
+#   コンテナ内では `environment: GalePath: /workspace/gale` で csproj が deploy 先を解決。
+# - build-arg の ${HOST_UID} / ${HOST_GID} は `.devcontainer/initialize.sh` が
+#   `id -u` / `id -g` から .env に冪等 upsert する。compose 方式の devcontainer
+#   では updateRemoteUserUID が効かないため、build-arg 経由で UID/GID を揃える。
+# - 本番 gRPC UDS は host と共有しない。Resonite を container 内で起動する構成
+#   になったため、mod (GrpcHost) が container 内 `/home/dev/.resonite-io/` に
+#   `resonite-{pid}.sock` を作り、同 container 内の Python client がそこへ connect
+#   する (host を介さない)。GrpcHost が bind 前に dir を作成するので、host bind や
+#   事前 mkdir は不要。
+# - bind source の `${HOME}` は docker compose が host の環境変数から展開する
+#   (X11 / audio socket 等で使用)。
+# - X11 描画: host の /tmp/.X11-unix を ro bind し、DISPLAY / XAUTHORITY を渡す。
+#   X auth cookie は initialize.sh が FamilyWild (ffff) 書換えで .xauth に用意する。
+# - 音声: host の PipeWire/PulseAudio socket を /tmp/pulse-native に bind し、
+#   PULSE_SERVER=unix:/tmp/pulse-native で Resonite の音声バックエンドに渡す。
+# - security_opt / ipc: host: pressure-vessel (Steam Linux Runtime) が
+#   非特権 user namespace と MIT-SHM を必要とするため。
+# - GPU 固有設定 (runtime / devices / NVIDIA env 等) は overlay に分離。
+#   devcontainer.json が compose.gpu.yml (initialize.sh が貼る symlink) を重ねる。
+# - Resonite 用 named volume: resonite-app (インストールコピー) / resonite-share
+#   (SteamRT/Proton + ユーザーデータ) / resonite-cache (アセットキャッシュ) /
+#   resonite-prefix (Wine prefix)。cache-uv と resonite-cache はネスト mount になるが
+#   Docker は named volume のネストを許容する (内側が優先)。
+
+name: resonite-io
+
+services:
+  dev:
+    build:
+      # compose が .devcontainer/ にあるため build context は同ディレクトリ (.devcontainer)。
+      # Dockerfile が COPY する repo ファイルは entrypoint.sh のみなので context は最小で良い
+      # (repo root を context にせずに済み、.dockerignore も不要)。
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    image: resonite-io-dev
+    container_name: resonite-io-dev
+    hostname: resonite-io-dev
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    entrypoint: /usr/local/bin/entrypoint.sh
+    env_file: ../.env
+    environment:
+      ResonitePath: /resonite
+      GalePath: /workspace/gale
+      DISPLAY: ${DISPLAY:-:0}
+      XAUTHORITY: /tmp/.Xauthority
+      PULSE_SERVER: unix:/tmp/pulse-native
+    init: true
+    stdin_open: true
+    tty: true
+    # pressure-vessel (Steam Linux Runtime) が非特権 user namespace を必要とする。
+    # ipc: host は X MIT-SHM 共有メモリ転送 (X_ShmPutImage) のため。
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    ipc: host
+    # render / video グループを追加することで /dev/dri への書き込み権限を得る。
+    # GID は initialize.sh が getent group / stat で検出して .env に upsert する。
+    group_add:
+      - "${RENDER_GID:-110}"
+      - "${VIDEO_GID:-44}"
+    volumes:
+      - ../:/workspace
+      - ${ResonitePath}:/resonite:ro
+      # X11 Unix domain socket (host の X server に接続するため)。
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # X auth cookie (initialize.sh が FamilyWild 書換えで .xauth に出力)。
+      - ${XAUTHORITY_HOST:-/dev/null}:/tmp/.Xauthority:ro
+      # PipeWire/PulseAudio ソケット (Resonite の音声バックエンド向け)。
+      - /run/user/${HOST_UID:-1000}/pulse/native:/tmp/pulse-native
+      # 本番 gRPC UDS は host と共有しない: Resonite を container 内で起動するため、
+      # mod (GrpcHost) が container 内 `/home/dev/.resonite-io/` に socket を作り、
+      # 同 container 内の Python `~/.resonite-io/` がそこへ connect する。dir は
+      # GrpcHost が bind 前に作成するので bind mount も事前 mkdir も不要。
+      # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
+      - cache-nuget:/home/dev/.nuget
+      - cache-uv:/home/dev/.cache/uv
+      - cache-claude:/home/dev/.claude
+      - cache-codex:/home/dev/.codex
+      # gh CLI の認証情報 (~/.config/gh/hosts.yml) を named volume に載せ、
+      # コンテナ再ビルドをまたいで `gh auth login` の state を永続化する。
+      - cache-gh:/home/dev/.config/gh
+      # Resonite 起動用 named volume (scripts/resonite-run.sh が rsync してここから起動)。
+      - resonite-app:/opt/resonite
+      # SteamRT / Proton / Resonite ユーザーデータ (named volume で永続化)。
+      - resonite-share:/home/dev/.local/share
+      # Resonite アセットキャッシュ + shader cache (cache-uv とネストするが許容)。
+      - resonite-cache:/home/dev/.cache
+      # Wine prefix (WINEPREFIX=/home/dev/prefix)。
+      - resonite-prefix:/home/dev/prefix
+
+volumes:
+  cache-nuget:
+    name: resonite-io-cache-nuget
+  cache-uv:
+    name: resonite-io-cache-uv
+  cache-claude:
+    name: resonite-io-cache-claude
+  cache-codex:
+    name: resonite-io-cache-codex
+  cache-gh:
+    name: resonite-io-cache-gh
+  resonite-app:
+    name: resonite-io-resonite-app
+  resonite-share:
+    name: resonite-io-resonite-share
+  resonite-cache:
+    name: resonite-io-resonite-cache
+  resonite-prefix:
+    name: resonite-io-resonite-prefix

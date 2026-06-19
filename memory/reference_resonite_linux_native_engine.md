@@ -19,7 +19,7 @@ Linux 上の Resonite は **engine と renderer でランタイムが分かれ�
 
 ## e2e 実測 (host PID との突き合わせ)
 
-`resoio info` (engine 自己申告) と host-agent の `pgrep` 結果を突き合わせた:
+`resoio info` (engine 自己申告) と container 内 `pgrep` の結果を突き合わせた:
 
 - `info.renderer_pid` == host `pgrep -f Renderite.Renderer.exe` の PID と **完全一致**。
   → Info の `renderer_pid` (= `RenderSystem.RendererProcess.Id`) は本物の host Linux PID。

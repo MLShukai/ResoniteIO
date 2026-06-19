@@ -1,21 +1,23 @@
-"""E2E: drive the ContextMenu modality against a live Resonite and screenshot.
+"""E2E: drive the ContextMenu modality against a live Resonite.
 
-Each action (open / list / highlight / close / invoke) is followed by a
-host-side desktop screenshot so the radial menu's appearance, item
-highlight, and disappearance can be confirmed visually. The radial menu
-is a local-user screen-space overlay (renderQueue 4000 / ZTest.Always),
-so an in-world Camera frame would not capture it — we grab the actual
-desktop window via the host-agent (`scripts/resonite_cli.py screenshot`).
+Drives the radial menu through its full closed loop (open / list /
+highlight / close / invoke) and pins each step against the
+``ContextMenuState`` snapshot returned by the RPCs. The radial menu is a
+local-user screen-space overlay (renderQueue 4000 / ZTest.Always), so after
+each step an in-engine Camera frame (``CameraClient.shot`` / ``resoio
+screenshot``) is grabbed as a reference-only, human-viewable artifact of the
+menu's appearance / highlight / disappearance. The hard contract is the
+state snapshot; the captures are not asserted on.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -25,10 +27,8 @@ from grpclib.const import Status
 
 from resoio.context_menu import ContextMenuClient, ContextMenuState
 from resoio.cursor import CursorClient
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-# parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # UDS bind and LocalUser/InteractionHandler readiness race: while the engine
@@ -40,29 +40,15 @@ _READY_RETRY_INTERVAL_S = 2.0
 # The bridge becomes ready (FocusedWorld present) before the home world has
 # finished loading + presenting. Give the home world ~20 s to settle after the
 # first ready response so the desktop is fully rendered (cursor placed, world
-# loaded) before driving the menu and grabbing screenshots.
+# loaded) before driving the menu.
 _HOME_LOAD_SETTLE_S = 20.0
 
 # Give the radial menu a moment to finish its open/close lerp + the renderer a
-# frame to present before grabbing the desktop, so screenshots are not torn
+# frame to present before grabbing the Camera frame, so the capture is not torn
 # mid-animation. Kept short because the desktop radial menu is transient and
 # auto-closes after a few seconds of no sustained summoning input — every
 # open-dependent step below re-asserts open() (idempotent) to stay robust.
 _SETTLE_S = 0.4
-
-
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    path = out_dir / name
-    subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "screenshot", "--output", str(path)],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
 
 
 def _format_state(state: ContextMenuState) -> str:
@@ -109,11 +95,11 @@ class TestContextMenu:
 
         async def settle_shot(step: str) -> None:
             await asyncio.sleep(_SETTLE_S)
-            _screenshot(out_dir, f"{step}.png")
+            await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
             # 0. baseline: engine ready, menu closed. Wait for the home world to
-            #    finish loading/presenting before the first capture.
+            #    finish loading/presenting before driving the menu.
             initial = await wait_for_ready()
             await asyncio.sleep(_HOME_LOAD_SETTLE_S)
             initial = await wait_for_ready()
@@ -124,11 +110,7 @@ class TestContextMenu:
             # Center the cursor so the menu opens at screen center. The engine
             # positions the radial menu at the cursor's laser hit point, so
             # without this it would open wherever the cursor sits (bottom-left
-            # right after startup). Best-effort: set_position is a one-shot
-            # warp (position is not held after the RPC returns), so on Wine
-            # the cursor may revert to the OS pointer before the menu opens —
-            # menu placement in the screenshots is reference-only, and none of
-            # the asserts below depend on it.
+            # right after startup).
             async with CursorClient() as cur:
                 await cur.set_position(0.5, 0.5)
 
@@ -144,7 +126,7 @@ class TestContextMenu:
                 enabled_index = next((i.index for i in opened.items if i.enabled), 0)
 
                 # 2. list/get the items (read-only). open() is idempotent; re-assert
-                #    it first since the radial may have auto-closed during the shot.
+                #    it first since the radial may have auto-closed.
                 await cm.open()
                 listed = await cm.get_state()
                 record("02_list", listed)

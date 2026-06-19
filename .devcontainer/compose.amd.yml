@@ -1,0 +1,23 @@
+# AMD GPU overlay。
+# initialize.sh の GPU 検出で amd が選ばれたときに compose.gpu.yml -> compose.amd.yml
+# として symlink され、devcontainer.json が compose.yml と重ねて読み込む。
+# Mesa (RADV) は Dockerfile に焼き込まれる (GPU=amd ビルド)。
+# AMD_RENDER_NODE: initialize.sh がモニタ接続 GPU の render node を検出して .env に書く。
+#   空 (単一 GPU 等) のときは /dev/dri 全体にフォールバックする。
+# AMD_VK_DEVICE_SELECT: Vulkan デバイス固定 (末尾 ! で 1 GPU のみ公開)。
+# AMD_DRI_PRIME: GL/EGL デバイス選択 (pci-<addr> 形式)。
+# DRI_PRIME は Mesa 環境変数。
+# 参考: multi-GPU 環境で /dev/dri 全体を渡すと video-decode 初期化が BMC チップで
+# クラッシュするため、render node を 1 つに絞る設計。
+
+services:
+  dev:
+    build:
+      args:
+        GPU: amd
+    devices:
+      - ${AMD_RENDER_NODE:-/dev/dri}:${AMD_RENDER_NODE:-/dev/dri}
+    environment:
+      AMD_VULKAN_ICD: RADV
+      MESA_VK_DEVICE_SELECT: ${AMD_VK_DEVICE_SELECT:-}
+      DRI_PRIME: ${AMD_DRI_PRIME:-}

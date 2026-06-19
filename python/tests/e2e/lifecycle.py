@@ -1,11 +1,11 @@
 """E2E: graceful shutdown against a live Resonite + Info host-PID cross-check.
 
-Validates the Lifecycle/shutdown feature against a real Resonite started via the
-host-agent:
+Validates the Lifecycle/shutdown feature against a real Resonite started in the
+dev container via ``just resonite-start``:
 
 1. ``Info.GetServerInfo`` reports the engine's host PID (`resonite_pid`) and the
-   renderer's (`renderer_pid`). We cross-check `renderer_pid` against the host's
-   actual ``Renderite.Renderer.exe`` PID (from the host-agent ``status``) to
+   renderer's (`renderer_pid`). We cross-check `renderer_pid` against the
+   container's actual ``Renderite.Renderer.exe`` PID (from ``pgrep``) to
    confirm the engine reports real host kernel PIDs (the engine runs natively on
    Linux, ``is_wine=false``). NOTE: the engine's own `resonite_pid` is observed
    only — it does NOT appear in ``pgrep -f Resonite.exe`` because that name
@@ -21,7 +21,6 @@ function from inside the container against the host Resonite.
 from __future__ import annotations
 
 import asyncio
-import json
 import subprocess
 import time
 from datetime import datetime
@@ -29,9 +28,8 @@ from pathlib import Path
 
 from resoio.info import get_server_info
 from resoio.lifecycle import shutdown
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # Shutdown needs time to run FrooxEngine's shutdown tasks and let Steam reap the
@@ -40,46 +38,48 @@ _SHUTDOWN_TIMEOUT_S = 90.0
 _SHUTDOWN_POLL_S = 1.0
 
 
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    subprocess.run(
-        [
-            "python3",
-            "scripts/resonite_cli.py",
-            "screenshot",
-            "--output",
-            str(out_dir / name),
-        ],
-        cwd=REPO_ROOT,
-        check=True,
+def _pgrep(pattern: str) -> list[int]:
+    """Return the PIDs whose command line matches ``pattern`` (``pgrep -af``).
+
+    ``pgrep`` exits 1 when nothing matches; that is the "no process" case, not
+    an error, so it is mapped to an empty list. Any other non-zero exit is a
+    real failure and is surfaced.
+    """
+    proc = subprocess.run(
+        ["pgrep", "-af", pattern],
+        check=False,
         text=True,
         capture_output=True,
         timeout=30.0,
     )
+    if proc.returncode == 1:
+        return []
+    if proc.returncode != 0:
+        raise AssertionError(
+            f"pgrep -af {pattern!r} failed (rc={proc.returncode}): {proc.stderr!r}"
+        )
+    pids: list[int] = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line:
+            pids.append(int(line.split(None, 1)[0]))
+    return pids
 
 
 def _host_status() -> tuple[list[int], list[int], bool]:
-    """Return ``(resonite_pids, renderite_pids, running)`` from the host-agent.
+    """Return ``(resonite_pids, renderite_pids, running)`` via ``pgrep``.
 
-    These are the host's *actual* Linux PIDs (the host-agent runs ``pgrep`` on the
-    host). ``resonite_pids`` are the Steam/Proton launch wrappers (their command
-    line contains ``Resonite.exe``), not the native engine process — used here
-    only to confirm the process group is gone after shutdown. ``renderite_pids``
-    is the real renderer, cross-checked against the Info ``renderer_pid``.
+    These are the container's *actual* Linux PIDs. ``resonite_pids`` are the
+    Steam/Proton launch wrappers (their command line contains ``Resonite.exe``),
+    not the native engine process — used here only to confirm the process group
+    is gone after shutdown. ``renderite_pids`` is the real renderer,
+    cross-checked against the Info ``renderer_pid``. ``running`` is True while
+    either process group is present.
     """
-    proc = subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "status"],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
-    data = json.loads(proc.stdout)["data"]
-    resonite = [int(p["pid"]) for p in data["resonite"]]
-    renderite = [int(p["pid"]) for p in data["renderite"]]
-    return resonite, renderite, bool(data["running"])
+    resonite = _pgrep("Resonite.exe")
+    renderite = _pgrep("Renderite.Renderer.exe")
+    running = bool(resonite or renderite)
+    return resonite, renderite, running
 
 
 class TestLifecycle:
@@ -91,7 +91,6 @@ class TestLifecycle:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = ARTIFACT_ROOT / f"lifecycle_{timestamp}"
-        out_dir.mkdir(parents=True, exist_ok=True)
 
         async def scenario() -> None:
             info = await get_server_info()
@@ -122,7 +121,9 @@ class TestLifecycle:
                 f"{info.resonite_pid in host_resonite} (expected False — wrappers)"
             )
 
-            _screenshot(out_dir, "before_shutdown.png")
+            # Reference-only artifact: grab the live view via the in-engine
+            # Camera before shutdown (best-effort; never fails the test).
+            await save_camera_shot(out_dir / "before_shutdown.png")
 
             pid = await shutdown()
             print(f"shutdown returned pid={pid}")

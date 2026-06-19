@@ -9,6 +9,31 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **Run Resonite inside the dev container**: the dev container can now launch
+  Resonite itself via `scripts/resonite-run.sh` (rsyncs the read-only `/resonite`
+  bind into a writable `/opt/resonite`, then starts Resonite through `umu-run` /
+  Proton — the first run pulls GE-Proton and copies the ~2 GB install). Two paths:
+  `just resonite-vanilla` runs **vanilla** Resonite in the foreground, while
+  `just resonite-start` / `-stop` / `-status` launch and manage Resonite **with
+  the ResoniteIO mod loaded** from the `./gale` Gale profile (background; engine
+  side via hookfxr, renderer side via a doorstop `winhttp.dll` —
+  `scripts/resonite-run.sh` exports `WINEDLLOVERRIDES="winhttp=n,b"`
+  automatically, so **no manual Steam-style `WINEDLLOVERRIDES` setup is needed**
+  on this path). With in-container launch the whole
+  mod loop runs inside the container: the mod (GrpcHost) creates its gRPC socket
+  under the container's `~/.resonite-io/` (it makes the directory itself before
+  binding) and the Python client connects there — no host bind-share. The mod's
+  BepInEx log stays at `gale/BepInEx/LogOutput.log` (`just log`); umu/Proton
+  launch noise is split into `gale/BepInEx/umu-launch.log`. Rendering needs a host
+  graphical session (X11 / Xwayland) and PipeWire/PulseAudio for audio.
+  **NVIDIA / AMD / Intel** GPUs are all supported — `initialize.sh` detects the
+  vendor and selects the matching per-vendor compose overlay
+  (`.devcontainer/compose.{nvidia,amd,intel}.yml` via the `compose.gpu.yml`
+  symlink). **Requires `kernel.apparmor_restrict_unprivileged_userns=0`** on the
+  host (pressure-vessel needs unprivileged user namespaces, which Ubuntu 24.04+
+  restricts by default); the container start hard-fails without it. The dev image
+  base also moved from `debian:bookworm-slim` to `debian:13-slim` (trixie), and
+  `compose.yml` moved from the repo root to `.devcontainer/compose.yml`
 - **`Contact` modality**: A new unary modality that drives the dash "Contacts"
   tab by reading/writing the cloud contact list (`Engine.Cloud.Contacts` /
   `Engine.Cloud.Users`) directly — no UI automation. `ListContacts` returns the
@@ -112,6 +137,21 @@ GitHub Release body. The format follows
   deprecation notice on stderr and `resoio.terminate` emits a
   `DeprecationWarning`; both forward to `shutdown`. Migrate to `resoio shutdown`
   / `resoio.shutdown`
+
+### Removed
+
+- **Container ↔ host Resonite bridge removed (migrated to in-container mod
+  launch)**: now that the dev container launches the mod-loaded Resonite itself
+  (`just resonite-start`), the host-side daemon (`scripts/host_agent.py`), its
+  container client (`scripts/resonite_cli.py`), the `just host-agent` recipe, and
+  the debug socket `~/.resonite-io-debug/host-agent.sock` are all removed. The
+  production gRPC UDS is **no longer bind-shared with the host** — the mod creates
+  it inside the container under `~/.resonite-io/`. The host **desktop** screenshot
+  bridge (the `just resonite-screenshot` recipe / host-agent / `pyscreenshot`) is
+  removed; screenshots now go through the existing in-engine `resoio screenshot`
+  (`CameraClient.shot()`, Camera v2 framebuffer — e.g. `resoio screenshot -o foo.png`).
+  `just resonite-up` is renamed to `just resonite-vanilla`. The `GaleProfile` /
+  `GaleBin` env vars are dropped (the Gale profile is read from `./gale`)
 
 ## [0.5.0] - 2026-06-13
 

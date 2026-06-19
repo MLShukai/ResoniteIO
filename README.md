@@ -67,7 +67,8 @@ for the full setup, including the required supporting plugins.
 
 ## Quick start
 
-With the mod deployed and Resonite running:
+With the mod deployed and Resonite running (on the host via Steam, or — for vanilla
+Resonite — inside the dev container with `just resonite-up`):
 
 ```python
 import asyncio

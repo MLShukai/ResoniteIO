@@ -4,7 +4,7 @@ Exercises the real ``FrooxEngineAuthBridge`` over the live UDS. Auth has no
 visual state, so there is no screenshot step; the contract is purely the
 :class:`AuthStatus` snapshot returned by each unary RPC.
 
-Two tiers, both gated by the shared ``require_host_agent`` autouse fixture:
+Two tiers, both gated by the shared ``require_mod_deployed`` autouse fixture:
 
 * ``test_status_is_safe`` always runs under e2e. It calls
   :meth:`AuthClient.status` once and pins the *shape* of the returned
@@ -30,9 +30,10 @@ Env vars for the destructive path:
 * ``RESONITE_IO_E2E_PASSWORD`` -- plaintext secret (never logged).
 * ``RESONITE_IO_E2E_TOTP`` -- optional 2FA code for TOTP-enabled accounts.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips when the agent is absent.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations

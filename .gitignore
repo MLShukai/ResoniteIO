@@ -189,14 +189,6 @@ $RECYCLE.BIN/
 site/
 
 # =============================================================================
-# Host-side scripts venv
-# =============================================================================
-
-# `just host-agent` が起動時に `uv venv` で作る host 専用 venv。
-# 既に `.venv/` で吸えるが、scripts/ 配下の意図を明示するため明記する。
-scripts/.venv/
-
-# =============================================================================
 # E2E artifacts
 # =============================================================================
 
@@ -228,6 +220,21 @@ decompiled/
 # `just deploy-mod` の配置先 (gale/BepInEx/plugins/ResoniteIO/) も含めて
 # host 側で Gale が管理するため、リポジトリには持ち込まない。
 gale/
+
+# =============================================================================
+# devcontainer 内 Resonite 起動 (just resonite-up) 関連
+# =============================================================================
+
+# initialize.sh がホスト $XAUTHORITY を FamilyWild に書き換えて生成する
+# X auth cookie ファイル。host 固有・秘匿情報のため commit しない。
+.xauth
+
+# initialize.sh が GPU 種別を検出して貼る GPU overlay compose ファイルの symlink。
+# host 固有のため commit しない (compose.gpu.yml の実体は .devcontainer/ 配下にある)。
+.devcontainer/compose.gpu.yml
+
+# initialize.sh が張る compose 変数補間用 .env symlink (-> ../.env)。host 固有。
+.devcontainer/.env
 
 # =============================================================================
 # Claude Code

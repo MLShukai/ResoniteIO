@@ -1,4 +1,4 @@
-"""E2E: drive the Cursor modality against a live Resonite and screenshot.
+"""E2E: drive the Cursor modality against a live Resonite.
 
 ``set_position`` establishes a *persistent hold*: the bridge registers a
 cursor lock that pins the engine cursor at the target position until
@@ -14,24 +14,26 @@ The hold acts on the engine cursor only and never captures the OS mouse
 pointer (no warp, no confine, no center pin); that half of the contract
 is verified by the human/orchestrator on the host, not here.
 
-Visual evidence: the desktop radial context menu opens at the cursor's
-laser hit point, so opening it while holding at (0.25, 0.25) shows the
-menu in the upper-left region of the window in the screenshot.
+The radial context menu opens at the cursor's laser hit point, so opening
+it while holding at (0.25, 0.25) places the menu in the upper-left region
+of the window. We assert it opened and grab an in-engine Camera frame
+(``CameraClient.shot`` / ``resoio screenshot``) of the menu at the held
+position as a reference-only, human-viewable artifact.
 
 After ``release`` the hold is dropped: the release response and a
 subsequent ``get_position`` both report ``held=False``. The teardown
 always best-effort releases so a failed run does not leave the engine
 cursor pinned for later tests or for a human at the machine.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -42,10 +44,8 @@ from grpclib.const import Status
 
 from resoio.context_menu import ContextMenuClient
 from resoio.cursor import CursorClient, CursorState
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-# parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 _READY_TIMEOUT_S = 120.0
@@ -62,20 +62,6 @@ _HOLD_X = 0.25
 _HOLD_Y = 0.25
 
 
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    path = out_dir / name
-    subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "screenshot", "--output", str(path)],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
-
-
 class TestCursor:
     @mark_e2e
     def test_hold_persists_across_rpcs_until_release(
@@ -85,7 +71,6 @@ class TestCursor:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = ARTIFACT_ROOT / f"cursor_{timestamp}"
-        out_dir.mkdir(parents=True, exist_ok=True)
 
         async def wait_for_ready() -> CursorState:
             deadline = time.monotonic() + _READY_TIMEOUT_S
@@ -137,12 +122,13 @@ class TestCursor:
                 assert read.y == pytest.approx(_HOLD_Y, abs=_POS_TOL)
                 assert read.held is True
 
-            # 3. visual evidence: the radial menu opens at the (held)
-            # cursor position, i.e. upper-left region of the window.
+            # 3. visual evidence: the radial menu opens at the (held) cursor
+            # position, i.e. upper-left region of the window. Grab an in-engine
+            # Camera frame of it (reference-only artifact).
             async with ContextMenuClient() as cm:
                 opened = await cm.open()
                 await asyncio.sleep(_SETTLE_S)
-                _screenshot(out_dir, "00_menu_at_held_position.png")
+                await save_camera_shot(out_dir / "00_menu_at_held_position.png")
                 assert opened.is_open, "context menu should open at the held cursor"
                 await cm.close()
                 await asyncio.sleep(_SETTLE_S)

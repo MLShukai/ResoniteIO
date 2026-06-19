@@ -19,9 +19,10 @@ When the account has no contacts (a fresh / empty cloud) the list/get steps
 ``pytest.skip`` rather than fail, since a non-empty contact list is an
 account-state precondition the test cannot create without a write.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live, signed-in Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live, signed-in Resonite started by ``just resonite-start`` from the ``./gale``
+profile; the ``require_mod_deployed`` autouse fixture skips when the mod is not
+deployed there.
 """
 
 from __future__ import annotations

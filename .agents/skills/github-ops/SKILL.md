@@ -18,7 +18,7 @@ ______________________________________________________________________
 
 ### 経路 A: `GH_TOKEN` 環境変数 (推奨)
 
-- host の `.env` または shell に `GH_TOKEN=ghp_xxx` (または fine-grained PAT) を入れ、`compose.yml` の `environment:` で container に流す
+- host の `.env` または shell に `GH_TOKEN=ghp_xxx` (または fine-grained PAT) を入れ、`.devcontainer/compose.yml` の `env_file: ../.env` 経由で container に流す
 - `gh` は `GH_TOKEN` を最優先で参照するため `gh auth login` 不要
 - PAT に必要な scope: `repo` (private repo を扱うなら) / `workflow` (CI 設定を触るなら) / `read:org`
 - token の漏洩を避けるため `.env` は gitignore 済みであることを確認 (`git check-ignore -v .env`)
@@ -156,7 +156,7 @@ ______________________________________________________________________
 
 ### `gh: command not found`
 
-Dockerfile に gh インストール step は入っているはず ([Dockerfile](../../../.devcontainer/Dockerfile))。image が古い場合は devcontainer を再ビルドする (VS Code「Dev Containers: Rebuild Container」、または `docker compose -f compose.yml build`)。
+Dockerfile に gh インストール step は入っているはず ([Dockerfile](../../../.devcontainer/Dockerfile))。image が古い場合は devcontainer を再ビルドする (VS Code「Dev Containers: Rebuild Container」、または `docker compose -f .devcontainer/compose.yml build`)。
 
 ### `HTTP 401: Bad credentials`
 

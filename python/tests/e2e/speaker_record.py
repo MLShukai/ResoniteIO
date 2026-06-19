@@ -2,7 +2,7 @@
 
 48 kHz / Stereo / float32 LE は ``SpeakerService`` の固定 wire format。
 本テストは ``SpeakerClient.stream()`` の生 chunk を受けて
-:class:`resoio.cli.record._WavFloat32Writer` (CLI 実装と完全に同じ writer)
+:class:`resoio.cli.record.WavFloat32Writer` (CLI 実装と完全に同じ writer)
 で WAV を書き出し、生成された WAV header を ``struct.unpack`` で直接 parse
 して format / channels / sample rate / data size が wire spec に一致する
 ことを確認する。
@@ -12,9 +12,10 @@ WAV header を ``wave`` 標準モジュールで読まない理由: 標準 ``wav
 する (整数 PCM 専用)。CLI 側 ``record.py`` が手書き struct で生成して
 いる format でもあるため、本テストでも対称的に手書き struct で検証する。
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ import grpclib
 import numpy as np
 from grpclib.const import Status
 
-from resoio.cli.record import _WavFloat32Writer  # noqa: PLC2701
+from resoio.cli.record import WavFloat32Writer  # noqa: PLC2701
 from resoio.speaker import CHANNELS, SAMPLE_RATE, SpeakerChunk, SpeakerClient
 from tests.helpers import mark_e2e
 
@@ -125,7 +126,7 @@ class TestSpeakerRecord:
         async def record() -> tuple[int, int]:
             """Return (chunk_count, bytes_written)."""
             await wait_for_speaker_ready()
-            writer = _WavFloat32Writer()
+            writer = WavFloat32Writer()
             writer.open(out_path)
             chunk_count = 0
             try:

@@ -1,0 +1,15 @@
+# Intel GPU overlay。
+# initialize.sh の GPU 検出で intel が選ばれたときに compose.gpu.yml -> compose.intel.yml
+# として symlink され、devcontainer.json が compose.yml と重ねて読み込む。
+# Mesa (iris/ANV) は Dockerfile に焼き込まれる (GPU=intel ビルド)。
+# Intel iGPU は特殊なランタイム不要 (plain runc)。/dev/dri 全体を渡せば ANV が
+# 自動選択される (mesa-vulkan-drivers に RADV と ANV が同梱されているが、
+# Intel-only 環境では ANV のみが実デバイスとして列挙される)。
+
+services:
+  dev:
+    build:
+      args:
+        GPU: intel
+    devices:
+      - /dev/dri:/dev/dri

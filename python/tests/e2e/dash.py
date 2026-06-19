@@ -1,13 +1,14 @@
-"""E2E: drive the Dash modality against a live Resonite and screenshot.
+"""E2E: drive the Dash modality against a live Resonite.
 
 Exercises the full closed loop on the real Esc dash (userspace overlay):
 open -> enumerate the **bottom tab bar** (language-independent ``ref_id`` +
 ``locale_key`` per tab) -> switch the current tab by tab -> let the switch
 settle -> enumerate the current tab's interactable **controls** -> operate a
-control by ``ref_id`` (highlight / invoke) -> close. Each step is followed by
-a host-side desktop screenshot via the host-agent
-(``scripts/resonite_cli.py screenshot``) since the dash is a local-user
-overlay an in-world Camera would not capture.
+control by ``ref_id`` (highlight / invoke) -> close. Each step is pinned
+against the RPC's returned state (``is_open`` / ``is_current`` / control
+listing) and followed by an in-engine Camera frame (``CameraClient.shot`` /
+``resoio screenshot``) kept as a reference-only, human-viewable artifact. The
+hard contract is the returned state; the captures are not asserted on.
 
 Open/close is driven as a symmetric ``close -> open -> close -> open`` so a
 real toggle is distinguishable from a no-op on an already-open dash.
@@ -19,15 +20,15 @@ switching Resonite's locale (a manual follow-up), but their
 language-independence is structural: neither derives from the displayed
 ``label``.
 
-Like every file under ``tests/e2e/`` this requires the host-side
-``just host-agent`` daemon plus a live Resonite client; the
-``require_host_agent`` autouse fixture skips otherwise.
+Like every file under ``tests/e2e/`` this runs in the dev container against a
+live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
+there.
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -37,10 +38,8 @@ import pytest
 from grpclib.const import Status
 
 from resoio.dash import DashClient, DashControl, DashTab
-from tests.helpers import mark_e2e
+from tests.helpers import mark_e2e, save_camera_shot
 
-# parents[2] is python/; the repo root (where scripts/ lives) is parents[3].
-REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 # UDS bind and UserspaceRadiantDash readiness race: while the engine is still
@@ -53,7 +52,7 @@ _READY_RETRY_INTERVAL_S = 2.0
 _HOME_LOAD_SETTLE_S = 20.0
 
 # Let the dash open/close lerp finish and the renderer present a frame before
-# grabbing the desktop, so screenshots are not torn mid-animation.
+# grabbing the Camera frame, so the capture is not torn mid-animation.
 _SETTLE_S = 0.6
 
 # After a set_tab the CurrentScreen.Target / is_current flip is synchronous,
@@ -70,20 +69,6 @@ _PREFERRED_TAB_KEYS = (
     "Dash.Screens.Settings",
     "Dash.Screens.Inventory",
 )
-
-
-def _screenshot(out_dir: Path, name: str) -> None:
-    """Grab the host desktop into ``out_dir/name`` via the host-agent
-    bridge."""
-    path = out_dir / name
-    subprocess.run(
-        ["python3", "scripts/resonite_cli.py", "screenshot", "--output", str(path)],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-        timeout=30.0,
-    )
 
 
 def _format_tabs(tabs: list[DashTab]) -> str:
@@ -156,7 +141,7 @@ class TestDash:
 
         async def settle_shot(step: str) -> None:
             await asyncio.sleep(_SETTLE_S)
-            _screenshot(out_dir, f"{step}.png")
+            await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
             # 0. baseline: engine ready, dash closed. Let the home world settle.
@@ -344,7 +329,7 @@ class TestDash:
 
         async def settle_shot(step: str) -> None:
             await asyncio.sleep(_SETTLE_S)
-            _screenshot(out_dir, f"{step}.png")
+            await save_camera_shot(out_dir / f"{step}.png")
 
         def _find_by_ref_id(tabs: list[DashTab], ref_id: str) -> DashTab | None:
             return next((t for t in tabs if t.ref_id == ref_id), None)

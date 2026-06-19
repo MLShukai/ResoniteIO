@@ -1,0 +1,18 @@
+# NVIDIA GPU overlay。
+# initialize.sh の GPU 検出で nvidia が選ばれたときに compose.gpu.yml -> compose.nvidia.yml
+# として symlink され、devcontainer.json が compose.yml と重ねて読み込む。
+# nvidia-container-toolkit がホストドライバを inject するため Mesa は不要 (GPU=nvidia ビルド)。
+# NVIDIA_GPU_UUID: initialize.sh が接続モニタ側 GPU の UUID を検出して .env に書く。
+#   空 (multi-GPU 検出不能) のときは "all" にフォールバックし全 GPU を公開する。
+
+services:
+  dev:
+    build:
+      args:
+        GPU: nvidia
+    runtime: nvidia
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_GPU_UUID:-all}
+      NVIDIA_DRIVER_CAPABILITIES: all
