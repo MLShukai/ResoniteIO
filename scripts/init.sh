@@ -6,9 +6,9 @@
 #
 # 手順:
 #   1. docker / docker compose v2 の存在確認
-#   2. .env が無ければ .env.example をコピーし $EDITOR (既定 vi) で開かせる。
-#      その場合は exit 0 で抜け、ユーザーに `just init` 再実行を促す
-#      (`set dotenv-load` の解釈はパース時のため、同一実行内で再 source できない)
+#   2. .env が無ければ .env.example をコピーし、ResonitePath の $HOME を実パスに
+#      展開して書き戻す。`set dotenv-load` の解釈はパース時のため同一実行内で
+#      再 source できないので exit 0 で抜け、ユーザーに `just init` 再実行を促す
 #   3. ResonitePath が指すディレクトリの実在を検証
 #   4. ./gale/ を空ディレクトリとして用意 (Gale は profile path に空 dir を要求するが
 #      存在自体は許容する。先回りで作っておくと Gale GUI でパス指定が楽になる)
@@ -66,13 +66,12 @@ main() {
 
   if [[ ! -f .env ]]; then
     cp .env.example .env
-    log ".env を .env.example から作成しました。"
-    if [[ -t 0 && -t 1 ]]; then
-      log "'${EDITOR:-vi}' で開きます。保存後、もう一度 'just init' を実行してください。"
-      "${EDITOR:-vi}" .env || true
-    else
-      warn "非対話 shell のため editor は起動しません。.env を編集してから 'just init' を再実行してください。"
-    fi
+    # ResonitePath の $HOME を実パスに展開して書き戻す。docker compose の変数補間や
+    # initialize.sh の Resonite.exe 存在チェックは $HOME を展開しないため、ここで
+    # 解決済みの絶対パスにしておく。
+    sed -i "/^ResonitePath=/{s|\${HOME}|${HOME}|g;s|\$HOME|${HOME}|g}" .env
+    log ".env を .env.example から作成しました (ResonitePath の \$HOME を展開済み)。"
+    log "必要なら .env を確認・編集し、もう一度 'just init' を実行してください。"
     # dotenv-load はパース時解釈のため、同一実行内では .env を再 source できない。
     # ここで一旦抜け、ユーザーに再実行してもらう。
     exit 0
