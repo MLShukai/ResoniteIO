@@ -1478,10 +1478,11 @@ a Unix Domain Socket (UDS).</p>
 <ul>
 <li><strong>gRPC</strong> gives a typed, multi-language contract with first-class streaming, which maps
   cleanly onto the streaming modalities (Camera, Speaker, Microphone, Locomotion).</li>
-<li><strong>A Unix Domain Socket</strong> keeps the transport local and avoids exposing a TCP port. The
-  socket lives under <code>~/.resonite-io/</code> for production IPC and <code>~/.resonite-io-debug/</code> for the
-  debug bridge. (Under Steam/Proton, <code>/run/user/&lt;UID&gt;</code> and <code>/tmp</code> are not shared with the
-  game's filesystem namespace, which is why a <code>$HOME</code>-rooted path is used.)</li>
+<li><strong>A Unix Domain Socket</strong> keeps the transport local and avoids exposing a TCP port. The mod
+  creates the socket under <code>~/.resonite-io/</code> and the Python client connects to it there; both
+  run on the same host (the dev container, when Resonite is launched in-container). (Under
+  Steam/Proton, <code>/run/user/&lt;UID&gt;</code> and <code>/tmp</code> are not shared with the game's filesystem
+  namespace, which is why a <code>$HOME</code>-rooted path is used.)</li>
 </ul>
 <h2 id="proto-is-the-single-source-of-truth">proto is the single source of truth<a class="headerlink" href="#proto-is-the-single-source-of-truth" title="Permanent link">&para;</a></h2>
 <p>The wire contract lives in <code>proto/resonite_io/v1/*.proto</code>, one file per modality. Code is
