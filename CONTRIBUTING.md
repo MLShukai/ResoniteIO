@@ -49,16 +49,24 @@ If the Gale profile is missing, `just init` prints the steps and exits. On the h
 1. Install Gale v1.5.4+.
 2. In the Gale GUI choose **Create profile** and point it at `<repo>/gale`
    (**this path must be EMPTY — do not pre-create the `gale/` directory**).
-3. Install these plugins into the profile:
-   - `ResoniteModding-BepisLoader` (>=1.5.1)
-   - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
-   - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
-   - `ResoniteModding-BepInExRenderer` (>=5.4) — Camera v2 (Renderite framebuffer)
-   - `ResoniteModding-RenderiteHook` (>=1.1.1) — injects doorstop into the renderer process
-   - `Nytra-InterprocessLib` (>=3.0.0) — shared-memory queue between engine and renderer
+3. Populate the profile with the required mods. **Recommended:** with the new
+   profile selected, choose **Import > ... profile from file**, pick
+   `<repo>/GaleProfile.r2z` (a committed Gale profile snapshot pinning the
+   required mods at known versions), and **overwrite** the profile. This installs
+   the whole required set in one step.
+   - **Fallback (manual):** if you prefer, or if the snapshot has fallen behind a
+     mod update, install these plugins individually instead:
+     - `ResoniteModding-BepisLoader` (>=1.5.1)
+     - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
+     - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
+     - `ResoniteModding-BepInExRenderer` (>=5.4) — Camera v2 (Renderite framebuffer)
+     - `ResoniteModding-RenderiteHook` (>=1.1.1) — injects doorstop into the renderer process
+     - `Nytra-InterprocessLib` (>=3.0.0) — shared-memory queue between engine and renderer
 4. Launch Resonite once via Gale to generate `<repo>/gale/BepInEx/`.
 
-`gale/` is `.gitignore`d and managed by the host's Gale install.
+`GaleProfile.r2z` is a convenience snapshot only — `just check-gale` is the source
+of truth for which parts must be present. `gale/` is `.gitignore`d and managed by
+the host's Gale install.
 
 #### Steam launch options (mandatory)
 
