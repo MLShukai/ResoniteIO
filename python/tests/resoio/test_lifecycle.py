@@ -5,8 +5,8 @@ hosting self-owned ``LifecycleBase`` / ``InfoBase`` fakes; no mocking of grpclib
 / asyncio / betterproto internals. ``LifecycleClient.shutdown`` fires the unary
 ``Lifecycle.Shutdown`` RPC; the module-level ``shutdown`` convenience reads the
 engine PID from ``Info`` and then schedules the shutdown (a pure gRPC stop — no
-OS signals). ``terminate`` is the deprecated former name of ``shutdown`` and is
-covered here too (it must keep working while emitting a ``DeprecationWarning``).
+OS signals). The forceful stop (kill the engine + renderer by PID) lives in
+:mod:`resoio.launcher` and is covered by ``test_launcher.py``.
 """
 
 from collections.abc import Awaitable, Callable
@@ -25,7 +25,7 @@ from resoio._generated.resonite_io.v1 import (
     ShutdownRequest,
     ShutdownResponse,
 )
-from resoio.lifecycle import LifecycleClient, shutdown, terminate
+from resoio.lifecycle import LifecycleClient, shutdown
 
 if TYPE_CHECKING:
     from grpclib._typing import IServable
@@ -123,29 +123,3 @@ async def test_shutdown_returns_none_when_engine_unreachable(tmp_path: Path):
     missing_socket = tmp_path / "absent.sock"
 
     assert await shutdown(socket_path=str(missing_socket)) is None
-
-
-# --- terminate (deprecated alias of shutdown) ------------------------------
-
-
-async def test_terminate_warns_and_forwards_to_shutdown(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """The deprecated ``terminate`` alias emits a ``DeprecationWarning`` and
-    still performs a real graceful shutdown (Info PID + one
-    Lifecycle.Shutdown)."""
-    lifecycle = _FakeLifecycle(accepted=True)
-    server = Server([_FakeInfo(resonite_pid=4242, renderer_pid=4343), lifecycle])
-    socket_path = tmp_path / "rio.sock"
-    await server.start(path=str(socket_path))
-    try:
-        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
-
-        with pytest.warns(DeprecationWarning, match="resoio.shutdown"):
-            pid = await terminate()
-
-        assert pid == 4242
-        assert len(lifecycle.requests) == 1
-    finally:
-        server.close()
-        await server.wait_closed()

@@ -1,49 +1,122 @@
-"""Tests for the deprecated ``resoio terminate`` CLI command.
+"""Tests for the ``resoio terminate`` CLI command (process kill).
 
-``terminate`` is the deprecated former name of ``shutdown``. Its real shutdown
-behaviour (read the engine PID from Info, send ``Lifecycle.Shutdown``) is
-covered by ``test_lifecycle.py`` against a real grpclib server. Here we pin the
-CLI dispatch contract: it warns about the deprecation on stderr, drives
-``resoio.lifecycle.shutdown``, and renders the result — ``resonite_pid=<pid>``
-on success, ``resonite not running`` when no engine was reachable. We stub our
-own first-party ``shutdown`` so the dispatch is exercised in isolation.
+``terminate`` force-stops Resonite by signalling its engine + renderer
+processes. Per testing-strategy we drive the real CLI dispatch
+(``_build_parser`` -> ``_amain``) against **real dummy processes** (copies of
+``sleep`` at the install-relative argv[0] paths the launcher matches), not mocks.
+The kill/detection logic itself is covered in ``test_launcher.py``; here we pin
+the CLI contract: PID output on a kill, ``resonite not running`` when nothing is
+found, and the argparse rejection of exactly one PID.
 """
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import time
+from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
 
 from resoio.cli import _amain, _build_parser
+from resoio.launcher import _find_engine_pids
+
+_SLEEP = shutil.which("sleep") or "/bin/sleep"
 
 
-async def test_terminate_warns_and_prints_pid_on_success(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+def _make_install(tmp_path: Path) -> Path:
+    install = tmp_path / "resonite"
+    (install / "dotnet-runtime").mkdir(parents=True)
+    shutil.copy(_SLEEP, install / "dotnet-runtime" / "dotnet")
+    (install / "dotnet-runtime" / "dotnet").chmod(0o755)
+    (install / "Renderer").mkdir(parents=True)
+    shutil.copy(_SLEEP, install / "Renderer" / "Renderite.Renderer.exe")
+    (install / "Renderer" / "Renderite.Renderer.exe").chmod(0o755)
+    (install / "Resonite.exe").write_text("")
+    return install
+
+
+@pytest.fixture
+def spawn() -> Iterator[Callable[..., int]]:
+    procs: list[subprocess.Popen[bytes]] = []
+
+    def _spawn(path: Path, *args: str) -> int:
+        proc = subprocess.Popen(
+            [str(path), *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        procs.append(proc)
+        return proc.pid
+
+    yield _spawn
+
+    for proc in procs:
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _wait_engine(install: Path, count: int, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while len(_find_engine_pids(str(install))) != count and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
+async def test_terminate_explicit_prints_killed_pids(
+    tmp_path: Path, spawn: Callable[..., int], capsys: pytest.CaptureFixture[str]
 ):
-    async def _fake_shutdown(*, socket_path: str | None) -> int:
-        return 4242
+    install = _make_install(tmp_path)
+    engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    renderer = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_engine(install, 1)
 
-    monkeypatch.setattr("resoio.lifecycle.shutdown", _fake_shutdown)
-    args = _build_parser().parse_args(["terminate"])
+    args = _build_parser().parse_args(["terminate", str(engine), str(renderer)])
     rc = await _amain(args)
 
-    captured = capsys.readouterr()
     assert rc == 0
-    assert captured.out.strip() == "resonite_pid=4242"
-    assert "deprecated" in captured.err
-    assert "resoio shutdown" in captured.err
+    out = capsys.readouterr().out
+    assert f"resonite_pid={engine}" in out
+    assert f"renderer_pid={renderer}" in out
+
+
+async def test_terminate_no_args_autodetects_and_kills(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    spawn: Callable[..., int],
+    capsys: pytest.CaptureFixture[str],
+):
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_engine(install, 1)
+
+    rc = await _amain(_build_parser().parse_args(["terminate"]))
+
+    assert rc == 0
+    assert f"resonite_pid={engine}" in capsys.readouterr().out
 
 
 async def test_terminate_reports_nothing_running(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    async def _fake_shutdown(*, socket_path: str | None) -> None:
-        return None
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
 
-    monkeypatch.setattr("resoio.lifecycle.shutdown", _fake_shutdown)
-    args = _build_parser().parse_args(["terminate"])
-    rc = await _amain(args)
+    rc = await _amain(_build_parser().parse_args(["terminate"]))
 
-    captured = capsys.readouterr()
     assert rc == 0
-    assert captured.out.strip() == "resonite not running"
-    assert "deprecated" in captured.err
+    assert capsys.readouterr().out.strip() == "resonite not running"
+
+
+async def test_terminate_one_pid_only_is_usage_error(
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _amain(_build_parser().parse_args(["terminate", "123"]))
+    assert rc == 2
+    assert "both" in capsys.readouterr().err

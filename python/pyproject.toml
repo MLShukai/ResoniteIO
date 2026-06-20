@@ -21,6 +21,10 @@ dependencies = [
   "numpy>=2.0",
   "pillow>=11",
   "prompt-toolkit>=3.0",
+  # Process discovery + signal-based kill for `resoio launch` / `terminate`
+  # (umu-launcher Resonite start/stop). Used to PID-diff the engine/renderer
+  # processes after spawn and to stage SIGTERM -> SIGKILL on teardown.
+  "psutil>=6",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
