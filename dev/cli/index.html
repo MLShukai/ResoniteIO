@@ -1479,6 +1479,12 @@
 <td>Liveness check.</td>
 </tr>
 <tr>
+<td><code>resoio wait</code></td>
+<td>Connection</td>
+<td>unary</td>
+<td>Block until <code>Connection.Ping</code> succeeds (startup readiness), then print the resolved socket path. Sockets whose owning engine PID is gone are skipped. Optional <code>pid</code> targets <code>resonite-{pid}.sock</code>; <code>-T/--timeout</code> (default 30s, <code>&lt;=0</code> tries once) bounds the wait.</td>
+</tr>
+<tr>
 <td><code>resoio info</code></td>
 <td>Info</td>
 <td>unary</td>
@@ -1647,6 +1653,7 @@ the result document.</p>
 line instead of as JSON:</p>
 <ul>
 <li><code>shutdown</code> / <code>terminate</code> print the engine host PID.</li>
+<li><code>wait</code> prints the <strong>resolved socket path</strong> that became ready.</li>
 <li><code>screenshot</code> / <code>record</code> / <code>world thumbnail</code> print the <strong>saved absolute path</strong> when writing a file
   (and <code>-o -</code> streams raw bytes to stdout with no path line).</li>
 </ul>
@@ -1656,39 +1663,45 @@ accept <code>--format</code> (<code>grab interactive --format json</code> exits 
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Liveness</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>resoio<span class="w"> </span>ping<span class="w"> </span>--message<span class="w"> </span>hello
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Record 10 seconds of muxed video+audio to a timestamped file in the CWD</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># (the saved absolute path is printed to stdout)</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>resoio<span class="w"> </span>record<span class="w"> </span>--duration<span class="w"> </span><span class="m">10</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># ... or to an explicit path / stdout</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>resoio<span class="w"> </span>record<span class="w"> </span>-o<span class="w"> </span>out.mp4<span class="w"> </span>--duration<span class="w"> </span><span class="m">10</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>resoio<span class="w"> </span>record<span class="w"> </span>-o<span class="w"> </span>-<span class="w"> </span>--video<span class="w"> </span><span class="p">|</span><span class="w"> </span>ffplay<span class="w"> </span>-
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="c1"># Save a single frame as PNG (timestamped file in the current directory)</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>resoio<span class="w"> </span>screenshot
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="c1"># ... or to an explicit path / stdout</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>resoio<span class="w"> </span>screenshot<span class="w"> </span>-o<span class="w"> </span>shot.png
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>resoio<span class="w"> </span>screenshot<span class="w"> </span>-o<span class="w"> </span>-<span class="w"> </span><span class="p">|</span><span class="w"> </span>feh<span class="w"> </span>-
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="c1"># Machine-readable output, piped to jq</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>resoio<span class="w"> </span>info<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.platform
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>resoio<span class="w"> </span>world<span class="w"> </span>sessions<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].name&#39;</span>
-<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>resoio<span class="w"> </span>session<span class="w"> </span>users<span class="w"> </span>list<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].user_name&#39;</span>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>resoio<span class="w"> </span>contact<span class="w"> </span>list<span class="w"> </span>--filter<span class="w"> </span>requests<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].username&#39;</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Block until the engine is up (max 60s), then ping it</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>resoio<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>-T<span class="w"> </span><span class="m">60</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>resoio<span class="w"> </span>ping
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Wait for a specific engine PID&#39;s socket</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>resoio<span class="w"> </span><span class="nb">wait</span><span class="w"> </span><span class="m">12345</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Record 10 seconds of muxed video+audio to a timestamped file in the CWD</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="c1"># (the saved absolute path is printed to stdout)</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>resoio<span class="w"> </span>record<span class="w"> </span>--duration<span class="w"> </span><span class="m">10</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="c1"># ... or to an explicit path / stdout</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>resoio<span class="w"> </span>record<span class="w"> </span>-o<span class="w"> </span>out.mp4<span class="w"> </span>--duration<span class="w"> </span><span class="m">10</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>resoio<span class="w"> </span>record<span class="w"> </span>-o<span class="w"> </span>-<span class="w"> </span>--video<span class="w"> </span><span class="p">|</span><span class="w"> </span>ffplay<span class="w"> </span>-
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="c1"># Save a single frame as PNG (timestamped file in the current directory)</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>resoio<span class="w"> </span>screenshot
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="c1"># ... or to an explicit path / stdout</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>resoio<span class="w"> </span>screenshot<span class="w"> </span>-o<span class="w"> </span>shot.png
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>resoio<span class="w"> </span>screenshot<span class="w"> </span>-o<span class="w"> </span>-<span class="w"> </span><span class="p">|</span><span class="w"> </span>feh<span class="w"> </span>-
 <a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>
-<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="c1"># Read the display settings, then cap the background fps</span>
-<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>resoio<span class="w"> </span>display<span class="w"> </span>get
-<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>resoio<span class="w"> </span>display<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-fps<span class="w"> </span><span class="m">30</span>
-<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>
-<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a><span class="c1"># Aim with the held cursor, grab at the ray hit point, then release</span>
-<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
-<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>resoio<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
-<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
-<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="c1"># Machine-readable output, piped to jq</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>resoio<span class="w"> </span>info<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.platform
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>resoio<span class="w"> </span>world<span class="w"> </span>sessions<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].name&#39;</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>resoio<span class="w"> </span>session<span class="w"> </span>users<span class="w"> </span>list<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].user_name&#39;</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>resoio<span class="w"> </span>contact<span class="w"> </span>list<span class="w"> </span>--filter<span class="w"> </span>requests<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[].username&#39;</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a><span class="c1"># Read the display settings, then cap the background fps</span>
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>resoio<span class="w"> </span>display<span class="w"> </span>get
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>resoio<span class="w"> </span>display<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-fps<span class="w"> </span><span class="m">30</span>
 <a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a>
-<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="c1"># Ask the engine to quit gracefully (prints the engine host PID)</span>
-<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>resoio<span class="w"> </span>shutdown
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="c1"># Aim with the held cursor, grab at the ray hit point, then release</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a>resoio<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
+<a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
+<a id="__codelineno-2-39" name="__codelineno-2-39" href="#__codelineno-2-39"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
+<a id="__codelineno-2-40" name="__codelineno-2-40" href="#__codelineno-2-40"></a>
+<a id="__codelineno-2-41" name="__codelineno-2-41" href="#__codelineno-2-41"></a><span class="c1"># Ask the engine to quit gracefully (prints the engine host PID)</span>
+<a id="__codelineno-2-42" name="__codelineno-2-42" href="#__codelineno-2-42"></a>resoio<span class="w"> </span>shutdown
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>
