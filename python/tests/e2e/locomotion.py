@@ -38,7 +38,7 @@ confirmation that the avatar stops within the 19-20 s window is done by
 inspecting the recorded MP4.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """

@@ -23,8 +23,8 @@ container**. On the host you only need:
   [`@devcontainers/cli`](https://github.com/devcontainers/cli)
 
 The container builds and deploys the mod, and can also launch Resonite itself — either
-vanilla (`just resonite-vanilla`) or **with the ResoniteIO mod loaded** from the `./gale`
-profile (`just resonite-start` / `-stop` / `-status`, see below). Mod verification runs
+vanilla (`just resonite-launch --vanilla`) or **with the ResoniteIO mod loaded** from the `./gale`
+profile (`just resonite-launch` / `just resonite-stop`, see below). Mod verification runs
 entirely inside the container; host Steam + Gale + `just deploy-mod` (GUI launch) still works.
 
 To run Resonite inside the container the host needs a few extra things:
@@ -83,10 +83,11 @@ renderer-side plugin never loads and Camera v2 stays dark. Wine prefers the syst
 `winhttp.dll`, so it must be overridden; Steam sanitizes env passed any other way, making the
 launch option the only working path.
 
-The **in-container** launcher (`just resonite-start`) needs the same override — the doorstop
+The **in-container** launcher (`just resonite-launch`) needs the same override — the doorstop
 is a hook `winhttp.dll` proxy that Wine only loads with `WINEDLLOVERRIDES="winhttp=n,b"` — but
-`scripts/resonite-run.sh` sets it for you, so no manual setup is required. `umu-run` passes the
-env through (unlike Steam, which sanitizes it), so the launcher can export it directly.
+`resoio launch` (`python/src/resoio/launcher.py`) sets it for you, so no manual setup is required.
+`umu-run` passes the env through (unlike Steam, which sanitizes it), so the launcher can export it
+directly.
 
 ### 2. Open the dev container
 
@@ -113,24 +114,22 @@ On startup the container runs:
 
 Inside the container, drive everything through `just`:
 
-| Recipe                  | Role                                                                       |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `just init`             | Host setup (docker / `.env` / Gale profile checks)                         |
-| `just gen-proto`        | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`) |
-| `just format`           | Format both sides (ruff for Python, csharpier for C#)                      |
-| `just test`             | Run both test suites (pytest+cov, dotnet test)                             |
-| `just type`             | Run pyright in strict mode                                                 |
-| `just build`            | `dotnet build -c Release` for the mod                                      |
-| `just run`              | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)   |
-| `just deploy-mod`       | Copy DLL+PDB into the Gale profile (`gale/BepInEx/plugins/ResoniteIO/`)    |
-| `just check-gale`       | Verify BepisLoader and the required plugins are present                    |
-| `just resonite-vanilla` | Launch vanilla Resonite inside the container (see below)                   |
-| `just resonite-start`   | Launch mod-loaded Resonite from `./gale` in the container (background)     |
-| `just resonite-stop`    | Stop the in-container Resonite (`SIGTERM` → 3 s → `SIGKILL`)               |
-| `just resonite-status`  | Show whether the in-container Resonite is running                          |
-| `just docs-serve`       | Preview the docs site (MkDocs) with live reload                            |
-| `just docs-build`       | Build the docs site with `--strict`                                        |
-| `just clean`            | Remove build/cache output on both sides                                    |
+| Recipe                 | Role                                                                       |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `just init`            | Host setup (docker / `.env` / Gale profile checks)                         |
+| `just gen-proto`       | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`) |
+| `just format`          | Format both sides (ruff for Python, csharpier for C#)                      |
+| `just test`            | Run both test suites (pytest+cov, dotnet test)                             |
+| `just type`            | Run pyright in strict mode                                                 |
+| `just build`           | `dotnet build -c Release` for the mod                                      |
+| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)   |
+| `just deploy-mod`      | Copy DLL+PDB into the Gale profile (`gale/BepInEx/plugins/ResoniteIO/`)    |
+| `just check-gale`      | Verify BepisLoader and the required plugins are present                    |
+| `just resonite-launch` | Launch mod-loaded Resonite from `./gale` in the container (see below)      |
+| `just resonite-stop`   | Terminate the in-container Resonite (`SIGTERM` → 3 s → `SIGKILL`)          |
+| `just docs-serve`      | Preview the docs site (MkDocs) with live reload                            |
+| `just docs-build`      | Build the docs site with `--strict`                                        |
+| `just clean`           | Remove build/cache output on both sides                                    |
 
 `just --list` shows everything; per-side sub-recipes (`py-test`, `mod-build`, …) are
 fallbacks for running one half. Container start/stop is handled by the dev container tooling,
@@ -140,18 +139,20 @@ not by `just`.
 
 ### 4. Run Resonite in the container (optional)
 
-Both launchers go through `scripts/resonite-run.sh`, which rsyncs the read-only `/resonite`
-bind into a writable `/opt/resonite`, then starts Resonite via `umu-run` (umu-launcher /
-Proton). The first run pulls GE-Proton and copies the ~2 GB install, so it is slow; later runs
-sync only deltas.
+Both launchers go through `resoio launch` (`python/src/resoio/launcher.py`), which starts
+Resonite via `umu-run` (umu-launcher / Proton). The read-only `/resonite` bind is synced into a
+writable `/opt/resonite` by `.devcontainer/entrypoint.sh` when the container starts; the first
+container start pulls GE-Proton and copies the ~2 GB install, so it is slow; later starts sync
+only deltas.
 
-- **`just resonite-vanilla`** runs vanilla Resonite (`Resonite.exe -SkipIntroTutorial`) in the
-  foreground — handy for confirming the base game launches.
-- **`just resonite-start`** launches Resonite **with the ResoniteIO mod loaded** from the
-  `./gale` Gale profile in the background (returns immediately); `just resonite-stop` /
-  `-status` manage its lifecycle. The engine side uses hookfxr
+- **`just resonite-launch --vanilla`** runs vanilla Resonite (`Resonite.exe -SkipIntroTutorial`)
+  — handy for confirming the base game launches.
+- **`just resonite-launch`** launches Resonite **with the ResoniteIO mod loaded** from the
+  `./gale` Gale profile. It waits until both the engine (`resonite_pid`) and renderer
+  (`renderer_pid`) processes appear and prints both host PIDs; `just resonite-stop` terminates
+  them (`SIGTERM` → 3 s → `SIGKILL`). The engine side uses hookfxr
   (`--hookfxr-enable --bepinex-target ./gale/BepInEx`) and the renderer side uses the doorstop
-  (a hook `winhttp.dll`). `scripts/resonite-run.sh` sets `WINEDLLOVERRIDES="winhttp=n,b"`
+  (a hook `winhttp.dll`). `resoio launch` sets `WINEDLLOVERRIDES="winhttp=n,b"`
   automatically (it is still required for the renderer to load it; `umu-run` passes env
   through, unlike Steam), so **no manual `WINEDLLOVERRIDES` setup is needed** on this path. It
   fail-fasts if the Gale profile has no `BepInEx/` — deploy the mod first with `just deploy-mod`.

@@ -125,7 +125,7 @@ ______________________________________________________________________
 
 - [x] `.devcontainer/Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt + X11/GPU/audio/umu-launcher。GPU ユーザースペースは build-arg `GPU` で分岐)
 - [x] `.devcontainer/compose.yml` (`name: resonite-io`、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照。`build:` は `context: .` (= `.devcontainer/`) / `dockerfile: Dockerfile`。GPU 固有設定は `compose.{nvidia,amd,intel}.yml` overlay に分離し、`initialize.sh` が host GPU を検出して `compose.gpu.yml` symlink を貼る)
-- [x] `scripts/resonite-run.sh` + `scripts/resonite-ctl.sh` (devcontainer 内で Resonite を起動: `/resonite:ro` を `/opt/resonite` に rsync → `umu-run` で起動。`--vanilla` で素の `Resonite.exe -SkipIntroTutorial` を foreground (`just resonite-vanilla`)、既定は Gale プロファイル `./gale` から **mod 込み** で起動する。`resonite-ctl.sh` が start/stop/status の lifecycle を提供 (`just resonite-{start,stop,status}`、background)。engine 側は hookfxr (`--hookfxr-enable --bepinex-target ./gale/BepInEx`)、Renderer 側は doorstop (hook 版 `winhttp.dll`)。container 経路でも `WINEDLLOVERRIDES="winhttp=n,b"` は必要だが `resonite-run.sh` が自動 export するため手動設定は不要 (umu-run は env を素通し。host Steam 起動では Steam Launch Options に手で設定))
+- [x] `resoio launch` / `resoio terminate` (Python launcher、`python/src/resoio/launcher.py`。devcontainer 内で Resonite を起動: `/resonite:ro` の `/opt/resonite` への rsync は `.devcontainer/entrypoint.sh` が container 起動時に行い、起動は `umu-run` 経由。`--vanilla` で素の `Resonite.exe -SkipIntroTutorial` (`just resonite-launch --vanilla`)、既定は Gale プロファイル `./gale` から **mod 込み** で起動する。`resoio launch` は engine (`resonite_pid`) と renderer (`renderer_pid`) が現れるまで待って両 host PID を返し、`resoio terminate` (`just resonite-stop`) が SIGTERM→3s→SIGKILL で kill する。薄い wrapper レシピ `just resonite-launch` / `just resonite-stop` 経由で叩く。engine 側は hookfxr (`--hookfxr-enable --bepinex-target ./gale/BepInEx`)、Renderer 側は doorstop (hook 版 `winhttp.dll`)。container 経路でも `WINEDLLOVERRIDES="winhttp=n,b"` は必要だが `resoio launch` が同等の env を設定するため手動設定は不要 (umu-run は env を素通し。host Steam 起動では Steam Launch Options に手で設定))
 - [x] `.devcontainer/devcontainer.json` (compose 参照) + `.devcontainer/initialize.sh` (host 側 pre-create フック: UDS dir 作成 + uid/gid 注入に加え、AppArmor 非特権 user namespace の hard fail チェック、DISPLAY / X auth cookie の FamilyWild 書換え / render・video GID / GPU ベンダ検出を `.env` に記録、`compose.gpu.yml` symlink 作成) + `.devcontainer/entrypoint.sh` (container 内でも AppArmor チェックを二段で hard fail)
 - [x] `scripts/container-init.sh` (container 内 deps restore: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink。devcontainer の `postCreateCommand` から呼ばれる)
 - [x] `just init` (host 側 one-time setup: docker / `.env` / Gale プロファイル確認)
@@ -134,7 +134,7 @@ ______________________________________________________________________
 - [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
 - ~~`scripts/setup.sh`~~ (廃止: Docker 環境に置き換え)
 - [x] **UDS socket ディレクトリ**: 当初は `$XDG_RUNTIME_DIR/resonite-io/` を採用予定だったが、Step 2 実装時に **pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆い、host 側 IPC を通さない**ことが判明 (詳細: `memory/reference_pressure_vessel_paths.md`)。最終的に `$HOME/.resonite-io/` を採用する。Resonite を devcontainer 内で起動するようになったため **host とは bind 共有しない**: mod (GrpcHost) が bind 前に container 内 `~/.resonite-io/` (= `/home/dev/.resonite-io/`) を自分で作成し、`resonite-{Process.Id}.sock` を bind、同 container 内の Python client がそこへ connect する (1 host 上で複数 Resonite が共存可能)。`initializeCommand` は host uid/gid を `.env` に記録し、build-arg でコンテナ user に一致させる (deploy 成果物が host 所有になる)。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の優先順で探索 (`.env` への記述は通常不要)。
-- [x] **Resonite 起動経路は devcontainer 内完結に移行**: Step 2 では container ↔ host Resonite debug bridge (`scripts/host_agent.py` host daemon + `scripts/resonite_cli.py` container client、`$HOME/.resonite-io-debug/host-agent.sock`) で host の Resonite を遠隔操作していたが、devcontainer 内で Resonite を直接起動できるようになったため **撤去**。現在は `scripts/resonite-ctl.sh` が container 内で mod 込み Resonite の start/stop/status を担う (`just resonite-{start,stop,status}`)。host daemon / debug socket / `just host-agent` レシピは廃止。print-debug (`just log`) は引き続き主 debug 経路。
+- [x] **Resonite 起動経路は devcontainer 内完結に移行**: Step 2 では container ↔ host Resonite debug bridge (`scripts/host_agent.py` host daemon + `scripts/resonite_cli.py` container client、`$HOME/.resonite-io-debug/host-agent.sock`) で host の Resonite を遠隔操作していたが、devcontainer 内で Resonite を直接起動できるようになったため **撤去**。現在は `resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`) が container 内で mod 込み Resonite の起動・kill を担う (`just resonite-launch` / `just resonite-stop`)。host daemon / debug socket / `just host-agent` レシピは廃止。print-debug (`just log`) は引き続き主 debug 経路。
 
 ### C. モノレポ構造
 
@@ -154,7 +154,7 @@ resonite-io/
 │   ├── Dockerfile                 # 開発コンテナ image (debian:13-slim + .NET 10 + uv + protoc + X11/GPU/umu-launcher)
 │   ├── initialize.sh              # host 側 pre-create フック (~/.resonite-io{,-debug}/ 0700 作成 + uid/gid/DISPLAY/GPU を .env に記録 + AppArmor チェック)
 │   └── entrypoint.sh              # container 内エントリポイント (AppArmor 二段チェック + machine-id 生成)
-├── justfile                       # ルートタスクランナー (build / test / resonite-vanilla / resonite-{start,stop,status})
+├── justfile                       # ルートタスクランナー (build / test / resonite-launch / resonite-stop)
 ├── buf.yaml                       # proto lint/breaking (modules: proto/、SERVICE_SUFFIX + RPC_*_STANDARD_NAME を except)
 ├── .pre-commit-config.yaml
 ├── .env.example                   # ResonitePath / GPU・X11 等の雛形 (.env は gitignore)
@@ -216,9 +216,7 @@ resonite-io/
 │   ├── gen_proto.sh               # .proto → Python コード生成 (C# 側は csproj が build-time に生成)
 │   ├── decompile.sh               # ilspycmd で Resonite first-party + Renderite Unity DLL を decompiled/ に展開
 │   ├── container-init.sh          # container 内 deps restore
-│   ├── lib.sh                     # 共通シェルユーティリティ
-│   ├── resonite-run.sh            # devcontainer 内で Resonite を umu-run 起動 (--vanilla / 既定は mod 込み)
-│   └── resonite-ctl.sh            # mod 込み Resonite の start/stop/status (`just resonite-{start,stop,status}`)
+│   └── lib.sh                     # 共通シェルユーティリティ
 │
 ├── decompiled/                    # ILSpy 出力 (gitignore、`just decompile` で再生成)
 ├── gale/                          # Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
@@ -245,7 +243,7 @@ resonite-io/
 
 Python 側は `uv sync` で editable install 含めて完結。
 
-**Debug 戦略**: 主経路は `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) からの **print-debug + `just log` でのログ tailing** (`gale/BepInEx/LogOutput.log`、umu/Proton 起動ノイズは `gale/BepInEx/umu-launch.log` に分離)。mod 込み Resonite は `scripts/resonite-ctl.sh` で devcontainer 内に起動・停止できる (`just resonite-{start,stop,status}`)。Step 2-3 当時はこれを container ↔ host Resonite bridge (現在は撤去) が担っていた。`deploy-mod` 時に同梱される PDB を使う .NET debugger attach は将来必要になった時に整備する。
+**Debug 戦略**: 主経路は `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) からの **print-debug + `just log` でのログ tailing** (`gale/BepInEx/LogOutput.log`、umu/Proton 起動ノイズは `gale/BepInEx/umu-launch.log` に分離)。mod 込み Resonite は `resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`) で devcontainer 内に起動・停止できる (`just resonite-launch` / `just resonite-stop`)。Step 2-3 当時はこれを container ↔ host Resonite bridge (現在は撤去) が担っていた。`deploy-mod` 時に同梱される PDB を使う .NET debugger attach は将来必要になった時に整備する。
 
 将来: BepisLoader の .NET Hot Reload (debugger attach 時)。
 
@@ -291,7 +289,7 @@ ______________________________________________________________________
 - ✅ 各モダリティは独立非同期ストリーム (RL `step()` なし)
 - ✅ ワールド非依存・単一ユーザー操作スコープ
 - ✅ 通信データ型は pyright strict 準拠
-- ✅ **開発環境は Docker 化** (`debian:13-slim` (trixie) ベース単一 image)。ホストには `docker` / `docker compose v2` / `just` の 3 つだけ要求。当初想定していた `setup.sh` は廃止。devcontainer 内で Resonite を起動する経路も追加済み (umu-run/Proton。host の graphical session + audio + AppArmor 緩和が前提)。素の Resonite は `just resonite-vanilla` (foreground)、**mod 込み** は Gale プロファイル `./gale` から `just resonite-{start,stop,status}` (background)。mod 検証は container 内完結 (host bridge は撤去)
+- ✅ **開発環境は Docker 化** (`debian:13-slim` (trixie) ベース単一 image)。ホストには `docker` / `docker compose v2` / `just` の 3 つだけ要求。当初想定していた `setup.sh` は廃止。devcontainer 内で Resonite を起動する経路も追加済み (umu-run/Proton。host の graphical session + audio + AppArmor 緩和が前提)。素の Resonite は `just resonite-launch --vanilla`、**mod 込み** は Gale プロファイル `./gale` から `just resonite-launch` (engine + renderer の両 PID を返す)、停止は `just resonite-stop`。mod 検証は container 内完結 (host bridge は撤去)
 - ✅ 補助ツール: ライセンス MIT、formatter (csharpier / ruff)、type-check (pyright strict)、test (xunit / pytest)
 - ✅ **C# Linter/Analyzer**: csharpier + Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
 - ✅ **C# Mod SDK**: `Microsoft.NET.Sdk` + BepisLoader 公式 Template の NuGet 群 (`BepInEx.ResonitePluginInfoProps` / `ResoniteModding.BepInExResoniteShim` / `ResoniteModding.BepisResoniteWrapper`)。当初検討した `Remora.Resonite.Sdk` は不採用
@@ -309,7 +307,7 @@ ______________________________________________________________________
 - ✅ **UDS socket path**: host と container で **`$HOME/.resonite-io/`** を同一絶対パスで rw bind 共有 (`compose.yml` long-form bind + `${HOME}` を host shell から解決。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達)。`$XDG_RUNTIME_DIR/resonite-io/` を当初想定したが pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆うため不採用 (詳細: `memory/reference_pressure_vessel_paths.md`)。socket ファイル名は mod が `resonite-{Process.Id}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは devcontainer の `initializeCommand` が `~/.resonite-io{,-debug}/` を 0700 で先に作成 (`create_host_path: false` で fail-fast)。
 - ✅ **AspNetCore shared framework の同梱**: Kestrel が要求する `Microsoft.AspNetCore.*` は framework reference のため、`CopyLocalLockFileAssemblies=true` でも bin/ に出ない。`ResoniteIO.csproj` の `CopyAspNetCoreSharedFrameworkRuntime` Target で `$(NetCoreRoot)shared/Microsoft.AspNetCore.App/$(BundledNETCoreAppPackageVersion)/*.dll` を TargetDir にコピーし、PostBuild の PluginFiles glob で gale 配下に同梱する (Step 2 Phase 4 で実機検証済み)。`Microsoft.NETCore.App` は Resonite ランタイムが既に持っているため include 不要。
 - ✅ **Resonite 同梱 DLL との version skew 対策**: `mod/src/ResoniteIO/Loading/PluginAssemblyResolver.cs` が plugin folder を優先する resolver を attach し、Resonite 同梱の旧 `Google.Protobuf` より Core 同梱版を解決させる。Plugin.Load では resolver 接続前に Core 型を絶対触らない (触ると旧 Protobuf 解決で `TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'`)。
-- ✅ **Resonite 起動は devcontainer 内完結** (旧 container ↔ host debug bridge は撤去): Step 2 で導入した host bridge (`scripts/host_agent.py` + `scripts/resonite_cli.py` + `$HOME/.resonite-io-debug/host-agent.sock` + `just host-agent`) は、devcontainer 内で Resonite を直接起動できるようになったため廃止。現在は `scripts/resonite-ctl.sh` が container 内で `scripts/resonite-run.sh` を background 起動し (`just resonite-{start,stop,status}`)、stop は `Resonite.exe` / `Renderite.Renderer.exe` の名前ベース SIGTERM→3s→SIGKILL のみ (Proton / pressure-vessel / Steam reaper には触らない)。GUI session 必須 (SSH only セッションでは fail-fast)。
+- ✅ **Resonite 起動は devcontainer 内完結** (旧 container ↔ host debug bridge は撤去): Step 2 で導入した host bridge (`scripts/host_agent.py` + `scripts/resonite_cli.py` + `$HOME/.resonite-io-debug/host-agent.sock` + `just host-agent`) は、devcontainer 内で Resonite を直接起動できるようになったため廃止。現在は `resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`) が container 内で Resonite を umu-run 起動し engine + renderer の両 PID を返す (`just resonite-launch` / `just resonite-stop`)、terminate は対象 PID への SIGTERM→3s→SIGKILL のみ (Proton / pressure-vessel / Steam reaper には触らない)。GUI session 必須 (SSH only セッションでは fail-fast)。
 - ✅ **gRPC tools の重複型警告 (CS0436) 対策**: Core で Server stub、テスト csproj で Client stub を別生成すると同一 namespace に message 型が重複する。テスト csproj 限定で `<NoWarn>$(NoWarn);CS0436</NoWarn>` を入れる (mod 側は Core を ProjectReference するだけで proto 直参照しない方針なので mod 側は対象外)。
 - ✅ **テスト戦略の二層化**:
   - Core 単体: Kestrel ラウンドトリップ含む統合テストを xunit で (Resonite 不要)

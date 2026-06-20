@@ -8,7 +8,7 @@ MP4 / H.264 は alpha 非対応のため ``cv2.cvtColor(RGBA2BGR)`` で alpha �
 込みで保存したい場合は MOV + PNG codec や個別 PNG dump が必要)。
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """

@@ -1,7 +1,7 @@
 """E2E: graceful shutdown against a live Resonite + Info host-PID cross-check.
 
 Validates the Lifecycle/shutdown feature against a real Resonite started in the
-dev container via ``just resonite-start``:
+dev container via ``just resonite-launch``:
 
 1. ``Info.GetServerInfo`` reports the engine's host PID (`resonite_pid`) and the
    renderer's (`renderer_pid`). We cross-check `renderer_pid` against the

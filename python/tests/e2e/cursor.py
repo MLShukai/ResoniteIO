@@ -26,7 +26,7 @@ always best-effort releases so a failed run does not leave the engine
 cursor pinned for later tests or for a human at the machine.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """

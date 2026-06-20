@@ -11,7 +11,7 @@ artifact. The hard contract is the returned snapshots; the captures are not
 asserted on.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live, **logged-in** Resonite started by ``just resonite-start`` from the
+live, **logged-in** Resonite started by ``just resonite-launch`` from the
 ``./gale`` profile; the ``require_mod_deployed`` autouse fixture skips when the
 mod is not deployed there. The cloud-dependent steps (sessions / records)
 degrade to a clear skip when the account sees an empty cloud, but the

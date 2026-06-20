@@ -15,7 +15,7 @@ Run everything from inside the dev container.
    just deploy-mod
    ```
 
-   `just resonite-start` boots Resonite from the `./gale` Gale profile, so
+   `just resonite-launch` boots Resonite from the `./gale` Gale profile, so
    the `ResoniteIO` mod (BepInEx + plugin) must be present there. The
    `require_mod_deployed` autouse fixture skips with a clear message when
    `./gale/BepInEx` is absent.
@@ -40,8 +40,9 @@ in its own `<name>.py` to keep the run target self-describing.
 
 `connection.py` orchestrates:
 
-- `just resonite-start` (boots Resonite in the container via
-  `scripts/resonite-run.sh`: umu-run + hookfxr loads the mod from `./gale`).
+- `just resonite-launch` (boots Resonite in the container via
+  `resoio launch` (`python/src/resoio/launcher.py`): umu-run + hookfxr loads
+  the mod from `./gale`).
 - Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
   (up to 120 s).
 - Waits 30 s after the UDS appears so the focused home world can finish

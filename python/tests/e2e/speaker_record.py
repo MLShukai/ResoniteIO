@@ -13,7 +13,7 @@ WAV header を ``wave`` 標準モジュールで読まない理由: 標準 ``wav
 いる format でもあるため、本テストでも対称的に手書き struct で検証する。
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """
@@ -50,7 +50,7 @@ _MIN_BYTES = int(_BYTES_PER_SECOND * 5.0)  # at least 5 s of audio
 _SPEAKER_READY_TIMEOUT_S = 120.0
 _SPEAKER_READY_RETRY_INTERVAL_S = 2.0
 
-# `just resonite-start` 経路で Resonite を起動した直後は
+# `just resonite-launch` 経路で Resonite を起動した直後は
 # AudioOutputDriver が 'Dummy Output' などの null driver に attach して
 # 一時的にゼロ buffer を吐く期間がある (decompile 上 audio system の
 # driver enumeration が deferred で、PulseAudio device が後追いで

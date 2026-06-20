@@ -28,17 +28,22 @@ resoio --help
 | `resoio contact` | Contact | unary | Browse and manage contacts (friends) via nested subcommands: `list` (`--search` / `--filter all\|accepted\|requests` / `--include-hidden`), `get`, `search` (`--exact`), `add` (`--username`), `accept`, `remove`. `list` hides dash-hidden (ignored / blocked) contacts by default; `--include-hidden` shows them. The mutating ops (`add` / `accept` / `remove`) write the real cloud contact list. |
 | `resoio auth` | Auth | unary | Resonite cloud sign-in via nested subcommands: `login` (credential positional; password via env/stdin/prompt, never a flag), `logout`, `status`. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
+| `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. Non-gRPC. |
+| `resoio terminate` | — (signals) | local process | Force-stop Resonite by killing the engine + renderer (`SIGTERM` → `SIGKILL`). Takes `[resonite_pid] [renderer_pid]` (from `launch`) or auto-detects the single running instance. Non-gRPC. |
 | `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
-| `resoio terminate` | Lifecycle | unary | **Deprecated** alias of `shutdown` (no longer maintained, removed in a future release). Behaves identically but prints a deprecation notice on stderr. |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
 
-`shutdown` is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
-reachable. A graceful shutdown is enough to stop the whole client — there is no SIGTERM/SIGKILL
-fallback, because the engine's own PID is not discoverable by name (`pgrep -f Resonite.exe`
-matches the Steam/Proton launch wrappers, which must not be signalled). `terminate` is the
-deprecated former name of this command; prefer `shutdown`.
+`launch` / `terminate` are **local process control** (no gRPC). `launch` spawns the
+umu-launcher chain and waits until the **engine** (`resonite_pid`) and **renderer**
+(`renderer_pid`) host processes appear, printing both; it refuses to start a second instance.
+`terminate` signals those two PIDs (`SIGTERM` → `SIGKILL`); given no PIDs it auto-detects the
+single running instance (and errors if it finds more than one). Because they work from the host
+process table they run before the UDS exists and regardless of whether the client is reachable.
+`shutdown`, by contrast, is a pure gRPC call (`Lifecycle.Shutdown`) that asks a **running**
+engine to quit gracefully — use it when the client is up and reachable, and `terminate` when
+you need a guaranteed stop (or already hold the PIDs from `launch`).
 
 ## `auth`
 
@@ -102,7 +107,9 @@ the result document.
 `--format` is **not** on every command. Commands that return a single value print it raw on one
 line instead of as JSON:
 
-- `shutdown` / `terminate` print the engine host PID.
+- `shutdown` prints the engine host PID; `terminate` prints the PIDs it killed (or `resonite
+  not running`). (`launch` *does* take `--format`, returning a `resonite_pid` / `renderer_pid`
+  pair.)
 - `screenshot` / `record` / `world thumbnail` print the **saved absolute path** when writing a file
   (and `-o -` streams raw bytes to stdout with no path line).
 
@@ -146,7 +153,14 @@ resoio grab --radius 0.5
 resoio grab release
 resoio cursor release
 
-# Ask the engine to quit gracefully (prints the engine host PID)
+# Start Resonite (engine + renderer) and capture both PIDs
+resoio launch --format json     # {"resonite_pid": ..., "renderer_pid": ...}
+
+# Stop it — by the PIDs from launch, or auto-detect the running instance
+resoio terminate 12345 12399
+resoio terminate
+
+# ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)
 resoio shutdown
 ```
 

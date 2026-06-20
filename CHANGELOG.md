@@ -9,17 +9,32 @@ GitHub Release body. The format follows
 
 ### Added
 
+- **`resoio launch` / `resoio terminate` (start/stop Resonite via umu-launcher)**:
+  New commands and Python functions (`resoio.launch` / `resoio.terminate`) that
+  start and force-stop the Resonite client without gRPC. `launch` spawns the
+  umu-launcher chain and PID-diffs the **engine** (`resonite_pid`) and
+  **renderer** (`renderer_pid`) host processes into existence, returning both as a
+  `LaunchResult`; `terminate` stages `SIGTERM` → `SIGKILL` over those two PIDs (or
+  auto-detects the single running instance when given none, erroring if more than
+  one is found). `RESONITE_EXE` (default: the Steam install) and `MOD_PATH` (the
+  Gale profile with the mod deployed) select the install; the ResoniteIO mod must
+  be installed (via Gale / Thunderstore) or `launch` errors with guidance. The
+  cooperative gRPC quit stays available as `resoio shutdown`. Exposed as
+  `resoio.launch` / `resoio.terminate` / `LaunchResult` / `LauncherError` and the
+  `resoio launch` (`-e/--exe` / `-p/--profile` / `--vanilla` /
+  `--format human|json`) and `resoio terminate` (`[resonite_pid] [renderer_pid]`)
+  CLI commands
 - **Run Resonite inside the dev container**: the dev container can now launch
-  Resonite itself via `scripts/resonite-run.sh` (rsyncs the read-only `/resonite`
-  bind into a writable `/opt/resonite`, then starts Resonite through `umu-run` /
-  Proton — the first run pulls GE-Proton and copies the ~2 GB install). Two paths:
-  `just resonite-vanilla` runs **vanilla** Resonite in the foreground, while
-  `just resonite-start` / `-stop` / `-status` launch and manage Resonite **with
-  the ResoniteIO mod loaded** from the `./gale` Gale profile (background; engine
-  side via hookfxr, renderer side via a doorstop `winhttp.dll` —
-  `scripts/resonite-run.sh` exports `WINEDLLOVERRIDES="winhttp=n,b"`
-  automatically, so **no manual Steam-style `WINEDLLOVERRIDES` setup is needed**
-  on this path). With in-container launch the whole
+  Resonite itself via the new `resoio launch` / `resoio terminate` commands (and
+  the thin `just resonite-launch` / `just resonite-stop` wrappers): the container
+  entrypoint rsyncs the read-only `/resonite` bind into a writable `/opt/resonite`,
+  and `resoio launch` starts Resonite through `umu-run` / Proton **with the
+  ResoniteIO mod loaded** from the `./gale` Gale profile (the first run pulls
+  GE-Proton and copies the ~2 GB install). `resoio launch --vanilla` runs
+  **vanilla** Resonite with no mod. Engine side loads via hookfxr, renderer side
+  via a doorstop `winhttp.dll` — `resoio launch` sets
+  `WINEDLLOVERRIDES="winhttp=n,b"` automatically, so **no manual Steam-style
+  `WINEDLLOVERRIDES` setup is needed** on this path. With in-container launch the whole
   mod loop runs inside the container: the mod (GrpcHost) creates its gRPC socket
   under the container's `~/.resonite-io/` (it makes the directory itself before
   binding) and the Python client connects there — no host bind-share. The mod's
@@ -114,6 +129,13 @@ GitHub Release body. The format follows
 
 ### Changed
 
+- **`resoio terminate` / `resoio.terminate` now force-stops the processes
+  (breaking)**: it was a deprecated alias of `resoio shutdown` (a graceful
+  `Lifecycle.Shutdown` over gRPC); it now **kills** the engine + renderer host
+  processes (`SIGTERM` → `SIGKILL`) and takes `[resonite_pid] [renderer_pid]` (or
+  auto-detects the single running instance). Use `resoio shutdown` /
+  `resoio.shutdown` for the cooperative gRPC quit. The old gRPC
+  `resoio.terminate(socket_path=...)` signature is removed
 - **`resoio record` default output is now a file (breaking)**: with no `-o`,
   `record` saves `record_<timestamp>.mp4` (`.wav` for `--audio`) to the current
   directory instead of streaming to stdout. Pass `-o -` for the previous stdout
@@ -128,15 +150,6 @@ GitHub Release body. The format follows
   (`received_frames` / `received_samples` / `dropped_frames` / `unix_nanos`) is
   the command result and now prints to stdout in both formats (was stderr);
   errors and status messages stay on stderr
-
-### Deprecated
-
-- **`resoio terminate` / `resoio.terminate`**: Renamed to `shutdown` (above).
-  The `terminate` command and function still work but are **no longer
-  maintained** and will be **removed in a future release**. The CLI prints a
-  deprecation notice on stderr and `resoio.terminate` emits a
-  `DeprecationWarning`; both forward to `shutdown`. Migrate to `resoio shutdown`
-  / `resoio.shutdown`
 
 ### Removed
 
