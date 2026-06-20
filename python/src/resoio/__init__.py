@@ -5,7 +5,7 @@ from importlib.metadata import version as _version
 from resoio._client import AmbiguousSocketError, SocketNotFoundError
 from resoio.auth import AuthClient, AuthStatus
 from resoio.camera import CameraClient, Frame
-from resoio.connection import ConnectionClient
+from resoio.connection import ConnectionClient, wait_for_ready
 from resoio.contact import (
     ContactClient,
     ContactFilter,
@@ -150,4 +150,5 @@ __all__ = [
     "get_server_info",
     "shutdown",
     "terminate",
+    "wait_for_ready",
 ]

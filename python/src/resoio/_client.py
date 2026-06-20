@@ -19,6 +19,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import ClassVar, Self
 
+import psutil
+
 # betterproto2 generates one ``ServiceStub`` subclass per service; bounding
 # the type var on that base makes each subclass pin a concrete stub type.
 from betterproto2.grpclib.grpclib_client import ServiceStub
@@ -30,9 +32,14 @@ __all__ = [
     "_BaseClient",
     "_reset_version_check",
     "resolve_socket_path",
+    "socket_path_for_pid",
 ]
 
-_SOCKET_GLOB = "resonite-*.sock"
+# The mod binds `resonite-{pid}.sock` (pid = engine host PID); these mirror the
+# C# SocketFilePrefix / SocketFileSuffix so the glob and pid-name agree.
+_SOCKET_FILE_PREFIX = "resonite-"
+_SOCKET_FILE_SUFFIX = ".sock"
+_SOCKET_GLOB = f"{_SOCKET_FILE_PREFIX}*{_SOCKET_FILE_SUFFIX}"
 _DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
 
 # PyPI distribution name (the import package is `resoio`); used for version lookup.
@@ -134,33 +141,78 @@ def resolve_socket_path() -> str:
 
     Empty env-var values fall through to the next step so a stray
     ``FOO=`` in shell config does not produce a bogus empty path.
+
+    When a directory is searched (steps 2-3), candidate sockets whose
+    owning engine PID is no longer alive are skipped as stale leftovers,
+    so only live sockets count toward the found / ambiguous decision.
     """
     explicit = os.environ.get("RESONITE_IO_SOCKET")
     if explicit:
         return explicit
 
+    return _pick_single_socket(_socket_search_dir())
+
+
+def _socket_search_dir() -> str:
+    """Directory searched for ``resonite-{pid}.sock`` absent an explicit path.
+
+    ``RESONITE_IO_SOCKET_DIR`` when set and non-empty, else
+    ``~/.resonite-io/`` (the C# Mod default).
+    """
     search_dir = os.environ.get("RESONITE_IO_SOCKET_DIR")
     if search_dir:
-        return _pick_single_socket(search_dir)
+        return search_dir
+    return str(Path.home() / _DEFAULT_SOCKET_DIR_NAME)
 
-    return _pick_single_socket(str(Path.home() / _DEFAULT_SOCKET_DIR_NAME))
+
+def socket_path_for_pid(pid: int) -> str:
+    """Conventional UDS path for the engine whose host PID is ``pid``.
+
+    Builds ``<dir>/resonite-{pid}.sock`` where ``<dir>`` is
+    ``RESONITE_IO_SOCKET_DIR`` or ``~/.resonite-io/`` — mirroring how the
+    mod names the socket. The explicit ``RESONITE_IO_SOCKET`` full-path
+    override is deliberately ignored (it is pid-independent). This is pure
+    path computation: the file need not exist.
+    """
+    name = f"{_SOCKET_FILE_PREFIX}{pid}{_SOCKET_FILE_SUFFIX}"
+    return os.path.join(_socket_search_dir(), name)
+
+
+def _socket_owner_alive(path: str) -> bool:
+    """True if the engine PID encoded in ``path`` is a live process.
+
+    ``resonite-{pid}.sock`` carries the binding engine's host PID. A socket
+    whose PID is gone is a stale leftover (SIGKILL without cleanup) that no
+    client can connect to, so resolution skips it. Names that do not encode
+    an integer PID are kept — we cannot assess them and would rather surface
+    a socket than silently hide it.
+    """
+    name = os.path.basename(path)
+    core = name[len(_SOCKET_FILE_PREFIX) : -len(_SOCKET_FILE_SUFFIX)]
+    try:
+        pid = int(core)
+    except ValueError:
+        return True
+    return psutil.pid_exists(pid)
 
 
 def _pick_single_socket(directory: str) -> str:
     pattern = os.path.join(directory, _SOCKET_GLOB)
     candidates = sorted(glob.glob(pattern))
-    if not candidates:
+    live = [path for path in candidates if _socket_owner_alive(path)]
+    if not live:
         raise SocketNotFoundError(
-            f"No Resonite IO socket matched {pattern!r}. "
-            "Is the mod running and bound to a UDS?"
+            f"No live Resonite IO socket matched {pattern!r}. "
+            "Is the mod running and bound to a UDS? "
+            "(Sockets whose owning engine PID is gone are skipped.)"
         )
-    if len(candidates) > 1:
-        joined = ", ".join(candidates)
+    if len(live) > 1:
+        joined = ", ".join(live)
         raise AmbiguousSocketError(
             f"Multiple Resonite IO sockets matched {pattern!r}: {joined}. "
             "Set RESONITE_IO_SOCKET to disambiguate."
         )
-    return candidates[0]
+    return live[0]
 
 
 class _BaseClient[TStub: ServiceStub](ABC):
