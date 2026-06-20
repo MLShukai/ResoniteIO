@@ -21,6 +21,11 @@ dependencies = [
   "numpy>=2.0",
   "pillow>=11",
   "prompt-toolkit>=3.0",
+  # Socket resolution skips stale `resonite-{pid}.sock` files whose owning
+  # engine PID is gone (SIGKILL without cleanup); psutil.pid_exists is the
+  # cross-platform liveness check. The engine runs natively on Linux, so the
+  # PID in the socket name is a real host kernel PID.
+  "psutil>=6",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

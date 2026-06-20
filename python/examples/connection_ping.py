@@ -12,42 +12,19 @@ Run from inside the dev container:
 import asyncio
 import time
 
-import grpclib.exceptions
-from grpclib.const import Status
-
-from resoio import ConnectionClient
+from resoio import ConnectionClient, wait_for_ready
 
 SOCKET_PATH: str | None = None
 MESSAGE = "hello"
 READY_TIMEOUT_S = 60.0
-READY_INTERVAL_S = 2.0
-
-
-async def wait_for_ready() -> None:
-    """Block until Connection.Ping returns OK.
-
-    During cold boot the UDS may be bound before the engine is fully
-    ready, in which case the server replies with FAILED_PRECONDITION.
-    Retry until ``READY_TIMEOUT_S`` elapses.
-    """
-    deadline = time.monotonic() + READY_TIMEOUT_S
-    while True:
-        try:
-            async with ConnectionClient(SOCKET_PATH) as client:
-                await client.ping("ready?")
-            return
-        except grpclib.exceptions.GRPCError as e:
-            if e.status != Status.FAILED_PRECONDITION:
-                raise
-            if time.monotonic() > deadline:
-                raise TimeoutError(
-                    f"Connection did not become ready in {READY_TIMEOUT_S:.0f}s"
-                ) from e
-            await asyncio.sleep(READY_INTERVAL_S)
 
 
 async def main() -> None:
-    await wait_for_ready()
+    # Block until the engine answers Connection.Ping. During cold boot the
+    # socket may be absent, have no listener yet, or be bound by an engine
+    # still initialising (FAILED_PRECONDITION); wait_for_ready retries those
+    # until READY_TIMEOUT_S elapses, then returns the resolved socket path.
+    await wait_for_ready(SOCKET_PATH, timeout=READY_TIMEOUT_S)
     async with ConnectionClient(SOCKET_PATH) as client:
         # monotonic_ns is immune to wall-clock jumps (NTP step / DST)
         # that would otherwise produce negative or inflated RTTs.

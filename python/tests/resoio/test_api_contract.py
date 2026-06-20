@@ -112,6 +112,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "get_server_info",
     "shutdown",
     "terminate",
+    "wait_for_ready",
 )
 
 
