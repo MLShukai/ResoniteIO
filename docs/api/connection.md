@@ -5,6 +5,8 @@
 
 ::: resoio.connection.ConnectionClient
 
+::: resoio.connection.wait_for_ready
+
 ::: resoio.SocketNotFoundError
 
 ::: resoio.AmbiguousSocketError

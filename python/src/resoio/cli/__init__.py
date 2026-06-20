@@ -39,6 +39,7 @@ from resoio.cli import (
     session,
     shutdown,
     terminate,
+    wait,
     world,
 )
 
@@ -46,6 +47,7 @@ __all__ = ["main"]
 
 _COMMAND_MODULES: list[ModuleType] = [
     ping,
+    wait,
     info,
     display,
     context_menu,

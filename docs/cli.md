@@ -13,6 +13,7 @@ resoio --help
 | Command | Modality | Direction | Notes |
 | --- | --- | --- | --- |
 | `resoio ping` | Connection | unary | Liveness check. |
+| `resoio wait` | Connection | unary | Block until `Connection.Ping` succeeds (startup readiness), then print the resolved socket path. Sockets whose owning engine PID is gone are skipped. Optional `pid` targets `resonite-{pid}.sock`; `-T/--timeout` (default 30s, `<=0` tries once) bounds the wait. |
 | `resoio info` | Info | unary | Print mod/engine version, OS platform, Wine flag, and engine/renderer host PIDs. |
 | `resoio record` | Camera / Speaker | Resonite → Python | Capture video and/or audio. `--video` / `--audio` filter (neither = muxed). `-o -` streams to stdout; `-o PATH` (`.mp4` / `.wav`) writes that file; omitted writes `record_<timestamp>.mp4` (`.wav` for `--audio`) to the current directory. On file save the saved absolute path is printed to stdout. |
 | `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o PATH` (`.png`) or `-o -` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. On file save the saved absolute path is printed to stdout. |
@@ -110,6 +111,7 @@ line instead of as JSON:
 - `shutdown` prints the engine host PID; `terminate` prints the PIDs it killed (or `resonite
   not running`). (`launch` *does* take `--format`, returning a `resonite_pid` / `renderer_pid`
   pair.)
+- `wait` prints the **resolved socket path** that became ready.
 - `screenshot` / `record` / `world thumbnail` print the **saved absolute path** when writing a file
   (and `-o -` streams raw bytes to stdout with no path line).
 
@@ -121,6 +123,12 @@ accept `--format` (`grab interactive --format json` exits with code 2).
 ```bash
 # Liveness
 resoio ping --message hello
+
+# Block until the engine is up (max 60s), then ping it
+resoio wait -T 60 && resoio ping
+
+# Wait for a specific engine PID's socket
+resoio wait 12345
 
 # Record 10 seconds of muxed video+audio to a timestamped file in the CWD
 # (the saved absolute path is printed to stdout)

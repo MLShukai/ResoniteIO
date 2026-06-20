@@ -21,9 +21,12 @@ dependencies = [
   "numpy>=2.0",
   "pillow>=11",
   "prompt-toolkit>=3.0",
-  # Process discovery + signal-based kill for `resoio launch` / `terminate`
-  # (umu-launcher Resonite start/stop). Used to PID-diff the engine/renderer
-  # processes after spawn and to stage SIGTERM -> SIGKILL on teardown.
+  # psutil serves two features: (1) `resoio launch` / `terminate` (umu-launcher
+  # start/stop) PID-diffs the engine/renderer after spawn and stages SIGTERM ->
+  # SIGKILL on teardown; (2) socket resolution skips stale `resonite-{pid}.sock`
+  # files whose owning engine PID is gone (SIGKILL without cleanup) via
+  # pid_exists. The engine runs natively on Linux, so the PID in the socket name
+  # is a real host kernel PID.
   "psutil>=6",
 ]
 classifiers = [
@@ -95,7 +98,7 @@ addopts = [
   "--strict-markers",
 ]
 markers = [
-  "e2e: end-to-end tests that require a live in-container Resonite (just resonite-start)",
+  "e2e: end-to-end tests that require a live in-container Resonite (just resonite-launch)",
   "api_contract: public API / proto wire contract pins (Hyrum's law mitigation, not behavior tests)",
 ]
 filterwarnings = [

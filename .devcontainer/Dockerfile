@@ -33,7 +33,7 @@ RUN dpkg --add-architecture i386
 
 # uv が独自 Python を引くため build-essential は不要。
 # python3 は補助スクリプト用の stdlib Python (uv 管理の Python 環境とは分離)。
-# procps は pgrep/pkill を提供する (scripts/resonite-ctl.sh の起動・停止判定で使用)。
+# procps は pgrep/pkill を提供する (e2e テストや手動 debug でのプロセス確認に使用)。
 # libicu76 は .NET SDK の globalization 初期化に必要 (debian 13 trixie の ICU)。
 # dbus-x11 は dbus-launch を提供する (Steam Linux Runtime の launcher-service が必要)。
 # rsync は entrypoint.sh が Resonite インストールを named volume にコピーするために使う。
@@ -119,7 +119,7 @@ RUN set -eux; \
 
 # umu-launcher を GitHub Releases の debian-13 向け .deb から導入。
 # umu-run は Proton/SteamRT を自動取得して Wine アプリを起動する。
-# Resonite の起動は scripts/resonite-run.sh が umu-run 経由で行う。
+# Resonite の起動は resoio launch (umu-run 経由) が行う。
 RUN set -eux; \
     apt-get update; \
     cd /tmp; \

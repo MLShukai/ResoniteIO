@@ -115,6 +115,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "launch",
     "shutdown",
     "terminate",
+    "wait_for_ready",
 )
 
 

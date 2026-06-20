@@ -126,6 +126,16 @@ GitHub Release body. The format follows
   (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`),
   interactive commands (`drive` / `grab interactive` / `inventory`), or the
   side-effect-only `session user kick` / `ban` / `respawn` leaves
+- **`resoio wait` / `resoio.wait_for_ready`**: A new startup-readiness gate that
+  blocks until the Resonite IO server answers `Connection.Ping`. The public async
+  `wait_for_ready(socket_path=None, *, timeout=None, interval=0.1)` polls until a
+  ping round-trips and returns the resolved socket path, retrying while the socket
+  is absent, has no listener yet, or the engine is still warming up
+  (`FAILED_PRECONDITION`); `AmbiguousSocketError` and other gRPC errors propagate,
+  and `timeout` (`None` = wait forever) raises `TimeoutError`. The `resoio wait`
+  CLI wraps it: it prints the resolved socket path on success, takes an optional
+  `pid` to target `resonite-{pid}.sock`, and `-T/--timeout` (default 30s, `<=0`
+  tries once) bounds the wait. `--format` is not added (path-only output)
 
 ### Changed
 
@@ -150,6 +160,13 @@ GitHub Release body. The format follows
   (`received_frames` / `received_samples` / `dropped_frames` / `unix_nanos`) is
   the command result and now prints to stdout in both formats (was stderr);
   errors and status messages stay on stderr
+- **Socket resolution skips dead sockets**: directory-based socket resolution
+  (`resolve_socket_path`, used by every modality client) now reads the engine PID
+  from each `resonite-{pid}.sock` candidate and skips ones whose process is gone
+  (`psutil.pid_exists`), so a stale socket left behind by a SIGKILL'd engine no
+  longer causes a spurious `AmbiguousSocketError` or a connect to a dead UDS;
+  only live sockets count toward the found / ambiguous decision. Names that do
+  not encode an integer PID are kept. Adds a `psutil` runtime dependency
 
 ### Removed
 
