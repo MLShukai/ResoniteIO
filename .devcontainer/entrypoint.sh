@@ -41,6 +41,19 @@ fi
 tr -d - </proc/sys/kernel/random/uuid >/etc/machine-id
 
 # ---------------------------------------------------------------------------
-# 3. compose の command を exec で起動
+# 3. Resonite install を書込可能コピーに同期 (/resonite:ro -> /opt/resonite)
+# ---------------------------------------------------------------------------
+# Resonite は install ディレクトリにログ等を書き込むため、ro bind の /resonite からは
+# 直接起動できない。HOME 外の /opt/resonite (resonite-app named volume) に同期しておき、
+# `resoio launch` (RESONITE_EXE=/opt/resonite/Resonite.exe) がそこから起動する。
+# /opt 配下に置くのは umu の drive 解決 (CWD -> Z:) を正しくするため。
+# ResonitePath 未設定で /resonite が無い構成 (build/test のみ) では skip する。
+if [[ -f /resonite/Resonite.exe ]]; then
+  echo "[entrypoint] syncing /resonite -> /opt/resonite (first run copies ~2GB)..."
+  rsync -a --delete /resonite/ /opt/resonite/
+fi
+
+# ---------------------------------------------------------------------------
+# 4. compose の command を exec で起動
 # ---------------------------------------------------------------------------
 exec "$@"

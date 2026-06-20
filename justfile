@@ -312,34 +312,26 @@ clean-py:
 
 # ===== Resonite (devcontainer 内起動) =========================================
 #
-# 共通前提 (resonite-vanilla / resonite-start とも):
+# devcontainer 内で ResoniteIO mod 込みの Resonite を起動・停止する。利用者向けの
+# 正式コマンド `resoio launch` / `resoio terminate` (umu-launcher で engine + renderer
+# を起動/kill する非 gRPC のプロセス制御) の薄い wrapper。RESONITE_EXE
+# (= /opt/resonite/Resonite.exe、entrypoint.sh が /resonite:ro から同期したコピー) と
+# MOD_PATH (= /workspace/gale) は compose の environment が渡す。
+#
+# 共通前提:
 #   - devcontainer 内で実行すること (umu-run が PATH に必要)
 #   - ホスト側で GUI session (X11 / Xwayland) と audio (PipeWire / PulseAudio) が動いていること
 #   - initialize.sh が DISPLAY / XAUTHORITY_HOST 等を .env に自動設定済みであること
 #
-# 初回実行時は GE-Proton のダウンロード + ~2GB の Resonite install コピーが走るため
-# 数分かかる。2 回目以降は差分のみ転送するため速い。
-#
-# 役割分担:
-#   - resonite-vanilla : mod を読まない素の Resonite を foreground 起動 (起動確認用)
-#   - resonite-start/stop/status : Gale プロファイル (./gale) から mod 込みで起動する
-#     background lifecycle。mod が無ければ fail-fast。
+# 初回起動は GE-Proton のダウンロード等で数分かかる。Resonite install の同期
+# (/resonite -> /opt/resonite) は entrypoint.sh が container 起動時に済ませている。
 
-# 素の Resonite を foreground 起動する (mod なし)。起動確認・切り分け用。
-resonite-vanilla *ARGS:
-    bash scripts/resonite-run.sh --vanilla {{ARGS}}
+# Resonite (engine + renderer) を mod 込みで起動し、両 PID を表示する。
+# `--vanilla` で mod なし起動、`-e/--exe` `-p/--profile` で明示指定も可。
+resonite-launch *ARGS:
+    cd python && uv run resoio launch {{ARGS}}
 
-# mod 込み Resonite を background 起動する (即 return)。
-# Gale プロファイルは ./gale (= /workspace/gale) を直接読む。BepInEx が無ければ
-# fail-fast。engine 側は hookfxr、Renderer 側は doorstop を CLI で渡すため
-# Steam Launch Options (WINEDLLOVERRIDES) は不要。
-resonite-start *ARGS:
-    bash scripts/resonite-ctl.sh start {{ARGS}}
-
-# Resonite / Renderite を停止する (SIGTERM → 3 秒待ち → SIGKILL の二段構え)。
-resonite-stop:
-    bash scripts/resonite-ctl.sh stop
-
-# Resonite / Renderite の実行状態を表示する。
-resonite-status:
-    bash scripts/resonite-ctl.sh status
+# Resonite を停止する (engine + renderer に SIGTERM -> SIGKILL)。
+# 引数なしで実行中インスタンスを自動検出して kill。PID を渡して個別指定も可。
+resonite-stop *ARGS:
+    cd python && uv run resoio terminate {{ARGS}}

@@ -60,7 +60,8 @@ class TestMicrophoneAutoDefault:
         _run_just("resonite-stop", check=False, timeout=30.0)
         _purge_stale_sockets(SOCKET_DIR)
 
-        _run_just("resonite-start")
+        # resonite-launch (resoio launch) blocks until engine + renderer appear.
+        _run_just("resonite-launch", "--timeout", "120", timeout=140.0)
         try:
             socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
             os.environ["RESONITE_IO_SOCKET"] = str(socket_path)

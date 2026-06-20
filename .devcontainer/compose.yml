@@ -56,6 +56,11 @@ services:
     environment:
       ResonitePath: /resonite
       GalePath: /workspace/gale
+      # `resoio launch` / `resoio terminate` 用 (umu-launcher で Resonite を起動/kill)。
+      # RESONITE_EXE は entrypoint.sh が /resonite から同期した書込可能コピー。
+      # MOD_PATH は ResoniteIO mod を deploy した Gale プロファイル (= GalePath)。
+      RESONITE_EXE: /opt/resonite/Resonite.exe
+      MOD_PATH: /workspace/gale
       DISPLAY: ${DISPLAY:-:0}
       XAUTHORITY: /tmp/.Xauthority
       PULSE_SERVER: unix:/tmp/pulse-native

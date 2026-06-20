@@ -16,7 +16,7 @@ SOCKET_GLOB = "resonite-*.sock"
 SOCKET_APPEAR_TIMEOUT_S = 120.0
 SOCKET_APPEAR_POLL_S = 1.0
 POST_SOCKET_STARTUP_SETTLE_S = 30.0
-# The Gale profile e2e starts Resonite from. `just resonite-start` reads the mod
+# The Gale profile e2e starts Resonite from. `just resonite-launch` reads the mod
 # (BepInEx + ResoniteIO plugin) from here; without a deployed mod no UDS is bound
 # and every scenario would hard-fail on the socket-wait timeout instead of
 # skipping cleanly.
@@ -66,7 +66,7 @@ def _purge_stale_sockets(directory: Path) -> None:
 
 @pytest.fixture(autouse=True)
 def require_mod_deployed() -> None:
-    # `just resonite-start` boots Resonite from the ./gale profile; without the
+    # `just resonite-launch` boots Resonite from the ./gale profile; without the
     # mod deployed there the GrpcHost never binds the UDS, so skip rather than
     # let resonite_session hard-fail on the socket-wait timeout.
     if not (GALE_DIR / "BepInEx").is_dir():
@@ -88,7 +88,9 @@ def resonite_session() -> Iterator[Path]:
     # running, so this is safe to always invoke.
     _run_just("resonite-stop", check=False, timeout=30.0)
     _purge_stale_sockets(SOCKET_DIR)
-    _run_just("resonite-start")
+    # resonite-launch (resoio launch) blocks until the engine + renderer
+    # processes appear, so allow more time than the background start it replaced.
+    _run_just("resonite-launch", "--timeout", "120", timeout=140.0)
     try:
         socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
         os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
