@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import time
@@ -9,6 +10,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from resoio.connection import wait_for_ready
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 SOCKET_DIR: Path = Path.home() / ".resonite-io"
@@ -21,24 +24,6 @@ POST_SOCKET_STARTUP_SETTLE_S = 30.0
 # and every scenario would hard-fail on the socket-wait timeout instead of
 # skipping cleanly.
 GALE_DIR: Path = Path(os.environ.get("GalePath", "/workspace/gale"))
-
-
-def _wait_for_socket(directory: Path, timeout_s: float) -> Path:
-    # Returns only when exactly one socket is present: leftover sockets from
-    # a prior run plus the live one would silently pick the wrong target.
-    deadline = time.monotonic() + timeout_s
-    last_candidates: list[Path] = []
-    while time.monotonic() < deadline:
-        if directory.is_dir():
-            candidates = sorted(directory.glob(SOCKET_GLOB))
-            if len(candidates) == 1:
-                return candidates[0]
-            last_candidates = candidates
-        time.sleep(SOCKET_APPEAR_POLL_S)
-    raise AssertionError(
-        f"Timed out waiting for Resonite IO socket under {directory} "
-        f"after {timeout_s:.0f}s. Last seen: {last_candidates}"
-    )
 
 
 def _run_just(
@@ -88,9 +73,23 @@ def resonite_session() -> Iterator[Path]:
     # running, so this is safe to always invoke.
     _run_just("resonite-stop", check=False, timeout=30.0)
     _purge_stale_sockets(SOCKET_DIR)
+    # Clear any explicit override (e.g. leaked from a crashed prior test) so the
+    # wait resolves by globbing SOCKET_DIR rather than honouring a stale path.
+    os.environ.pop("RESONITE_IO_SOCKET", None)
     _run_just("resonite-start")
     try:
-        socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
+        # wait_for_ready polls Connection.Ping — a stronger readiness signal
+        # than the socket file merely appearing — and resolves through
+        # resolve_socket_path, which skips sockets whose engine PID is gone, so
+        # a stale leftover can no longer be picked as the (wrong) target.
+        socket_path = Path(
+            asyncio.run(
+                wait_for_ready(
+                    timeout=SOCKET_APPEAR_TIMEOUT_S,
+                    interval=SOCKET_APPEAR_POLL_S,
+                )
+            )
+        )
         os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
         # The mod binds the UDS before the focused home world is fully loaded.
         # Give the whole e2e suite one shared startup settle window so modality
