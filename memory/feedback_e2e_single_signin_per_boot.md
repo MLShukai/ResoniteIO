@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-`python/tests/e2e/conftest.py` の `resonite_session` fixture は function-scoped で、test ごとに `just resonite-stop` → `resonite-start` で Resonite を再起動する。ここで **連続した 2 回目以降の boot は cloud sign-in が確実には通らない**。実測では 2 番目の test が 120s の readiness poll の間ずっと `Not signed in to a Resonite account` のままだった (fixture の SIGKILL 停止 → 即再起動で saved session の再認証が走らない/cloud 側にセッションが残る等が原因と推測)。
+`python/tests/e2e/conftest.py` の `resonite_session` fixture は function-scoped で、test ごとに `just resonite-stop` → `resonite-launch` で Resonite を再起動する。ここで **連続した 2 回目以降の boot は cloud sign-in が確実には通らない**。実測では 2 番目の test が 120s の readiness poll の間ずっと `Not signed in to a Resonite account` のままだった (fixture の SIGKILL 停止 → 即再起動で saved session の再認証が走らない/cloud 側にセッションが残る等が原因と推測)。
 
 **Why:** Dash のような sign-in 不要なモダリティ (UserspaceRadiantDash は login 前から存在) は複数 test を並べても落ちないが、Inventory / World など `engine.Cloud.CurrentUserID` を要するモダリティは boot ごとに sign-in が要る。1 file に sign-in 必須の test を 2 つ並べると 2 つ目が `FAILED_PRECONDITION` (= `*NotReadyException`) で readiness timeout する。
 

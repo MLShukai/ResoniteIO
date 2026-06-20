@@ -47,7 +47,7 @@ py-test:
 py-type:
     cd python && uv run pyright
 
-# e2e テストを実行する (container 内 `just resonite-start` で起動する実機 Resonite が前提)。
+# e2e テストを実行する (container 内 `just resonite-launch` で起動する実機 Resonite が前提)。
 # - 引数なし (name="all"): tests/e2e/ ディレクトリ配下を全て走らせる
 # - 引数あり (例: `just e2e-test connection`): tests/e2e/<name>.py のみ走らせる
 # tests/e2e/ 配下のファイルは `test_` prefix を持たず `<scenario>.py` 命名としている。
@@ -259,7 +259,7 @@ check-gale:
 
 # Resonite mod の BepInEx ログを追従する。print-debug の主経路。
 # `tail -F` は inode 切り替え (ローテーション / Resonite 再起動) を跨いで再追従する。
-# container 内 `just resonite-start` で起動した mod がここ (gale/BepInEx/LogOutput.log)
+# container 内 `just resonite-launch` で起動した mod がここ (gale/BepInEx/LogOutput.log)
 # にログを書く。umu/Proton 自体の起動ノイズは別ファイル (gale/BepInEx/umu-launch.log)。
 log:
     @GALE_ROOT="${GalePath:-./gale}"; \

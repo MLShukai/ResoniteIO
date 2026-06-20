@@ -6,10 +6,11 @@
 #   1. AppArmor による非特権 user namespace 制限のチェック (hard fail)
 #      pressure-vessel (Steam Linux Runtime) が unprivileged userns を必要とするため。
 #   2. コンテナ毎にユニークな machine-id を生成。
-#   3. compose の command (sleep infinity) を exec で引き継ぐ。
+#   3. Resonite install を ro bind (/resonite) から書込可能な /opt/resonite へ同期。
+#   4. compose の command (sleep infinity) を exec で引き継ぐ。
 #
-# Resonite 実際の起動は scripts/resonite-run.sh が行う
-# (justfile の resonite-vanilla / resonite-start レシピ)。
+# Resonite 実際の起動・停止は `resoio launch` / `resoio terminate`
+# (just resonite-launch / resonite-stop) が行う。
 
 set -euo pipefail
 

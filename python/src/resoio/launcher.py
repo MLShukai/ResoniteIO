@@ -206,7 +206,7 @@ def _resolve_mod_path(explicit: str | None) -> str:
 def _find_renderer_preloader(profile: str) -> str | None:
     """Locate the renderer-side BepInEx preloader DLL for the doorstop hook.
 
-    Mirrors ``scripts/resonite-run.sh``: the first match of
+    Returns the first match of
     ``<profile>/Renderer/BepInEx/core/BepInEx.*Preloader*.dll`` (or IL2CPP).
     ``None`` means Camera v2 (the renderer plugin) launches disabled.
     """
@@ -219,7 +219,7 @@ def _find_renderer_preloader(profile: str) -> str | None:
 
 
 def _append_env(existing: str | None, value: str, sep: str) -> str:
-    """Append ``value`` to a ``sep``-delimited env var (mirrors run.sh)."""
+    """Append ``value`` to a ``sep``-delimited env var."""
     return f"{existing}{sep}{value}" if existing else value
 
 
@@ -232,7 +232,7 @@ def _build_command(
 ) -> tuple[list[str], dict[str, str], str | None]:
     """Build the umu-run argv, environment, and log path.
 
-    Ports the launch chain of ``scripts/resonite-run.sh``: engine-side hookfxr
+    Builds the umu-run launch chain: engine-side hookfxr
     (``--hookfxr-enable --bepinex-target``), renderer-side doorstop, the
     pressure-vessel profile bind, and the ``winhttp=n,b`` Wine override. Returns
     ``log_path=None`` (→ ``/dev/null``) for a vanilla launch.

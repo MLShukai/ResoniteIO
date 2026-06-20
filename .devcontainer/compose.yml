@@ -99,7 +99,7 @@ services:
       # gh CLI の認証情報 (~/.config/gh/hosts.yml) を named volume に載せ、
       # コンテナ再ビルドをまたいで `gh auth login` の state を永続化する。
       - cache-gh:/home/dev/.config/gh
-      # Resonite 起動用 named volume (scripts/resonite-run.sh が rsync してここから起動)。
+      # Resonite 起動用 named volume (entrypoint.sh が /resonite から rsync し resoio launch がここから起動)。
       - resonite-app:/opt/resonite
       # SteamRT / Proton / Resonite ユーザーデータ (named volume で永続化)。
       - resonite-share:/home/dev/.local/share
