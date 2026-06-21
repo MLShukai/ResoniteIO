@@ -11,7 +11,8 @@ using ResoniteIO.Core.Logging;
 namespace ResoniteIO.Bridge;
 
 /// <summary>
-/// FrooxEngine の手 (<see cref="Grabber"/>) を介した掴み/離しを操作する
+/// FrooxEngine の手 (<see cref="Grabber"/> / <see cref="InteractionHandler"/>) を介した
+/// 掴み/離し (Grab/Release) と掴んだ後の操作 (Use/Unuse/Equip/Dequip) を行う
 /// <see cref="IGrabberBridge"/> 実装。
 /// </summary>
 /// <remarks>
@@ -24,11 +25,24 @@ namespace ResoniteIO.Bridge;
 /// FailedPrecondition に翻訳する。
 /// </para>
 /// <para>
-/// engine 状態を per-instance には保持せず (manager 参照を読むだけ、event 購読無し、
-/// dispatch は <c>world.RunSynchronously</c> の one-shot)、IDisposable でもない。
-/// 掴みは <see cref="Grabber.Grab(float3, float)"/> でオブジェクトを手の HolderSlot 下に
-/// reparent し、以降は engine が手に自動追従させるため、Locomotion のような per-frame
-/// repeater は不要 (Grab/Release は edge-triggered な one-shot で完結する)。
+/// Grab / Release / GetState / Equip / Dequip は edge-triggered な one-shot。掴みは
+/// <see cref="Grabber.Grab(float3, float)"/> でオブジェクトを手の HolderSlot 下に reparent し、
+/// 以降は engine が手に自動追従させる。Equip は engine の <c>EquipGrabbed</c>
+/// (decompiled InteractionHandler.cs:3582) を手本に、grab 中の grabbable から
+/// <c>ITool</c> を探し <see cref="InteractionHandler.Equip(ITool, bool)"/> で装備する。
+/// </para>
+/// <para>
+/// Use / Unuse は <b>hold セマンティクス</b>を持つ stateful 操作。Use した
+/// (手, ボタン) を内部集合に保持し、self-rescheduling repeater
+/// (<c>World.RunInUpdates(0, …)</c>) が毎 engine tick その
+/// <see cref="InteractionHandlerInputs.Interact"/> / <see cref="InteractionHandlerInputs.Secondary"/>
+/// の <c>ExternalInput = true</c> を再注入し続ける (engine 1-frame 寿命 ExternalInput と
+/// RPC レートのギャップを吸収)。初 tick で engine が <c>OnPrimaryPress</c> (整列 / 装備 tool の
+/// 機能発現) を、以後 <c>OnPrimaryHold</c> を毎フレーム発火する。Unuse で集合から外すと
+/// 翌 tick に注入が止まり engine が <c>OnPrimaryRelease</c> を発火、repeater は集合が空に
+/// なった時点で self-terminate する。Locomotion の継続入力と同型
+/// (<c>memory/feedback_locomotion_external_input.md</c>)。world 切替 / Dispose 時は
+/// hold を全クリアしてボタン押しっぱなし leak を防ぐ。
 /// </para>
 /// <para>
 /// Grab の中心点は **デスクトップカーソルレイ** の hit 点。レイは engine 内カーソル位置
@@ -44,10 +58,23 @@ namespace ResoniteIO.Bridge;
 /// VR モード (<c>ScreenActive == false</c>) は <see cref="GrabberNotReadyException"/>。
 /// </para>
 /// </remarks>
-internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
+internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
 {
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
+
+    // hold 状態 (Use 済み Unuse 前の (手, ボタン)) と repeater の running フラグ / 世代を守る単一 lock。
+    private readonly object _holdLock = new();
+    private readonly HashSet<(Chirality Side, GrabberButtonSelector Button)> _held = new();
+    private bool _repeaterRunning;
+
+    // repeater の世代。world 切替 / Dispose で進めて旧世代のコルーチンを supersede する。
+    // RunInUpdates のコルーチンは scheduling した world のキューに載るため、その world が
+    // dispose されると (CoroutineManager.Dispose の worldQueue.Clear) 破棄され二度と走らない。
+    // _repeaterRunning だけに依存すると、その取りこぼしでフラグが true のまま wedge し以後
+    // 一切 repeater が再起動しなくなる。世代チェックでこれを防ぐ。
+    private long _holdGeneration;
+    private volatile bool _disposed;
 
     public FrooxEngineGrabberBridge(Engine engine, ILogSink log)
     {
@@ -56,6 +83,9 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
 
         _worldManager = engine.WorldManager;
         _log = log;
+
+        // world 切替で hold を持ち越さない (別 world のボタンを押し続けない)。
+        _worldManager.WorldFocused += OnWorldFocused;
     }
 
     /// <inheritdoc/>
@@ -66,7 +96,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
                 () =>
                 {
                     var world = ResolveWorld();
-                    var (resolved, grabber) = ResolveHandGrabber(world, hand);
+                    var (resolved, handler, grabber) = ResolveHand(world, hand);
                     var (origin, dir) = ComputeCursorRay(world);
 
                     // 自前 raycast (decompiled RaycastDriver.cs:62 パターン)。自分の
@@ -84,7 +114,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
                     if (hits.Count == 0)
                     {
                         // レイ miss は grabbed=false の正常結果 (Grab は呼ばない)。
-                        return new GrabOutcome(false, ReadSnapshot(resolved, grabber));
+                        return new GrabOutcome(false, ReadSnapshot(resolved, handler, grabber));
                     }
 
                     // Grabber.Grab(float3 point, float radius) — proximity grab。
@@ -97,7 +127,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
                         PinGrabbedAtGrabPose(world, grabber, before);
                     }
 
-                    return new GrabOutcome(grabbed, ReadSnapshot(resolved, grabber));
+                    return new GrabOutcome(grabbed, ReadSnapshot(resolved, handler, grabber));
                 },
                 ct
             );
@@ -110,13 +140,13 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
             .RunOnEngineAsync(
                 () =>
                 {
-                    var (resolved, grabber) = ResolveHandGrabber(ResolveWorld(), hand);
+                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
 
                     // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
                     // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
                     grabber.Release();
 
-                    return ReadSnapshot(resolved, grabber);
+                    return ReadSnapshot(resolved, handler, grabber);
                 },
                 ct
             );
@@ -129,8 +159,122 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
             .RunOnEngineAsync(
                 () =>
                 {
-                    var (resolved, grabber) = ResolveHandGrabber(ResolveWorld(), hand);
-                    return ReadSnapshot(resolved, grabber);
+                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+                    return ReadSnapshot(resolved, handler, grabber);
+                },
+                ct
+            );
+    }
+
+    /// <inheritdoc/>
+    public Task<GrabSnapshot> UseAsync(
+        GrabberHandSelector hand,
+        GrabberButtonSelector button,
+        CancellationToken ct
+    )
+    {
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var world = ResolveWorld();
+                    var (resolved, handler, grabber) = ResolveHand(world, hand);
+
+                    // (手, ボタン) を hold 集合へ。repeater が毎 tick ExternalInput を再注入する。
+                    lock (_holdLock)
+                    {
+                        _held.Add((ToChirality(resolved), button));
+                    }
+                    EnsureRepeaterStarted(world);
+
+                    return ReadSnapshot(resolved, handler, grabber);
+                },
+                ct
+            );
+    }
+
+    /// <inheritdoc/>
+    public Task<GrabSnapshot> UnuseAsync(
+        GrabberHandSelector hand,
+        GrabberButtonSelector button,
+        CancellationToken ct
+    )
+    {
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+
+                    // 集合から外すだけ。翌 tick に repeater が注入を止め、engine が
+                    // ExternalInput 不在を held=false と評価して OnPrimaryRelease を発火する。
+                    lock (_holdLock)
+                    {
+                        _held.Remove((ToChirality(resolved), button));
+                    }
+
+                    return ReadSnapshot(resolved, handler, grabber);
+                },
+                ct
+            );
+    }
+
+    /// <inheritdoc/>
+    public Task<GrabSnapshot> EquipAsync(GrabberHandSelector hand, CancellationToken ct)
+    {
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+
+                    // engine EquipGrabbed (decompiled InteractionHandler.cs:3582) を手本に、
+                    // grab 中の grabbable から最初の ITool を探して装備する。tool が無ければ no-op。
+                    var grabbed = grabber.GrabbedObjects;
+                    for (var i = 0; i < grabbed.Count; i++)
+                    {
+                        var grabbable = grabbed[i];
+                        if (grabbable is null)
+                        {
+                            continue;
+                        }
+                        var tool = grabbable.Slot?.GetComponent<ITool>();
+                        if (tool is not null)
+                        {
+                            // engine の Equip は permission-gated world 等で拒否されうる。
+                            // 先に Release してから拒否されると tool を落とすだけになるため、
+                            // CanEquip で装備可能を確認できたときだけ grab を手放す
+                            // (不可なら no-op で掴んだまま残す)。
+                            // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3436
+                            if (handler.CanEquip(tool))
+                            {
+                                grabber.Release(grabbable, supressEvents: true);
+                                handler.Equip(tool, lockEquip: true);
+                            }
+                            break;
+                        }
+                    }
+
+                    return ReadSnapshot(resolved, handler, grabber);
+                },
+                ct
+            );
+    }
+
+    /// <inheritdoc/>
+    public Task<GrabSnapshot> DequipAsync(GrabberHandSelector hand, CancellationToken ct)
+    {
+        return ResolveWorld()
+            .RunOnEngineAsync(
+                () =>
+                {
+                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+
+                    // InteractionHandler.Dequip(bool popOff) — 装備中 tool を外す。未装備は no-op。
+                    // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3606
+                    handler.Dequip(popOff: true);
+
+                    return ReadSnapshot(resolved, handler, grabber);
                 },
                 ct
             );
@@ -151,16 +295,29 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
 
     /// <summary>
     /// engine thread 上で <paramref name="hand"/> を実際の手 (Left/Right) へ解決し、
-    /// 対応する <see cref="Grabber"/> とペアで返す (全 RPC 共通の前段)。
+    /// 対応する <see cref="InteractionHandler"/> / <see cref="Grabber"/> をまとめて返す
+    /// (全 RPC 共通の前段)。
     /// </summary>
     /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private (GrabberHandSelector Resolved, Grabber Grabber) ResolveHandGrabber(
+    private (GrabberHandSelector Resolved, InteractionHandler Handler, Grabber Grabber) ResolveHand(
         World world,
         GrabberHandSelector hand
     )
     {
         var resolved = ResolveSelector(world, hand);
-        return (resolved, ResolveGrabber(world, resolved));
+        var handler = ResolveInteractionHandler(world, resolved);
+
+        // InteractionHandler.Grabber — 手の Grabber。
+        // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:1554
+        var grabber = handler.Grabber;
+        if (grabber is null)
+        {
+            throw new GrabberNotReadyException(
+                $"No Grabber for side {ToChirality(resolved)}; engine still initializing."
+            );
+        }
+
+        return (resolved, handler, grabber);
     }
 
     /// <summary>
@@ -209,10 +366,14 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
     }
 
     /// <summary>
-    /// engine thread 上で <paramref name="resolved"/> に対応する <see cref="Grabber"/> を解決する。
+    /// engine thread 上で <paramref name="resolved"/> に対応する <see cref="InteractionHandler"/>
+    /// を解決する。
     /// </summary>
     /// <remarks>呼び出し元が engine thread に marshal 済みであることを前提とする。</remarks>
-    private Grabber ResolveGrabber(World world, GrabberHandSelector resolved)
+    private static InteractionHandler ResolveInteractionHandler(
+        World world,
+        GrabberHandSelector resolved
+    )
     {
         var localUser = world.LocalUser;
         if (localUser is null)
@@ -233,16 +394,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
             );
         }
 
-        // InteractionHandler.Grabber — 手の Grabber。
-        // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:1554
-        var grabber = handler.Grabber;
-        if (grabber is null)
-        {
-            throw new GrabberNotReadyException(
-                $"No Grabber for side {side}; engine still initializing."
-            );
-        }
-        return grabber;
+        return handler;
     }
 
     /// <summary>
@@ -366,7 +518,11 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
     /// engine thread 上で現在の掴み状態の snapshot を構築する。
     /// <paramref name="resolved"/> は Primary 解決後の実際の手 (Left/Right)。
     /// </summary>
-    private static GrabSnapshot ReadSnapshot(GrabberHandSelector resolved, Grabber grabber)
+    private GrabSnapshot ReadSnapshot(
+        GrabberHandSelector resolved,
+        InteractionHandler handler,
+        Grabber grabber
+    )
     {
         // Grabber.IsHoldingObjects / GrabbedObjects。
         // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:91,95
@@ -379,6 +535,230 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge
             var name = grabbed[i]?.Slot?.Name ?? string.Empty;
             names.Add(name);
         }
-        return new GrabSnapshot(resolved, isHolding, names);
+
+        // InteractionHandler.ActiveTool — 装備中 tool (未装備は null)。
+        // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:1753
+        var activeTool = handler.ActiveTool;
+        var isToolEquipped = activeTool is not null;
+        var equippedToolName = activeTool?.Slot?.Name ?? string.Empty;
+
+        return new GrabSnapshot(
+            resolved,
+            isHolding,
+            names,
+            isToolEquipped,
+            equippedToolName,
+            HeldButtonsFor(resolved)
+        );
+    }
+
+    /// <summary>現在 <paramref name="resolved"/> の手で hold 中 (Use 済み Unuse 前) のボタンを列挙する。</summary>
+    private IReadOnlyList<GrabberButtonSelector> HeldButtonsFor(GrabberHandSelector resolved)
+    {
+        var side = ToChirality(resolved);
+        var buttons = new List<GrabberButtonSelector>(2);
+        lock (_holdLock)
+        {
+            foreach (var (heldSide, button) in _held)
+            {
+                if (heldSide == side)
+                {
+                    buttons.Add(button);
+                }
+            }
+        }
+        return buttons;
+    }
+
+    /// <summary>
+    /// hold 集合が非空の間、毎 engine tick 各 (手, ボタン) の <c>ExternalInput = true</c> を
+    /// 再注入する self-rescheduling repeater を、まだ動いていなければ 1 回 schedule する。
+    /// </summary>
+    /// <remarks>
+    /// 注入先 world は <see cref="HoldTickStep"/> が毎 tick <see cref="WorldManager.FocusedWorld"/>
+    /// から解決し直すため、ここでは最初の schedule 先 (= Use 呼び出し時の focused world) だけを
+    /// 渡す。world 切替後は <see cref="OnWorldFocused"/> が hold を空にし repeater が止まる。
+    /// </remarks>
+    private void EnsureRepeaterStarted(World world)
+    {
+        bool start = false;
+        long generation = 0;
+        lock (_holdLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            if (!_repeaterRunning)
+            {
+                _repeaterRunning = true;
+                generation = ++_holdGeneration;
+                start = true;
+            }
+        }
+
+        if (start)
+        {
+            TryScheduleTick(world, generation);
+        }
+    }
+
+    private void TryScheduleTick(World world, long generation)
+    {
+        try
+        {
+            world.RunInUpdates(0, () => HoldTickStep(generation));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning($"GrabberBridge: failed to schedule hold tick: {ex.Message}");
+            lock (_holdLock)
+            {
+                // 自世代の所有権が残っているときだけ running を下ろす。
+                if (_holdGeneration == generation)
+                {
+                    _repeaterRunning = false;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// engine update tick 上で 1 度実行され、hold 中の各ボタンへ ExternalInput を注入してから
+    /// 次 tick へ自己 schedule する repeater 本体。disposed / focus world 不在 / hold 集合が空に
+    /// なったら self-terminate する。注入先は毎 tick 現在の focused world から解決し直すので
+    /// world 切替に追従する。<paramref name="generation"/> が進んでいたら (world 切替 / Dispose で
+    /// supersede 済み) このコルーチンは旧世代として静かに終わる — 現世代の running フラグは
+    /// 触らない (二重 repeater の発生を防ぎつつ、コルーチン取りこぼしによる wedge も防ぐ)。
+    /// </summary>
+    private void HoldTickStep(long generation)
+    {
+        (Chirality Side, GrabberButtonSelector Button)[] held;
+        lock (_holdLock)
+        {
+            if (_holdGeneration != generation)
+            {
+                return;
+            }
+            if (_disposed || _held.Count == 0)
+            {
+                _repeaterRunning = false;
+                return;
+            }
+            held = new (Chirality, GrabberButtonSelector)[_held.Count];
+            _held.CopyTo(held);
+        }
+
+        var world = _worldManager.FocusedWorld;
+        if (world is null || world.IsDisposed)
+        {
+            lock (_holdLock)
+            {
+                if (_holdGeneration == generation)
+                {
+                    _repeaterRunning = false;
+                }
+            }
+            return;
+        }
+
+        InjectHeld(world, held);
+
+        bool reschedule;
+        lock (_holdLock)
+        {
+            reschedule = !_disposed && _held.Count > 0 && _holdGeneration == generation;
+            if (!reschedule && _holdGeneration == generation)
+            {
+                _repeaterRunning = false;
+            }
+        }
+
+        if (reschedule)
+        {
+            TryScheduleTick(world, generation);
+        }
+    }
+
+    /// <summary>
+    /// engine thread 上で、<paramref name="held"/> の各 (手, ボタン) に対応する
+    /// <see cref="DigitalAction.ExternalInput"/> を <c>true</c> にする。
+    /// </summary>
+    /// <remarks>
+    /// <c>ExternalInput</c> は engine が毎 Evaluate で OR-merge 後に null へ戻す 1-frame 寿命の
+    /// フックなので、hold を継続するには毎 tick の再注入が要る (false は明示不要)。
+    /// </remarks>
+    private static void InjectHeld(
+        World world,
+        (Chirality Side, GrabberButtonSelector Button)[] held
+    )
+    {
+        var localUser = world.LocalUser;
+        if (localUser is null)
+        {
+            return;
+        }
+        foreach (var (side, button) in held)
+        {
+            var inputs = localUser.GetInteractionHandler(side)?.Inputs;
+            if (inputs is null)
+            {
+                continue;
+            }
+            var action =
+                button == GrabberButtonSelector.Secondary ? inputs.Secondary : inputs.Interact;
+            if (action is not null)
+            {
+                action.ExternalInput = true;
+            }
+        }
+    }
+
+    private void OnWorldFocused(World world)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        // world 切替で hold は持ち越さない。集合を空にするだけでなく running を下ろし
+        // 世代を進める: 旧 world に scheduling 済みの HoldTickStep は、その world が
+        // dispose されるとコルーチンキューごと破棄され二度と走らないため、running フラグの
+        // リセットをその tick に依存できない (依存すると wedge して以後 Use が効かなくなる)。
+        // ここで running=false にしておけば、掴んだまま world を離脱しても次の Use が新 world で
+        // repeater を再起動できる。世代 bump で、もし旧 tick が生きていても supersede される。
+        lock (_holdLock)
+        {
+            _held.Clear();
+            _repeaterRunning = false;
+            _holdGeneration++;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        try
+        {
+            _worldManager.WorldFocused -= OnWorldFocused;
+        }
+        catch
+        {
+            // engine 側が先に破棄されているケースの best-effort。
+        }
+
+        lock (_holdLock)
+        {
+            _held.Clear();
+            _repeaterRunning = false;
+            // 世代 bump で、scheduling 済みのまだ走っていない HoldTickStep を supersede する。
+            _holdGeneration++;
+        }
+
+        _log.LogInfo("Grabber Bridge disposed: holds cleared, hold repeater stopped");
     }
 }

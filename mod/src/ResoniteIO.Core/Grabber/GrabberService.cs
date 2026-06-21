@@ -85,6 +85,80 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
         return MapToProtoState(snapshot);
     }
 
+    public override async Task<V1.GrabberGrabState> Use(
+        V1.GrabberUseRequest request,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge("Use");
+        var hand = ToSelector(request.Hand);
+        var button = ToButton(request.Button);
+
+        var snapshot = await InvokeBridge(
+                "Use",
+                ct => bridge.UseAsync(hand, button, ct),
+                context.CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return MapToProtoState(snapshot);
+    }
+
+    public override async Task<V1.GrabberGrabState> Unuse(
+        V1.GrabberUnuseRequest request,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge("Unuse");
+        var hand = ToSelector(request.Hand);
+        var button = ToButton(request.Button);
+
+        var snapshot = await InvokeBridge(
+                "Unuse",
+                ct => bridge.UnuseAsync(hand, button, ct),
+                context.CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return MapToProtoState(snapshot);
+    }
+
+    public override async Task<V1.GrabberGrabState> Equip(
+        V1.GrabberEquipRequest request,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge("Equip");
+        var hand = ToSelector(request.Hand);
+
+        var snapshot = await InvokeBridge(
+                "Equip",
+                ct => bridge.EquipAsync(hand, ct),
+                context.CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return MapToProtoState(snapshot);
+    }
+
+    public override async Task<V1.GrabberGrabState> Dequip(
+        V1.GrabberDequipRequest request,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge("Dequip");
+        var hand = ToSelector(request.Hand);
+
+        var snapshot = await InvokeBridge(
+                "Dequip",
+                ct => bridge.DequipAsync(hand, ct),
+                context.CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return MapToProtoState(snapshot);
+    }
+
     private IGrabberBridge RequireBridge(string rpc) =>
         BridgeGuard.Require(_bridge, _log, "Grabber", "IGrabberBridge", rpc);
 
@@ -129,15 +203,32 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
             _ => V1.GrabberHand.Primary,
         };
 
+    private static GrabberButtonSelector ToButton(V1.GrabberButton button) =>
+        button == V1.GrabberButton.Secondary
+            ? GrabberButtonSelector.Secondary
+            // UNSPECIFIED / PRIMARY / 未知の値はすべて Primary 扱い。
+            : GrabberButtonSelector.Primary;
+
+    private static V1.GrabberButton ToProtoButton(GrabberButtonSelector button) =>
+        button == GrabberButtonSelector.Secondary
+            ? V1.GrabberButton.Secondary
+            : V1.GrabberButton.Primary;
+
     private static V1.GrabberGrabState MapToProtoState(GrabSnapshot snapshot)
     {
         var state = new V1.GrabberGrabState
         {
             Hand = ToProtoHand(snapshot.Hand),
             IsHolding = snapshot.IsHolding,
+            IsToolEquipped = snapshot.IsToolEquipped,
+            EquippedToolName = snapshot.EquippedToolName,
             UnixNanos = UnixNanosClock.Now(),
         };
         state.ObjectNames.AddRange(snapshot.ObjectNames);
+        foreach (var button in snapshot.HeldButtons)
+        {
+            state.HeldButtons.Add(ToProtoButton(button));
+        }
         return state;
     }
 }
