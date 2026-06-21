@@ -8,6 +8,9 @@
    (raycast の距離順先頭 = 最手前という仮定の実機確認)
 3. **VR モードで grab が `FAILED_PRECONDITION` になること**
    (VR への切替は人間の HMD 操作が必要)
+4. **tool (Pen 等) を equip → `use` で押下保持したままカーソルを動かすと
+   描画されること** (`OnPrimaryHold` が毎フレーム駆動されることの目視確認。
+   ITool を持つ spawn 対象と描いた線の目視判断が必要)
 
 実装計画上の対応:
 
@@ -101,6 +104,47 @@ uv run --project python resoio grab state --hand right
 (`RaycastAll` の先頭 hit = 最手前という仮定の実機検証)。確認後は
 `cursor release` + `grab release` で後片付けする。
 
+## 手順: tool を equip → use で押下保持して描画 (Pen)
+
+`use` / `unuse` の hold セマンティクス (押下保持中に `OnPrimaryHold` が毎フレーム
+駆動される) は **ITool を持つ spawn 対象** と描いた線の目視でしか確認できない。
+e2e は RPC 経路 (`held_buttons` の round-trip / hold が RPC を跨いで持続すること /
+equip・dequip が非 tool grab で no-op になること) までを自動化済みなので、ここでは
+**実際に Pen で線が引けること** だけを目視する。
+
+ITool を持つ既知の inventory アイテム (例: Resonite Essentials の Pen 系ツール) を
+spawn し、カーソル照準で grab してから装備 → 押下保持して描く:
+
+```sh
+# REPL 内で ITool を持つツールを spawn (パスは環境の inventory に合わせる)
+uv run --project python resoio inventory
+#   resoio:/Inventory$ spawn "/Inventory/<...>/Pen"
+#   resoio:/Inventory$ exit
+
+uv run --project python resoio cursor set 0.5 0.45
+uv run --project python resoio grab --radius 0.5       # ツールを掴む
+uv run --project python resoio grab equip              # 手に装備
+uv run --project python resoio grab state              # equipped=True / tool=<名前> を確認
+
+# 押下保持 → カーソルを数点動かす → 解放 (描画ストローク)
+uv run --project python resoio grab use --button primary
+uv run --project python resoio cursor set 0.4 0.5
+uv run --project python resoio cursor set 0.6 0.5
+uv run --project python resoio cursor set 0.5 0.6
+uv run --project python resoio grab unuse --button primary
+
+uv run --project python resoio grab dequip             # 装備解除
+```
+
+`grab use` から `grab unuse` までの間に **カーソルを動かした軌跡に沿って線が
+描かれる** ことを目視する (Pen が `OnPrimaryHold` で毎フレーム描画する)。
+`grab state` で装備中は `equipped=True` / `tool=<ツール名>`、`use` 中は
+`held=[primary]`、`unuse` 後は `held=[]` になることも併せて確認する。
+
+> 注: Wine/Proton 上では実 OS カーソルを動かせないため、描画位置の更新は
+> `cursor set` (engine 内カーソルの正規化座標) で行う。`use` の hold は
+> `InputAction.ExternalInput` 経由で OS を介さないため、フォーカス非依存で効く。
+
 ## 手順: VR モードで FAILED_PRECONDITION
 
 VR モードで Resonite を起動する (または Dash からデスクトップ → VR に
@@ -121,6 +165,8 @@ CLI が **`FAILED_PRECONDITION` エラーで失敗** し、エラーメッセー
 - 目視: release 後は object が手から離れ、その場に留まる
 - 前後 2 object: 手前の slot 名が `objects=[...]` に出る
 - VR モード: grab が `FAILED_PRECONDITION` (message に `desktop`) で失敗する
+- 目視: Pen を equip → `use` 押下保持中にカーソルを動かすと軌跡に線が描かれる
+  (`state` で equip 中 `equipped=True`、`use` 中 `held=[primary]`、`unuse` 後 `held=[]`)
 
 ## 想定される失敗モードと診断
 
