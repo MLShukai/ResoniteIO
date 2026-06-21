@@ -116,6 +116,7 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Display.IDisplayBridge",
             "ResoniteIO.Core.Grabber.GrabOutcome",
             "ResoniteIO.Core.Grabber.GrabSnapshot",
+            "ResoniteIO.Core.Grabber.GrabberButtonSelector",
             "ResoniteIO.Core.Grabber.GrabberHandSelector",
             "ResoniteIO.Core.Grabber.GrabberNotReadyException",
             "ResoniteIO.Core.Grabber.GrabberService",
@@ -308,6 +309,9 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.GetUserRoleOverridesResponse",
             "ResoniteIO.V1.Grabber",
             "ResoniteIO.V1.Grabber+GrabberBase",
+            "ResoniteIO.V1.GrabberButton",
+            "ResoniteIO.V1.GrabberDequipRequest",
+            "ResoniteIO.V1.GrabberEquipRequest",
             "ResoniteIO.V1.GrabberGetStateRequest",
             "ResoniteIO.V1.GrabberGrabRequest",
             "ResoniteIO.V1.GrabberGrabResult",
@@ -315,6 +319,8 @@ public sealed class ApiContractTests
             "ResoniteIO.V1.GrabberHand",
             "ResoniteIO.V1.GrabberReflection",
             "ResoniteIO.V1.GrabberReleaseRequest",
+            "ResoniteIO.V1.GrabberUnuseRequest",
+            "ResoniteIO.V1.GrabberUseRequest",
             "ResoniteIO.V1.Info",
             "ResoniteIO.V1.Info+InfoBase",
             "ResoniteIO.V1.InfoReflection",
@@ -715,7 +721,28 @@ public sealed class ApiContractTests
                 new[] { typeof(GrabberHandSelector), typeof(float), typeof(CancellationToken) }
             ),
             ("ReleaseAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) }),
-            ("GetStateAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) })
+            ("GetStateAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) }),
+            // 掴んだ後の操作: Use/Unuse は button hold、Equip/Dequip は tool 装備。
+            (
+                "UseAsync",
+                new[]
+                {
+                    typeof(GrabberHandSelector),
+                    typeof(GrabberButtonSelector),
+                    typeof(CancellationToken),
+                }
+            ),
+            (
+                "UnuseAsync",
+                new[]
+                {
+                    typeof(GrabberHandSelector),
+                    typeof(GrabberButtonSelector),
+                    typeof(CancellationToken),
+                }
+            ),
+            ("EquipAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) }),
+            ("DequipAsync", new[] { typeof(GrabberHandSelector), typeof(CancellationToken) })
         );
     }
 

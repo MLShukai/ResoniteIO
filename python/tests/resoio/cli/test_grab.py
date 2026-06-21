@@ -31,12 +31,17 @@ from grpclib.server import Server
 
 from resoio._generated.resonite_io.v1 import (
     GrabberBase,
+    GrabberButton,
+    GrabberDequipRequest,
+    GrabberEquipRequest,
     GrabberGetStateRequest,
     GrabberGrabRequest,
     GrabberGrabResult as PbGrabberGrabResult,
     GrabberGrabState as PbGrabberGrabState,
     GrabberHand,
     GrabberReleaseRequest,
+    GrabberUnuseRequest,
+    GrabberUseRequest,
 )
 from resoio.cli import _amain, _build_parser
 
@@ -54,6 +59,10 @@ class _EchoGrabber(GrabberBase):
         self.grab_requests: list[GrabberGrabRequest] = []
         self.release_requests: list[GrabberReleaseRequest] = []
         self.get_state_requests: list[GrabberGetStateRequest] = []
+        self.use_requests: list[GrabberUseRequest] = []
+        self.unuse_requests: list[GrabberUnuseRequest] = []
+        self.equip_requests: list[GrabberEquipRequest] = []
+        self.dequip_requests: list[GrabberDequipRequest] = []
 
     async def grab(self, message: GrabberGrabRequest) -> PbGrabberGrabResult:
         self.grab_requests.append(message)
@@ -83,6 +92,48 @@ class _EchoGrabber(GrabberBase):
             is_holding=True,
             object_names=["Cube", "Sphere"],
             unix_nanos=9012,
+        )
+
+    async def use(self, message: GrabberUseRequest) -> PbGrabberGrabState:
+        self.use_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=True,
+            object_names=["Cube"],
+            unix_nanos=2468,
+            held_buttons=[message.button],
+        )
+
+    async def unuse(self, message: GrabberUnuseRequest) -> PbGrabberGrabState:
+        self.unuse_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=True,
+            object_names=["Cube"],
+            unix_nanos=1357,
+            held_buttons=[],
+        )
+
+    async def equip(self, message: GrabberEquipRequest) -> PbGrabberGrabState:
+        self.equip_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=False,
+            object_names=[],
+            unix_nanos=3690,
+            is_tool_equipped=True,
+            equipped_tool_name="Pen",
+        )
+
+    async def dequip(self, message: GrabberDequipRequest) -> PbGrabberGrabState:
+        self.dequip_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=False,
+            object_names=[],
+            unix_nanos=4812,
+            is_tool_equipped=False,
+            equipped_tool_name="",
         )
 
 
@@ -354,6 +405,9 @@ async def test_grab_json_flattens_result_and_state_into_one_object(
         "hand": "primary",
         "is_holding": True,
         "object_names": ["Cube"],
+        "is_tool_equipped": False,
+        "equipped_tool_name": "",
+        "held_buttons": [],
         "unix_nanos": 1234,
     }
 
@@ -384,6 +438,9 @@ async def test_grab_release_json_emits_grab_state_shape(
         "is_holding": False,
         "object_names": [],
         "unix_nanos": 5678,
+        "is_tool_equipped": False,
+        "equipped_tool_name": "",
+        "held_buttons": [],
     }
 
 
@@ -400,7 +457,147 @@ async def test_grab_state_json_emits_grab_state_shape(
         "is_holding": True,
         "object_names": ["Cube", "Sphere"],
         "unix_nanos": 9012,
+        "is_tool_equipped": False,
+        "equipped_tool_name": "",
+        "held_buttons": [],
     }
+
+
+# --- use / unuse / click / equip / dequip ----------------------------------
+
+
+async def test_use_invokes_use_rpc_with_hand_and_default_primary_button(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "use", "--hand", "left"])
+    assert rc == 0
+
+    assert len(grabber_server.use_requests) == 1
+    wire = grabber_server.use_requests[0]
+    assert wire.hand == GrabberHand.LEFT
+    # No --button -> default primary (left-click).
+    assert wire.button == GrabberButton.PRIMARY
+    # use must not grab / release / read state.
+    assert grabber_server.grab_requests == []
+    assert grabber_server.unuse_requests == []
+
+    out = capsys.readouterr().out
+    assert "held=[primary]" in out
+
+
+async def test_use_forwards_secondary_button(
+    grabber_server: _EchoGrabber,
+):
+    rc = await _invoke(["grab", "use", "--button", "secondary", "--hand", "right"])
+    assert rc == 0
+
+    assert len(grabber_server.use_requests) == 1
+    wire = grabber_server.use_requests[0]
+    assert wire.hand == GrabberHand.RIGHT
+    assert wire.button == GrabberButton.SECONDARY
+
+
+async def test_unuse_invokes_unuse_rpc_with_button(
+    grabber_server: _EchoGrabber,
+):
+    rc = await _invoke(["grab", "unuse", "--button", "secondary"])
+    assert rc == 0
+
+    assert len(grabber_server.unuse_requests) == 1
+    assert grabber_server.unuse_requests[0].button == GrabberButton.SECONDARY
+    assert grabber_server.use_requests == []
+
+
+async def test_click_invokes_use_then_unuse(
+    grabber_server: _EchoGrabber,
+):
+    rc = await _invoke(["grab", "click", "--hand", "left", "--button", "secondary"])
+    assert rc == 0
+
+    # click is a convenience: use (press) then unuse (release), same hand+button.
+    assert len(grabber_server.use_requests) == 1
+    assert len(grabber_server.unuse_requests) == 1
+    assert grabber_server.use_requests[0].hand == GrabberHand.LEFT
+    assert grabber_server.use_requests[0].button == GrabberButton.SECONDARY
+    assert grabber_server.unuse_requests[0].hand == GrabberHand.LEFT
+    assert grabber_server.unuse_requests[0].button == GrabberButton.SECONDARY
+
+
+async def test_equip_invokes_equip_rpc_with_hand(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "equip", "--hand", "right"])
+    assert rc == 0
+
+    assert len(grabber_server.equip_requests) == 1
+    assert grabber_server.equip_requests[0].hand == GrabberHand.RIGHT
+    assert grabber_server.dequip_requests == []
+
+    out = capsys.readouterr().out
+    assert "equipped=True" in out
+    assert "tool=Pen" in out
+
+
+async def test_dequip_invokes_dequip_rpc_with_hand(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "dequip"])
+    assert rc == 0
+
+    assert len(grabber_server.dequip_requests) == 1
+    assert grabber_server.dequip_requests[0].hand == GrabberHand.PRIMARY
+    assert grabber_server.equip_requests == []
+
+    out = capsys.readouterr().out
+    assert "equipped=False" in out
+
+
+async def test_use_json_emits_state_with_held_button_label(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "use", "--button", "secondary", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == {
+        "hand": "primary",
+        "is_holding": True,
+        "object_names": ["Cube"],
+        "unix_nanos": 2468,
+        "is_tool_equipped": False,
+        "equipped_tool_name": "",
+        # held_buttons surfaces as the string label, not the wire enum int.
+        "held_buttons": ["secondary"],
+    }
+
+
+async def test_equip_json_emits_tool_equipped_state(
+    grabber_server: _EchoGrabber,
+    capsys: pytest.CaptureFixture[str],
+):
+    rc = await _invoke(["grab", "equip", "--format", "json"])
+    assert rc == 0
+
+    payload = _sole_json_document(capsys.readouterr().out)
+    assert payload == {
+        "hand": "primary",
+        "is_holding": False,
+        "object_names": [],
+        "unix_nanos": 3690,
+        "is_tool_equipped": True,
+        "equipped_tool_name": "Pen",
+        "held_buttons": [],
+    }
+
+
+async def test_invalid_button_exits_with_usage_code():
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(["grab", "use", "--button", "middle"])
+    assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
 
 
 async def test_grab_interactive_rejects_structured_format(

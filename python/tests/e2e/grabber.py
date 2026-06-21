@@ -1,11 +1,23 @@
 """E2E: drive the Grabber modality against a live Resonite.
 
 This verifies the Grabber RPC path (``get_state`` / ``grab`` /
-``release``) end-to-end against a live Resonite: the mod loads, the
-bridge reaches the real per-hand ``Grabber`` without throwing, responses
+``release`` / ``use`` / ``unuse`` / ``equip`` / ``dequip``) end-to-end
+against a live Resonite: the mod loads, the bridge reaches the real
+per-hand ``Grabber`` / ``InteractionHandler`` without throwing, responses
 are well-formed, and the requested hand resolves correctly
 (``left`` → left, ``right`` → right, ``primary`` → the engine's primary
 hand, which is the right hand per ``InputInterface.PrimaryHand``).
+
+After the positive grab, the post-grab interactions are exercised on the
+real engine: ``use`` presses-and-holds the primary button (verifying the
+``ExternalInput`` injection repeater) so ``held_buttons`` reports
+``"primary"`` and that hold *persists across a separate* ``get_state``
+RPC, then ``unuse`` clears it. ``equip`` / ``dequip`` are driven as
+no-ops on the (non-tool) Mirror — they must not throw and leave
+``is_tool_equipped`` False. The tool-specific visual checks (a Pen
+drawing while the primary button is held and the cursor moves) need a
+spawnable ``ITool`` and remain a human-only check in
+``mod/tests/manual/grabber-verification.md``.
 
 Grab is cursor-ray based: it picks a grabbable within ``radius`` metres of
 the point where the desktop cursor ray hits the world (aim with
@@ -90,9 +102,12 @@ _GRAB_RADIUS = 0.5
 
 def _format_state(state: GrabState) -> str:
     names = ", ".join(state.object_names)
+    held = ", ".join(state.held_buttons)
     return (
         f"hand={state.hand} is_holding={state.is_holding} "
-        f"objects=[{names}] unix_nanos={state.unix_nanos}"
+        f"objects=[{names}] equipped={state.is_tool_equipped} "
+        f"tool={state.equipped_tool_name} held=[{held}] "
+        f"unix_nanos={state.unix_nanos}"
     )
 
 
@@ -231,6 +246,45 @@ class TestGrabber:
                     assert grab_result.state.unix_nanos > 0
                     await cursor.release()
 
+                # 3b. use (hold primary): pressing the primary button while
+                #     holding drives the engine's StartInteraction via the
+                #     ExternalInput repeater. The button stays held — the
+                #     bridge reports it in held_buttons.
+                use_state = await client.use(button="primary")
+                record("05b_use_primary", use_state)
+                assert "primary" in use_state.held_buttons, (
+                    "use(primary) should report the primary button as held"
+                )
+                await settle_shot("04_after_use")
+
+                # 3c. the hold persists across a *separate* RPC (it is not a
+                #     one-shot): a fresh get_state still sees the held button.
+                held_state = await client.get_state()
+                record("05c_state_while_held", held_state)
+                assert "primary" in held_state.held_buttons, (
+                    "the primary hold must persist until unuse, across RPCs"
+                )
+
+                # 3d. unuse: releasing the button clears the hold.
+                unuse_state = await client.unuse(button="primary")
+                record("05d_unuse_primary", unuse_state)
+                assert "primary" not in unuse_state.held_buttons, (
+                    "unuse(primary) should clear the held button"
+                )
+
+                # 3e. equip / dequip are no-ops on the non-tool Mirror: they
+                #     must reach the real InteractionHandler without throwing
+                #     and leave nothing equipped (a Mirror has no ITool).
+                equip_state = await client.equip()
+                record("05e_equip_noop", equip_state)
+                assert isinstance(equip_state.is_tool_equipped, bool)
+                assert not equip_state.is_tool_equipped, (
+                    "equipping a non-tool grab must be a no-op"
+                )
+                dequip_state = await client.dequip()
+                record("05f_dequip_noop", dequip_state)
+                assert not dequip_state.is_tool_equipped
+
                 # 4. release: the Mirror is dropped and the hand reports empty.
                 release_state = await client.release()
                 record("06_release", release_state)
@@ -255,6 +309,10 @@ class TestGrabber:
             """
             try:
                 async with GrabberClient() as client:
+                    # Drop any held buttons first so a failed run cannot leave
+                    # the primary/secondary button stuck down on the engine.
+                    await client.unuse(button="primary")
+                    await client.unuse(button="secondary")
                     await client.release()
             except Exception as e:  # noqa: BLE001 - teardown must not mask the test
                 print(f"best-effort grabber release failed (ignored): {e!r}")

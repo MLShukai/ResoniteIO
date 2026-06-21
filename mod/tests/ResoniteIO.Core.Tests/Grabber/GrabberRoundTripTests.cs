@@ -319,4 +319,245 @@ public sealed class GrabberRoundTripTests
         );
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
     }
+
+    // ----- Use / Unuse: button hold (hand + button round-trip) -----
+
+    [Theory]
+    [InlineData(GrabberButton.Unspecified, GrabberButtonSelector.Primary)]
+    [InlineData(GrabberButton.Primary, GrabberButtonSelector.Primary)]
+    [InlineData(GrabberButton.Secondary, GrabberButtonSelector.Secondary)]
+    public async Task Use_forwards_hand_and_button(
+        GrabberButton protoButton,
+        GrabberButtonSelector expected
+    )
+    {
+        // 仕様: proto button (UNSPECIFIED(0)/PRIMARY(1) → Primary、SECONDARY(2) → Secondary)
+        // が Core selector へ map されて Bridge に届く。hand も併せて運ぶ。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Left, Button = protoButton }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("Use", call.Method);
+        Assert.Equal(GrabberHandSelector.Left, call.Hand);
+        Assert.Equal(expected, call.Button);
+    }
+
+    [Fact]
+    public async Task Use_then_Unuse_round_trips_held_buttons()
+    {
+        // 仕様: Use した button が held_buttons に現れ、Unuse で消える (hold セマンティクスの
+        // 観測可能な状態変化を実 wire で検証)。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var afterUse = await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Left, Button = GrabberButton.Secondary }
+        );
+        Assert.Contains(GrabberButton.Secondary, afterUse.HeldButtons);
+        Assert.True(afterUse.UnixNanos > 0);
+
+        var afterUnuse = await client.UnuseAsync(
+            new GrabberUnuseRequest { Hand = GrabberHand.Left, Button = GrabberButton.Secondary }
+        );
+        Assert.DoesNotContain(GrabberButton.Secondary, afterUnuse.HeldButtons);
+
+        Assert.Equal(2, bridge.Calls.Count);
+        Assert.Equal("Use", bridge.Calls[0].Method);
+        Assert.Equal("Unuse", bridge.Calls[1].Method);
+        Assert.Equal(GrabberButtonSelector.Secondary, bridge.Calls[1].Button);
+    }
+
+    [Fact]
+    public async Task Use_round_trips_both_primary_and_secondary_held_buttons()
+    {
+        // 仕様: 同じ手で primary と secondary を両方 Use すると、held_buttons に両方が
+        // 現れる。これは (a) ToProtoButton の **Primary 経路** が wire に乗ること
+        // (Secondary だけだと Primary の else 分岐が未検証になる) と、(b) held_buttons の
+        // multi-element round-trip (object_names の 3 要素テストと対) を同時に pin する。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Right, Button = GrabberButton.Primary }
+        );
+        var state = await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Right, Button = GrabberButton.Secondary }
+        );
+
+        // HeldButtons は順不同 (Fake は HashSet) なので Contains + Count で検証する。
+        Assert.Contains(GrabberButton.Primary, state.HeldButtons);
+        Assert.Contains(GrabberButton.Secondary, state.HeldButtons);
+        Assert.Equal(2, state.HeldButtons.Count);
+    }
+
+    [Fact]
+    public async Task Use_held_buttons_do_not_leak_across_hands()
+    {
+        // 仕様: held_buttons は手ごとに分離される。Left で Use したボタンは Right の
+        // 状態には出ない (Bridge の HeldButtonsFor / Service の per-hand 取り扱いを pin)。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Left, Button = GrabberButton.Secondary }
+        );
+
+        var right = await client.GetStateAsync(
+            new GrabberGetStateRequest { Hand = GrabberHand.Right }
+        );
+        Assert.Empty(right.HeldButtons);
+        Assert.False(right.IsToolEquipped);
+
+        // 対照: Left 側にはちゃんと出ている (「全部空」で素通りしていないことの確認)。
+        var left = await client.GetStateAsync(
+            new GrabberGetStateRequest { Hand = GrabberHand.Left }
+        );
+        Assert.Contains(GrabberButton.Secondary, left.HeldButtons);
+    }
+
+    [Fact]
+    public async Task Equipped_tool_does_not_leak_across_hands()
+    {
+        // 仕様: 装備状態も手ごとに分離される。Left に tool を装備しても Right は未装備のまま。
+        var bridge = new FakeGrabberBridge();
+        bridge.SeedEquipped(GrabberHandSelector.Left, "Pen");
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var right = await client.GetStateAsync(
+            new GrabberGetStateRequest { Hand = GrabberHand.Right }
+        );
+        Assert.False(right.IsToolEquipped);
+        Assert.Equal(string.Empty, right.EquippedToolName);
+
+        var left = await client.GetStateAsync(
+            new GrabberGetStateRequest { Hand = GrabberHand.Left }
+        );
+        Assert.True(left.IsToolEquipped);
+        Assert.Equal("Pen", left.EquippedToolName);
+    }
+
+    // ----- Equip / Dequip: tool 装備状態の round-trip -----
+
+    [Fact]
+    public async Task Equip_returns_tool_equipped_state()
+    {
+        // 仕様: Equip で grab 中の tool を装備し、is_tool_equipped=true / equipped_tool_name が round-trip。
+        var bridge = new FakeGrabberBridge { EquippedToolName = "Pen" };
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var state = await client.EquipAsync(new GrabberEquipRequest { Hand = GrabberHand.Right });
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("Equip", call.Method);
+        Assert.Equal(GrabberHandSelector.Right, call.Hand);
+
+        Assert.True(state.IsToolEquipped);
+        Assert.Equal("Pen", state.EquippedToolName);
+        Assert.Equal(GrabberHand.Right, state.Hand);
+        Assert.True(state.UnixNanos > 0);
+    }
+
+    [Fact]
+    public async Task Dequip_returns_not_equipped_state()
+    {
+        // 仕様: 装備中 tool を Dequip すると is_tool_equipped=false / equipped_tool_name 空 に戻る。
+        var bridge = new FakeGrabberBridge();
+        bridge.SeedEquipped(GrabberHandSelector.Left, "Pen");
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var state = await client.DequipAsync(new GrabberDequipRequest { Hand = GrabberHand.Left });
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("Dequip", call.Method);
+        Assert.Equal(GrabberHandSelector.Left, call.Hand);
+
+        Assert.False(state.IsToolEquipped);
+        Assert.Equal(string.Empty, state.EquippedToolName);
+    }
+
+    // ----- 未注入 / 例外翻訳 (新 RPC も既存と同じ契約) -----
+
+    [Theory]
+    [InlineData("use")]
+    [InlineData("unuse")]
+    [InlineData("equip")]
+    [InlineData("dequip")]
+    public async Task PostGrab_rpcs_without_bridge_return_Unavailable(string rpc)
+    {
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: null);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+        {
+            switch (rpc)
+            {
+                case "use":
+                    await client.UseAsync(new GrabberUseRequest());
+                    break;
+                case "unuse":
+                    await client.UnuseAsync(new GrabberUnuseRequest());
+                    break;
+                case "equip":
+                    await client.EquipAsync(new GrabberEquipRequest());
+                    break;
+                default:
+                    await client.DequipAsync(new GrabberDequipRequest());
+                    break;
+            }
+        });
+        Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Use_translates_GrabberNotReadyException_to_FailedPrecondition()
+    {
+        var bridge = new FakeGrabberBridge
+        {
+            ThrowOnNextCall = new GrabberNotReadyException("handler not ready"),
+        };
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.UseAsync(new GrabberUseRequest())
+        );
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Equip_translates_GrabberNotReadyException_to_FailedPrecondition()
+    {
+        var bridge = new FakeGrabberBridge
+        {
+            ThrowOnNextCall = new GrabberNotReadyException("local user not ready"),
+        };
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+            await client.EquipAsync(new GrabberEquipRequest())
+        );
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
 }

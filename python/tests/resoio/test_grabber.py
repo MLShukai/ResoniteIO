@@ -21,12 +21,17 @@ from grpclib.exceptions import GRPCError as ClientGRPCError
 
 from resoio._generated.resonite_io.v1 import (
     GrabberBase,
+    GrabberButton,
+    GrabberDequipRequest,
+    GrabberEquipRequest,
     GrabberGetStateRequest,
     GrabberGrabRequest,
     GrabberGrabResult as PbGrabberGrabResult,
     GrabberGrabState as PbGrabberGrabState,
     GrabberHand,
     GrabberReleaseRequest,
+    GrabberUnuseRequest,
+    GrabberUseRequest,
 )
 from resoio.grabber import GrabberClient, GrabResult, GrabState
 
@@ -56,6 +61,10 @@ class _EchoGrabber(GrabberBase):
         self.grab_requests: list[GrabberGrabRequest] = []
         self.release_requests: list[GrabberReleaseRequest] = []
         self.get_state_requests: list[GrabberGetStateRequest] = []
+        self.use_requests: list[GrabberUseRequest] = []
+        self.unuse_requests: list[GrabberUnuseRequest] = []
+        self.equip_requests: list[GrabberEquipRequest] = []
+        self.dequip_requests: list[GrabberDequipRequest] = []
 
     async def grab(self, message: GrabberGrabRequest) -> PbGrabberGrabResult:
         self.grab_requests.append(message)
@@ -85,6 +94,50 @@ class _EchoGrabber(GrabberBase):
             is_holding=True,
             object_names=["Cube", "Sphere", "Cone"],
             unix_nanos=9012,
+        )
+
+    async def use(self, message: GrabberUseRequest) -> PbGrabberGrabState:
+        self.use_requests.append(message)
+        # Echo the pressed button as currently held, so a test can verify the
+        # button enum reached the server and the held_buttons decode path.
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=True,
+            object_names=["Cube"],
+            unix_nanos=2468,
+            held_buttons=[message.button],
+        )
+
+    async def unuse(self, message: GrabberUnuseRequest) -> PbGrabberGrabState:
+        self.unuse_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=True,
+            object_names=["Cube"],
+            unix_nanos=1357,
+            held_buttons=[],
+        )
+
+    async def equip(self, message: GrabberEquipRequest) -> PbGrabberGrabState:
+        self.equip_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=False,
+            object_names=[],
+            unix_nanos=3690,
+            is_tool_equipped=True,
+            equipped_tool_name="Pen",
+        )
+
+    async def dequip(self, message: GrabberDequipRequest) -> PbGrabberGrabState:
+        self.dequip_requests.append(message)
+        return PbGrabberGrabState(
+            hand=message.hand,
+            is_holding=False,
+            object_names=[],
+            unix_nanos=4812,
+            is_tool_equipped=False,
+            equipped_tool_name="",
         )
 
 
@@ -131,6 +184,10 @@ class TestGrabberClient:
         assert result.state.is_holding is True
         assert result.state.object_names == ("Cube",)
         assert result.state.unix_nanos == 1234
+        # Appended fields decode to their proto3 defaults when unset by server.
+        assert result.state.is_tool_equipped is False
+        assert result.state.equipped_tool_name == ""
+        assert result.state.held_buttons == ()
 
     async def test_grab_sends_radius_verbatim_including_zero_default(
         self, uds_server: UdsServer
@@ -269,6 +326,92 @@ class TestGrabberClient:
         assert exc_info.value.status is Status.FAILED_PRECONDITION
         assert "desktop" in (exc_info.value.message or "")
 
+    # --- use / unuse / click (button hold) ---------------------------------
+
+    async def test_use_sends_hand_and_default_primary_button(
+        self, uds_server: UdsServer
+    ):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.use(hand="left")
+
+        assert len(fake.use_requests) == 1
+        wire = fake.use_requests[0]
+        assert wire.hand == GrabberHand.LEFT
+        # No button arg -> default primary (left-click).
+        assert wire.button == GrabberButton.PRIMARY
+        # The pressed button surfaces as held; PRIMARY decodes to "primary".
+        assert state.held_buttons == ("primary",)
+
+    async def test_use_sends_secondary_button(self, uds_server: UdsServer):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.use(hand="right", button="secondary")
+
+        assert fake.use_requests[0].button == GrabberButton.SECONDARY
+        assert state.held_buttons == ("secondary",)
+
+    async def test_unuse_sends_button_and_returns_released_state(
+        self, uds_server: UdsServer
+    ):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.unuse(button="secondary")
+
+        assert len(fake.unuse_requests) == 1
+        assert fake.unuse_requests[0].button == GrabberButton.SECONDARY
+        # unuse must not issue a use RPC.
+        assert fake.use_requests == []
+        assert state.held_buttons == ()
+
+    async def test_click_sends_use_then_unuse_with_same_hand_and_button(
+        self, uds_server: UdsServer
+    ):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.click(hand="left", button="secondary")
+
+        # click = press (use) then release (unuse), same hand + button.
+        assert len(fake.use_requests) == 1
+        assert len(fake.unuse_requests) == 1
+        assert fake.use_requests[0].hand == GrabberHand.LEFT
+        assert fake.use_requests[0].button == GrabberButton.SECONDARY
+        assert fake.unuse_requests[0].hand == GrabberHand.LEFT
+        assert fake.unuse_requests[0].button == GrabberButton.SECONDARY
+        # Returned state is the one after unuse (button released).
+        assert state.held_buttons == ()
+        assert state.unix_nanos == 1357
+
+    # --- equip / dequip (tool lifecycle) -----------------------------------
+
+    async def test_equip_returns_tool_equipped_state(self, uds_server: UdsServer):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.equip(hand="right")
+
+        assert len(fake.equip_requests) == 1
+        assert fake.equip_requests[0].hand == GrabberHand.RIGHT
+        assert state.is_tool_equipped is True
+        assert state.equipped_tool_name == "Pen"
+
+    async def test_dequip_returns_not_equipped_state(self, uds_server: UdsServer):
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            state = await client.dequip(hand="left")
+
+        assert len(fake.dequip_requests) == 1
+        assert fake.dequip_requests[0].hand == GrabberHand.LEFT
+        # dequip must not issue an equip RPC.
+        assert fake.equip_requests == []
+        assert state.is_tool_equipped is False
+        assert state.equipped_tool_name == ""
+
     async def test_grab_raises_when_not_connected(self):
         client = GrabberClient()
         with pytest.raises(RuntimeError, match="not connected"):
@@ -283,3 +426,23 @@ class TestGrabberClient:
         client = GrabberClient()
         with pytest.raises(RuntimeError, match="not connected"):
             await client.get_state()
+
+    async def test_use_raises_when_not_connected(self):
+        client = GrabberClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.use()
+
+    async def test_unuse_raises_when_not_connected(self):
+        client = GrabberClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.unuse()
+
+    async def test_equip_raises_when_not_connected(self):
+        client = GrabberClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.equip()
+
+    async def test_dequip_raises_when_not_connected(self):
+        client = GrabberClient()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await client.dequip()
