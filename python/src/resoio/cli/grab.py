@@ -1,4 +1,4 @@
-"""``resoio grab`` subcommand: grab / release objects in Resonite.
+"""``resoio grab`` subcommand: grab objects and operate them in Resonite.
 
 A single parser with an optional positional ``action`` (default
 ``grab``), so flags resolve naturally whether placed before or after
@@ -9,15 +9,24 @@ the action:
   only)
 * ``resoio grab release`` — release everything the hand holds
 * ``resoio grab state`` — print the hand's current hold state
+* ``resoio grab use`` — press ``--button`` and hold it down (left-click
+  aligns a grabbed object / activates an equipped tool)
+* ``resoio grab unuse`` — release the held ``--button``
+* ``resoio grab click`` — press and release ``--button`` once
+* ``resoio grab equip`` / ``resoio grab dequip`` — equip a grabbed tool
+  into the hand / remove the equipped tool
 * ``resoio grab interactive`` — a key-driven loop (``g`` grab /
-  ``r`` release / ``s`` state / ``q`` quit)
+  ``r`` release / ``s`` state / ``u`` use / ``i`` unuse / ``c`` click /
+  ``e`` equip / ``d`` dequip / ``q`` quit; upper-case ``U``/``I``/``C``
+  use the secondary button)
 
 ``--hand {primary,left,right}`` selects the target hand (default
-``primary``); ``--radius`` only affects the grab action. The shared
-``-s/--socket`` flag comes from the common parent parser. All flags
-work both before and after the action (e.g. ``resoio grab --hand left
-release`` and ``resoio grab release --hand left``). After every action
-the resulting state is printed.
+``primary``); ``--radius`` only affects grab; ``--button
+{primary,secondary}`` selects the button for use/unuse/click (default
+``primary``). The shared ``-s/--socket`` flag comes from the common
+parent parser. All flags work both before and after the action (e.g.
+``resoio grab --hand left use`` and ``resoio grab use --hand left``).
+After every action the resulting state is printed.
 """
 
 from __future__ import annotations
@@ -51,19 +60,31 @@ def register(
     parser = subparsers.add_parser(
         "grab",
         parents=[common],
-        help="Grab / release objects (grab/release/state/interactive).",
+        help="Grab and operate objects (grab/use/equip/...).",
         description=(
             "Drive the Resonite IO Grabber service from the shell. "
             "Without an action the grab action runs, taking a --radius "
-            "around the cursor ray hit point (desktop mode only). The "
-            "resulting hold state is printed after every action."
+            "around the cursor ray hit point (desktop mode only). use / "
+            "unuse press and release --button (left/right click) with "
+            "hold semantics; equip / dequip handle tools. The resulting "
+            "hold state is printed after every action."
         ),
     )
     parser.add_argument(
         "action",
         nargs="?",
         default="grab",
-        choices=["grab", "release", "state", "interactive"],
+        choices=[
+            "grab",
+            "release",
+            "state",
+            "use",
+            "unuse",
+            "click",
+            "equip",
+            "dequip",
+            "interactive",
+        ],
         help="The grab action to perform (default: grab).",
     )
     parser.add_argument(
@@ -78,15 +99,24 @@ def register(
         default=0.0,
         help="Grab sphere radius in metres (<= 0 uses the server default).",
     )
+    parser.add_argument(
+        "--button",
+        choices=["primary", "secondary"],
+        default="primary",
+        help="Button for use/unuse/click (default: primary = left-click).",
+    )
     output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
 
 def _format_state(state: GrabState) -> str:
     names = ", ".join(state.object_names)
+    held = ", ".join(state.held_buttons)
     return (
         f"hand={state.hand} is_holding={state.is_holding} "
-        f"objects=[{names}] unix_nanos={state.unix_nanos}"
+        f"objects=[{names}] equipped={state.is_tool_equipped} "
+        f"tool={state.equipped_tool_name} held=[{held}] "
+        f"unix_nanos={state.unix_nanos}"
     )
 
 
@@ -124,16 +154,21 @@ def _print_interactive_help(stream: TextIO) -> None:
         "  g : grab at cursor ray hit point\n"
         "  r : release\n"
         "  s : print current state\n"
+        "  u : use (hold primary) / U : use secondary\n"
+        "  i : unuse primary / I : unuse secondary\n"
+        "  c : click primary / C : click secondary\n"
+        "  e : equip grabbed tool / d : dequip\n"
         "  q : quit",
         file=stream,
     )
 
 
 async def _run_interactive(args: argparse.Namespace) -> int:
-    """Key-driven grab/release loop over the Grabber UDS."""
-    from resoio.grabber import GrabberClient, GrabberHandArg
+    """Key-driven grab / use / equip loop over the Grabber UDS."""
+    from resoio.grabber import GrabberButtonArg, GrabberClient, GrabberHandArg
 
     hand: GrabberHandArg = args.hand
+    button: GrabberButtonArg
 
     _print_interactive_help(sys.stderr)
 
@@ -161,6 +196,24 @@ async def _run_interactive(args: argparse.Namespace) -> int:
                         print(_format_state(state))
                     elif key == "s":
                         state = await client.get_state(hand=hand)
+                        print(_format_state(state))
+                    elif key in ("u", "U"):
+                        button = "secondary" if key == "U" else "primary"
+                        state = await client.use(hand=hand, button=button)
+                        print(_format_state(state))
+                    elif key in ("i", "I"):
+                        button = "secondary" if key == "I" else "primary"
+                        state = await client.unuse(hand=hand, button=button)
+                        print(_format_state(state))
+                    elif key in ("c", "C"):
+                        button = "secondary" if key == "C" else "primary"
+                        state = await client.click(hand=hand, button=button)
+                        print(_format_state(state))
+                    elif key == "e":
+                        state = await client.equip(hand=hand)
+                        print(_format_state(state))
+                    elif key == "d":
+                        state = await client.dequip(hand=hand)
                         print(_format_state(state))
                     elif key == "q":
                         stop = True
@@ -200,6 +253,9 @@ async def _run(args: argparse.Namespace) -> int:
                         "hand": result.state.hand,
                         "is_holding": result.state.is_holding,
                         "object_names": list(result.state.object_names),
+                        "is_tool_equipped": result.state.is_tool_equipped,
+                        "equipped_tool_name": result.state.equipped_tool_name,
+                        "held_buttons": list(result.state.held_buttons),
                         "unix_nanos": result.state.unix_nanos,
                     },
                     args.format,
@@ -210,8 +266,18 @@ async def _run(args: argparse.Namespace) -> int:
             return 0
         if action == "release":
             state = await client.release(hand=args.hand)
-        else:
+        elif action == "state":
             state = await client.get_state(hand=args.hand)
+        elif action == "use":
+            state = await client.use(hand=args.hand, button=args.button)
+        elif action == "unuse":
+            state = await client.unuse(hand=args.hand, button=args.button)
+        elif action == "click":
+            state = await client.click(hand=args.hand, button=args.button)
+        elif action == "equip":
+            state = await client.equip(hand=args.hand)
+        else:
+            state = await client.dequip(hand=args.hand)
 
     if output.is_structured(args.format):
         output.emit(state, args.format)
