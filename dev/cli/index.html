@@ -837,6 +837,8 @@
       
         
       
+        
+      
     
     
     
@@ -1358,6 +1360,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1575,26 +1605,36 @@
 <td>Set / center / get / release the desktop cursor. <code>set</code> and <code>center</code> hold the position until <code>release</code>.</td>
 </tr>
 <tr>
+<td><code>resoio launch</code></td>
+<td>— (umu-launcher)</td>
+<td>local process</td>
+<td>Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. <code>-e/--exe</code> / <code>RESONITE_EXE</code> and <code>-p/--profile</code> / <code>MOD_PATH</code> select the install + mod profile; <code>--vanilla</code> skips the mod. Non-gRPC.</td>
+</tr>
+<tr>
+<td><code>resoio terminate</code></td>
+<td>— (signals)</td>
+<td>local process</td>
+<td>Force-stop Resonite by killing the engine + renderer (<code>SIGTERM</code> → <code>SIGKILL</code>). Takes <code>[resonite_pid] [renderer_pid]</code> (from <code>launch</code>) or auto-detects the single running instance. Non-gRPC.</td>
+</tr>
+<tr>
 <td><code>resoio shutdown</code></td>
 <td>Lifecycle</td>
 <td>unary</td>
 <td>Ask the engine to quit gracefully (<code>Lifecycle.Shutdown</code>); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from <code>Info</code>).</td>
 </tr>
-<tr>
-<td><code>resoio terminate</code></td>
-<td>Lifecycle</td>
-<td>unary</td>
-<td><strong>Deprecated</strong> alias of <code>shutdown</code> (no longer maintained, removed in a future release). Behaves identically but prints a deprecation notice on stderr.</td>
-</tr>
 </tbody>
 </table>
 <p><code>record</code> is the Resonite → Python capture command (it pulls Camera and Speaker), while <code>mic</code>
 is its independent Python → Resonite counterpart.</p>
-<p><code>shutdown</code> is a pure gRPC call (no OS signals), so it works from anywhere the UDS is
-reachable. A graceful shutdown is enough to stop the whole client — there is no SIGTERM/SIGKILL
-fallback, because the engine's own PID is not discoverable by name (<code>pgrep -f Resonite.exe</code>
-matches the Steam/Proton launch wrappers, which must not be signalled). <code>terminate</code> is the
-deprecated former name of this command; prefer <code>shutdown</code>.</p>
+<p><code>launch</code> / <code>terminate</code> are <strong>local process control</strong> (no gRPC). <code>launch</code> spawns the
+umu-launcher chain and waits until the <strong>engine</strong> (<code>resonite_pid</code>) and <strong>renderer</strong>
+(<code>renderer_pid</code>) host processes appear, printing both; it refuses to start a second instance.
+<code>terminate</code> signals those two PIDs (<code>SIGTERM</code> → <code>SIGKILL</code>); given no PIDs it auto-detects the
+single running instance (and errors if it finds more than one). Because they work from the host
+process table they run before the UDS exists and regardless of whether the client is reachable.
+<code>shutdown</code>, by contrast, is a pure gRPC call (<code>Lifecycle.Shutdown</code>) that asks a <strong>running</strong>
+engine to quit gracefully — use it when the client is up and reachable, and <code>terminate</code> when
+you need a guaranteed stop (or already hold the PIDs from <code>launch</code>).</p>
 <h2 id="auth"><code>auth</code><a class="headerlink" href="#auth" title="Permanent link">&para;</a></h2>
 <p><code>resoio auth</code> signs the engine in and out of the Resonite cloud account (Python → Resonite),
 mirroring how a <code>gh auth login</code>-style flow works. It has three nested leaves:</p>
@@ -1652,7 +1692,9 @@ the result document.</p>
 <p><code>--format</code> is <strong>not</strong> on every command. Commands that return a single value print it raw on one
 line instead of as JSON:</p>
 <ul>
-<li><code>shutdown</code> / <code>terminate</code> print the engine host PID.</li>
+<li><code>shutdown</code> prints the engine host PID; <code>terminate</code> prints the PIDs it killed (or <code>resonite
+  not running</code>). (<code>launch</code> <em>does</em> take <code>--format</code>, returning a <code>resonite_pid</code> / <code>renderer_pid</code>
+  pair.)</li>
 <li><code>wait</code> prints the <strong>resolved socket path</strong> that became ready.</li>
 <li><code>screenshot</code> / <code>record</code> / <code>world thumbnail</code> print the <strong>saved absolute path</strong> when writing a file
   (and <code>-o -</code> streams raw bytes to stdout with no path line).</li>
@@ -1700,8 +1742,15 @@ accept <code>--format</code> (<code>grab interactive --format json</code> exits 
 <a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
 <a id="__codelineno-2-39" name="__codelineno-2-39" href="#__codelineno-2-39"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
 <a id="__codelineno-2-40" name="__codelineno-2-40" href="#__codelineno-2-40"></a>
-<a id="__codelineno-2-41" name="__codelineno-2-41" href="#__codelineno-2-41"></a><span class="c1"># Ask the engine to quit gracefully (prints the engine host PID)</span>
-<a id="__codelineno-2-42" name="__codelineno-2-42" href="#__codelineno-2-42"></a>resoio<span class="w"> </span>shutdown
+<a id="__codelineno-2-41" name="__codelineno-2-41" href="#__codelineno-2-41"></a><span class="c1"># Start Resonite (engine + renderer) and capture both PIDs</span>
+<a id="__codelineno-2-42" name="__codelineno-2-42" href="#__codelineno-2-42"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--format<span class="w"> </span>json<span class="w">     </span><span class="c1"># {&quot;resonite_pid&quot;: ..., &quot;renderer_pid&quot;: ...}</span>
+<a id="__codelineno-2-43" name="__codelineno-2-43" href="#__codelineno-2-43"></a>
+<a id="__codelineno-2-44" name="__codelineno-2-44" href="#__codelineno-2-44"></a><span class="c1"># Stop it — by the PIDs from launch, or auto-detect the running instance</span>
+<a id="__codelineno-2-45" name="__codelineno-2-45" href="#__codelineno-2-45"></a>resoio<span class="w"> </span>terminate<span class="w"> </span><span class="m">12345</span><span class="w"> </span><span class="m">12399</span>
+<a id="__codelineno-2-46" name="__codelineno-2-46" href="#__codelineno-2-46"></a>resoio<span class="w"> </span>terminate
+<a id="__codelineno-2-47" name="__codelineno-2-47" href="#__codelineno-2-47"></a>
+<a id="__codelineno-2-48" name="__codelineno-2-48" href="#__codelineno-2-48"></a><span class="c1"># ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)</span>
+<a id="__codelineno-2-49" name="__codelineno-2-49" href="#__codelineno-2-49"></a>resoio<span class="w"> </span>shutdown
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>
