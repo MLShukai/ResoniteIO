@@ -35,6 +35,19 @@
     -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
 
+    <!--
+      MSB3277 (System.Memory version 競合) を message に格下げして抑制する。
+      Resonite 側 DLL (Renderite.Shared / Enums.NET / Cloudtoid) と InterprocessLib.Unity は
+      .NET 9 ビルドのため System.Memory 9.0.0.0 を要求するが、本 net472 plugin は RendererShared
+      が引く NuGet System.Memory 4.6.3 (net462 assembly 4.0.5.0) を polyfill として持つ。両者は
+      build-time で統一できず MSB3277 を出すが、9.0.0.0 の System.Memory は net472 には配布されず
+      version を一致させて消すことは原理的に不可能。実行時は Renderer プロセス (Wine + Unity Mono)
+      同梱の System.Memory が使われるため無害 (E1 実機検証済み、
+      feedback_camera_v2_constraints.md §10/§11)。MSB3277 は MSBuild タスク警告 (MSBxxxx) なので
+      TreatWarningsAsErrors / NoWarn (CSxxxx 向け) では抑制できず、MSBuildWarningsAsMessages で扱う。
+    -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+
     <!-- Resonite Renderer 側 Managed DLL dir 解決
          (engine 側 ResoniteIO.csproj の $(GamePath) と同じ考え方)。 -->
     <RendererManagedDir Condition="'$(ResonitePath)' != ''"

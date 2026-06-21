@@ -146,6 +146,15 @@ GitHub Release body. The format follows
   auto-detects the single running instance). Use `resoio shutdown` /
   `resoio.shutdown` for the cooperative gRPC quit. The old gRPC
   `resoio.terminate(socket_path=...)` signature is removed
+- **`resoio shutdown` / `resoio.shutdown` documented as best-effort**: the
+  graceful `Lifecycle.Shutdown` ACK only confirms the quit was *requested*, not
+  that the engine exited. On Linux (including the dev container) FrooxEngine
+  frequently hangs during teardown and the engine never exits on its own
+  (issue #49), so the docs and example now spell out the cooperative pattern —
+  `shutdown` to ask nicely, then `terminate` for a guaranteed stop. Behaviour is
+  unchanged; the live e2e now drives that real flow (graceful request, then
+  forced terminate) instead of asserting a graceful exit that does not happen
+  in-container
 - **`resoio record` default output is now a file (breaking)**: with no `-o`,
   `record` saves `record_<timestamp>.mp4` (`.wav` for `--audio`) to the current
   directory instead of streaming to stdout. Pass `-o -` for the previous stdout

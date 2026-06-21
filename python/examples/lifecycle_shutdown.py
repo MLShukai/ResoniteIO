@@ -6,7 +6,10 @@ engine ACKs immediately and exits asynchronously, so the call returns promptly
 and does not wait for the process to die. Assumes a Resonite client with the
 ResoniteIO mod loaded is running on the host.
 
-For a one-call stop that also reports the engine's host PID, use
+Graceful shutdown is best-effort: the ACK only confirms the quit was requested,
+and on Linux the engine may hang during teardown without exiting. For a
+guaranteed stop, follow up with :func:`resoio.terminate` (a forceful kill by
+PID). For a one-call stop that also reports the engine's host PID, use
 :func:`resoio.shutdown` (it reads the PID from ``Info`` then sends this RPC).
 
 Run from inside the dev container:

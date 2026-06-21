@@ -4,11 +4,17 @@ A single unary RPC: ``shutdown`` asks the running engine to quit gracefully
 (FrooxEngine ``Engine.RequestShutdown``), the same path the in-app Quit button
 takes. The engine schedules the shutdown on its update thread and ACKs
 immediately, then exits asynchronously — the RPC does not wait for the process
-to die. Steam/Proton reaps the renderer and launch wrappers when the engine
-exits, so a graceful shutdown is sufficient to stop the whole client; no OS
-signals are sent. The :func:`shutdown` convenience wraps this with PID
-reporting. For a forceful stop (kill the engine + renderer by PID), see
-:func:`resoio.terminate` / ``resoio terminate``.
+to die, and no OS signals are sent. When the engine does exit, Steam/Proton
+reaps the renderer and launch wrappers.
+
+**Graceful shutdown is best-effort, not guaranteed.** On Linux (including the
+dev container) FrooxEngine frequently hangs during teardown and the engine never
+exits on its own — the ACK only confirms the quit was *requested*. Callers that
+must ensure the process is actually gone should treat ``shutdown`` as a
+cooperative first step and follow up with a forceful stop
+(:func:`resoio.terminate` / ``resoio terminate``, which kills the engine +
+renderer by host PID). The :func:`shutdown` convenience wraps the RPC with PID
+reporting.
 """
 
 from __future__ import annotations
@@ -76,13 +82,20 @@ class LifecycleClient(_BaseClient[LifecycleStub]):
 
 
 async def shutdown(*, socket_path: str | None = None) -> int | None:
-    """Stop the running Resonite client gracefully and return the engine's PID.
+    """Ask the running Resonite client to quit gracefully; return the engine
+    PID.
 
     Reads the engine's host PID from the ``Info`` RPC (for reporting), then
     sends ``Lifecycle.Shutdown``. The engine schedules its own shutdown and
-    exits asynchronously; Steam/Proton reaps the renderer and launch wrappers,
-    so no OS signals are needed. Because this is a pure gRPC call it works from
-    anywhere the UDS is reachable (no host-native requirement).
+    exits asynchronously; no OS signals are sent. Because this is a pure gRPC
+    call it works from anywhere the UDS is reachable (no host-native
+    requirement).
+
+    This is **cooperative and best-effort**: it returns once the engine ACKs the
+    request, not once the process has died, and on Linux the engine may hang
+    during teardown without ever exiting (see the module docstring). Callers that
+    need a guaranteed stop should follow up with :func:`resoio.terminate` (a
+    forceful kill by PID) when the engine outlives the graceful request.
 
     Args:
         socket_path: Explicit UDS path for the ``Info`` / ``Lifecycle`` RPCs;

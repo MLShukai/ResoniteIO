@@ -1,7 +1,7 @@
-"""E2E: graceful shutdown against a live Resonite + Info host-PID cross-check.
+"""E2E: graceful shutdown + forced terminate against a live Resonite.
 
-Validates the Lifecycle/shutdown feature against a real Resonite started in the
-dev container via ``resoio.launch``:
+Validates the real stop flow against a Resonite started in the dev container via
+``resoio.launch``:
 
 1. ``Info.GetServerInfo`` reports the engine's host PID (`resonite_pid`) and the
    renderer's (`renderer_pid`). We cross-check `renderer_pid` against the
@@ -11,11 +11,15 @@ dev container via ``resoio.launch``:
    only — it does NOT appear in ``pgrep -f Resonite.exe`` because that name
    matches the Steam/Proton launch wrappers, not the native engine process.
 2. ``shutdown()`` reads the engine PID from Info and sends ``Lifecycle.Shutdown``;
-   the engine quits itself and Steam/Proton reaps the renderer + wrappers. We poll
-   the host until the whole Resonite process group is gone.
+   the engine ACKs and is *asked* to quit. Graceful shutdown is best-effort: on
+   Linux / in the dev container FrooxEngine frequently hangs during teardown and
+   the engine never exits on its own (issue #49). So we give it a bounded grace
+   window (a graceful exit is allowed but not required), then force the kill with
+   :func:`resoio.terminate`. Either way the engine PID must be gone at the end.
 
-``shutdown`` is a pure gRPC call (no OS signals), so this drives the real public
-function from inside the container against the host Resonite.
+This exercises the real operational pattern — ``resoio shutdown`` to ask the
+engine nicely, ``resoio terminate`` to guarantee the process is gone — driving
+both public functions from inside the container against the host Resonite.
 """
 
 from __future__ import annotations
@@ -26,16 +30,23 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import psutil
+
 from resoio.info import get_server_info
+from resoio.launcher import terminate
 from resoio.lifecycle import shutdown
 from tests.helpers import mark_e2e, save_camera_shot
 
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
-# Shutdown needs time to run FrooxEngine's shutdown tasks and let Steam reap the
-# whole process group.
-_SHUTDOWN_TIMEOUT_S = 90.0
-_SHUTDOWN_POLL_S = 1.0
+# Best-effort window for the engine to quit on its own after a graceful
+# Lifecycle.Shutdown. On Linux it usually hangs and never exits, so this is
+# intentionally short — we fall back to a forced terminate when it elapses.
+_GRACE_TIMEOUT_S = 30.0
+# After SIGTERM → SIGKILL the engine should disappear quickly; this is the final
+# settle window for the kernel to reap it.
+_FORCE_TIMEOUT_S = 15.0
+_POLL_S = 1.0
 
 
 def _pgrep(pattern: str) -> list[int]:
@@ -66,25 +77,33 @@ def _pgrep(pattern: str) -> list[int]:
     return pids
 
 
-def _host_status() -> tuple[list[int], list[int], bool]:
-    """Return ``(resonite_pids, renderite_pids, running)`` via ``pgrep``.
+def _engine_alive(pid: int) -> bool:
+    """Return whether ``pid`` is a live, non-zombie process.
 
-    These are the container's *actual* Linux PIDs. ``resonite_pids`` are the
-    Steam/Proton launch wrappers (their command line contains ``Resonite.exe``),
-    not the native engine process — used here only to confirm the process group
-    is gone after shutdown. ``renderite_pids`` is the real renderer,
-    cross-checked against the Info ``renderer_pid``. ``running`` is True while
-    either process group is present.
+    This is the direct ``kill -0``-style liveness check the issue uses to decide
+    whether the engine actually exited (a zombie that has died but not yet been
+    reaped is treated as gone).
     """
-    resonite = _pgrep("Resonite.exe")
-    renderite = _pgrep("Renderite.Renderer.exe")
-    running = bool(resonite or renderite)
-    return resonite, renderite, running
+    try:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+
+
+def _wait_until_dead(pid: int, timeout: float) -> bool:
+    """Poll until ``pid`` is gone; return True if it died within
+    ``timeout``."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _engine_alive(pid):
+            return True
+        time.sleep(_POLL_S)
+    return not _engine_alive(pid)
 
 
 class TestLifecycle:
     @mark_e2e
-    def test_shutdown_exits_engine_and_info_reports_host_pids(
+    def test_shutdown_acks_then_terminate_stops_engine(
         self, resonite_session: Path
     ) -> None:
         del resonite_session  # fixture only manages the Resonite lifecycle
@@ -102,12 +121,10 @@ class TestLifecycle:
             assert info.resonite_pid > 0
             assert info.renderer_pid > 0
 
-            host_resonite, host_renderite, running = _host_status()
-            print(
-                f"host: resonite_wrappers={host_resonite} "
-                f"renderite={host_renderite} running={running}"
-            )
-            assert running is True
+            host_resonite = _pgrep("Resonite.exe")
+            host_renderite = _pgrep("Renderite.Renderer.exe")
+            print(f"host: resonite_wrappers={host_resonite} renderite={host_renderite}")
+            assert _engine_alive(info.resonite_pid), "engine not running pre-shutdown"
             # Strong cross-check: the engine-reported renderer PID is the real
             # host renderer PID, proving Info carries real host kernel PIDs.
             assert info.renderer_pid in host_renderite, (
@@ -129,17 +146,27 @@ class TestLifecycle:
             print(f"shutdown returned pid={pid}")
             assert pid == info.resonite_pid
 
-            # The window vanishes on shutdown, so we confirm exit by the host
-            # process group disappearing (not by a post-shutdown screenshot).
-            deadline = time.monotonic() + _SHUTDOWN_TIMEOUT_S
-            while time.monotonic() < deadline:
-                _, _, still_running = _host_status()
-                if not still_running:
-                    print("engine exited after shutdown")
-                    return
-                time.sleep(_SHUTDOWN_POLL_S)
-            raise AssertionError(
-                f"engine did not exit within {_SHUTDOWN_TIMEOUT_S:.0f}s of shutdown"
+            # Graceful shutdown only *asks* the engine to quit. On Linux / in the
+            # container it frequently hangs and never exits on its own (issue
+            # #49), so give it a bounded grace window (graceful exit allowed but
+            # not required), then force the kill with terminate(). This is the
+            # real operational flow: shutdown to ask nicely, terminate to ensure.
+            if _wait_until_dead(info.resonite_pid, _GRACE_TIMEOUT_S):
+                print("engine exited gracefully after shutdown")
+            else:
+                print(
+                    f"engine still alive {_GRACE_TIMEOUT_S:.0f}s after shutdown "
+                    "(graceful quit hung — known Linux behavior); forcing terminate"
+                )
+                killed = terminate(info.resonite_pid, info.renderer_pid)
+                print(
+                    f"terminate killed resonite_pid={killed.resonite_pid} "
+                    f"renderer_pid={killed.renderer_pid}"
+                )
+
+            # Whichever path ran, the engine process must be gone now.
+            assert _wait_until_dead(info.resonite_pid, _FORCE_TIMEOUT_S), (
+                f"engine pid {info.resonite_pid} still alive after shutdown + terminate"
             )
 
         asyncio.run(scenario())
