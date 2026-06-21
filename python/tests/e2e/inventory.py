@@ -47,7 +47,7 @@ account state. Spawned objects land in the world (the local user's space),
 which is expected and not cleaned by inventory ops.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live, signed-in Resonite started by ``just resonite-launch`` from the ``./gale``
+live, signed-in Resonite started by ``resoio.launch`` from the ``./gale``
 profile; the ``require_mod_deployed`` autouse fixture skips when the mod is not
 deployed there.
 """

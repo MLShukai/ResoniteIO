@@ -12,7 +12,7 @@ it was found.
 The settings/respawn run against the local home world where the local
 user is the host, so the host-gated writes (ApplySettings / Respawn) are
 permitted. Like every file under ``tests/e2e/`` this runs in the dev
-container against a live Resonite started by ``just resonite-launch`` from
+container against a live Resonite started by ``resoio.launch`` from
 the ``./gale`` profile; the ``require_mod_deployed`` autouse fixture skips
 when the mod is not deployed there.
 """

@@ -10,7 +10,7 @@ menu's appearance / highlight / disappearance. The hard contract is the
 state snapshot; the captures are not asserted on.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
+live Resonite started by ``resoio.launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """

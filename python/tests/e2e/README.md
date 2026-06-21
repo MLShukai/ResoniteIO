@@ -15,10 +15,10 @@ Run everything from inside the dev container.
    just deploy-mod
    ```
 
-   `just resonite-launch` boots Resonite from the `./gale` Gale profile, so
-   the `ResoniteIO` mod (BepInEx + plugin) must be present there. The
-   `require_mod_deployed` autouse fixture skips with a clear message when
-   `./gale/BepInEx` is absent.
+   The `resonite_session` fixture boots Resonite from the `./gale` Gale
+   profile via `resoio.launch` (the launcher Python API), so the `ResoniteIO`
+   mod (BepInEx + plugin) must be present there. The `require_mod_deployed`
+   autouse fixture skips with a clear message when `./gale/BepInEx` is absent.
 
 2. **Resonite installed** and the in-container launch prerequisites met
    (host graphical session + PipeWire/PulseAudio, AppArmor userns relaxation,
@@ -38,18 +38,19 @@ The recipe forwards to `pytest -m e2e` with `--override-ini='python_files=*.py'`
 so files in `tests/e2e/` do not need the `test_` prefix. Each scenario lives
 in its own `<name>.py` to keep the run target self-describing.
 
-`connection.py` orchestrates:
+The `resonite_session` fixture (`conftest.py`) owns the lifecycle and
+`connection.py` exercises it:
 
-- `just resonite-launch` (boots Resonite in the container via
-  `resoio launch` (`python/src/resoio/launcher.py`): umu-run + hookfxr loads
-  the mod from `./gale`).
-- Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
-  (up to 120 s).
-- Waits 30 s after the UDS appears so the focused home world can finish
+- `resoio.launch` (`python/src/resoio/launcher.py`): boots Resonite in the
+  container via umu-run + hookfxr loading the mod from `./gale`, and blocks
+  until the engine + renderer host PIDs appear (up to 120 s).
+- `wait_for_ready` polls `Connection.Ping` on `~/.resonite-io/resonite-*.sock`
+  until the mod binds the UDS and answers.
+- Waits 30 s after readiness so the focused home world can finish
   loading before a scenario starts.
 - Calls `Connection.Ping("e2e-smoke")` once via `ConnectionClient`.
-- `just resonite-stop` in `finally:` so Resonite is stopped even on
-  failure.
+- `resoio.terminate` of the launched PIDs in `finally:` so Resonite is
+  stopped even on failure.
 
 If the mod is not deployed to `./gale`, the test will skip with a clear
 message.

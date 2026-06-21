@@ -31,7 +31,7 @@ Env vars for the destructive path:
 * ``RESONITE_IO_E2E_TOTP`` -- optional 2FA code for TOTP-enabled accounts.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-launch`` from the ``./gale`` profile;
+live Resonite started by ``resoio.launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """

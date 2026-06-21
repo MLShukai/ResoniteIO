@@ -20,7 +20,7 @@ When the account has no contacts (a fresh / empty cloud) the list/get steps
 account-state precondition the test cannot create without a write.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live, signed-in Resonite started by ``just resonite-launch`` from the ``./gale``
+live, signed-in Resonite started by ``resoio.launch`` from the ``./gale``
 profile; the ``require_mod_deployed`` autouse fixture skips when the mod is not
 deployed there.
 """
