@@ -82,6 +82,9 @@ __all__ = (
     "GetUserRoleOverridesRequest",
     "GetUserRoleOverridesResponse",
     "GrabberBase",
+    "GrabberButton",
+    "GrabberDequipRequest",
+    "GrabberEquipRequest",
     "GrabberGetStateRequest",
     "GrabberGrabRequest",
     "GrabberGrabResult",
@@ -89,6 +92,8 @@ __all__ = (
     "GrabberHand",
     "GrabberReleaseRequest",
     "GrabberStub",
+    "GrabberUnuseRequest",
+    "GrabberUseRequest",
     "InfoBase",
     "InfoStub",
     "InventoryBase",
@@ -336,6 +341,43 @@ class ContextMenuHand(betterproto2.Enum):
             "CONTEXT_MENU_HAND_PRIMARY": 1,
             "CONTEXT_MENU_HAND_LEFT": 2,
             "CONTEXT_MENU_HAND_RIGHT": 3,
+        }
+
+
+class GrabberButton(betterproto2.Enum):
+    """
+    Use / Unuse する仮想ボタン (デスクトップの左 / 右クリック相当)。
+    """
+
+    UNSPECIFIED = 0
+    """
+    未指定。サーバは PRIMARY (左クリック相当) として扱う。
+    """
+
+    PRIMARY = 1
+    """
+    左クリック相当。grab 中なら整列、装備 tool 中なら機能発現 (Pen 描画等)。
+    """
+
+    SECONDARY = 2
+    """
+    右クリック相当 (secondary interaction)。
+    """
+
+    @classmethod
+    def betterproto_value_to_renamed_proto_names(cls) -> dict[int, str]:
+        return {
+            0: "GRABBER_BUTTON_UNSPECIFIED",
+            1: "GRABBER_BUTTON_PRIMARY",
+            2: "GRABBER_BUTTON_SECONDARY",
+        }
+
+    @classmethod
+    def betterproto_renamed_proto_names_to_value(cls) -> dict[str, int]:
+        return {
+            "GRABBER_BUTTON_UNSPECIFIED": 0,
+            "GRABBER_BUTTON_PRIMARY": 1,
+            "GRABBER_BUTTON_SECONDARY": 2,
         }
 
 
@@ -1720,6 +1762,38 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False)
+class GrabberDequipRequest(betterproto2.Message):
+    """
+    装備中の tool を外す。未装備なら no-op。
+    """
+
+    hand: "GrabberHand" = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberHand(0)
+    )
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GrabberDequipRequest", GrabberDequipRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class GrabberEquipRequest(betterproto2.Message):
+    """
+    grab 中の grabbable から ITool を探して装備する。tool が無ければ no-op。
+    """
+
+    hand: "GrabberHand" = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberHand(0)
+    )
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GrabberEquipRequest", GrabberEquipRequest
+)
+
+
+@dataclass(eq=False, repr=False)
 class GrabberGetStateRequest(betterproto2.Message):
     hand: "GrabberHand" = betterproto2.field(
         1, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberHand(0)
@@ -1808,6 +1882,23 @@ class GrabberGrabState(betterproto2.Message):
     サーバ完了時刻 (UTC ナノ秒)。
     """
 
+    is_tool_equipped: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    tool を装備しているか (`InteractionHandler.ActiveTool != null`)。
+    """
+
+    equipped_tool_name: "str" = betterproto2.field(6, betterproto2.TYPE_STRING)
+    """
+    装備中 tool の slot 名 (best-effort、未装備時は空)。
+    """
+
+    held_buttons: "list[GrabberButton]" = betterproto2.field(
+        7, betterproto2.TYPE_ENUM, repeated=True
+    )
+    """
+    現在 hold 中 (Use 済み Unuse 前) のボタン。順不同。
+    """
+
 
 default_message_pool.register_message(
     "resonite_io.v1", "GrabberGrabState", GrabberGrabState
@@ -1823,6 +1914,52 @@ class GrabberReleaseRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "resonite_io.v1", "GrabberReleaseRequest", GrabberReleaseRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class GrabberUnuseRequest(betterproto2.Message):
+    """
+    Use で押下中のボタンを離す (hold 終了)。押下していなければ no-op。
+    """
+
+    hand: "GrabberHand" = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberHand(0)
+    )
+
+    button: "GrabberButton" = betterproto2.field(
+        2, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberButton(0)
+    )
+    """
+    離すボタン。UNSPECIFIED は PRIMARY 扱い。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GrabberUnuseRequest", GrabberUnuseRequest
+)
+
+
+@dataclass(eq=False, repr=False)
+class GrabberUseRequest(betterproto2.Message):
+    """
+    item を左 / 右クリック相当で押下する (hold 開始)。Unuse まで hold が継続する。
+    """
+
+    hand: "GrabberHand" = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberHand(0)
+    )
+
+    button: "GrabberButton" = betterproto2.field(
+        2, betterproto2.TYPE_ENUM, default_factory=lambda: GrabberButton(0)
+    )
+    """
+    押下するボタン。UNSPECIFIED は PRIMARY 扱い。
+    """
+
+
+default_message_pool.register_message(
+    "resonite_io.v1", "GrabberUseRequest", GrabberUseRequest
 )
 
 
@@ -4058,6 +4195,92 @@ class GrabberStub(betterproto2_grpclib.ServiceStub):
             metadata=metadata,
         )
 
+    async def use(
+        self,
+        message: "GrabberUseRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "GrabberGrabState":
+        """
+        指定した手の item を指定ボタンで押下する (hold 開始)。grab 中なら整列、装備
+        tool 中なら機能発現。Unuse まで hold が継続する (Pen 描画等)。cursor ray は
+        使わないため desktop / VR を問わない (handler 未準備のみ FAILED_PRECONDITION)。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Grabber/Use",
+            message,
+            GrabberGrabState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def unuse(
+        self,
+        message: "GrabberUnuseRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "GrabberGrabState":
+        """
+        Use で押下中のボタンを離す (hold 終了)。押下していなければ no-op。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Grabber/Unuse",
+            message,
+            GrabberGrabState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def equip(
+        self,
+        message: "GrabberEquipRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "GrabberGrabState":
+        """
+        grab 中の grabbable から ITool を探して装備する。tool が無ければ no-op。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Grabber/Equip",
+            message,
+            GrabberGrabState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def dequip(
+        self,
+        message: "GrabberDequipRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "GrabberGrabState":
+        """
+        装備中の tool を外す。未装備なら no-op。
+        """
+
+        return await self._unary_unary(
+            "/resonite_io.v1.Grabber/Dequip",
+            message,
+            GrabberGrabState,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
 
 class InfoStub(betterproto2_grpclib.ServiceStub):
     """
@@ -5495,6 +5718,36 @@ class GrabberBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def use(self, message: "GrabberUseRequest") -> "GrabberGrabState":
+        """
+        指定した手の item を指定ボタンで押下する (hold 開始)。grab 中なら整列、装備
+        tool 中なら機能発現。Unuse まで hold が継続する (Pen 描画等)。cursor ray は
+        使わないため desktop / VR を問わない (handler 未準備のみ FAILED_PRECONDITION)。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def unuse(self, message: "GrabberUnuseRequest") -> "GrabberGrabState":
+        """
+        Use で押下中のボタンを離す (hold 終了)。押下していなければ no-op。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def equip(self, message: "GrabberEquipRequest") -> "GrabberGrabState":
+        """
+        grab 中の grabbable から ITool を探して装備する。tool が無ければ no-op。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def dequip(self, message: "GrabberDequipRequest") -> "GrabberGrabState":
+        """
+        装備中の tool を外す。未装備なら no-op。
+        """
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def __rpc_grab(
         self, stream: "grpclib.server.Stream[GrabberGrabRequest, GrabberGrabResult]"
     ) -> None:
@@ -5519,6 +5772,38 @@ class GrabberBase(betterproto2_grpclib.ServiceBase):
         response = await self.get_state(request)
         await stream.send_message(response)
 
+    async def __rpc_use(
+        self, stream: "grpclib.server.Stream[GrabberUseRequest, GrabberGrabState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.use(request)
+        await stream.send_message(response)
+
+    async def __rpc_unuse(
+        self, stream: "grpclib.server.Stream[GrabberUnuseRequest, GrabberGrabState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.unuse(request)
+        await stream.send_message(response)
+
+    async def __rpc_equip(
+        self, stream: "grpclib.server.Stream[GrabberEquipRequest, GrabberGrabState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.equip(request)
+        await stream.send_message(response)
+
+    async def __rpc_dequip(
+        self, stream: "grpclib.server.Stream[GrabberDequipRequest, GrabberGrabState]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.dequip(request)
+        await stream.send_message(response)
+
     def __mapping__(self) -> "dict[str, grpclib.const.Handler]":
         return {
             "/resonite_io.v1.Grabber/Grab": grpclib.const.Handler(
@@ -5537,6 +5822,30 @@ class GrabberBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_get_state,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 GrabberGetStateRequest,
+                GrabberGrabState,
+            ),
+            "/resonite_io.v1.Grabber/Use": grpclib.const.Handler(
+                self.__rpc_use,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GrabberUseRequest,
+                GrabberGrabState,
+            ),
+            "/resonite_io.v1.Grabber/Unuse": grpclib.const.Handler(
+                self.__rpc_unuse,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GrabberUnuseRequest,
+                GrabberGrabState,
+            ),
+            "/resonite_io.v1.Grabber/Equip": grpclib.const.Handler(
+                self.__rpc_equip,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GrabberEquipRequest,
+                GrabberGrabState,
+            ),
+            "/resonite_io.v1.Grabber/Dequip": grpclib.const.Handler(
+                self.__rpc_dequip,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GrabberDequipRequest,
                 GrabberGrabState,
             ),
         }

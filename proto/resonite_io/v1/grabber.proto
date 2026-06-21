@@ -1,17 +1,21 @@
 // Grabber service: Resonite 内のオブジェクトを engine 経由で **掴む / 離す**
-// (Grab / Release) modality。AI エージェントから「指定した手で近接 grab する」
-// 「離す」「現在の保持状態を取得する」を行う。
-//
-// scope: Step 6 は **Grab / Release のみ**。Hand pose (手の姿勢) 制御は engine 的に
-// クリーンな注入経路が無いため (TrackedDevicePositioner が毎 input update で hand
-// slot を上書きし、Locomotion のような ExternalInput フックを持たない) スコープ外。
+// (Grab / Release)、および **掴んだ後の操作** (Use / Unuse / Equip / Dequip) を行う
+// modality。AI エージェントから「指定した手で近接 grab する」「離す」「現在の保持状態を
+// 取得する」「掴んだ/装備した item を左右クリックで操作する」「item を装備/解除する」を行う。
 //
 // 操作モデル: 各手 (`InteractionHandler`) は `Grabber` を 1 つ持ち、Grab は
 // デスクトップカーソルレイの hit 点を中心とした proximity grab。VR モードは
 // FAILED_PRECONDITION。掴んだオブジェクトは Grabber の HolderSlot
 // に reparent され **以後は手に自動追従** する。よって Grab / Release は離散の
-// **edge-triggered な one-shot 操作**であり、ContextMenu と同じく unary RPC で表現する
-// (Locomotion のような client-streaming repeater は不要)。
+// **edge-triggered な one-shot 操作**であり、ContextMenu と同じく unary RPC で表現する。
+//
+// Use / Unuse は engine の入力アクション (`InteractionHandlerInputs.Interact` /
+// `.Secondary` の `ExternalInput`) を tick ごとに注入し続ける hold セマンティクス:
+// Use で button down (engine が `OnPrimaryPress`/整列/装備 tool の機能発現を発火し、
+// 以後 `OnPrimaryHold` を毎フレーム dispatch)、Unuse で button up (`OnPrimaryRelease`)。
+// Pen のように「押下保持したままカーソルを動かして描画する」ツールはこの hold で表現する。
+// 単発クリック (整列など) は Use → Unuse を順に呼ぶ (client 側の便宜ラッパで提供)。
+// Equip / Dequip は `InteractionHandler.Equip(ITool, bool)` / `Dequip(bool)` を呼ぶ。
 //
 // engine への dispatch は同期マーシャル (`RunSynchronously` + `TaskCompletionSource`)
 // で行い、各 RPC は操作適用後の `GrabberGrabState` を engine thread 上で読み取って返す。
@@ -29,6 +33,16 @@ enum GrabberHand {
   GRABBER_HAND_PRIMARY = 1;
   GRABBER_HAND_LEFT = 2;
   GRABBER_HAND_RIGHT = 3;
+}
+
+// Use / Unuse する仮想ボタン (デスクトップの左 / 右クリック相当)。
+enum GrabberButton {
+  // 未指定。サーバは PRIMARY (左クリック相当) として扱う。
+  GRABBER_BUTTON_UNSPECIFIED = 0;
+  // 左クリック相当。grab 中なら整列、装備 tool 中なら機能発現 (Pen 描画等)。
+  GRABBER_BUTTON_PRIMARY = 1;
+  // 右クリック相当 (secondary interaction)。
+  GRABBER_BUTTON_SECONDARY = 2;
 }
 
 // Grab は常に **現在のデスクトップカーソルレイ** (engine 内カーソル位置から計算する
@@ -54,6 +68,30 @@ message GrabberGetStateRequest {
   GrabberHand hand = 1;
 }
 
+// item を左 / 右クリック相当で押下する (hold 開始)。Unuse まで hold が継続する。
+message GrabberUseRequest {
+  GrabberHand hand = 1;
+  // 押下するボタン。UNSPECIFIED は PRIMARY 扱い。
+  GrabberButton button = 2;
+}
+
+// Use で押下中のボタンを離す (hold 終了)。押下していなければ no-op。
+message GrabberUnuseRequest {
+  GrabberHand hand = 1;
+  // 離すボタン。UNSPECIFIED は PRIMARY 扱い。
+  GrabberButton button = 2;
+}
+
+// grab 中の grabbable から ITool を探して装備する。tool が無ければ no-op。
+message GrabberEquipRequest {
+  GrabberHand hand = 1;
+}
+
+// 装備中の tool を外す。未装備なら no-op。
+message GrabberDequipRequest {
+  GrabberHand hand = 1;
+}
+
 // 操作後の保持状態スナップショット。
 message GrabberGrabState {
   // 解決後の手 (UNSPECIFIED にはならない)。UNSPECIFIED/PRIMARY を渡したとき
@@ -65,6 +103,12 @@ message GrabberGrabState {
   repeated string object_names = 3;
   // サーバ完了時刻 (UTC ナノ秒)。
   int64 unix_nanos = 4;
+  // tool を装備しているか (`InteractionHandler.ActiveTool != null`)。
+  bool is_tool_equipped = 5;
+  // 装備中 tool の slot 名 (best-effort、未装備時は空)。
+  string equipped_tool_name = 6;
+  // 現在 hold 中 (Use 済み Unuse 前) のボタン。順不同。
+  repeated GrabberButton held_buttons = 7;
 }
 
 message GrabberGrabResult {
@@ -84,4 +128,14 @@ service Grabber {
   rpc Release(GrabberReleaseRequest) returns (GrabberGrabState);
   // 指定した手の現在の保持状態を取得する。
   rpc GetState(GrabberGetStateRequest) returns (GrabberGrabState);
+  // 指定した手の item を指定ボタンで押下する (hold 開始)。grab 中なら整列、装備
+  // tool 中なら機能発現。Unuse まで hold が継続する (Pen 描画等)。cursor ray は
+  // 使わないため desktop / VR を問わない (handler 未準備のみ FAILED_PRECONDITION)。
+  rpc Use(GrabberUseRequest) returns (GrabberGrabState);
+  // Use で押下中のボタンを離す (hold 終了)。押下していなければ no-op。
+  rpc Unuse(GrabberUnuseRequest) returns (GrabberGrabState);
+  // grab 中の grabbable から ITool を探して装備する。tool が無ければ no-op。
+  rpc Equip(GrabberEquipRequest) returns (GrabberGrabState);
+  // 装備中の tool を外す。未装備なら no-op。
+  rpc Dequip(GrabberDequipRequest) returns (GrabberGrabState);
 }
