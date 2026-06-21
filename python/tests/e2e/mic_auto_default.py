@@ -7,8 +7,8 @@ the BepInEx ``LogOutput.log`` for the auto-promote log line once the
 session is live.
 
 The symmetric Dispose-time revert (``cleared OverrideAudioInputIndex``)
-is NOT asserted here: ``just resonite-stop`` runs a SIGTERM→SIGKILL race
-in which BepInEx's file log writer is typically reaped before
+is NOT asserted here: ``terminate`` runs a SIGTERM→SIGKILL race in which
+BepInEx's file log writer is typically reaped before
 AppDomain.ProcessExit-driven dispose lines reach disk. The dispose path
 is exercised whenever Resonite shuts down cleanly (e.g. GrpcHost
 bind failure shows the dispose lines in ``LogOutput.log.prev``), and is
@@ -20,22 +20,25 @@ The "another user actually hears voice" check is also still manual.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
 import pytest
 
+from resoio.connection import wait_for_ready
 from tests.e2e.conftest import (
+    SOCKET_APPEAR_POLL_S,
     SOCKET_APPEAR_TIMEOUT_S,
     SOCKET_DIR,
+    _launch_session,
     _purge_stale_sockets,
-    _run_just,
-    _wait_for_socket,
+    _terminate_quietly,
 )
 from tests.helpers import mark_e2e
 
-# conftest's REPO_ROOT actually points at python/ (misleading name); for the
-# gale plugin log we need the real workspace root.
+# The real workspace root (this file lives at python/tests/e2e/), used to find
+# the gale plugin log.
 WORKSPACE_ROOT: Path = Path(__file__).resolve().parents[3]
 BEPINEX_LOG_PATH: Path = WORKSPACE_ROOT / "gale" / "BepInEx" / "LogOutput.log"
 
@@ -57,13 +60,20 @@ class TestMicrophoneAutoDefault:
         # we read below reflects only this test's session. BepInEx rotates
         # ``LogOutput.log`` → ``LogOutput.log.prev`` on each startup, so a
         # successful start guarantees the current file is just this run.
-        _run_just("resonite-stop", check=False, timeout=30.0)
+        _terminate_quietly()
         _purge_stale_sockets(SOCKET_DIR)
 
-        _run_just("resonite-start")
+        # launch (resoio.launch) blocks until the engine + renderer appear and
+        # returns both host PIDs so teardown can signal them precisely.
+        result = _launch_session()
         try:
-            socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
-            os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
+            socket_path = asyncio.run(
+                wait_for_ready(
+                    timeout=SOCKET_APPEAR_TIMEOUT_S,
+                    interval=SOCKET_APPEAR_POLL_S,
+                )
+            )
+            os.environ["RESONITE_IO_SOCKET"] = socket_path
 
             # The UDS socket appears only after GrpcHost.Start, which runs
             # after the Microphone Bridge ctor — so the auto-promote log must
@@ -79,5 +89,5 @@ class TestMicrophoneAutoDefault:
             )
         finally:
             os.environ.pop("RESONITE_IO_SOCKET", None)
-            _run_just("resonite-stop", check=False, timeout=30.0)
+            _terminate_quietly(result.resonite_pid, result.renderer_pid)
             _purge_stale_sockets(SOCKET_DIR)

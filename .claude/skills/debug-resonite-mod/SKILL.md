@@ -1,12 +1,12 @@
 ---
 name: debug-resonite-mod
-description: "Use when debugging resonite-io mod runtime — adding logs, decompiling Resonite DLLs, starting/stopping Resonite in the container, tailing BepInEx logs. Triggers: 'just log', 'just decompile', 'just resonite-start', 'just resonite-stop', 'Resonite を起動', 'Resonite を停止', 'BepInEx LogOutput', 'AssemblyLoadContext', 'mod の挙動を確認', 'TypeLoadException', 'Renderer の挙動'."
+description: "Use when debugging resonite-io mod runtime — adding logs, decompiling Resonite DLLs, starting/stopping Resonite in the container, tailing BepInEx logs. Triggers: 'just log', 'just decompile', 'just resonite-launch', 'just resonite-stop', 'Resonite を起動', 'Resonite を停止', 'BepInEx LogOutput', 'AssemblyLoadContext', 'mod の挙動を確認', 'TypeLoadException', 'Renderer の挙動'."
 version: 0.1.0
 ---
 
 # Debug Resonite-IO Mod
 
-mod は Resonite プロセスに in-process でロードされ、Resonite 自体は devcontainer 内で起動する (`just resonite-start`)。.NET debugger attach は未整備なので、基本戦略は **print-debug + ログ tailing**。
+mod は Resonite プロセスに in-process でロードされ、Resonite 自体は devcontainer 内で起動する (`just resonite-launch`)。.NET debugger attach は未整備なので、基本戦略は **print-debug + ログ tailing**。
 
 ______________________________________________________________________
 
@@ -32,16 +32,15 @@ Camera readback など Renderite 周辺の実装は **decompile を読みなが�
 
 ______________________________________________________________________
 
-## 3. container 内 Resonite control (start/stop/status)
+## 3. container 内 Resonite control (launch/stop)
 
-container 内で mod 込み Resonite を起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。`scripts/resonite-ctl.sh` を `just` レシピ越しに叩く。
+container 内で mod 込み Resonite を起動・停止する debug 経路。print-debug (`just log`) と並ぶ二本目の debug 経路。`resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`) を `just` レシピ越しに叩く。
 
-- `just resonite-start` で **mod 込み**を **background** 起動 (即 return)。Gale プロファイル `./gale` (= `/workspace/gale`) を hookfxr + doorstop で読む。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`) で、`resonite-run.sh` が `WINEDLLOVERRIDES="winhttp=n,b"` を自動 export するため Steam Launch Options の手動設定は不要 (host Steam 起動では手動設定が要る)
-- `just resonite-stop` で停止 (`Resonite.exe` / `Renderite.Renderer.exe` を `pkill` で SIGTERM → 3 秒待ち → SIGKILL の二段構え)
-- `just resonite-status` で実行状態を表示 (`pgrep -af` の出力)
-- mod を読まない素の起動が要るときは `just resonite-vanilla` (foreground、起動確認用、setup-resonite-env skill §5 参照)
+- `just resonite-launch` で **mod 込み**を起動 (= `resoio launch`)。`MOD_PATH` の Gale プロファイル `./gale` (= `/workspace/gale`) を hookfxr + doorstop で読む。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`) で、`resoio launch` が `WINEDLLOVERRIDES="winhttp=n,b"` を自動 export するため Steam Launch Options の手動設定は不要 (host Steam 起動では手動設定が要る)。engine (native の `dotnet` プロセス) と renderer (`Renderite.Renderer.exe`) の両プロセスが現れるまで待ってから両 host PID を返す。既に起動中なら error (single-instance)
+- `just resonite-stop` で停止 (= `resoio terminate`)。engine + renderer を psutil 経由で SIGTERM → 3 秒待ち → SIGKILL の段階 kill。engine の実体は `dotnet` プロセスで、`Resonite.exe` 名のプロセスは wine ブートストラップにすぎない
+- 起動状態の確認は `pgrep -af Renderite.Renderer.exe` (renderer プロセスの有無で判定)
+- mod を読まない素の起動が要るときは `just resonite-launch --vanilla` (起動確認用、setup-resonite-env skill §5 参照)
 - **ログ**: mod 本体は `gale/BepInEx/LogOutput.log` (`just log`)、umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log`
-- **kill 範囲**: 名前ベース `pkill` のみ。umu-run ラッパも cmdline に "Resonite.exe" を含むため一緒に落ちるが、container には守るべき Steam セッションが無いので launch chain ごとクリーンに片付く
 
 ______________________________________________________________________
 
@@ -53,7 +52,7 @@ ______________________________________________________________________
 
 ### Camera v2 / Renderer 側 plugin が load されない
 
-- `WINEDLLOVERRIDES="winhttp=n,b"` は **両経路で必要** (これが無いと hook 版 `winhttp.dll` doorstop が読まれず Renderer 側 BepInEx は起動しない、2026-06-19 実機検証)。container 内 `just resonite-start` 経路では `resonite-run.sh` が自動で export するため手動設定は不要。host Steam 経由起動の場合のみ Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` を手で設定する (Steam は env を sanitize するため)
+- `WINEDLLOVERRIDES="winhttp=n,b"` は **両経路で必要** (これが無いと hook 版 `winhttp.dll` doorstop が読まれず Renderer 側 BepInEx は起動しない、2026-06-19 実機検証)。container 内 `just resonite-launch` 経路では `resoio launch` が自動で export するため手動設定は不要。host Steam 経由起動の場合のみ Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%` を手で設定する (Steam は env を sanitize するため)
 - `gale/Renderer/BepInEx/LogOutput.log` を確認 (Renderer 側ログは engine 側と別ファイル)
 - InterprocessLib の callback signature は `Action<T[]?>` で、namespace は DLL 名と独立して `InterprocessLib`。static event は Dispose で必ず `-=`。詳細: [`feedback_interprocesslib_callback_signature.md`](../../memory/feedback_interprocesslib_callback_signature.md)
 
@@ -61,7 +60,7 @@ ______________________________________________________________________
 
 - `just check-gale` で必須 plugin 6 個 (+ BepInExRenderer framework) を確認
 - `gale/BepInEx/plugins/ResoniteIO/` に DLL + PDB が居るか
-- Vanilla 起動 (`just resonite-vanilla` / host Steam 直起動) になっていないか — mod 込みは `just resonite-start` で起動する
+- Vanilla 起動 (`just resonite-launch --vanilla` / host Steam 直起動) になっていないか — mod 込みは `just resonite-launch` で起動する
 - 詳細な setup 周りは `setup-resonite-env` skill 参照
 
 ### Camera readback / Renderite の挙動が不明

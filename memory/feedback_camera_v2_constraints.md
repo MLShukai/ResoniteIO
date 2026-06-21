@@ -88,7 +88,7 @@ hook 版 `winhttp.dll` プロキシで、Wine に system 同梱でなく hook �
 *挙動* を設定するだけで、`winhttp.dll` の *読み込み自体* はこの override
 が前提。経路で違うのは「誰が override を設定するか」だけ:
 
-- **container 内 `just resonite-start` 経路**: `scripts/resonite-run.sh` が
+- **container 内 `just resonite-launch` 経路**: `resoio launch` (`python/src/resoio/launcher.py`) が
   mod 起動時に `WINEDLLOVERRIDES="winhttp=n,b"` を自動で `export` するため
   **利用者の手動設定は不要**。umu-run は Steam と違い env を素通しするので
   env 経由で渡せる。
@@ -111,17 +111,17 @@ WINEDLLOVERRIDES="winhttp=n,b" %command%
 
 **Why:** Steam の sanitize policy は env を proton-fixed のものに上書き
 するため Launch Options だけが通る。umu-run にはこの sanitize が無いので
-`resonite-run.sh` が env を直接 export して渡せる。
+`resoio launch` が env を直接 export して渡せる。
 
 **How to apply:**
 
-- container 経路は `resonite-run.sh` が自動設定するので人間の操作は不要。
+- container 経路は `resoio launch` が自動設定するので人間の操作は不要。
   host Steam 経路は README / AGENTS.md / `just init` の手順表示で
   **Launch Options 必須** を人間に伝える (commit `cf05254` で実施済み)
 - Renderer 側 BepInEx ログ (`gale/Renderer/BepInEx/LogOutput.log`) が空 /
   生成されない症状を見たら 99% override の漏れを疑う (host Steam なら
-  Launch Options、container なら `resonite-run.sh` の export)
-- 切り分け手順は `just resonite-start` → `just log` (BepInEx LogOutput) で
+  Launch Options、container なら `resoio launch` の export)
+- 切り分け手順は `just resonite-launch` → `just log` (BepInEx LogOutput) で
   Renderer plugin ロード行を grep。表示されなければ override を確認
 
 ## 4. `IDisplayTextureSource.UnityTexture` は外部 desktop 取り込み用 (誤解しない)

@@ -41,7 +41,8 @@ from resoio.inventory import (
     InventorySpawnResult,
     InventoryThumbnail,
 )
-from resoio.lifecycle import LifecycleClient, shutdown, terminate
+from resoio.launcher import LauncherError, LaunchResult, launch, terminate
+from resoio.lifecycle import LifecycleClient, shutdown
 from resoio.locomotion import (
     DriveSummary,
     LocomotionClient,
@@ -117,6 +118,8 @@ __all__ = [
     "InventorySpawnResult",
     "InventoryThumbnail",
     "KickKind",
+    "LaunchResult",
+    "LauncherError",
     "LifecycleClient",
     "ListRecordsResponse",
     "ListSessionsResponse",
@@ -148,6 +151,7 @@ __all__ = [
     "WorldSession",
     "__version__",
     "get_server_info",
+    "launch",
     "shutdown",
     "terminate",
     "wait_for_ready",

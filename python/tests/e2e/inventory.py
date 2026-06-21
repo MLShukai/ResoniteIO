@@ -47,7 +47,7 @@ account state. Spawned objects land in the world (the local user's space),
 which is expected and not cleaned by inventory ops.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live, signed-in Resonite started by ``just resonite-start`` from the ``./gale``
+live, signed-in Resonite started by ``resoio.launch`` from the ``./gale``
 profile; the ``require_mod_deployed`` autouse fixture skips when the mod is not
 deployed there.
 """
@@ -85,7 +85,6 @@ _SPAWN_SOURCE_NAME = "DragonFruit"
 # user is signed in. Mirror context_menu.py's readiness poll.
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
-_HOME_LOAD_SETTLE_S = 20.0
 _SETTLE_S = 0.5
 
 # Every inventory RPC in the scenario must return within this budget. A
@@ -158,8 +157,6 @@ class TestInventory:
                     await asyncio.sleep(_READY_RETRY_INTERVAL_S)
 
         async def scenario() -> None:
-            root = await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
             root = await wait_for_ready()
             record(f"root has {len(root.entries)} entries")
 

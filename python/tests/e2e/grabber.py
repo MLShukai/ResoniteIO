@@ -35,7 +35,7 @@ positive grab, not pixel content (the object visually following the hand
 is left to manual inspection).
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``resoio.launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """
@@ -62,14 +62,6 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 # world and its per-hand Grabbers exist. Mirror context_menu.py's readiness poll.
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
-
-# The bridge becomes ready (FocusedWorld present) before the home world has
-# finished loading + presenting. Give the home world ~20 s to settle after the
-# first ready response so the desktop is fully rendered before spawning the
-# Mirror and driving the grab/release calls. Spawning too early after boot has
-# been observed (once) to place the item away from the expected spot in front
-# of the avatar, so this settle is also a flakiness guard for the spawn.
-_HOME_LOAD_SETTLE_S = 20.0
 
 # After the spawn RPC returns, the Mirror still tweens/settles into its place
 # in front of the avatar; wait before aiming at it (5 s verified on hardware).
@@ -172,11 +164,9 @@ class TestGrabber:
             return result
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, hands empty. Wait for the home world to
-            #    finish loading/presenting before spawning anything (a too-early
-            #    spawn has been observed to land away from the expected spot).
-            initial = await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
+            # 0. baseline: engine ready, hands empty. (conftest's shared 30 s
+            #    startup settle already covers home-world load before we spawn;
+            #    a too-early spawn has been observed to land off the expected spot.)
             initial = await wait_for_ready()
             record("00_initial", initial)
             await settle_shot("00_initial")

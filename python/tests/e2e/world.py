@@ -11,7 +11,7 @@ artifact. The hard contract is the returned snapshots; the captures are not
 asserted on.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live, **logged-in** Resonite started by ``just resonite-start`` from the
+live, **logged-in** Resonite started by ``resoio.launch`` from the
 ``./gale`` profile; the ``require_mod_deployed`` autouse fixture skips when the
 mod is not deployed there. The cloud-dependent steps (sessions / records)
 degrade to a clear skip when the account sees an empty cloud, but the
@@ -47,10 +47,6 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 # context_menu.py.
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
-
-# The bridge becomes ready before the home world has finished loading +
-# presenting. Give the home world time to settle before driving the scenario.
-_HOME_LOAD_SETTLE_S = 20.0
 
 # Joining / focusing / leaving a world triggers async world load + present.
 # Give the renderer a generous window to finish the transition before the next
@@ -168,9 +164,8 @@ class TestWorld:
             await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, home world loaded + presented.
-            await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
+            # 0. baseline: engine ready, home world loaded + presented (covered
+            #    by conftest's shared 30 s startup settle).
             await wait_for_ready()
 
             async with WorldClient() as world:

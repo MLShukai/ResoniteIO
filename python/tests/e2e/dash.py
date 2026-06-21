@@ -21,7 +21,7 @@ language-independence is structural: neither derives from the displayed
 ``label``.
 
 Like every file under ``tests/e2e/`` this runs in the dev container against a
-live Resonite started by ``just resonite-start`` from the ``./gale`` profile;
+live Resonite started by ``resoio.launch`` from the ``./gale`` profile;
 the ``require_mod_deployed`` autouse fixture skips when the mod is not deployed
 there.
 """
@@ -46,10 +46,6 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 # booting, the Dash bridge raises DashNotReadyException -> FAILED_PRECONDITION.
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
-
-# The bridge becomes ready before the home world has finished loading; give it
-# time to settle so the desktop is fully rendered before driving the dash.
-_HOME_LOAD_SETTLE_S = 20.0
 
 # Let the dash open/close lerp finish and the renderer present a frame before
 # grabbing the Camera frame, so the capture is not torn mid-animation.
@@ -144,9 +140,8 @@ class TestDash:
             await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, dash closed. Let the home world settle.
-            await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
+            # 0. baseline: engine ready, dash closed (home world already settled
+            #    by conftest's shared 30 s startup window).
             await wait_for_ready()
 
             async with DashClient() as dash:
@@ -350,9 +345,8 @@ class TestDash:
             return ordered[:3]
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, home world settled.
-            await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
+            # 0. baseline: engine ready, home world settled (by conftest's shared
+            #    30 s startup window).
             await wait_for_ready()
 
             async with DashClient() as dash:

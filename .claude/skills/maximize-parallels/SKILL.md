@@ -31,7 +31,7 @@ description: 独立な tool 呼び出しは 1 メッセージにまとめて並�
 - **`cd` を伴う `Bash`**: cwd は session 内で持続するので、並列に走らせると後続コマンドがどの cwd で動くか不定。代わりに各 Bash で絶対パスを使うか `cd dir && cmd` のように 1 Bash 内に閉じ込める（`CLAUDE.md` の Git Safety Protocol で `cd <current-directory> && git ...` も禁止されている点に注意）
 - **依存する出力**: `git rev-parse HEAD` の結果を次の `git show <sha>` に渡すような場合
 - **同じ branch / worktree への破壊的操作**: `git checkout` / `git reset` / `git stash` を並列に走らせない
-- **同じ pytest セッション / port を奪い合う e2e**: `python/tests/e2e/` のように外部リソース (Resonite プロセス、UDS path、特定 port) を専有するテストや、`just deploy-mod` / `just resonite-start` のような単一 Resonite 実機を奪い合う操作は並列不可
+- **同じ pytest セッション / port を奪い合う e2e**: `python/tests/e2e/` のように外部リソース (Resonite プロセス、UDS path、特定 port) を専有するテストや、`just deploy-mod` / `just resonite-launch` のような単一 Resonite 実機を奪い合う操作は並列不可
 
 ## 実践手順 (複数タスクに着手するとき)
 

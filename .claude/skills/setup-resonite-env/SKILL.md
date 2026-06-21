@@ -32,7 +32,7 @@ ______________________________________________________________________
 4. devcontainer が自動実行する:
    - `initializeCommand` (host 側・作成前、`.devcontainer/initialize.sh`): host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致させ、deploy 成果物が host 所有になる)。加えて container 内 Resonite 起動のために **AppArmor の非特権 user namespace 制限を hard fail チェック** (§6 参照)、`DISPLAY` / X auth cookie (FamilyWild 書換えで `.xauth`) / render・video GID / GPU ベンダを検出して `.env` に記録し、`compose.gpu.yml` symlink を貼る。本番 gRPC UDS dir は **host 側に作らない** — Resonite は container 内で起動し、mod (GrpcHost) が container 内 `~/.resonite-io/` を bind 前に自分で mkdir する
    - `postCreateCommand` (container 内・作成後): `scripts/container-init.sh` を実行 (deps 解決: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
-5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する。devcontainer 内で Resonite を起動する場合は `just resonite-vanilla` (mod なし) / `just resonite-start` (mod 込み) (§5)
+5. 以降はコンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` 等を従来どおり実行する。devcontainer 内で Resonite を起動する場合は `just resonite-launch --vanilla` (mod なし) / `just resonite-launch` (mod 込み) (§5)
 
 ______________________________________________________________________
 
@@ -73,7 +73,7 @@ ______________________________________________________________________
 
 Camera v2 の Renderer 側 BepInEx を起動させる doorstop は hook 版 `winhttp.dll` プロキシで、Wine に system 同梱でなく hook 版 `winhttp.dll` を読ませるには **どちらの起動経路でも `WINEDLLOVERRIDES="winhttp=n,b"` が必要** (2026-06-19 実機検証)。`--doorstop-*` の CLI 引数は doorstop の *挙動* を設定するだけで、`winhttp.dll` の *読み込み自体* はこの override が前提。経路で違うのは「誰が override を設定するか」だけ:
 
-- **container 内 `just resonite-start` 経路**: `scripts/resonite-run.sh` が mod 起動時に `WINEDLLOVERRIDES="winhttp=n,b"` を自動で `export` するため **利用者の手動設定は不要**。umu-run は Steam と違い env を素通しするので env 経由で渡せる
+- **container 内 `just resonite-launch` 経路**: `resoio launch` (`python/src/resoio/launcher.py`) が mod 起動時に `WINEDLLOVERRIDES="winhttp=n,b"` を自動で `export` するため **利用者の手動設定は不要**。umu-run は Steam と違い env を素通しするので env 経由で渡せる
 - **host Steam 経由起動の場合**: Steam で Resonite を選択 → Properties → Launch Options に以下を設定する:
 
 ```text
@@ -82,7 +82,7 @@ WINEDLLOVERRIDES="winhttp=n,b" %command%
 
 - **なぜ必須**: Wine は system 同梱 `winhttp.dll` を優先するため、RenderiteHook が deploy した hook 版 `winhttp.dll` (= doorstop) を読ませるには override が必要。これが無いと Renderer 側 BepInEx は永遠に起動せず、Camera v2 の renderer-side plugin が load されない
 - **debug が困難**: 真の原因が override 漏れであることは `/proc/<pid>/environ` で確認できないと見抜けない (Wine プロセスの env を host から見るのが面倒)
-- **host Steam では Launch Options が唯一の経路**: env で `WINEDLLOVERRIDES` を渡しても Steam が sanitize するため通らない。umu-run は素通しなので container では `resonite-run.sh` が env で渡せる、という違い
+- **host Steam では Launch Options が唯一の経路**: env で `WINEDLLOVERRIDES` を渡しても Steam が sanitize するため通らない。umu-run は素通しなので container では `resoio launch` が env で渡せる、という違い
 
 ______________________________________________________________________
 
@@ -95,16 +95,18 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5. devcontainer 内で Resonite を起動 (`just resonite-vanilla` / `just resonite-start`)
+## 5. devcontainer 内で Resonite を起動 (`just resonite-launch`)
 
-devcontainer 内で Resonite を直接起動できる。`scripts/resonite-run.sh` が ro bind の `/resonite` を書込可能な `/opt/resonite` に rsync してから `umu-run` (umu-launcher/Proton) で `Resonite.exe -SkipIntroTutorial` を起動する。初回は GE-Proton の DL と install コピー (~2GB) で時間がかかり、2 回目以降は差分のみ転送する。
+devcontainer 内で Resonite を直接起動できる。ro bind の `/resonite` から書込可能な `/opt/resonite` への rsync は `.devcontainer/entrypoint.sh` が container 起動時に行う (初回は install コピー、2 回目以降は差分のみ)。`resoio launch` (`python/src/resoio/launcher.py`) が `umu-run` (umu-launcher/Proton) で `RESONITE_EXE` (= `/opt/resonite/Resonite.exe`) を起動する。初回は GE-Proton の DL でも時間がかかる。
 
-2 つの起動経路がある:
+起動・停止は以下:
 
-- **`just resonite-vanilla`**: mod を読まない素の Resonite を **foreground** 起動 (起動確認・切り分け用)
-- **`just resonite-start` / `resonite-stop` / `resonite-status`** (`scripts/resonite-ctl.sh`): Gale プロファイル (`./gale` = `/workspace/gale`) から **mod 込み**で **background** 起動する lifecycle。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`)。`resonite-run.sh` が `WINEDLLOVERRIDES="winhttp=n,b"` を自動 export するため Steam Launch Options の手動設定は不要 (§3)。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。停止は SIGTERM → 3s → SIGKILL の二段構え
+- **`just resonite-launch`** (= `resoio launch`): `MOD_PATH` の Gale プロファイル (`./gale` = `/workspace/gale`) から **mod 込み**で起動する。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`)。`resoio launch` が `WINEDLLOVERRIDES="winhttp=n,b"` を自動 export するため Steam Launch Options の手動設定は不要 (§3)。`./gale/BepInEx` が無ければ fail-fast (先に `just deploy-mod`)。engine (native の `dotnet` プロセス) と renderer (`Renderite.Renderer.exe`) の両プロセスが現れるまで待ってから両 host PID を返す。既に起動中なら error (single-instance)
+- **`just resonite-launch --vanilla`**: mod を読まない素の Resonite を起動 (起動確認・切り分け用)
+- **`just resonite-stop`** (= `resoio terminate`): engine + renderer を psutil 経由で SIGTERM → 3s → SIGKILL の段階 kill。engine の実体は `dotnet` プロセスで、`Resonite.exe` 名のプロセスは wine ブートストラップにすぎない
+- 起動状態の確認は `pgrep -af Renderite.Renderer.exe` (renderer プロセスの有無で判定)
 
-`just resonite-start` で起動した mod のログは `gale/BepInEx/LogOutput.log` (`just log` で tail)、umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log` に分離される。
+`just resonite-launch` で起動した mod のログは `gale/BepInEx/LogOutput.log` (`just log` で tail)、umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log` に分離される。
 
 ### 前提 (host 側)
 
@@ -144,4 +146,4 @@ ______________________________________________________________________
 
 ## 8. 実機 mod load 検証手順
 
-`just deploy-mod` → `just resonite-start` (container 内で mod 込み Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Claude が container 内で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。
+`just deploy-mod` → `just resonite-launch` (container 内で mod 込み Resonite を起動) → `just log` で `gale/BepInEx/LogOutput.log` を tail し、`Loading Plugin ResoniteIO` 行が出るのを確認 → `just resonite-stop` の流れ。Claude が container 内で完結できる。詳細な debug 経路は [/debug-resonite-mod skill](../debug-resonite-mod/SKILL.md) を参照。

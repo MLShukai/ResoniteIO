@@ -33,7 +33,7 @@
 ## 前提
 
 - ResoniteIO mod が Gale 経由起動の Resonite に正しくロードされる状態
-  (確認: `just resonite-start` 後に `just log` で `Loading Plugin ResoniteIO`
+  (確認: `just resonite-launch` 後に `just log` で `Loading Plugin ResoniteIO`
   が出る)
 - Gale プロファイルに必須 plugin install 済み (`just check-gale` 全 ✓)
 - Steam Launch Options に `WINEDLLOVERRIDES="winhttp=n,b" %command%`
@@ -49,7 +49,7 @@ container 内 shell から deploy + 起動:
 
 ```sh
 just deploy-mod                # build + plugin deploy
-just resonite-start            # host 経由で Gale → Resonite 起動
+just resonite-launch           # Gale プロファイル → mod 込み Resonite 起動
 ```
 
 home world ロード後、grabbable を spawn する (`resoio inventory` は

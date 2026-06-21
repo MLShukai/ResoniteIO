@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-e2e 検証は **Codex 自身が container 内の Resonite を起動して実行する** のが基本路線。`just resonite-start` / `resonite-stop` / `resonite-status` (= `scripts/resonite-ctl.sh`) で devcontainer 内の mod 込み Resonite を起動・停止・状態確認でき、screenshot は in-engine Camera (`resoio screenshot` = `CameraClient.shot()`、従来から存在) で Resonite 画面を取れるので、Codex が `python/tests/e2e/` 配下の harness を回しきって検証を完結させる。host-agent 経由の desktop 全体 pyscreenshot bridge は撤去したが、Resonite 画面の screenshot は in-engine Camera v2 で引き続き `resoio screenshot -o foo.png` で取得できる。
+e2e 検証は **Codex 自身が container 内の Resonite を起動して実行する** のが基本路線。`just resonite-launch` / `resonite-stop` (= `resoio launch` / `resoio terminate`、`python/src/resoio/launcher.py`) で devcontainer 内の mod 込み Resonite を起動・停止でき、起動状態は `pgrep -af Renderite.Renderer.exe` で確認できる。screenshot は in-engine Camera (`resoio screenshot` = `CameraClient.shot()`、従来から存在) で Resonite 画面を取れるので、Codex が `python/tests/e2e/` 配下の harness を回しきって検証を完結させる。host-agent 経由の desktop 全体 pyscreenshot bridge は撤去したが、Resonite 画面の screenshot は in-engine Camera v2 で引き続き `resoio screenshot -o foo.png` で取得できる。
 
 **Why:** 当初は「manual テストはユーザが Resonite UI を見て確認する手順書」として `mod/tests/manual/*.md` を各モダリティ実装時に量産していたが、ユーザは実際にはそれらを読んでも実行してもいない。書いた本人が読まない手順書は「verify した既成事実だけ残る最悪の状態」で、価値が逆にマイナス。ユーザ自身からも 2026-05-27 のセッションで「Codex が e2e で検証まで通すのが基本」「manual テストを実行すること自体を最小化していく」と明示的にフィードバックがあった。
 

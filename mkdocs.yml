@@ -113,6 +113,7 @@ nav:
       - Auth: api/auth.md
       - Cursor: api/cursor.md
       - Lifecycle: api/lifecycle.md
+      - Launcher: api/launcher.md
 
 extra:
   # Versioned docs via mike (deployed by .github/workflows/docs.yml). Renders a

@@ -31,6 +31,7 @@ from resoio.cli import (
     grab,
     info,
     inventory,
+    launch,
     mic,
     ping,
     record,
@@ -62,6 +63,7 @@ _COMMAND_MODULES: list[ModuleType] = [
     contact,
     inventory,
     auth,
+    launch,
     shutdown,
     terminate,
 ]
