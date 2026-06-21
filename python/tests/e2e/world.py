@@ -48,10 +48,6 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
 
-# The bridge becomes ready before the home world has finished loading +
-# presenting. Give the home world time to settle before driving the scenario.
-_HOME_LOAD_SETTLE_S = 20.0
-
 # Joining / focusing / leaving a world triggers async world load + present.
 # Give the renderer a generous window to finish the transition before the next
 # state read + Camera capture, so both the snapshot and the captured frame
@@ -168,9 +164,8 @@ class TestWorld:
             await save_camera_shot(out_dir / f"{step}.png")
 
         async def scenario() -> None:
-            # 0. baseline: engine ready, home world loaded + presented.
-            await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
+            # 0. baseline: engine ready, home world loaded + presented (covered
+            #    by conftest's shared 30 s startup settle).
             await wait_for_ready()
 
             async with WorldClient() as world:

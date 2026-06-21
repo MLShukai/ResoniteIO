@@ -50,7 +50,6 @@ ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
 _READY_TIMEOUT_S = 120.0
 _READY_RETRY_INTERVAL_S = 2.0
-_HOME_LOAD_SETTLE_S = 20.0
 _SETTLE_S = 0.4
 
 # Cursor positions are pixel-quantized, so the normalized position in a
@@ -95,8 +94,6 @@ class TestCursor:
                 print(f"best-effort release failed (ignored): {e!r}")
 
         async def scenario() -> None:
-            initial = await wait_for_ready()
-            await asyncio.sleep(_HOME_LOAD_SETTLE_S)
             initial = await wait_for_ready()
             assert initial.window_width > 0 and initial.window_height > 0, (
                 "window resolution should be known once the engine is ready"
