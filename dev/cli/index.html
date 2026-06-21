@@ -1620,7 +1620,7 @@
 <td><code>resoio shutdown</code></td>
 <td>Lifecycle</td>
 <td>unary</td>
-<td>Ask the engine to quit gracefully (<code>Lifecycle.Shutdown</code>); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from <code>Info</code>).</td>
+<td>Ask the engine to quit gracefully (<code>Lifecycle.Shutdown</code>). Best-effort — on Linux the engine often hangs during teardown and never exits, so follow up with <code>terminate</code> when you need a guaranteed stop. Prints the engine's host PID (from <code>Info</code>).</td>
 </tr>
 </tbody>
 </table>
@@ -1633,8 +1633,11 @@ umu-launcher chain and waits until the <strong>engine</strong> (<code>resonite_p
 single running instance (and errors if it finds more than one). Because they work from the host
 process table they run before the UDS exists and regardless of whether the client is reachable.
 <code>shutdown</code>, by contrast, is a pure gRPC call (<code>Lifecycle.Shutdown</code>) that asks a <strong>running</strong>
-engine to quit gracefully — use it when the client is up and reachable, and <code>terminate</code> when
-you need a guaranteed stop (or already hold the PIDs from <code>launch</code>).</p>
+engine to quit gracefully — use it when the client is up and reachable. It is best-effort,
+though: on Linux (including the dev container) FrooxEngine frequently hangs during teardown and
+the engine never exits on its own, so reach for <code>terminate</code> when you need a <strong>guaranteed</strong> stop
+(or already hold the PIDs from <code>launch</code>). The cooperative pattern is <code>shutdown</code> to ask the
+engine nicely, then <code>terminate</code> to make sure the process is gone.</p>
 <h2 id="auth"><code>auth</code><a class="headerlink" href="#auth" title="Permanent link">&para;</a></h2>
 <p><code>resoio auth</code> signs the engine in and out of the Resonite cloud account (Python → Resonite),
 mirroring how a <code>gh auth login</code>-style flow works. It has three nested leaves:</p>
