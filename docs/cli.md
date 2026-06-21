@@ -31,7 +31,7 @@ resoio --help
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
 | `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. Non-gRPC. |
 | `resoio terminate` | — (signals) | local process | Force-stop Resonite by killing the engine + renderer (`SIGTERM` → `SIGKILL`). Takes `[resonite_pid] [renderer_pid]` (from `launch`) or auto-detects the single running instance. Non-gRPC. |
-| `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`); the engine exits itself and Steam/Proton reaps the renderer + launch wrappers. Prints the engine's host PID (from `Info`). |
+| `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`). Best-effort — on Linux the engine often hangs during teardown and never exits, so follow up with `terminate` when you need a guaranteed stop. Prints the engine's host PID (from `Info`). |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
@@ -43,8 +43,11 @@ umu-launcher chain and waits until the **engine** (`resonite_pid`) and **rendere
 single running instance (and errors if it finds more than one). Because they work from the host
 process table they run before the UDS exists and regardless of whether the client is reachable.
 `shutdown`, by contrast, is a pure gRPC call (`Lifecycle.Shutdown`) that asks a **running**
-engine to quit gracefully — use it when the client is up and reachable, and `terminate` when
-you need a guaranteed stop (or already hold the PIDs from `launch`).
+engine to quit gracefully — use it when the client is up and reachable. It is best-effort,
+though: on Linux (including the dev container) FrooxEngine frequently hangs during teardown and
+the engine never exits on its own, so reach for `terminate` when you need a **guaranteed** stop
+(or already hold the PIDs from `launch`). The cooperative pattern is `shutdown` to ask the
+engine nicely, then `terminate` to make sure the process is gone.
 
 ## `auth`
 
