@@ -33,8 +33,8 @@ matching [API Reference](../api/connection.md) page links it.
 ## Direction conventions
 
 Audio is split by direction on purpose: **Speaker** carries Resonite → Python audio (what
-the agent "hears"), and **Microphone** carries Python → Resonite audio (what the agent
-"says"). The same split logic gives Camera (out) and the input modalities (Locomotion,
+Resonite plays out), and **Microphone** carries Python → Resonite audio (what you push in as
+a virtual mic). The same split logic gives Camera (out) and the input modalities (Locomotion,
 Microphone) their streaming directions.
 
 ## Mirrored structure

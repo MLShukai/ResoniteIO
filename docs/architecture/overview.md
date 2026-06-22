@@ -1,6 +1,6 @@
 # Architecture Overview
 
-ResoniteIO connects two processes — the Resonite client and your agent code — over gRPC on
+ResoniteIO connects two processes — the Resonite client and your Python code — over gRPC on
 a Unix Domain Socket (UDS).
 
 ```mermaid
@@ -11,7 +11,7 @@ flowchart LR
         core["ResoniteIO.Core<br/>gRPC server (Kestrel)<br/>&lt;Modality&gt;Service"]
         bridge --- core
     end
-    subgraph agent["Your agent (Python)"]
+    subgraph pyside["Your code (Python)"]
         py["resoio<br/>&lt;Modality&gt;Client<br/>grpclib (async)"]
     end
     core <-->|"gRPC over UDS"| py

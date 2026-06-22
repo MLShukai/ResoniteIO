@@ -4,7 +4,7 @@
 
 <h1 align="center">ResoniteIO</h1>
 
-<p align="center">Turn <a href="https://resonite.com/">Resonite</a> into a runtime environment for AI agents.</p>
+<p align="center">A bidirectional IPC bridge between <a href="https://resonite.com/">Resonite</a> and Python.</p>
 
 <p align="center">
   <a href="https://pypi.org/project/resonite-io/"><img src="https://img.shields.io/pypi/v/resonite-io" alt="PyPI version"></a>
@@ -18,15 +18,15 @@
 
 ______________________________________________________________________
 
-**ResoniteIO** is a bidirectional IPC bridge that lets AI agents see, hear, speak, move, and
-act inside [Resonite](https://resonite.com/). A C# mod runs inside the Resonite client and a
-Python package (`resoio`) runs wherever your agent code lives; they talk to each other over
-**gRPC on a Unix Domain Socket**.
+**ResoniteIO** is a bidirectional IPC bridge that lets your Python code observe and control
+[Resonite](https://resonite.com/): capture video and audio out of the client, and send audio,
+movement, and UI input back in. A C# mod runs inside the Resonite client and a Python package
+(`resoio`) runs wherever your code lives; they talk to each other over **gRPC on a Unix Domain
+Socket**.
 
-It is designed like **real-time robotics middleware, not a reinforcement-learning
-environment**: there is no `Observation` / `Action` abstraction and no global `step()`.
-Each capability is an independent, asynchronous **modality** stream carrying its own
-timestamps, and any synchronization you need is done on the receiving side.
+Each capability is exposed as an independent, asynchronous **modality** stream carrying its
+own timestamps. There is no global clock or `step()` barrier — any synchronization you need
+is done on the receiving side, and you can use any modality on its own.
 
 ## Modalities
 
@@ -56,7 +56,7 @@ curl -L -o ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest
 # or: wget -O ResoniteIO.zip https://github.com/MLShukai/ResoniteIO/releases/latest/download/ResoniteIO.zip
 ```
 
-**2. The Python client** (runs with your agent):
+**2. The Python client** (runs with your code):
 
 ```bash
 pip install resonite-io

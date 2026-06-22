@@ -2,22 +2,20 @@
 
 ![ResoniteIO — Resonite ⇄ Python](assets/banner.png)
 
-**ResoniteIO** is a bidirectional IPC bridge that turns [Resonite](https://resonite.com/)
-into a runtime environment for AI agents. A C# mod running inside the Resonite client
-(`ResoniteIO`, loaded via BepisLoader) and a Python package (`resoio`) talk to each other
-over **gRPC on a Unix Domain Socket**.
+**ResoniteIO** is a bidirectional IPC bridge between [Resonite](https://resonite.com/) and
+Python. A C# mod running inside the Resonite client (`ResoniteIO`, loaded via BepisLoader)
+and a Python package (`resoio`) talk to each other over **gRPC on a Unix Domain Socket**.
 
 !!! note "Linux only"
     ResoniteIO targets Resonite running on Linux through Steam Play (Proton). Windows is not
     supported. See [Installation](getting-started/installation.md) for details.
 
-## Design philosophy
+## Design
 
-ResoniteIO is built like **real-time robotics middleware, not a reinforcement-learning
-environment**. There is no `Observation` / `Action` abstraction and no global `step()`.
-Instead, each capability is exposed as an independent, asynchronous **modality** stream,
-each carrying its own timestamps. Any synchronization you need is done on the receiving
-side.
+Each Resonite capability is exposed as an independent, asynchronous **modality** stream,
+each carrying its own timestamps. There is no global clock or `step()` barrier, so any
+synchronization you need is done on the receiving side — and you can use any modality on its
+own, without the others.
 
 - **Camera / Speaker** — Resonite → Python (server-streaming): vision and audio out.
 - **Microphone / Locomotion** — Python → Resonite (client-streaming): voice in, movement.

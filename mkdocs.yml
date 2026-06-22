@@ -1,7 +1,7 @@
 site_name: ResoniteIO
 site_description: >-
-  Bidirectional IPC bridge that turns Resonite into a runtime environment for
-  AI agents — a C# mod and the resoio Python client connected over gRPC/UDS.
+  Bidirectional IPC bridge between Resonite and Python — a C# mod and the resoio
+  Python client connected over gRPC/UDS.
 site_url: https://mlshukai.github.io/ResoniteIO/
 repo_url: https://github.com/MLShukai/ResoniteIO
 repo_name: MLShukai/ResoniteIO
