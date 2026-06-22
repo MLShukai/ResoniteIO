@@ -19,7 +19,7 @@ resoio --help
 | `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o PATH` (`.png`) or `-o -` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. On file save the saved absolute path is printed to stdout. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
-| `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point, then operate the held / equipped item (desktop mode only). The action positional (`grab` / `release` / `state` / `use` / `unuse` / `click` / `equip` / `dequip` / `interactive`) defaults to `grab`; `--hand` / `--radius` / `--button {primary,secondary}` work before or after it. `use` holds a button down until `unuse` (left-click aligns / activates a tool); `click` is press+release; both take `--strength` (analog primary press pressure 0..1, default 1.0, e.g. BrushTool/Pen, ignored for the secondary button); `equip` / `dequip` handle tools. |
+| `resoio grabber` | Grabber | unary | Grab at the desktop cursor ray hit point, then operate the held / equipped item (desktop mode only). The action positional (`grab` / `release` / `state` / `use` / `unuse` / `click` / `equip` / `dequip` / `interactive`) is required; `--hand` / `--radius` / `--button {primary,secondary}` work before or after it. `use` holds a button down until `unuse` (left-click aligns / activates a tool); `click` is press+release; both take `--strength` (analog primary press pressure 0..1, default 1.0, e.g. BrushTool/Pen, ignored for the secondary button); `equip` / `dequip` handle tools. |
 | `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config (`-W/--width`, `-H/--height`, `-F/--max-fps` — at least one required) and prints the post-apply snapshot. |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
@@ -118,8 +118,8 @@ line instead of as JSON:
 - `screenshot` / `record` / `world thumbnail` print the **saved absolute path** when writing a file
   (and `-o -` streams raw bytes to stdout with no path line).
 
-Interactive commands (`drive`, `grab interactive`, `inventory`) have no structured output and do not
-accept `--format` (`grab interactive --format json` exits with code 2).
+Interactive commands (`drive`, `grabber interactive`, `inventory`) have no structured output and do not
+accept `--format` (`grabber interactive --format json` exits with code 2).
 
 ## Examples
 
@@ -160,18 +160,18 @@ resoio display set --max-fps 30
 
 # Aim with the held cursor, grab at the ray hit point, then release
 resoio cursor center
-resoio grab --radius 0.5
-resoio grab release
+resoio grabber grab --radius 0.5
+resoio grabber release
 resoio cursor release
 
 # Equip a grabbed tool (e.g. a Pen), draw by holding the primary button
 # while moving the cursor, then release the button and dequip
-resoio grab equip
-resoio grab use --button primary --strength 0.8   # press and hold (pen pressure)
+resoio grabber equip
+resoio grabber use --button primary --strength 0.8   # press and hold (pen pressure)
 resoio cursor set 0.4 0.5            # drag the cursor to draw a stroke
 resoio cursor set 0.6 0.5
-resoio grab unuse --button primary   # release the button
-resoio grab dequip
+resoio grabber unuse --button primary   # release the button
+resoio grabber dequip
 
 # Start Resonite (engine + renderer) and capture both PIDs
 resoio launch --format json     # {"resonite_pid": ..., "renderer_pid": ...}

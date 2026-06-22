@@ -8,4 +8,4 @@ Nested argparse subparsers are unsafe for "flag before or after subcommand" CLIs
 
 **Why:** A spec for the `resoio grab` CLI rename assumed the hasattr guard made shared parent option-parsers safe across parent+leaves; tests pinned the mixed flag-position forms and failed. The orchestrator's resolution: drop subparsers entirely.
 
-**How to apply:** For resoio CLI commands needing a default action with flags accepted in any position, use a single flat parser with an optional positional (`action`, `nargs="?"`, `default=...`, `choices=[...]`) and dispatch in `_run` — see `python/src/resoio/cli/grab.py`. If subparsers are ever unavoidable, leaf options need `default=argparse.SUPPRESS` to avoid the overwrite.
+**How to apply:** For resoio CLI commands needing a default action with flags accepted in any position, use a single flat parser with a positional `action` (`choices=[...]`; add `nargs="?"` + `default=...` only when a default action is desired) and dispatch in `_run` — see `python/src/resoio/cli/grabber.py`. If subparsers are ever unavoidable, leaf options need `default=argparse.SUPPRESS` to avoid the overwrite.

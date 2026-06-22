@@ -12,10 +12,8 @@
    描画されること** (`OnPrimaryHold` が毎フレーム駆動されることの目視確認。
    ITool を持つ spawn 対象と描いた線の目視判断が必要)
 
-実装計画上の対応:
+自動化状況:
 
-- [resonite_io_plan.md](../../../resonite_io_plan.md) Step 6 (Grabber、旧称
-  Manipulation) の grab/release の目視確認相当
 - **ポジティブ grab は自動 e2e 化済み**:
   [python/tests/e2e/grabber.py](../../../python/tests/e2e/grabber.py)
   が `InventoryClient.spawn("/Inventory/Resonite Essentials/Mirror")` で
@@ -70,8 +68,8 @@ uv run --project python resoio inventory
 
 ```sh
 uv run --project python resoio cursor set 0.5 0.45
-uv run --project python resoio grab --radius 0.5
-uv run --project python resoio grab state
+uv run --project python resoio grabber grab --radius 0.5
+uv run --project python resoio grabber state
 ```
 
 `grabbed=True` / `is_holding=True` / `objects=[Mirror]` を確認したら、
@@ -82,7 +80,7 @@ uv run --project python resoio grab state
 
 ```sh
 uv run --project python resoio cursor release
-uv run --project python resoio grab release
+uv run --project python resoio grabber release
 ```
 
 `is_holding=False` になり、Mirror がその場に残ることを目視確認する。
@@ -96,8 +94,8 @@ spawn した Mirror を world から削除する API は無いので放置して
 
 ```sh
 uv run --project python resoio cursor set <x> <y>   # 2 つの box が重なる照準
-uv run --project python resoio grab --hand right --radius 0.3
-uv run --project python resoio grab state --hand right
+uv run --project python resoio grabber grab --hand right --radius 0.3
+uv run --project python resoio grabber state --hand right
 ```
 
 `objects=[...]` が **手前の box の slot 名** であることを確認する
@@ -127,20 +125,20 @@ uv run --project python resoio inventory
 # 空中に浮く tool はレイ hit 点から radius 内に入りにくいので radius を広げ、
 # 当たらなければ照準を数点ずらして掴む (grabbed=True になるまで)
 uv run --project python resoio cursor set 0.5 0.5
-uv run --project python resoio grab --radius 1.0       # ツールを掴む
-uv run --project python resoio grab equip              # 手に装備
-uv run --project python resoio grab state              # equipped=True / tool=Geometry Line Brush Tool を確認
+uv run --project python resoio grabber grab --radius 1.0   # ツールを掴む
+uv run --project python resoio grabber equip              # 手に装備
+uv run --project python resoio grabber state              # equipped=True / tool=Geometry Line Brush Tool を確認
 
 # 押下保持 → カーソルを大きく多点掃引 → 解放 (描画ストローク)
-uv run --project python resoio grab use --button primary
+uv run --project python resoio grabber use --button primary
 for xy in "0.35 0.5" "0.4 0.4" "0.5 0.35" "0.6 0.4" "0.65 0.5" "0.6 0.6" "0.5 0.65" "0.4 0.6" "0.35 0.5"; do
   uv run --project python resoio cursor set $xy ; sleep 0.1
 done
-uv run --project python resoio grab unuse --button primary
+uv run --project python resoio grabber unuse --button primary
 
 uv run --project python resoio cursor set 0.5 0.5      # 手をどかして描いた線を見やすくする
 uv run --project python resoio screenshot -o /tmp/pen.png
-uv run --project python resoio grab dequip             # 装備解除
+uv run --project python resoio grabber dequip             # 装備解除
 ```
 
 `grab use` から `grab unuse` までの間に **カーソルを動かした軌跡 (上記なら円弧) に沿って
@@ -160,7 +158,7 @@ VR モードで Resonite を起動する (または Dash からデスクトッ�
 切り替える)。container 内 shell から:
 
 ```sh
-uv run --project python resoio grab --hand right
+uv run --project python resoio grabber grab --hand right
 ```
 
 CLI が **`FAILED_PRECONDITION` エラーで失敗** し、エラーメッセージに
@@ -216,6 +214,6 @@ Grabber / Mouse が未確定。Userspace でなく Home World 等いずれかの
 
 ```sh
 uv run --project python resoio cursor release   # カーソル保持が残っていれば解放
-uv run --project python resoio grab release
+uv run --project python resoio grabber release
 just resonite-stop             # container → host bridge 経由で Resonite を停止
 ```

@@ -10,9 +10,7 @@
 
 C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / proto handler / 各モダリティのドメインロジック) は **Resonite に一切依存しないピュアライブラリ `ResoniteIO.Core`** に置き、BepInEx Plugin `ResoniteIO` は engine bridging のみを担う薄いアダプタとする。依存方向は **Core ← Mod** で逆参照禁止。Python (`resoio`) も Resonite 非依存。詳細は [feedback_core_mod_layering.md](memory/feedback_core_mod_layering.md) 参照。
 
-C# / Python 両側のモジュール構造は **モダリティ単位でミラーリング** する。新規モダリティは Core 側 `<Modality>Service` + Mod 側 `FrooxEngine<Modality>Bridge` のペアで追加する。
-
-詳細な背景・スコープ・採用技術・段階的実装計画は [resonite_io_plan.md](resonite_io_plan.md) を **必ず** 参照すること（Step 0〜8、決定事項一覧、リスク欄を含む）。
+C# / Python 両側のモジュール構造は **モダリティ単位でミラーリング** する。新規モダリティは Core 側 `<Modality>Service` + Mod 側 `FrooxEngine<Modality>Bridge` + Python 側 `<Modality>Client` の三層で追加する (規約は [add-new-modality skill](.claude/skills/add-new-modality/SKILL.md))。
 
 ## メモリ・スキル参照
 
@@ -90,39 +88,51 @@ LLM コーディングで陥りがちなミスを減らすための行動指針�
 
 ## プロジェクト状況
 
-**現状: 当初計画の Step 0〜7 がすべて完了**。Step 0 = Docker 化開発環境、Step 1 = mod/python/proto スケルトン、Step 2 = `Connection.Ping`、Step 3 = Camera server-streaming RPC、Step 4 = Locomotion client-streaming RPC、Step 5 = Speaker server-streaming RPC、Step 6 = Grabber Grab/Release unary RPC (旧称 Manipulation、2026-06-11 に rename)、Step 7 = Microphone client-streaming RPC。加えて当初の 8-step 計画外の userspace / world 系モダリティ **Display / World / ContextMenu / Dash / Inventory / Cursor** (いずれも unary RPC 中心) も実装済み。Cursor は desktop カーソル位置を正規化座標で set/get/release するモダリティ — **set は engine 内カーソルを `release` まで保持する** (永続 cursor lock + Harmony で renderer への lock 伝播を偽装し、OS マウスポインタは奪わない。Wine でも cross-RPC で位置が維持される)。Grabber の `grab` は **常にデスクトップカーソルレイの hit 点を中心に radius 内の grabbable を掴む** (point 指定は 2026-06-10 に廃止、VR モードは FailedPrecondition) — `cursor set` で照準してから `grab` する流れ。ContextMenu は engine-native 配置に揃えてあり (旧 `Pointer.Target = null!` 回避策を撤去)、`open` は現カーソル位置に開く (中央表示は `cursor.set_position(0.5, 0.5)` で保持してから open)。**auto-close (視点移動でメニューが閉じる) の注意**: この経路は engine の exit-lerp が担うが、それには「実 OS カーソル (active screen pointer)」が必要。Wine/Proton 上では OS injection 不可で cursor lock の forced position は active pointer とは見なされないため、agent 操作では exit-lerp が発火しない (実機検証済み)。agent は `close()` で明示的に閉じる。詳細: [feedback_cursor_lock_mechanism.md](memory/feedback_cursor_lock_mechanism.md)。
+当初の 8-step 計画はすべて完了し、計画外の userspace / world / cloud 系モダリティも実装済み。現在のモダリティ一覧 (proto service 単位、いずれも `<Modality>Service` + `FrooxEngine<Modality>Bridge` + `<Modality>Client` の三層ミラー):
 
-詳細な Step 履歴・RPC 仕様・Bridge クラス命名等は [resonite_io_plan.md](resonite_io_plan.md) を正規とする。新規モダリティ追加の規約は [.claude/skills/add-new-modality/](.claude/skills/add-new-modality/) に集約。
+- **メタ**: `Connection` (Ping) / `Info` (GetServerInfo: mod/engine version・platform・Wine/Proton 判定) / `Lifecycle` (Shutdown: graceful な engine 終了、best-effort)
+- **ストリーム**: `Camera` (server-stream, RGB フレーム) / `Speaker` (server-stream, final mix audio) / `Microphone` (client-stream, Python→Resonite voice) / `Locomotion` (Drive=client-stream + Reset, 移動・姿勢)
+- **操作・userspace (unary)**: `Grabber` (Grab/Release/GetState) / `Cursor` (SetPosition/GetPosition/Release) / `Display` (Apply/Get) / `ContextMenu` (Open/Close/Highlight/Invoke 等) / `Dash` (ESC オーバーレイ操作) / `Inventory` (List/MakeDir/Copy/Move/Remove/Spawn/FetchThumbnail)
+- **world / cloud (unary)**: `World` (session/record 一覧・Join/Focus/Leave 等) / `Session` (in-world 管理: settings・users・kick/ban/role) / `Contact` (friend 一覧/検索/申請) / `Auth` (cloud login/logout/status)
 
-実装済みの主要要素 (概観):
+挙動の確定事項・落とし穴はモダリティ別 memory に集約する (CLAUDE.md には重複させない)。特に注意が要るもの:
 
-- 開発環境: `.devcontainer/` (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / `justfile` / `resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`: umu-launcher で Resonite の engine + renderer 2 プロセスを起動/kill する非 gRPC のプロセス制御。`just resonite-launch *ARGS` = `uv run resoio launch` / `just resonite-stop *ARGS` = `uv run resoio terminate`。`--vanilla` で mod なし、既定は `MOD_PATH` (= Gale プロファイル `./gale`) から mod 込みで起動。engine + renderer の両プロセスが現れるまで待って両 PID を返す)
-- C# Core (`mod/src/ResoniteIO.Core/`): モダリティ単位で IF と Service を `<Modality>/` 配下にまとめる (Connection / Camera / Speaker / Microphone / Locomotion / Grabber / Display / World / ContextMenu / Dash / Inventory / Cursor)。共通基盤として `UnixNanosClock` / `ILogSink` (`Logging/`) と汎用 gRPC host `GrpcHost` (`Hosting/`)
-- C# Mod (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で GrpcHost 起動、SafeShutdown で partial-failure / ProcessExit を統合) / `Bridge/FrooxEngine<Modality>Bridge`
-- Python (`python/src/resoio/`): モダリティごとに `<Modality>Client` (`ConnectionClient` / `CameraClient` / `SpeakerClient` / `MicrophoneClient` / `LocomotionClient` / `GrabberClient` / `DisplayClient` / `WorldClient` / `ContextMenuClient` / `DashClient` / `InventoryClient` / `CursorClient`) と `_socket.py` / `_generated/`
-- CLI (`python/src/resoio/cli/`): action 名 flat command (`resoio ping` / `wait` / `info` / `record` / `mic` / `drive` / `grab` / `display` / `world` / `context-menu` / `dash` / `inventory` / `cursor`)。subgroup 階層化はしない。`record` は `--video` / `--audio` の filter フラグ (両方未指定で muxed mp4/mkv) で Camera/Speaker を取得する Resonite→Python 方向、`mic` は Microphone を Python→Resonite に流す独立コマンド、`drive` は対話 WASD 運転 (旧 `locomotion drive` の平坦化)、`grab` は action 省略時 grab でフラグ位置自由 (旧 `manipulate`)、`display` は `get` / `set` subcommand (`set` は `-W/-H/-F` を 1 つ以上必須)、`cursor` は desktop カーソルを set/center/get/release する (set は release まで保持)、`wait` は `Connection.Ping` が通るまで待つ startup readiness gate (任意 pid で `resonite-{pid}.sock` を狙撃、`-T/--timeout` 既定 30s、resolved socket path を出力)。socket 解決は engine PID が死んだ stale socket を `psutil.pid_exists` で除外する
-- proto: `proto/resonite_io/v1/{connection,camera,locomotion,speaker,microphone,grabber,display,world,context_menu,dash,inventory,cursor}.proto`
-- UDS path: 本番 gRPC IPC は container 内 `$HOME/.resonite-io/` (= `/home/dev/.resonite-io/`)。Resonite を container 内で動かすので host とは共有しない。mod (GrpcHost) が bind 前にこのディレクトリを自分で作り `resonite-{pid}.sock` を bind、同 container 内の Python client がそこへ connect する
-- Camera v2 Renderer plugin: UnityEngine.CoreModule が非再配布なため CI で build できず、Resonite のあるローカルで build した成果物を **committed prebuilt** (`mod/prebuilt/renderer/`) として commit し配布物 (Thunderstore zip) に同梱する。更新は `just renderer-prebuild` (Resonite 必須)、prebuilt と Renderer ソースの drift は `just check-renderer-prebuilt` (`just run` ゲートに含む) と CI (`publish.yml` build ジョブ / `dotnet.yml`) の drift guard で検出する
+- **Cursor**: `set` は engine 内カーソルを `release` まで **永続保持** する (Harmony で renderer への lock 伝播を偽装し OS マウスは奪わない。Wine でも cross-RPC で位置維持)。詳細 [feedback_cursor_lock_mechanism.md](memory/feedback_cursor_lock_mechanism.md)
+- **Grabber**: `grab` は常にデスクトップカーソルレイの hit 点を中心に掴む (point 指定なし、VR は FailedPrecondition)。`cursor set` で照準 → `grab` の流れ。詳細 [feedback_grabber_engine_api.md](memory/feedback_grabber_engine_api.md)
+- **ContextMenu**: `open` は現カーソル位置に開く (中央は `cursor.set_position(0.5, 0.5)` 後に open)。視点移動の auto-close (exit-lerp) は Wine では発火しないので agent は `close()` で明示的に閉じる。詳細 [feedback_dash_overlay_vs_contextmenu.md](memory/feedback_dash_overlay_vs_contextmenu.md)
+- **Session vs Auth**: `Session` は in-world 管理 (admin)、`Auth` は cloud アカウント login で別物。詳細 [feedback_auth_login_api.md](memory/feedback_auth_login_api.md)
+
+実装の主要要素:
+
+- **プロセス制御** (`python/src/resoio/launcher.py`、非 gRPC): `resoio launch` が umu-launcher で engine + renderer を起動し両 host PID を返す (`--vanilla` で mod なし、既定は Gale プロファイル `./gale` から mod 込み)、`resoio terminate` が両プロセスを SIGTERM→3s→SIGKILL で force-kill する。`just resonite-launch` / `just resonite-stop` の薄い wrapper。graceful 終了は別系統の `resoio shutdown` (gRPC `Lifecycle.Shutdown`、engine が自分で抜ける)
+- **C# Core** (`mod/src/ResoniteIO.Core/`): モダリティ単位で `I<Modality>Bridge` + `<Modality>Service` を `<Modality>/` 配下にまとめる。共通基盤は `UnixNanosClock` / `ILogSink` (`Logging/`)、汎用 gRPC host `GrpcHost` (`Hosting/`)、共通変換 (`Rpc/`)
+- **C# Mod** (`mod/src/ResoniteIO/`): `ResoniteIOPlugin` (OnEngineReady で GrpcHost 起動、SafeShutdown で partial-failure / ProcessExit を統合) + `Bridge/FrooxEngine<Modality>Bridge`
+- **Python** (`python/src/resoio/`): モダリティごとの `<Modality>Client` + `_socket.py` / `_generated/` + `launcher.py` (launch/terminate) / `lifecycle.py` (shutdown) / `info.py` (get_server_info)
+- **CLI** (`python/src/resoio/cli/`): action 名 flat command (`ping` / `wait` / `info` / `screenshot` / `record` / `mic` / `drive` / `grabber` / `cursor` / `display` / `context-menu` / `dash` / `inventory` / `world` / `session` / `contact` / `auth` / `launch` / `terminate` / `shutdown`)。subgroup 階層化はしない。`record` は `--video` / `--audio` filter フラグ (両方未指定で muxed mp4/mkv) で Camera/Speaker を取得、`mic` は Microphone を流す、`drive` は対話 WASD、`grabber` は action 必須 (grab/release/state/interactive)、`screenshot` は in-engine Camera で PNG キャプチャ、`wait` は `Connection.Ping` が通るまで待つ readiness gate。設計規約は [cli-design skill](.claude/skills/cli-design/SKILL.md)
+- **proto**: `proto/resonite_io/v1/*.proto` (17 service、single source of truth)
+- **UDS path**: 本番 gRPC IPC は container 内 `$HOME/.resonite-io/` (= `/home/dev/.resonite-io/`)。mod (GrpcHost) が bind 前に自分で作り `resonite-{pid}.sock` を bind、同 container 内の Python client が connect する (host とは共有しない)
+- **Camera v2 Renderer plugin**: UnityEngine.CoreModule が非再配布で CI build 不可のため、Resonite のあるローカルで build した成果物を **committed prebuilt** (`mod/prebuilt/renderer/`) として commit し配布物 (Thunderstore zip) に同梱する。更新は `just renderer-prebuild`、prebuilt と Renderer ソースの drift は `just check-renderer-prebuilt` (`just run` ゲートに含む) と CI で検出する
 
 リポジトリ実構造:
 
 ```text
 resonite-io/
-├── .devcontainer/ (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / justfile / .env.example / buf.yaml
-├── resonite_io_plan.md        # 全体計画書 (Step 0〜8、決定事項、リスク)
+├── .devcontainer/ (devcontainer.json / compose.yml / compose.{nvidia,amd,intel}.yml / Dockerfile / initialize.sh / entrypoint.sh) / justfile / .env.example / buf.yaml / mkdocs.yml
 ├── proto/resonite_io/v1/      # *.proto (single source of truth)
 ├── mod/                       # C# 側 (.NET 10、Core/Mod 二層)
 │   ├── src/ResoniteIO.Core/   # pure library (Resonite 非依存)
 │   ├── src/ResoniteIO/        # BepInEx adapter (engine bridging のみ)
+│   ├── prebuilt/renderer/     # Camera v2 Renderer plugin の committed prebuilt
 │   └── tests/                 # Core.Tests (Kestrel ラウンドトリップ) / Tests (smoke) / manual/
 ├── python/                    # Python 側 (uv + betterproto2 + grpclib)
-│   └── src/resoio/            # Client 群 + cli/ + _generated/
-├── scripts/                   # gen_proto / decompile
+│   └── src/resoio/            # Client 群 + cli/ + launcher/lifecycle + _generated/
+├── docs/                      # 公開ドキュメントサイト (MkDocs Material + mkdocstrings)
+├── scripts/                   # gen_proto / decompile / migrate_codex
 ├── memory/                    # プロジェクト memory (MEMORY.md index + feedback_/reference_*.md + agents/<agent-type>/)
 ├── gale/                      # Gale (Resonite mod manager) profile (gitignore)
 ├── decompiled/                # ILSpy 出力 (gitignore)
-└── .claude/                   # skills/ + agents/ + commands/ + settings*.json
+├── .claude/                   # Claude harness: skills/ + agents/ + settings*.json (source of truth)
+└── .agents/ + .codex/         # Codex ミラー (skills / agents / rules。Codex 側が `migrate-claude` で同期)
 ```
 
 ## ツーリング
@@ -131,8 +141,10 @@ resonite-io/
 - C# (mod): **.NET 10 SDK** + BepisLoader 公式 Template (`dotnet new bep6resonite`) 準拠。フォーマッタ `csharpier`、配布 `tcli` (`.config/dotnet-tools.json` の local tool)。テスト `xunit`、`Nullable=enable` + `TreatWarningsAsErrors=true`
 - Python (resoio): **`uv`** + Python `>=3.12`。gRPC は **`betterproto2[grpclib]`** (async)。`pyright` strict、`ruff` (line-length 88、ダブルクォート、isort + combine-as-imports)、`pytest` + `pytest-asyncio`/`pytest-cov`/`pytest-mock`
 - proto: C# 側は csproj の `<Protobuf>` で `dotnet build` 時に自動生成 (Server スタブのみ、commit しない)。Python 側は `just gen-proto` で `python/src/resoio/_generated/` に書き、**commit する**。lint は `buf` (`SERVICE_SUFFIX` / `RPC_REQUEST_STANDARD_NAME` / `RPC_RESPONSE_STANDARD_NAME` を except)
-- Docker 開発環境: `debian:13-slim` (trixie) ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`.devcontainer/compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く (compose / build context とも `.devcontainer/`)。devcontainer 内で **Resonite を起動できる** (umu-run/Proton。host の graphical session + PipeWire/PulseAudio + AppArmor 緩和が前提、GPU は NVIDIA/AMD/Intel を `initialize.sh` が自動検出して compose overlay を切替)。**mod 込み** は `just resonite-launch` (= `resoio launch`、`MOD_PATH` の Gale プロファイル `./gale` から起動)、mod なしは `just resonite-launch --vanilla`、停止は `just resonite-stop` (= `resoio terminate`)。`resoio launch` は engine + renderer が現れるまで待って両 PID を返す。engine 側は hookfxr、Renderer 側は doorstop (hook 版 `winhttp.dll`)。container 経路でも `WINEDLLOVERRIDES="winhttp=n,b"` は必要だが `resoio launch` が自動 export するため手動設定は不要 (umu-run は env を素通しする)。mod 開発の deploy は引き続き `just deploy-mod`、host Steam + Gale GUI 直起動も従来どおり可能 (host では Steam Launch Options に手で設定)。詳細セットアップは [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md) 参照
+- ドキュメント: 公開サイトは `docs/` (MkDocs Material + mkdocstrings)。`just docs-serve` でプレビュー、`just docs-build` (`--strict`) でビルド。規約は [write-docs skill](.claude/skills/write-docs/SKILL.md)
+- Docker 開発環境: `debian:13-slim` (trixie) ベースの単一 image に .NET / uv / protoc / dotnet local tools / pre-commit を同梱。`.devcontainer/compose.yml` を `.devcontainer/devcontainer.json` から参照する devcontainer 方式で開く。devcontainer 内で **Resonite を起動できる** (umu-run/Proton。host の graphical session + PipeWire/PulseAudio + AppArmor 緩和が前提、GPU は NVIDIA/AMD/Intel を `initialize.sh` が自動検出して compose overlay を切替)。詳細は [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md)
 - CI / リリース: `.github/workflows/` に品質ゲート (`pre-commit` / `test` (Python 3.12-3.14) / `type-check` / `dotnet` / `proto-check`) と tag-driven リリース (`publish.yml`) を配置。`v*` tag の push で Thunderstore mod + PyPI パッケージを同時公開する。手順は [RELEASE.md](RELEASE.md) と [release-resonite skill](.claude/skills/release-resonite/SKILL.md) 参照 (正規 version = csproj `<Version>`、`python/pyproject.toml` は lockstep)
+- Codex ミラー: `.claude/` を source of truth とし `.agents/` + `.codex/` + `AGENTS.md` はそのミラー。Claude 側からは settings 由来の Codex rules のみ [migrate-codex skill](.claude/skills/migrate-codex/SKILL.md) (`just migrate-codex`) で同期する。skill/agent/prose の内容移植は Codex 側の `migrate-claude` skill が担うので **Claude からは `.agents/` / `.codex/` / `AGENTS.md` を編集しない**
 
 ## コマンド
 
@@ -140,38 +152,30 @@ resonite-io/
 
 | レシピ                       | 役割                                                                                                                         |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `just run`                   | `format` → `gen-proto` → `build` → `test` → `type` を直列実行 (コミット前の必須 check)                                       |
+| `just run`                   | `format` → `gen-proto` → `build` → `test` → `type` → `check-renderer-prebuilt` を直列実行 (コミット前の必須 check)           |
 | `just gen-proto`             | `.proto` から Python 側コードを生成 (C# 側は csproj が build-time 生成)                                                      |
 | `just deploy-mod`            | mod build + `gale/BepInEx/plugins/ResoniteIO/` へ DLL+PDB 配置                                                               |
 | `just log`                   | `gale/BepInEx/LogOutput.log` を tail -F (print-debug の主経路。umu/Proton 起動ノイズは `gale/BepInEx/umu-launch.log` に分離) |
 | `just decompile`             | Resonite first-party DLL を ILSpy で `decompiled/` に展開                                                                    |
 | `just init`                  | host 側で初回 setup (docker / docker compose v2 検出 / `.env` 作成・検証 / `ResonitePath` 検証 / Gale プロファイル確認)      |
 | `just check-gale`            | Gale プロファイルに必須 plugin が揃っているか検証                                                                            |
-| `just resonite-launch *ARGS` | container 内で Resonite を起動 (= `resoio launch`、`MOD_PATH` の `./gale` から mod 込み、`--vanilla` で mod なし)            |
-| `just resonite-stop *ARGS`   | container 内で Resonite を停止 (= `resoio terminate`。engine + renderer を psutil で SIGTERM → 3s → SIGKILL)                 |
+| `just docs-serve` / `-build` | ドキュメントサイト (MkDocs) の live preview / `--strict` build                                                               |
+| `just resonite-launch *ARGS` | container 内で Resonite を起動 (= `resoio launch`、`./gale` から mod 込み、`--vanilla` で mod なし。両 PID を返す)           |
+| `just resonite-stop *ARGS`   | container 内で Resonite を force-kill (= `resoio terminate`。engine + renderer を psutil で SIGTERM → 3s → SIGKILL)          |
 
-全レシピは `just --list` で取得可能。サブコマンド分離 (`just py-test` / `just mod-build` 等) は troubleshooting 時のフォールバック。
+全レシピは `just --list` で取得可能。サブコマンド分離 (`just py-test` / `just mod-build` 等) は troubleshooting 時のフォールバック。停止は force-kill の `just resonite-stop` のほか、graceful な `resoio shutdown` (gRPC `Lifecycle.Shutdown`、engine が自分で抜ける) がある。
 
 **`.proto` を変更した場合は必ず `just gen-proto` を再実行し、生成物の差分も同じ commit に含める** (CI の `proto-check` workflow が再生成 diff を検証する)。
 
 ## 実行環境
 
-**ホスト側に必要なものは `docker` / `docker compose v2` / `just` に加えて devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか**。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。devcontainer 内で **Resonite を直接起動** できる: **ResoniteIO mod 込み** は `MOD_PATH` の Gale プロファイル `./gale` から `just resonite-launch` (= `resoio launch`)、mod なしは `just resonite-launch --vanilla`、停止は `just resonite-stop` (= `resoio terminate`)。mod 検証は container 内で完結し (mod (GrpcHost) が container 内 `~/.resonite-io/` に socket を作り、同 container 内の Python client が connect する)、host を経由しない。host Steam + Gale GUI 直起動や `just deploy-mod` も従来どおり可能。コンテナ内起動には host の graphical session (X11 / Xwayland) と PipeWire/PulseAudio、そして `kernel.apparmor_restrict_unprivileged_userns=0` が要る (未設定だと pressure-vessel が非特権 user namespace を作れず起動が hard fail する)。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリ絶対パスを指定 (コンテナ内起動では `/resonite:ro` の source として再利用される)。
+ホスト側に必要なのは `docker` / `docker compose v2` / `just` と devcontainer を開く手段 (VS Code の Dev Containers 拡張 / Zed / `@devcontainers/cli`) のいずれか。.NET / uv / protoc / pre-commit はすべてコンテナ内に閉じている。初回だけ host で `just init` (docker 検出 / `.env` 作成・`ResonitePath` 検証 / Gale プロファイル確認) を回し、あとは devcontainer を開く (`initializeCommand` が host UID/GID を `.env` に記録、`postCreateCommand` = `scripts/container-init.sh` が `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink を実行)。ビルド / テスト / gen-proto / deploy はすべてコンテナ内で `just` から実行する。
 
-開発環境の入り方は devcontainer 方式:
+devcontainer 内で **Resonite を直接起動** できる: **mod 込み** は `just resonite-launch`、mod なしは `just resonite-launch --vanilla`、停止は `just resonite-stop`。mod 検証は container 内で完結し (mod (GrpcHost) が container 内 `~/.resonite-io/` に socket を作り、同 container 内の Python client が connect する)、host を経由しない。host Steam + Gale GUI 直起動や `just deploy-mod` も従来どおり可能。コンテナ内起動には host の graphical session (X11 / Xwayland) + PipeWire/PulseAudio、そして `kernel.apparmor_restrict_unprivileged_userns=0` が要る (未設定だと pressure-vessel が非特権 user namespace を作れず hard fail する)。`.env` の `ResonitePath` に Resonite 実行ファイルディレクトリの絶対パスを指定する (コンテナ内起動では `/resonite:ro` の source として再利用される)。
 
-1. host で一度 `just init` (docker / docker compose v2 検出、`.env` 作成・検証、`ResonitePath` 検証、Gale プロファイル確認)
-2. devcontainer を開く — **VS Code**: 「Dev Containers: Reopen in Container」、**Zed**: dev container として開く、**CLI** (任意・headless / CI 用): `devcontainer up --workspace-folder .` → `devcontainer exec --workspace-folder . bash`
-3. devcontainer が自動実行する: `initializeCommand` (host 側・作成前) が host UID/GID を `.env` に記録 (build-arg でコンテナ user に一致、deploy 成果物が host 所有になる)、`postCreateCommand` (container 内・作成後) が `scripts/container-init.sh` を実行 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
-4. コンテナ内ターミナルで `just gen-proto` / `just build` / `just deploy-mod` / `just run` 等を従来どおり実行
-5. 後片付けは VS Code / Zed の devcontainer 停止操作、または CLI なら `docker compose` を直接叩く
+初回環境構築 (Docker / Gale プロファイル / Steam Launch Options) は [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md)、debug 経路 (`just log` / `just decompile`) は [debug-resonite-mod skill](.claude/skills/debug-resonite-mod/SKILL.md) に集約済み。
 
-初回環境構築 (Docker / Gale プロファイル / Steam Launch Options) と debug 経路 (`just log` / `just decompile` / container ↔ host bridge) の詳細は専用 skill に集約済み:
-
-- 初回セットアップ: [setup-resonite-env skill](.claude/skills/setup-resonite-env/SKILL.md)
-- デバッグ手順: [debug-resonite-mod skill](.claude/skills/debug-resonite-mod/SKILL.md)
-
-ライセンス・ToS: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎 (詳細は [resonite_io_plan.md](resonite_io_plan.md) §7)。商用化や派手な公開実験を始める前にユーザーに確認する。
+ライセンス・ToS: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎だが、商用化や派手な公開実験を始める前にユーザーに確認する。
 
 ## コーディング規約とテスト方針
 
@@ -242,7 +246,7 @@ public sealed class Example
 
 ### 基本サイクル
 
-1. **要件確認**: [resonite_io_plan.md](resonite_io_plan.md) の該当 Step を読み、スコープと未解決事項を把握する
+1. **要件確認**: 関連モダリティの既存実装と [memory/MEMORY.md](memory/MEMORY.md) の規約を読み、スコープと未解決事項を把握する
 2. **作業ブランチ作成**: `main` から `<種別>/<日付>/<内容>` で分岐
 3. **作業はコンテナ内で行う** (devcontainer に入って attach。ビルド/テスト/gen-proto はすべてコンテナ内)
 4. **実装**: コードを書く (C# / Python / proto)
@@ -252,9 +256,8 @@ public sealed class Example
 
 ### 判断基準
 
-- plan に明記されている内容はそのまま実装する
-- plan に記載がない実装の詳細は自分で判断してよい
-- plan の未決事項に関わる部分は、合理的なデフォルトで実装し、コミットメッセージに判断理由を記載
+- 既存の規約・実装パターンに沿って実装する
+- 明文化されていない実装の詳細は自分で判断してよい。合理的なデフォルトを採り、重要な判断はコミットメッセージに理由を記載
 - 型チェックエラー (pyright strict / C# warnings-as-errors) を放置しない
 - スコープ外 (RL `step()`、マルチエージェント、ワールド作者向け API 等) は実装しない
 

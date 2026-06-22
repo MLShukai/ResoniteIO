@@ -51,6 +51,6 @@ through a single `SafeShutdown` dispose chain, stopping modalities in dependency
 
 ## Further reading
 
-- Repository design document: `resonite_io_plan.md` in the repo.
+- Repository conventions and design: `CLAUDE.md` in the repo.
 - The `add-new-modality` skill in `.claude/skills/` codifies the full proto → Core → Mod →
   Python → CLI → tests workflow and the conventions above.

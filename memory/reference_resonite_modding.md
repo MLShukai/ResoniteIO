@@ -17,7 +17,7 @@ metadata:
 - ソース: [github.com/ResoniteModding](https://github.com/ResoniteModding) (BepisLoader / docs / Templates 等)
 - Discord: [discord.gg/vCDJK9xyvm](https://discord.gg/vCDJK9xyvm)
 - ライセンス上の立場: 公式 wiki は "an independent project and are not affiliated with Resonite or Yellow Dog Man Studios S.r.o." と明記。Resonite 本体に対しては非公式コミュニティ。
-- mod 利用そのものは慣習的に黙認〜歓迎（\[\[../resonite_io_plan\]\] §7 と整合）。
+- mod 利用そのものは慣習的に黙認〜歓迎（ライセンス・ToS の整理は [CLAUDE.md](../CLAUDE.md) 参照）。
 
 ## ロード機構
 
@@ -116,7 +116,7 @@ public class Plugin : BasePlugin
 - **`ResoniteHooks.OnEngineReady` が最重要フック**。`Engine.Current` を含む FrooxEngine API はここから先でないと安全に触れない。プラグインの初期化処理の大部分はここに置く。
 - `BepInDependency` で `BepInExResoniteShim`（`ResoniteHooks` の提供元）への依存を明示する。
 
-\[\[../resonite_io_plan\]\] Step 2 以降で UDS gRPC server を立てる際も、bind は `OnEngineReady` 内で行うのが正解。FrooxEngine の更新スレッドをブロックしない別スレッドで server を回すのは [AGENTS.md](../AGENTS.md) の「C# 側コーディング規約」と整合。
+UDS gRPC server を立てる際も、bind は `OnEngineReady` 内で行うのが正解。FrooxEngine の更新スレッドをブロックしない別スレッドで server を回すのは [AGENTS.md](../AGENTS.md) の「C# 側コーディング規約」と整合。
 
 ## ロギング
 

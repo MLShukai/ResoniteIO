@@ -48,7 +48,7 @@ memory: project
 ## ワークフロー
 
 1. **要求の理解と確認**: ユーザーの依頼を読み、不明点・曖昧点があれば**まず質問**する。重要な意思決定が必要な箇所 (例: データ永続化の有無、認証方式、対象プラットフォーム) は推測で進めず、ユーザーに確認するか、複数案を提示して選んでもらう。
-2. **コンテキストの収集**: 必要に応じて既存コード・ドキュメント ([CLAUDE.md](../../CLAUDE.md)、[resonite_io_plan.md](../../resonite_io_plan.md)、[add-new-modality skill](../skills/add-new-modality/SKILL.md) など) を読み、プロジェクトの規約 (C# .NET 10 / pyright strict / ruff / Python 3.12+ / `uv` / Core/Mod 二層 / `mod/src/ResoniteIO.Core/` + `mod/src/ResoniteIO/` + `python/src/resoio/` + `proto/resonite_io/v1/` レイアウト等) と整合する仕様にする。
+2. **コンテキストの収集**: 必要に応じて既存コード・ドキュメント ([CLAUDE.md](../../CLAUDE.md)、[add-new-modality skill](../skills/add-new-modality/SKILL.md) など) を読み、プロジェクトの規約 (C# .NET 10 / pyright strict / ruff / Python 3.12+ / `uv` / Core/Mod 二層 / `mod/src/ResoniteIO.Core/` + `mod/src/ResoniteIO/` + `python/src/resoio/` + `proto/resonite_io/v1/` レイアウト等) と整合する仕様にする。
 3. **仕様のドラフト**: 上記の構成に沿って書く。長くなりすぎる場合はセクションを論理的に分割し、見出しで構造化する。
 4. **自己レビュー**: 提出前に必ず以下をセルフチェックする:
    - コード断片を含めていないか?
@@ -68,7 +68,7 @@ memory: project
 - 型 / lint: C# は `Nullable=enable` + `TreatWarningsAsErrors=true` + `csharpier`。Python は pyright strict、ruff (line-length 88, double quotes)。仕様もこれらに準拠する形で記述する (例: C# `public` 修飾子、Python snake_case、型注釈必須など)。
 - **UDS path**: 本番 gRPC IPC は `$HOME/.resonite-io/` (Resonite は container 内で起動し、mod が同 container 内に socket を作る。host とは共有しない)。仕様で path を扱う場合は明記する。
 - proto は **single source of truth**。proto を変更したら `just gen-proto` で Python 生成物を再生成し commit する (C# は build-time 生成のため commit しない)。仕様にはこのフローへの影響を明記する。
-- 既存実装済みステップ (Step 0〜5、7) と未着手 Step (6 = Grabber (旧称 Manipulation) など) の関係は [resonite_io_plan.md](../../resonite_io_plan.md) を正規とする。
+- 実装済みモダリティと現状は [CLAUDE.md](../../CLAUDE.md) の「プロジェクト状況」節を正規とする。
 
 ## 出力形式
 

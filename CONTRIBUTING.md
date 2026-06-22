@@ -1,8 +1,7 @@
 # Contributing to ResoniteIO
 
 This guide covers the development setup and workflow for ResoniteIO. For the project's design,
-scope, and staged implementation plan see [`resonite_io_plan.md`](resonite_io_plan.md);
-for repository conventions see [`CLAUDE.md`](CLAUDE.md).
+scope, and repository conventions see [`CLAUDE.md`](CLAUDE.md).
 
 ResoniteIO is a monorepo with three pieces that mirror each other by modality:
 

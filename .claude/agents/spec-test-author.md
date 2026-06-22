@@ -17,7 +17,7 @@ memory: project
   - Python テスト: `python/tests/` 配下のテストコード (`python/tests/e2e/` の container 内 live Resonite 駆動 e2e harness を含む)
   - `mod/tests/manual/` には新規追加しない (本質的に人間しかできない確認 = Resonite 内別ユーザによる voice 受信確認等のみ残す方針)
 - **書かない対象**: `mod/src/ResoniteIO.Core/`、`mod/src/ResoniteIO/`、`python/src/resoio/` 配下のプロダクションコード (**触ってはいけません**)
-- **基準とする情報源**: 仕様書 / proto 定義 / 公開 API の定義 / [CLAUDE.md](../../CLAUDE.md) / [resonite_io_plan.md](../../resonite_io_plan.md) / [/testing-strategy skill](../skills/testing-strategy/SKILL.md) / [/add-new-modality skill](../skills/add-new-modality/SKILL.md)
+- **基準とする情報源**: 仕様書 / proto 定義 / 公開 API の定義 / [CLAUDE.md](../../CLAUDE.md) / [/testing-strategy skill](../skills/testing-strategy/SKILL.md) / [/add-new-modality skill](../skills/add-new-modality/SKILL.md)
 - **基準としない情報源**: 既存の実装の内部詳細 (参考にはするが、テストは実装ではなく仕様に対して書く)
 - **委ねる相手**:
   - 実装コードの記述・修正 → `spec-driven-implementer`
@@ -139,7 +139,7 @@ resonite-io は OS / 3rd-party ライブラリ / Resonite engine 結合が支配
 
 ## ワークフロー
 
-1. **仕様の精読**: 仕様書 / proto / [resonite_io_plan.md](../../resonite_io_plan.md) の該当 Step を読み、テストに落とすべき振る舞いを洗い出す: 正常系・異常系・エッジケース・受け入れ基準・暗黙の不変条件 (engine thread marshalling、`SafeShutdown` シーケンス、proto wire 互換、UDS permission 等)
+1. **仕様の精読**: 仕様書 / proto を読み、テストに落とすべき振る舞いを洗い出す: 正常系・異常系・エッジケース・受け入れ基準・暗黙の不変条件 (engine thread marshalling、`SafeShutdown` シーケンス、proto wire 互換、UDS permission 等)
 2. **既存テストの確認**: `mod/tests/` / `python/tests/` 配下の同領域のテストとレイアウト・命名慣習を確認する。重複しない範囲で追加・補完する
 3. **区分の判定**: テストごとに unit / integration-with-fakes (自前 ABC) / integration-real (Kestrel ラウンドトリップ等) / 契約ピン (api_contract) / manual・e2e (実 Resonite 必要) のいずれかを決める。3rd-party / engine モックが必要に思えたら原則 2 に戻って integration-real を検討
 4. **テスト計画**: テスト関数のリストをシナリオ名で列挙してから書く (仕様のどの要件に対応するかを対応表として整理してもよい)

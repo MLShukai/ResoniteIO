@@ -1,21 +1,20 @@
-"""``resoio grab`` subcommand: grab objects and operate them in Resonite.
+"""``resoio grabber`` subcommand: grab objects and operate them in Resonite.
 
-A single parser with an optional positional ``action`` (default
-``grab``), so flags resolve naturally whether placed before or after
-the action:
+A single parser with a required positional ``action``, so flags
+resolve naturally whether placed before or after the action:
 
-* ``resoio grab`` / ``resoio grab grab`` — try to grab a grabbable
+* ``resoio grabber grab`` — try to grab a grabbable
   within ``--radius`` metres of the cursor ray hit point (desktop mode
   only)
-* ``resoio grab release`` — release everything the hand holds
-* ``resoio grab state`` — print the hand's current hold state
-* ``resoio grab use`` — press ``--button`` and hold it down (left-click
+* ``resoio grabber release`` — release everything the hand holds
+* ``resoio grabber state`` — print the hand's current hold state
+* ``resoio grabber use`` — press ``--button`` and hold it down (left-click
   aligns a grabbed object / activates an equipped tool)
-* ``resoio grab unuse`` — release the held ``--button``
-* ``resoio grab click`` — press and release ``--button`` once
-* ``resoio grab equip`` / ``resoio grab dequip`` — equip a grabbed tool
+* ``resoio grabber unuse`` — release the held ``--button``
+* ``resoio grabber click`` — press and release ``--button`` once
+* ``resoio grabber equip`` / ``resoio grabber dequip`` — equip a grabbed tool
   into the hand / remove the equipped tool
-* ``resoio grab interactive`` — a key-driven loop (``g`` grab /
+* ``resoio grabber interactive`` — a key-driven loop (``g`` grab /
   ``r`` release / ``s`` state / ``u`` use / ``i`` unuse / ``c`` click /
   ``e`` equip / ``d`` dequip / ``q`` quit; upper-case ``U``/``I``/``C``
   use the secondary button)
@@ -23,9 +22,10 @@ the action:
 ``--hand {primary,left,right}`` selects the target hand (default
 ``primary``); ``--radius`` only affects grab; ``--button
 {primary,secondary}`` selects the button for use/unuse/click (default
-``primary``). The shared ``-s/--socket`` flag comes from the common
-parent parser. All flags work both before and after the action (e.g.
-``resoio grab --hand left use`` and ``resoio grab use --hand left``).
+``primary``); ``--strength`` sets the primary press strength 0..1 for
+use/click (default 1.0). The shared ``-s/--socket`` flag comes from the
+common parent parser. All flags work both before and after the action (e.g.
+``resoio grabber --hand left use`` and ``resoio grabber use --hand left``).
 After every action the resulting state is printed.
 """
 
@@ -51,29 +51,27 @@ def register(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],  # pyright: ignore[reportPrivateUsage]
     common: argparse.ArgumentParser,
 ) -> None:
-    """Register the ``grab`` subparser.
+    """Register the ``grabber`` subparser.
 
-    One flat parser: the positional ``action`` is optional
-    (``nargs="?"``, default ``grab``) and dispatch happens on
-    ``args.action`` inside :func:`_run`.
+    One flat parser: the positional ``action`` is required and
+    dispatch happens on ``args.action`` inside :func:`_run`.
     """
     parser = subparsers.add_parser(
-        "grab",
+        "grabber",
         parents=[common],
         help="Grab and operate objects (grab/use/equip/...).",
         description=(
             "Drive the Resonite IO Grabber service from the shell. "
-            "Without an action the grab action runs, taking a --radius "
-            "around the cursor ray hit point (desktop mode only). use / "
-            "unuse press and release --button (left/right click) with "
+            "Name the action explicitly (grab / release / state / use / "
+            "unuse / click / equip / dequip / interactive); grab takes a "
+            "--radius around the cursor ray hit point (desktop mode only). "
+            "use / unuse press and release --button (left/right click) with "
             "hold semantics; equip / dequip handle tools. The resulting "
             "hold state is printed after every action."
         ),
     )
     parser.add_argument(
         "action",
-        nargs="?",
-        default="grab",
         choices=[
             "grab",
             "release",
@@ -85,7 +83,7 @@ def register(
             "dequip",
             "interactive",
         ],
-        help="The grab action to perform (default: grab).",
+        help="The grab action to perform.",
     )
     parser.add_argument(
         "--hand",
@@ -159,7 +157,7 @@ def _raw_tty(stream: TextIO) -> Generator[None]:
 def _print_interactive_help(stream: TextIO) -> None:
     """Print the interactive keymap to ``stream`` once at start."""
     print(
-        "resoio grab interactive — controls\n"
+        "resoio grabber interactive — controls\n"
         "  g : grab at cursor ray hit point\n"
         "  r : release\n"
         "  s : print current state\n"
@@ -184,7 +182,7 @@ async def _run_interactive(args: argparse.Namespace) -> int:
     try:
         stdin_fd = sys.stdin.fileno()
     except (OSError, ValueError):
-        print("resoio grab interactive: stdin has no fd", file=sys.stderr)
+        print("resoio grabber interactive: stdin has no fd", file=sys.stderr)
         return 1
 
     async with GrabberClient(args.socket) as client:
@@ -241,7 +239,7 @@ async def _run(args: argparse.Namespace) -> int:
         # reject a structured request rather than silently ignoring it.
         if output.is_structured(args.format):
             print(
-                "resoio grab interactive: --format is not supported "
+                "resoio grabber interactive: --format is not supported "
                 "(interactive output is human-only); use grab / release / "
                 "state for structured output.",
                 file=sys.stderr,

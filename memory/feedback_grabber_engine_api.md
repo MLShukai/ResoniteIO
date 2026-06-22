@@ -1,6 +1,6 @@
 ---
 name: grabber-engine-api
-description: Grabber modality (旧称 Manipulation) の engine 経路 — Grab はカーソルレイ hit 点中心の radius grab (point 指定は廃止)、Grabber API、hand-pose 注入が不可な理由、unary RPC 採用、home に grabbable が無い e2e 制約、Use/Unuse の hold は digital Interact + analog Strength の両方注入が必要 (BrushTool/Pen 発火) + tip はカーソルに追従。
+description: Grabber modality (旧称 Manipulation) の engine 経路 — Grab はカーソルレイ hit 点中心の radius grab (point 指定は廃止)、Grabber API、hand-pose 注入が不可な理由、unary RPC 採用、e2e は Inventory spawn で positive grab/tool 操作まで自動化、Use/Unuse の hold は digital Interact + analog Strength の両方注入が必要 (BrushTool/Pen 発火) + tip はカーソルに追従。
 metadata:
   type: feedback
 ---
@@ -37,7 +37,7 @@ Step 6 (2026-06-06 完了)。Resonite 内オブジェクトの **Grab / Release*
 - VR モード (`InputInterface.ScreenActive == false`) は `GrabberNotReadyException` →
   gRPC `FailedPrecondition` (message に "desktop" を含む)。
 - Cursor モダリティの永続保持 (\[\[feedback-cursor-lock-mechanism\]\]) と連動:
-  `cursor.set_position` で照準 → `grab` (CLI: `resoio grab`、旧 `manipulate grab`) の流れが cross-RPC で成立する。
+  `cursor.set_position` で照準 → `grab` (CLI: `resoio grabber grab`、旧称 `resoio grab` / `manipulate grab`) の流れが cross-RPC で成立する。
 
 ## Hold 位置: grab 直後に object を手へ寄せる (頭上に飛ぶ問題の修正、2026-06-10)
 
@@ -137,12 +137,18 @@ pose を外し grab/release のみになったことで操作は離散 edge-trig
 proto は `GrabberHand` enum (ContextMenuHand 同規約)、radius `<=0` は **Service 側で 0.1m default**
 (Core でテスト可能にするため)。旧 `WorldPoint point` field は 2026-06-10 に削除 (field 2 reserved)。
 
-## e2e の制約: home に grabbable が無い
+## e2e の自動化状況 (Inventory spawn で positive grab / tool 操作まで自動化)
 
-実機 e2e (`python/tests/e2e/grabber.py`) は get_state/grab/release の **RPC 契約**
-(mod ロード・実 Grabber 到達・例外なし・hand 解決・release で is_holding False) を検証し green。
-ただし **default local home world に掴める object が spawn 付近に無く、API で grabbable を
-決定的に生成する手段も無い**ため `grabbed=True` の positive grab は自動化不可。object が手に追従する
-目視確認は `mod/tests/manual/grabber-verification.md` の人手手順に残した。
-今後 positive grab を自動化するなら「grabbable を含む決定的な test world / record」か
-「spawn 手段」の確立が前提。
+実機 e2e (`python/tests/e2e/grabber.py`) は `InventoryClient.spawn` で grabbable を決定的に
+spawn できるため、**positive grab と grab 後の tool 操作まで自動 assert する** (上記
+「Inventory spawn で自動化可能」節参照):
+
+- Mirror: spawn → cursor 照準 → `grabbed=True`/`object_names`→ release で `is_holding=False`、
+  さらに use/unuse の `held_buttons` round-trip と非 tool の equip/dequip no-op。
+- Geometry Line Brush Tool (実 ITool): spawn → grab → **equip で `is_tool_equipped`/
+  `equipped_tool_name` を assert** → `use(strength)` でカーソル掃引描画 → unuse → dequip。
+  浮遊 tool は screen 中央の狭い縦帯 (x≈0.5, y≈0.47) でしか掴めず (ray が背後の遠い面に当たる)、
+  aim 点の縦スキャン + radius 2.0 + aim ごとの settle で較正。掴めなければ明示 skip。
+
+目視でしか確認できない項目 (掴んだ object の手追従、前後 2 object の最手前選択、VR の
+FAILED_PRECONDITION) のみ `mod/tests/manual/grabber-verification.md` に人手手順として残す。

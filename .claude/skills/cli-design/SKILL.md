@@ -17,9 +17,9 @@ version: 0.1.0
 
 ## 2. flat command 命名
 
-- **action 名の flat command** で並べる (`resoio ping` / `record` / `mic` / `grab` / `display`)。
+- **action 名の flat command** で並べる (`resoio ping` / `record` / `mic` / `grabber` / `display`)。
 - **subgroup 階層化はしない** (`resoio voice mic` ではなく `resoio mic`)。詳細は [`add-new-modality`](../add-new-modality/SKILL.md) §7。
-- positional `action` + 前後自由なフラグ (例: `grab`) か、nested subparser (例: `world` / `dash`) かはコマンドの性質で選ぶ。flat 設計 (positional action) を選んだら subparser 化して文法を変えない。
+- positional `action` + 前後自由なフラグ (例: `grabber`) か、nested subparser (例: `world` / `dash`) かはコマンドの性質で選ぶ。flat 設計 (positional action) を選んだら subparser 化して文法を変えない。
 
 ## 3. 出力規約 (最重要)
 
@@ -32,8 +32,8 @@ version: 0.1.0
   - nested コマンド: `fmt = output.build_format_parent()` を作り、**結果を返す leaf** だけ `add_parser(..., parents=[common, fmt])` で付ける。
 - **`--format` を付けない (carve-out)**:
   - **pid / path を 1 つ返すだけ** → 値を 1 行 stdout に出すだけ (`shutdown`/`terminate` は pid、`screenshot`/`record`/`world thumbnail` は保存した絶対パス)。
-  - **interactive** (`drive` / `grab interactive` / `inventory` REPL/TUI) → 構造化出力なし、従来どおり human のみ。
-- flat 設計のため `--format` が parser 全体に乗り、一部 action では無意味になる場合 (`grab interactive`)、その action で `is_structured(args.format)` を検知して **exit 2 + stderr で明示拒否** する (黙って無視しない)。
+  - **interactive** (`drive` / `grabber interactive` / `inventory` REPL/TUI) → 構造化出力なし、従来どおり human のみ。
+- flat 設計のため `--format` が parser 全体に乗り、一部 action では無意味になる場合 (`grabber interactive`)、その action で `is_structured(args.format)` を検知して **exit 2 + stderr で明示拒否** する (黙って無視しない)。
 
 ### 入出力チャネルの規約
 
