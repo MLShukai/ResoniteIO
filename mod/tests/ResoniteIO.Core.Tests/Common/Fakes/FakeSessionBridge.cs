@@ -34,17 +34,26 @@ internal sealed class FakeSessionBridge : ISessionBridge
         AutoCleanupIntervalSeconds: 120f,
         Tags: new[] { "social", "test" },
         SessionId: "S-test-session",
-        IsHost: true,
-        ResoniteLinkEnabled: false,
-        ResoniteLinkPort: 0
+        // ResoniteLink を 0.6.0 publish 修正で全層コメントアウト。snapshot record の
+        // 末尾 2 パラメータ (ResoniteLinkEnabled / ResoniteLinkPort) が消えるのに合わせ、
+        // ここの構築引数もコメントアウトし IsHost を末尾パラメータ化する (末尾カンマを削る)。
+        // 復活時はこの 2 行のコメントを外し IsHost にカンマを戻す。
+        IsHost: true
+    // ResoniteLinkEnabled: false,
+    // ResoniteLinkPort: 0
     );
 
+    // ResoniteLink を 0.6.0 publish 修正で全層コメントアウト。有効化時の代理 port 値も
+    // 参照されなくなるためコメントアウトする (復活時はコメントを外す)。XML doc ごと
+    // ブロックコメントにして orphan な doc comment (CS1587) を残さない。
+    /*
     /// <summary>
     /// ResoniteLink を有効化したときに engine が割り当てるポートを模した値。
     /// 実 engine は 2000-65535 の動的割当だが、Fake では決定的な値を返す
     /// (snapshot に「有効時 port は &gt; 0」が載ることを観測するための代理値)。
     /// </summary>
     private const int ResoniteLinkEnabledPort = 50000;
+    */
 
     private readonly List<SessionUserSnapshot> _users = new()
     {
@@ -126,6 +135,11 @@ internal sealed class FakeSessionBridge : ISessionBridge
         LastApplyPatch = patch;
         TripIfArmed();
 
+        // ResoniteLink を 0.6.0 publish 修正で全層コメントアウト。patch.ResoniteLinkEnabled /
+        // SessionResoniteLinkException / snapshot の ResoniteLink prop がすべて消えるため、
+        // この switch ロジックと下の snapshot 構築 2 行をブロックでコメントアウトする。
+        // 復活時はコメントを外す。
+        /*
         // ResoniteLink: true=有効化 (冪等), false=runtime disable 不可 (例外),
         // null=変更しない。engine 契約 (ISessionBridge / session.proto) に準拠。
         var resoniteLinkEnabled = _settings.ResoniteLinkEnabled;
@@ -143,6 +157,7 @@ internal sealed class FakeSessionBridge : ISessionBridge
             case null:
                 break;
         }
+        */
 
         _settings = _settings with
         {
@@ -161,8 +176,10 @@ internal sealed class FakeSessionBridge : ISessionBridge
             AutoCleanupIntervalSeconds =
                 patch.AutoCleanupIntervalSeconds ?? _settings.AutoCleanupIntervalSeconds,
             Tags = patch.Tags ?? _settings.Tags,
-            ResoniteLinkEnabled = resoniteLinkEnabled,
-            ResoniteLinkPort = resoniteLinkPort,
+            // ResoniteLink を 0.6.0 publish 修正で全層コメントアウト (snapshot record から
+            // ResoniteLink prop が消え、上の switch ローカルも無くなるため)。復活時はコメントを外す。
+            // ResoniteLinkEnabled = resoniteLinkEnabled,
+            // ResoniteLinkPort = resoniteLinkPort,
         };
 
         return Task.CompletedTask;

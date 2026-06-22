@@ -64,7 +64,8 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
                 );
 
                 ApplySettings(world.Configuration, patch);
-                ApplyResoniteLink(world, patch.ResoniteLinkEnabled);
+                // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+                // ApplyResoniteLink(world, patch.ResoniteLinkEnabled);
                 _log.LogInfo("[ResoniteIO] Session.ApplySettings");
                 return true;
             },
@@ -269,7 +270,8 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
     private static SessionSettingsSnapshot ReadSettings(FrooxWorld world)
     {
         var config = world.Configuration;
-        var resoniteLink = world.ResoniteLink;
+        // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+        // var resoniteLink = world.ResoniteLink;
         return new SessionSettingsSnapshot(
             WorldName: config.WorldName.Value ?? "",
             WorldDescription: config.WorldDescription.Value ?? "",
@@ -285,9 +287,11 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
             AutoCleanupIntervalSeconds: config.AutoCleanupInterval.Value,
             Tags: ReadTags(config.WorldTags),
             SessionId: world.SessionId ?? "",
-            IsHost: world.IsAuthority,
-            ResoniteLinkEnabled: resoniteLink != null,
-            ResoniteLinkPort: resoniteLink != null && resoniteLink.Port > 0 ? resoniteLink.Port : 0
+            IsHost: world.IsAuthority
+        // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+        // 復活時は上の IsHost に末尾カンマを足し、以下 2 行のコメントを外す。
+        // , ResoniteLinkEnabled: resoniteLink != null
+        // , ResoniteLinkPort: resoniteLink != null && resoniteLink.Port > 0 ? resoniteLink.Port : 0
         );
     }
 
@@ -352,41 +356,43 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge
         }
     }
 
-    /// <summary>
-    /// patch の <paramref name="enabled"/> に従い ResoniteLink を有効化する。前提: engine thread 上で呼ぶ。
-    /// </summary>
-    /// <remarks>
-    /// <para><c>null</c>: 変更しない。</para>
-    /// <para><c>true</c>: 既に有効 (<c>world.ResoniteLink != null</c>) なら no-op (冪等)。未有効なら
-    /// host authority + ResoniteLink 権限を要求し、<c>world.StartResoniteLink()</c> を呼ぶ。</para>
-    /// <para><c>false</c>: engine が stop API を持たないため runtime disable は不可。
-    /// <see cref="SessionResoniteLinkException"/> を投げる。</para>
-    /// </remarks>
-    private static void ApplyResoniteLink(FrooxWorld world, bool? enabled)
-    {
-        if (enabled is not { } value)
-        {
-            return;
-        }
-
-        if (!value)
-        {
-            throw new SessionResoniteLinkException(
-                "ResoniteLink cannot be disabled at runtime (the engine exposes no stop API)."
-            );
-        }
-
-        if (world.ResoniteLink != null)
-        {
-            return;
-        }
-
-        RequirePermission(
-            world.IsAuthority && world.IsAllowedToRunResoniteLink(),
-            "ResoniteLink requires host authority and ResoniteLink permission."
-        );
-        world.StartResoniteLink();
-    }
+    // 予約 (GameLibs が World.ResoniteLink / IsAllowedToRunResoniteLink() /
+    // StartResoniteLink() API を公開したらコメントを外して復活):
+    // /// <summary>
+    // /// patch の <paramref name="enabled"/> に従い ResoniteLink を有効化する。前提: engine thread 上で呼ぶ。
+    // /// </summary>
+    // /// <remarks>
+    // /// <para><c>null</c>: 変更しない。</para>
+    // /// <para><c>true</c>: 既に有効 (<c>world.ResoniteLink != null</c>) なら no-op (冪等)。未有効なら
+    // /// host authority + ResoniteLink 権限を要求し、<c>world.StartResoniteLink()</c> を呼ぶ。</para>
+    // /// <para><c>false</c>: engine が stop API を持たないため runtime disable は不可。
+    // /// <see cref="SessionResoniteLinkException"/> を投げる。</para>
+    // /// </remarks>
+    // private static void ApplyResoniteLink(FrooxWorld world, bool? enabled)
+    // {
+    //     if (enabled is not { } value)
+    //     {
+    //         return;
+    //     }
+    //
+    //     if (!value)
+    //     {
+    //         throw new SessionResoniteLinkException(
+    //             "ResoniteLink cannot be disabled at runtime (the engine exposes no stop API)."
+    //         );
+    //     }
+    //
+    //     if (world.ResoniteLink != null)
+    //     {
+    //         return;
+    //     }
+    //
+    //     RequirePermission(
+    //         world.IsAuthority && world.IsAllowedToRunResoniteLink(),
+    //         "ResoniteLink requires host authority and ResoniteLink permission."
+    //     );
+    //     world.StartResoniteLink();
+    // }
 
     /// <summary>接続ユーザ 1 名の snapshot を読む。前提: engine thread 上で呼ぶ。</summary>
     private static SessionUserSnapshot ReadUser(User user)

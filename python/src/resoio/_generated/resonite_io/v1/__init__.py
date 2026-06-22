@@ -3043,16 +3043,11 @@ class SessionSettings(betterproto2.Message):
     session_id: "str" = betterproto2.field(14, betterproto2.TYPE_STRING)
 
     is_host: "bool" = betterproto2.field(15, betterproto2.TYPE_BOOL)
-
-    resonite_link_enabled: "bool" = betterproto2.field(16, betterproto2.TYPE_BOOL)
     """
-    ResoniteLink (engine が公開する localhost WebSocket 連携エンドポイント) の
-    状態 (読み取り専用)。World.ResoniteLink が null なら disabled。
-    """
-
-    resonite_link_port: "int" = betterproto2.field(17, betterproto2.TYPE_INT32)
-    """
-    ResoniteLink の待受ポート。無効時は 0 (有効時は 2000-65535 の動的割当)。
+    予約: field 16 / 17 は ResoniteLink 復活用に予約 (他用途に再利用しないこと)。
+    GameLibs が World.ResoniteLink API を公開したら、以下を復活させる:
+      16 = ResoniteLink (localhost WebSocket 連携) の有効状態 (読み取り専用、bool)。
+      17 = ResoniteLink の待受ポート (int32)。無効時は 0 (有効時は動的割当)。
     """
 
 
@@ -3129,15 +3124,11 @@ class SessionSettingsPatch(betterproto2.Message):
     """
 
     tags: "list[str]" = betterproto2.field(14, betterproto2.TYPE_STRING, repeated=True)
-
-    resonite_link_enabled: "bool | None" = betterproto2.field(
-        15, betterproto2.TYPE_BOOL, optional=True
-    )
     """
-    ResoniteLink の有効化。true で engine の World.StartResoniteLink() を呼ぶ
-    (host + ResoniteLink 権限が必須、冪等)。**engine は runtime での無効化を
-    提供しない** (dash UI にも Enable ボタンのみ) ため、false を送ると Service は
-    FailedPrecondition を返す。未指定なら変更しない。
+    予約: field 15 は ResoniteLink 復活用に予約 (他用途に再利用しないこと)。
+    GameLibs が World.ResoniteLink API を公開したら、ResoniteLink の有効化を表す
+      15 = optional bool (true で World.StartResoniteLink() を呼ぶ、未指定で変更しない)
+    を復活させる。
     """
 
 

@@ -199,17 +199,18 @@ def _register_settings(
         default=None,
         help="Comma-separated tags to replace the whole set (empty clears it).",
     )
-    set_parser.add_argument(
-        "--resonite-link",
-        dest="resonite_link_enabled",
-        action="store_const",
-        const=True,
-        default=None,
-        help=(
-            "Enable the engine ResoniteLink endpoint (host only; idempotent). "
-            "There is no disable flag: the engine exposes no runtime-disable API."
-        ),
-    )
+    # 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+    # set_parser.add_argument(
+    #     "--resonite-link",
+    #     dest="resonite_link_enabled",
+    #     action="store_const",
+    #     const=True,
+    #     default=None,
+    #     help=(
+    #         "Enable the engine ResoniteLink endpoint (host only; idempotent). "
+    #         "There is no disable flag: the engine exposes no runtime-disable API."
+    #     ),
+    # )
     set_parser.set_defaults(func=_run_settings_set, _parser=set_parser)
 
 
@@ -406,8 +407,9 @@ def _format_settings(settings: SessionSettings) -> str:
         ("tags", ",".join(settings.tags)),
         ("session_id", settings.session_id),
         ("is_host", str(settings.is_host)),
-        ("resonite_link_enabled", str(settings.resonite_link_enabled)),
-        ("resonite_link_port", str(settings.resonite_link_port)),
+        # 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+        # ("resonite_link_enabled", str(settings.resonite_link_enabled)),
+        # ("resonite_link_port", str(settings.resonite_link_port)),
     ]
     width = max(len(key) for key, _ in fields)
     return "\n".join(f"{key.ljust(width)}  {value}" for key, value in fields)
@@ -485,7 +487,8 @@ async def _run_settings_set(args: argparse.Namespace) -> int:
         args.auto_cleanup_enabled,
         args.auto_cleanup_interval_seconds,
         args.tags,
-        args.resonite_link_enabled,
+        # 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+        # args.resonite_link_enabled,
     )
     if all(value is None for value in flag_values):
         parser: argparse.ArgumentParser = args._parser
@@ -513,7 +516,8 @@ async def _run_settings_set(args: argparse.Namespace) -> int:
             auto_cleanup_enabled=args.auto_cleanup_enabled,
             auto_cleanup_interval_seconds=args.auto_cleanup_interval_seconds,
             tags=tags,
-            resonite_link_enabled=args.resonite_link_enabled,
+            # 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+            # resonite_link_enabled=args.resonite_link_enabled,
         )
         settings = await client.get_settings()
     if output.is_structured(args.format):

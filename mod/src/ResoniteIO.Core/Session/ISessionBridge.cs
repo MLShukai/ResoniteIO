@@ -33,9 +33,12 @@ public enum KickKind
 /// </summary>
 /// <remarks>
 /// 全 field に actual 値を入れる (presence 概念なし)。<paramref name="SessionId"/> /
-/// <paramref name="IsHost"/> は読み取り専用メタ。<paramref name="ResoniteLinkEnabled"/> /
-/// <paramref name="ResoniteLinkPort"/> は ResoniteLink の読み取り専用状態 (無効時 port は 0)。
+/// <paramref name="IsHost"/> は読み取り専用メタ。
 /// </remarks>
+// 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+// 復活時は上の </remarks> の前に次の paramref 説明を戻す:
+//   <paramref name="ResoniteLinkEnabled"/> / <paramref name="ResoniteLinkPort"/> は
+//   ResoniteLink の読み取り専用状態 (無効時 port は 0)。
 public sealed record SessionSettingsSnapshot(
     string WorldName,
     string WorldDescription,
@@ -51,9 +54,11 @@ public sealed record SessionSettingsSnapshot(
     float AutoCleanupIntervalSeconds,
     IReadOnlyList<string> Tags,
     string SessionId,
-    bool IsHost,
-    bool ResoniteLinkEnabled,
-    int ResoniteLinkPort
+    bool IsHost
+// 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+// 復活時は上の IsHost に末尾カンマを足し、以下 2 行のコメントを外す。
+// , bool ResoniteLinkEnabled
+// , int ResoniteLinkPort
 );
 
 /// <summary>
@@ -85,12 +90,13 @@ public sealed record SessionSettingsPatchSnapshot
     /// <summary><c>null</c> なら tags を変更しない。non-null なら全置換 (空配列で全消し)。</summary>
     public IReadOnlyList<string>? Tags { get; init; }
 
-    /// <summary>
-    /// ResoniteLink の有効化。<c>true</c> で有効化 (冪等)、<c>null</c> なら変更しない。
-    /// <c>false</c> (runtime disable) は engine が stop API を持たないため Bridge 層で
-    /// <see cref="SessionResoniteLinkException"/> になる。
-    /// </summary>
-    public bool? ResoniteLinkEnabled { get; init; }
+    // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+    // /// <summary>
+    // /// ResoniteLink の有効化。<c>true</c> で有効化 (冪等)、<c>null</c> なら変更しない。
+    // /// <c>false</c> (runtime disable) は engine が stop API を持たないため Bridge 層で
+    // /// <see cref="SessionResoniteLinkException"/> になる。
+    // /// </summary>
+    // public bool? ResoniteLinkEnabled { get; init; }
 }
 
 /// <summary>接続ユーザー 1 名の snapshot (proto <c>SessionUser</c> から独立した Core 層 POCO)。</summary>
@@ -274,15 +280,16 @@ public sealed class SessionRoleNotFoundException : Exception
         : base(message, innerException) { }
 }
 
-/// <summary>
-/// ResoniteLink を要求どおりに変更できない (runtime disable 不可 / 有効化失敗)。
-/// Service 層は <c>FailedPrecondition</c> に翻訳する。
-/// </summary>
-public sealed class SessionResoniteLinkException : Exception
-{
-    public SessionResoniteLinkException(string message)
-        : base(message) { }
-
-    public SessionResoniteLinkException(string message, Exception? innerException)
-        : base(message, innerException) { }
-}
+// 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+// /// <summary>
+// /// ResoniteLink を要求どおりに変更できない (runtime disable 不可 / 有効化失敗)。
+// /// Service 層は <c>FailedPrecondition</c> に翻訳する。
+// /// </summary>
+// public sealed class SessionResoniteLinkException : Exception
+// {
+//     public SessionResoniteLinkException(string message)
+//         : base(message) { }
+//
+//     public SessionResoniteLinkException(string message, Exception? innerException)
+//         : base(message, innerException) { }
+// }

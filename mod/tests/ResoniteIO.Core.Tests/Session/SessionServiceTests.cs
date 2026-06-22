@@ -123,7 +123,10 @@ public sealed class SessionServiceTests
         Assert.Null(patch.AutoCleanupEnabled);
         Assert.Null(patch.AutoCleanupIntervalSeconds);
         Assert.Null(patch.Tags);
-        Assert.Null(patch.ResoniteLinkEnabled);
+        // ResoniteLink は 0.6.0 publish 修正で全層コメントアウト
+        // (proto field が再生成で消えるため patch.ResoniteLinkEnabled も無くなる)。
+        // 復活時はこの行のコメントを外す。
+        // Assert.Null(patch.ResoniteLinkEnabled);
     }
 
     // ===================================================================
@@ -218,8 +221,15 @@ public sealed class SessionServiceTests
 
     // ===================================================================
     //  ResoniteLink — GetSettings state + ApplySettings enable/disable
+    //
+    //  ResoniteLink を 0.6.0 publish 修正で全層コメントアウトしたため、ResoniteLink
+    //  専用の 5 Fact をブロックでコメントアウトする (SessionSettings/Patch から
+    //  resonite_link フィールドが消え、SessionResoniteLinkException も外れるため
+    //  これらはコンパイル不能になる)。GameLibs が World.ResoniteLink API を公開したら
+    //  この丸ごとのコメントを外して復活させる。
     // ===================================================================
 
+    /*
     [Fact]
     public async Task GetSettings_carries_resonite_link_disabled_state_with_zero_port()
     {
@@ -300,6 +310,7 @@ public sealed class SessionServiceTests
         var patch = Assert.IsType<Core.Session.SessionSettingsPatchSnapshot>(bridge.LastApplyPatch);
         Assert.Null(patch.ResoniteLinkEnabled);
     }
+    */
 
     // ===================================================================
     //  ApplySettings — max_users range validation (Service layer)

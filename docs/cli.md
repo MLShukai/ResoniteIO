@@ -25,7 +25,7 @@ resoio --help
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
 | `resoio inventory` | Inventory | unary | Interactive REPL: browse (`ls`/`cd`), mutate (`mkdir`/`cp`/`mv`/`rm`), `spawn`, and `thumb` (save an item's thumbnail image). |
-| `resoio session` | Session | unary | Configure the connected session via nested subcommands: `settings get`/`set` (partial apply; `set --resonite-link` enables ResoniteLink — enable-only, the engine has no runtime disable), `users list`, `user kick`/`ban`/`silence`/`respawn`/`role` (target with `--id`/`--name`/`--self`; `respawn` defaults to self), `roles list`, `overrides list`. |
+| `resoio session` | Session | unary | Configure the connected session via nested subcommands: `settings get`/`set` (partial apply), `users list`, `user kick`/`ban`/`silence`/`respawn`/`role` (target with `--id`/`--name`/`--self`; `respawn` defaults to self), `roles list`, `overrides list`. |
 | `resoio contact` | Contact | unary | Browse and manage contacts (friends) via nested subcommands: `list` (`--search` / `--filter all\|accepted\|requests` / `--include-hidden`), `get`, `search` (`--exact`), `add` (`--username`), `accept`, `remove`. `list` hides dash-hidden (ignored / blocked) contacts by default; `--include-hidden` shows them. The mutating ops (`add` / `accept` / `remove`) write the real cloud contact list. |
 | `resoio auth` | Auth | unary | Resonite cloud sign-in via nested subcommands: `login` (credential positional; password via env/stdin/prompt, never a flag), `logout`, `status`. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |

@@ -1,20 +1,24 @@
-# C# build & test for the ResoniteIO mod.
+# C# build & test for the ResoniteIO mod. Two CI jobs cover two concerns:
 #
-# Scope: ONLY the Resonite-independent Core layer is built/tested on clean CI.
+#   - build-test: builds + tests the Resonite-independent Core layer
+#     (ResoniteIO.Core.Tests) — the fast, test-bearing layer.
+#   - build-mod:  builds the Mod package (ResoniteIO.csproj = Core + Mod) in
+#     Release through the Resonite.GameLibs NuGet fallback, mirroring
+#     publish.yml's `build` job. This catches "API present in the local
+#     FrooxEngine.dll but absent from Resonite.GameLibs" skew on every PR/push
+#     instead of only at tag/publish time (that skew once broke a publish: a
+#     ResoniteLink-using bridge compiled locally but not against GameLibs).
 #
-# We do NOT build the whole ResoniteIO.sln, and we do NOT build the Mod
-# (ResoniteIO / ResoniteIO.Tests), because the Mod links against proprietary
-# DLLs that are not restorable on a public runner:
-#   - net472 ResoniteIO.Renderer -> Unity/Renderite DLLs.
-#   - ResoniteIO (engine bridge)  -> InterprocessLib.FrooxEngine.dll (the
-#     Nytra-InterprocessLib Gale mod, used by the Camera v2 receiver). The
-#     Resonite.GameLibs NuGet fallback supplies FrooxEngine/Elements/SkyFrost
-#     engine types, but NOT InterprocessLib, so the Mod fails to compile here.
+# build-mod provisions InterprocessLib.FrooxEngine.dll via
+# .github/scripts/fetch-interprocesslib.sh — the Camera v2 receiver compiles
+# against it and GameLibs does not supply it (GameLibs gives
+# FrooxEngine/Elements/SkyFrost only). It does NOT build the net472
+# ResoniteIO.Renderer (non-redistributable Unity/Renderite DLLs; shipped as a
+# committed prebuilt) nor the Mod test assemblies (they need the engine-side
+# InterprocessLib receiver at runtime); those stay verified locally via
+# `just run` and in the manual/e2e tier.
 #
-# Therefore the Mod + its tests (incl. the engine-side InterprocessLib
-# receiver) are verified locally via `just run` (Gale profile present) and in
-# the manual/e2e tier. ResoniteIO.Core.Tests (240 tests, incl. the FrameHeader
-# IPC contract) is the CI-covered layer.
+# Keep build-mod's mod-build step in lockstep with publish.yml's build job.
 name: C# Build & Test
 
 on:
@@ -63,3 +67,42 @@ jobs:
 
       - name: Test Core (Resonite-independent; Mod + Renderer excluded)
         run: dotnet test mod/tests/ResoniteIO.Core.Tests/ResoniteIO.Core.Tests.csproj -c Release
+
+  # Builds the Mod package (Core + Mod) in Release via the Resonite.GameLibs
+  # NuGet fallback — the SAME build publish.yml's `build` job runs at tag time.
+  # Running it on every PR/push catches GameLibs API skew before a release tag.
+  build-mod:
+    name: Build Mod (GameLibs fallback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "${{ env.DOTNET_VERSION }}"
+
+      - name: Restore .NET tools (csharpier, tcli)
+        run: dotnet tool restore
+
+      - name: Renderer prebuilt drift guard (committed DLL must match renderer sources)
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="$(cat mod/prebuilt/renderer.sha256)"
+          ACTUAL="$(bash scripts/renderer-prebuilt-hash.sh)"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Renderer prebuilt is stale. Run 'just renderer-prebuild' locally (with Resonite) and commit mod/prebuilt/renderer/."
+            echo "expected=$EXPECTED actual=$ACTUAL"
+            exit 1
+          fi
+
+      - name: Provision InterprocessLib (Camera v2 build dependency)
+        shell: bash
+        run: ./.github/scripts/fetch-interprocesslib.sh
+
+      # Keep this command identical to publish.yml's "Build Thunderstore mod
+      # package" step — if one changes, change both, or skew returns.
+      - name: Build mod package (Release, GameLibs fallback)
+        run: dotnet build mod/src/ResoniteIO/ResoniteIO.csproj -c Release -t:PackTS
