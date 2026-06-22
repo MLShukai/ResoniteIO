@@ -74,6 +74,7 @@ resonite-io プロジェクトの規約・知見・ユーザーの好みを記�
 - [agent model は inherit](feedback_agent_model_inherit.md) — `.claude/agents/*.md` の `model:` は `inherit` 固定。session model は settings.container.json で一元 pin (Fable 5 移行の教訓)。
 - [git に --no-pager を付けない](feedback_git_no_pager.md) — 非インタラクティブ Bash では既定で pager を使わないため冗長。
 - [docstring-author に cleanup も依頼する](feedback_docstring_author_includes_cleanup.md) — 呼ぶたびに「新規 polish」だけでなく「冗長コメント trim」もスコープに含めて指示する。
+- [CHANGELOG 絵文字規約](feedback_changelog_emoji_convention.md) — カテゴリ見出しに絵文字 (`✨ Added` 等) + `💥 Breaking:` marker。version 見出しと末尾 link 定義は触らない。polish は docstring-author に委譲。
 - [リリースパイプライン](feedback_release_pipeline.md) — `v*` tag で Thunderstore mod + PyPI を同時公開。正規 version = csproj、CHANGELOG = release notes、net472 除外、namespace mlshukai、repo は MLShukai へ移管。
 - [応答は日本語で](feedback_respond_in_japanese.md) — project owner への会話応答は日本語。成果物 (コード/コミット/PR/docstring) は既存規約どおり。
 

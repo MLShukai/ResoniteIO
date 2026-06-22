@@ -7,219 +7,249 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
-### Added
+### ✨ Added
 
 - **`resoio launch` / `resoio terminate` (start/stop Resonite via umu-launcher)**:
   New commands and Python functions (`resoio.launch` / `resoio.terminate`) that
-  start and force-stop the Resonite client without gRPC. `launch` spawns the
-  umu-launcher chain and PID-diffs the **engine** (`resonite_pid`) and
-  **renderer** (`renderer_pid`) host processes into existence, returning both as a
-  `LaunchResult`; `terminate` stages `SIGTERM` → `SIGKILL` over those two PIDs (or
-  auto-detects the single running instance when given none, erroring if more than
-  one is found). `RESONITE_EXE` (default: the Steam install) and `MOD_PATH` (the
-  Gale profile with the mod deployed) select the install; the ResoniteIO mod must
-  be installed (via Gale / Thunderstore) or `launch` errors with guidance. The
-  cooperative gRPC quit stays available as `resoio shutdown`. Exposed as
-  `resoio.launch` / `resoio.terminate` / `LaunchResult` / `LauncherError` and the
-  `resoio launch` (`-e/--exe` / `-p/--profile` / `--vanilla` /
-  `--format human|json`) and `resoio terminate` (`[resonite_pid] [renderer_pid]`)
-  CLI commands
+  start and force-stop the Resonite client without gRPC.
+
+  - `launch` spawns the umu-launcher chain and PID-diffs the **engine**
+    (`resonite_pid`) and **renderer** (`renderer_pid`) host processes into
+    existence, returning both as a `LaunchResult`.
+  - `terminate` stages `SIGTERM` → `SIGKILL` over those two PIDs (or auto-detects
+    the single running instance when given none, erroring if more than one is
+    found).
+  - `RESONITE_EXE` (default: the Steam install) and `MOD_PATH` (the Gale profile
+    with the mod deployed) select the install; the ResoniteIO mod must be
+    installed (via Gale / Thunderstore) or `launch` errors with guidance.
+  - The cooperative gRPC quit stays available as `resoio shutdown`.
+  - Exposed as `resoio.launch` / `resoio.terminate` / `LaunchResult` /
+    `LauncherError` and the `resoio launch` (`-e/--exe` / `-p/--profile` /
+    `--vanilla` / `--format human|json`) and `resoio terminate`
+    (`[resonite_pid] [renderer_pid]`) CLI commands.
+
 - **Run Resonite inside the dev container**: the dev container can now launch
   Resonite itself via the new `resoio launch` / `resoio terminate` commands (and
-  the thin `just resonite-launch` / `just resonite-stop` wrappers): the container
-  entrypoint rsyncs the read-only `/resonite` bind into a writable `/opt/resonite`,
-  and `resoio launch` starts Resonite through `umu-run` / Proton **with the
-  ResoniteIO mod loaded** from the `./gale` Gale profile (the first run pulls
-  GE-Proton and copies the ~2 GB install). `resoio launch --vanilla` runs
-  **vanilla** Resonite with no mod. Engine side loads via hookfxr, renderer side
-  via a doorstop `winhttp.dll` — `resoio launch` sets
-  `WINEDLLOVERRIDES="winhttp=n,b"` automatically, so **no manual Steam-style
-  `WINEDLLOVERRIDES` setup is needed** on this path. With in-container launch the whole
-  mod loop runs inside the container: the mod (GrpcHost) creates its gRPC socket
-  under the container's `~/.resonite-io/` (it makes the directory itself before
-  binding) and the Python client connects there — no host bind-share. The mod's
-  BepInEx log stays at `gale/BepInEx/LogOutput.log` (`just log`); umu/Proton
-  launch noise is split into `gale/BepInEx/umu-launch.log`. Rendering needs a host
-  graphical session (X11 / Xwayland) and PipeWire/PulseAudio for audio.
-  **NVIDIA / AMD / Intel** GPUs are all supported — `initialize.sh` detects the
-  vendor and selects the matching per-vendor compose overlay
-  (`.devcontainer/compose.{nvidia,amd,intel}.yml` via the `compose.gpu.yml`
-  symlink). **Requires `kernel.apparmor_restrict_unprivileged_userns=0`** on the
-  host (pressure-vessel needs unprivileged user namespaces, which Ubuntu 24.04+
-  restricts by default); the container start hard-fails without it. The dev image
-  base also moved from `debian:bookworm-slim` to `debian:13-slim` (trixie), and
-  `compose.yml` moved from the repo root to `.devcontainer/compose.yml`
+  the thin `just resonite-launch` / `just resonite-stop` wrappers).
+
+  - The container entrypoint rsyncs the read-only `/resonite` bind into a writable
+    `/opt/resonite`, and `resoio launch` starts Resonite through `umu-run` /
+    Proton **with the ResoniteIO mod loaded** from the `./gale` Gale profile (the
+    first run pulls GE-Proton and copies the ~2 GB install). `resoio launch --vanilla` runs **vanilla** Resonite with no mod.
+  - Engine side loads via hookfxr, renderer side via a doorstop `winhttp.dll` —
+    `resoio launch` sets `WINEDLLOVERRIDES="winhttp=n,b"` automatically, so **no
+    manual Steam-style `WINEDLLOVERRIDES` setup is needed** on this path.
+  - The whole mod loop runs inside the container: the mod (GrpcHost) creates its
+    gRPC socket under the container's `~/.resonite-io/` (it makes the directory
+    itself before binding) and the Python client connects there — no host
+    bind-share.
+  - The mod's BepInEx log stays at `gale/BepInEx/LogOutput.log` (`just log`);
+    umu/Proton launch noise is split into `gale/BepInEx/umu-launch.log`.
+  - Rendering needs a host graphical session (X11 / Xwayland) and
+    PipeWire/PulseAudio for audio. **NVIDIA / AMD / Intel** GPUs are all supported
+    — `initialize.sh` detects the vendor and selects the matching per-vendor
+    compose overlay (`.devcontainer/compose.{nvidia,amd,intel}.yml` via the
+    `compose.gpu.yml` symlink).
+  - **Requires `kernel.apparmor_restrict_unprivileged_userns=0`** on the host
+    (pressure-vessel needs unprivileged user namespaces, which Ubuntu 24.04+
+    restricts by default); the container start hard-fails without it.
+  - The dev image base also moved from `debian:bookworm-slim` to `debian:13-slim`
+    (trixie), and `compose.yml` moved from the repo root to
+    `.devcontainer/compose.yml`.
+
 - **`Contact` modality**: A new unary modality that drives the dash "Contacts"
   tab by reading/writing the cloud contact list (`Engine.Cloud.Contacts` /
-  `Engine.Cloud.Users`) directly — no UI automation. `ListContacts` returns the
-  synced contacts with presence (online status + current session name / access
-  level) plus the contact / request counts and a list-loaded flag, with
-  client-side `search` (username / alternate-username substring) and `filter`
-  (accepted friends / incoming requests). Like the dash tab it hides
-  `ShouldBeHidden` contacts (ignored / blocked / none) by default — pass
-  `include_hidden` to include them, and every contact carries an `is_hidden`
-  flag. `GetContact` fetches one by user id (absent → `found=false`).
-  `SearchUsers` queries the cloud for users to add (exact or substring,
-  read-only). `AddContact` (resolving the username mod-side when omitted),
-  `AcceptRequest`, and `RemoveContact` mutate the list; remove declines a
-  request / deletes a friend, which the engine marks `Ignored` so the entry
-  drops out of the default (hidden) list. Unknown ids return `NotFound`, cloud
-  failures `Internal`, and an unavailable cloud `FailedPrecondition`. Exposed as
-  `ContactClient` and the nested `resoio contact` CLI
-  (`list` (with `--include-hidden`) / `get` / `search` / `add` / `accept` /
-  `remove`, each with `--format human|json`)
+  `Engine.Cloud.Users`) directly — no UI automation.
+
+  - `ListContacts` returns the synced contacts with presence (online status +
+    current session name / access level) plus the contact / request counts and a
+    list-loaded flag, with client-side `search` (username / alternate-username
+    substring) and `filter` (accepted friends / incoming requests). Like the dash
+    tab it hides `ShouldBeHidden` contacts (ignored / blocked / none) by default —
+    pass `include_hidden` to include them, and every contact carries an
+    `is_hidden` flag.
+  - `GetContact` fetches one by user id (absent → `found=false`). `SearchUsers`
+    queries the cloud for users to add (exact or substring, read-only).
+  - `AddContact` (resolving the username mod-side when omitted), `AcceptRequest`,
+    and `RemoveContact` mutate the list; remove declines a request / deletes a
+    friend, which the engine marks `Ignored` so the entry drops out of the default
+    (hidden) list.
+  - Unknown ids return `NotFound`, cloud failures `Internal`, and an unavailable
+    cloud `FailedPrecondition`.
+  - Exposed as `ContactClient` and the nested `resoio contact` CLI (`list` (with
+    `--include-hidden`) / `get` / `search` / `add` / `accept` / `remove`, each
+    with `--format human|json`).
+
 - **`Auth` modality**: A new unary modality for Resonite cloud authentication —
   sign in / out and read the auth status — driving `Engine.Cloud.Session`
   directly (`Login` / `Logout` / `Status`, all returning a unified `AuthStatus`
   of `logged_in` / `user_id` / `user_name` / `session_expires_unix_nanos`).
-  `login` takes a credential (username / email / `U-` id) and a password (plus an
-  optional `totp` for 2FA) and `remember_me` (default true), which delegates
-  session persistence to the engine — **resoio stores no credentials on disk**.
-  Wrong credentials return `Unauthenticated`; a 2FA-enabled account with no/blank
-  code returns `FailedPrecondition`, and the CLI then prompts for the code and
-  retries once. Exposed as `AuthClient` and the nested `resoio auth login` /
-  `logout` / `status` CLI. **Security**: the plaintext password is never
-  persisted, logged, placed in an exception / gRPC status detail, or
-  `--format json` output, and there is **no `--password` CLI flag** — the
-  password comes only from `RESONITE_IO_PASSWORD`, piped stdin, or a hidden
-  prompt. All three leaves support `--format human|json`; the human `status` output renders the session expiry as a UTC datetime, and the `--format json` document adds a derived ISO-8601 `session_expires_iso` next to the exact `session_expires_unix_nanos`. When the credential is omitted, the interactive prompt reads `Username or Email` — a username, email, or user id is accepted
+
+  - `login` takes a credential (username / email / `U-` id) and a password (plus
+    an optional `totp` for 2FA) and `remember_me` (default true), which delegates
+    session persistence to the engine — **resoio stores no credentials on disk**.
+  - Wrong credentials return `Unauthenticated`; a 2FA-enabled account with
+    no/blank code returns `FailedPrecondition`, and the CLI then prompts for the
+    code and retries once.
+  - **Security**: the plaintext password is never persisted, logged, placed in an
+    exception / gRPC status detail, or `--format json` output, and there is **no
+    `--password` CLI flag** — the password comes only from `RESONITE_IO_PASSWORD`,
+    piped stdin, or a hidden prompt.
+  - All three leaves support `--format human|json`; the human `status` output
+    renders the session expiry as a UTC datetime, and the `--format json` document
+    adds a derived ISO-8601 `session_expires_iso` next to the exact
+    `session_expires_unix_nanos`. When the credential is omitted, the interactive
+    prompt reads `Username or Email` — a username, email, or user id is accepted.
+  - Exposed as `AuthClient` and the nested `resoio auth login` / `logout` /
+    `status` CLI.
+
 - **`Session` modality**: A new unary userspace modality that drives the dash
   "Session" dialog — the connected session's Settings, Users, and Permissions
   tabs — by reading/writing `World.Configuration` / `World.AllUsers` /
-  `World.Permissions` directly (no UI automation). Settings use a get +
-  partial-apply model (`GetSettings` / `ApplySettings`): world name/description,
-  max users, access level, hide-from-listing, mobile-friendly, away-kick,
-  auto-save, auto-cleanup, and tags. Partial updates use `proto3 optional`
-  presence, so `false` / `0` can be set explicitly and unset fields are left
-  untouched (`tags` use a `replace_tags` gate); `ApplySettings` returns nothing —
-  call `GetSettings` to read the new state. Users expose `ListUsers` plus
-  host-gated `KickUser` / `BanUser` / `SilenceUser` / `RespawnUser` /
-  `SetUserRole`; targets resolve by `user_id` (preferred), `user_name`, or
-  `local` (self), and `respawn` defaults to self. Permissions expose `ListRoles`
-  (with the default anonymous/visitor/contact/host/owner roles) and
-  `GetUserRoleOverrides`. Host-gated operations return `PermissionDenied` when
-  the local user lacks the right, and out-of-range `max_users` returns
-  `InvalidArgument`. Exposed as `SessionClient` and the nested `resoio session`
-  CLI (`settings get`/`set`, `users list`,
-  `user kick`/`ban`/`silence`/`respawn`/`role`, `roles list`, `overrides list`)
+  `World.Permissions` directly (no UI automation).
+
+  - **Settings** use a get + partial-apply model (`GetSettings` /
+    `ApplySettings`): world name/description, max users, access level,
+    hide-from-listing, mobile-friendly, away-kick, auto-save, auto-cleanup, and
+    tags. Partial updates use `proto3 optional` presence, so `false` / `0` can be
+    set explicitly and unset fields are left untouched (`tags` use a
+    `replace_tags` gate); `ApplySettings` returns nothing — call `GetSettings` to
+    read the new state.
+  - **Users** expose `ListUsers` plus host-gated `KickUser` / `BanUser` /
+    `SilenceUser` / `RespawnUser` / `SetUserRole`; targets resolve by `user_id`
+    (preferred), `user_name`, or `local` (self), and `respawn` defaults to self.
+  - **Permissions** expose `ListRoles` (with the default
+    anonymous/visitor/contact/host/owner roles) and `GetUserRoleOverrides`.
+  - Host-gated operations return `PermissionDenied` when the local user lacks the
+    right, and out-of-range `max_users` returns `InvalidArgument`.
+  - Exposed as `SessionClient` and the nested `resoio session` CLI (`settings get`/`set`, `users list`, `user kick`/`ban`/`silence`/`respawn`/`role`, `roles list`, `overrides list`).
+
 - **ResoniteLink enable in `Session` settings**: `SessionSettings` now reports
   `resonite_link_enabled` / `resonite_link_port` (read from `World.ResoniteLink`,
   port normalized to `0` when off), and `ApplySettings` can turn ResoniteLink on
   via `World.StartResoniteLink()` (host + ResoniteLink-permission gated,
-  idempotent) using `apply_settings(resonite_link_enabled=True)` or
-  `resoio session settings set --resonite-link`. **Enable-only**: the engine
-  exposes no runtime stop API (the dash itself offers only an Enable button), so
-  requesting disable returns `FailedPrecondition`
+  idempotent) using `apply_settings(resonite_link_enabled=True)` or `resoio session settings set --resonite-link`. **Enable-only**: the engine exposes no
+  runtime stop API (the dash itself offers only an Enable button), so requesting
+  disable returns `FailedPrecondition`.
+
 - **`resoio shutdown` / `resoio.shutdown`**: The graceful-stop command and
   convenience function are now named `shutdown`, matching Resonite's terminology
   and the `Lifecycle.Shutdown` RPC. Behaviour is unchanged — it reads the engine
-  PID from `Info` (for reporting) and sends `Lifecycle.Shutdown`; the engine
-  quits itself and Steam/Proton reaps the renderer + launch wrappers. Prints /
-  returns the engine's host PID, or "resonite not running" / `None` when no
-  engine is reachable
-- **`resoio --format human|json`**: Commands that return structured data
-  (`ping`, `info`, `display`, `cursor`, `grabber`, `context-menu`, `dash`, `world`,
-  `mic`, `session`) gained a `--format` flag. `human` (default) keeps the
-  existing text output unchanged; `json` prints one machine-readable document to
-  stdout (proto field names in snake_case, enums as their name, big ints exact,
-  non-ASCII preserved). `--format` is not added to pid/path-only commands
-  (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`),
-  interactive commands (`drive` / `grabber interactive` / `inventory`), or the
-  side-effect-only `session user kick` / `ban` / `respawn` leaves
+  PID from `Info` (for reporting) and sends `Lifecycle.Shutdown`; the engine quits
+  itself and Steam/Proton reaps the renderer + launch wrappers. Prints / returns
+  the engine's host PID, or "resonite not running" / `None` when no engine is
+  reachable.
+
+- **`resoio --format human|json`**: Commands that return structured data (`ping`,
+  `info`, `display`, `cursor`, `grabber`, `context-menu`, `dash`, `world`, `mic`,
+  `session`) gained a `--format` flag. `human` (default) keeps the existing text
+  output unchanged; `json` prints one machine-readable document to stdout (proto
+  field names in snake_case, enums as their name, big ints exact, non-ASCII
+  preserved). `--format` is not added to pid/path-only commands (`shutdown` /
+  `terminate`, `screenshot` / `record` / `world thumbnail`), interactive commands
+  (`drive` / `grabber interactive` / `inventory`), or the side-effect-only
+  `session user kick` / `ban` / `respawn` leaves.
+
 - **`resoio wait` / `resoio.wait_for_ready`**: A new startup-readiness gate that
-  blocks until the Resonite IO server answers `Connection.Ping`. The public async
-  `wait_for_ready(socket_path=None, *, timeout=None, interval=0.1)` polls until a
-  ping round-trips and returns the resolved socket path, retrying while the socket
-  is absent, has no listener yet, or the engine is still warming up
-  (`FAILED_PRECONDITION`); `AmbiguousSocketError` and other gRPC errors propagate,
-  and `timeout` (`None` = wait forever) raises `TimeoutError`. The `resoio wait`
-  CLI wraps it: it prints the resolved socket path on success, takes an optional
-  `pid` to target `resonite-{pid}.sock`, and `-T/--timeout` (default 30s, `<=0`
-  tries once) bounds the wait. `--format` is not added (path-only output)
+  blocks until the Resonite IO server answers `Connection.Ping`.
+
+  - The public async `wait_for_ready(socket_path=None, *, timeout=None, interval=0.1)` polls until a ping round-trips and returns the resolved socket
+    path, retrying while the socket is absent, has no listener yet, or the engine
+    is still warming up (`FAILED_PRECONDITION`); `AmbiguousSocketError` and other
+    gRPC errors propagate, and `timeout` (`None` = wait forever) raises
+    `TimeoutError`.
+  - The `resoio wait` CLI wraps it: it prints the resolved socket path on success,
+    takes an optional `pid` to target `resonite-{pid}.sock`, and `-T/--timeout`
+    (default 30s, `<=0` tries once) bounds the wait. `--format` is not added
+    (path-only output).
+
 - **Grabber post-grab interactions (`Use` / `Unuse` / `Equip` / `Dequip`)**: The
   Grabber service gained four unary RPCs (all returning `GrabberGrabState`) for
-  operating what a hand holds. `Use` presses a virtual button (`primary` =
-  left-click / `secondary` = right-click) and **holds it down** until `Unuse`,
-  driven by a per-tick `ExternalInput` re-injection repeater (Locomotion-style) so
-  the press survives across RPCs; `primary` injects **both** the digital `Interact`
-  action **and** the analog press-strength action, which is what makes
-  strength-driven tools such as Pens / Geometry Line Brushes (the `BrushTool`
-  family, which fire on analog `primaryStrength`, not on the digital press) draw —
-  hold `Use`, sweep the cursor with `cursor set` to move the tip, then `Unuse`.
-  `Equip` finds an `ITool` on a grabbed object and equips it into the hand;
-  `Dequip` removes the equipped tool (both no-ops when nothing applies). `Use`
-  takes an optional `strength` (analog primary press pressure, `0..1`, default
-  `1.0`, server-clamped, ignored for `secondary` and missing → `1.0`) usable as
-  e.g. brush pressure. `GrabberGrabState` gained `is_tool_equipped` /
-  `equipped_tool_name` / `held_buttons`. Exposed as
-  `GrabberClient.use` / `unuse` / `click` (a press+release convenience) / `equip` /
-  `dequip` (`use` / `click` take `strength: float = 1.0`) and the `resoio grabber`
-  actions `use` / `unuse` / `click` / `equip` / `dequip` with
-  `--button {primary,secondary}` and `--strength` (default `1.0`)
+  operating what a hand holds.
 
-### Changed
+  - `Use` presses a virtual button (`primary` = left-click / `secondary` =
+    right-click) and **holds it down** until `Unuse`, driven by a per-tick
+    `ExternalInput` re-injection repeater (Locomotion-style) so the press survives
+    across RPCs. `primary` injects **both** the digital `Interact` action **and**
+    the analog press-strength action, which is what makes strength-driven tools
+    such as Pens / Geometry Line Brushes (the `BrushTool` family, which fire on
+    analog `primaryStrength`, not on the digital press) draw — hold `Use`, sweep
+    the cursor with `cursor set` to move the tip, then `Unuse`.
+  - `Equip` finds an `ITool` on a grabbed object and equips it into the hand;
+    `Dequip` removes the equipped tool (both no-ops when nothing applies).
+  - `Use` takes an optional `strength` (analog primary press pressure, `0..1`,
+    default `1.0`, server-clamped, ignored for `secondary` and missing → `1.0`)
+    usable as e.g. brush pressure. `GrabberGrabState` gained `is_tool_equipped` /
+    `equipped_tool_name` / `held_buttons`.
+  - Exposed as `GrabberClient.use` / `unuse` / `click` (a press+release
+    convenience) / `equip` / `dequip` (`use` / `click` take `strength: float = 1.0`) and the `resoio grabber` actions `use` / `unuse` / `click` / `equip` /
+    `dequip` with `--button {primary,secondary}` and `--strength` (default `1.0`).
+
+### 🔧 Changed
 
 - **`resoio grab` is renamed to `resoio grabber`, and the action is now
-  required (breaking)**: the top-level Grabber command is `resoio grabber` and
+  required**: 💥 Breaking: the top-level Grabber command is `resoio grabber` and
   the action must be named explicitly — `resoio grabber grab` / `release` /
   `state` / `interactive`. Bare `resoio grabber` now errors with the argparse
-  usage code; the old implicit-`grab` default (where `resoio grab` ran a grab
-  with no action) is **removed**. The old `resoio grab` command name is also
-  removed (no alias), so argparse rejects it. This aligns the command with the
-  `Grabber` modality name (like `cursor` / `display` / `world`). The Python API
-  (`GrabberClient`) and the gRPC wire are unchanged
-- **`resoio terminate` / `resoio.terminate` now force-stops the processes
-  (breaking)**: it was a deprecated alias of `resoio shutdown` (a graceful
+  usage code; the old implicit-`grab` default (where `resoio grab` ran a grab with
+  no action) is **removed**. The old `resoio grab` command name is also removed
+  (no alias), so argparse rejects it. This aligns the command with the `Grabber`
+  modality name (like `cursor` / `display` / `world`). The Python API
+  (`GrabberClient`) and the gRPC wire are unchanged.
+- **`resoio terminate` / `resoio.terminate` now force-stops the processes**: 💥
+  Breaking: it was a deprecated alias of `resoio shutdown` (a graceful
   `Lifecycle.Shutdown` over gRPC); it now **kills** the engine + renderer host
   processes (`SIGTERM` → `SIGKILL`) and takes `[resonite_pid] [renderer_pid]` (or
   auto-detects the single running instance). Use `resoio shutdown` /
   `resoio.shutdown` for the cooperative gRPC quit. The old gRPC
-  `resoio.terminate(socket_path=...)` signature is removed
+  `resoio.terminate(socket_path=...)` signature is removed.
 - **`resoio shutdown` / `resoio.shutdown` documented as best-effort**: the
   graceful `Lifecycle.Shutdown` ACK only confirms the quit was *requested*, not
   that the engine exited. On Linux (including the dev container) FrooxEngine
   frequently hangs during teardown and the engine never exits on its own
   (issue #49), so the docs and example now spell out the cooperative pattern —
   `shutdown` to ask nicely, then `terminate` for a guaranteed stop. Behaviour is
-  unchanged; the live e2e now drives that real flow (graceful request, then
-  forced terminate) instead of asserting a graceful exit that does not happen
-  in-container
-- **`resoio record` default output is now a file (breaking)**: with no `-o`,
+  unchanged; the live e2e now drives that real flow (graceful request, then forced
+  terminate) instead of asserting a graceful exit that does not happen
+  in-container.
+- **`resoio record` default output is now a file**: 💥 Breaking: with no `-o`,
   `record` saves `record_<timestamp>.mp4` (`.wav` for `--audio`) to the current
   directory instead of streaming to stdout. Pass `-o -` for the previous stdout
-  behaviour, or `-o PATH` for an explicit file
-- **`screenshot` / `record` / `world thumbnail` print the saved path**: on a
-  file save these now print the saved absolute path to stdout (`screenshot` was
+  behaviour, or `-o PATH` for an explicit file.
+- **`screenshot` / `record` / `world thumbnail` print the saved path**: on a file
+  save these now print the saved absolute path to stdout (`screenshot` was
   previously silent; `world thumbnail` previously logged to stderr), so a caller
   can capture stdout to locate the artifact. `-o -` still streams raw bytes with
   no path line. `world thumbnail` also gained the dated-default / `-o -` target
-  rules to match `screenshot` / `record`
+  rules to match `screenshot` / `record`.
 - **`resoio mic` summary moves to stdout**: the end-of-stream summary
   (`received_frames` / `received_samples` / `dropped_frames` / `unix_nanos`) is
-  the command result and now prints to stdout in both formats (was stderr);
-  errors and status messages stay on stderr
+  the command result and now prints to stdout in both formats (was stderr); errors
+  and status messages stay on stderr.
 - **Socket resolution skips dead sockets**: directory-based socket resolution
   (`resolve_socket_path`, used by every modality client) now reads the engine PID
   from each `resonite-{pid}.sock` candidate and skips ones whose process is gone
   (`psutil.pid_exists`), so a stale socket left behind by a SIGKILL'd engine no
-  longer causes a spurious `AmbiguousSocketError` or a connect to a dead UDS;
-  only live sockets count toward the found / ambiguous decision. Names that do
-  not encode an integer PID are kept. Adds a `psutil` runtime dependency
+  longer causes a spurious `AmbiguousSocketError` or a connect to a dead UDS; only
+  live sockets count toward the found / ambiguous decision. Names that do not
+  encode an integer PID are kept. Adds a `psutil` runtime dependency.
 
-### Removed
+### 🗑️ Removed
 
 - **Container ↔ host Resonite bridge removed (migrated to in-container mod
   launch)**: now that the dev container launches the mod-loaded Resonite itself
   (`just resonite-start`), the host-side daemon (`scripts/host_agent.py`), its
   container client (`scripts/resonite_cli.py`), the `just host-agent` recipe, and
-  the debug socket `~/.resonite-io-debug/host-agent.sock` are all removed. The
-  production gRPC UDS is **no longer bind-shared with the host** — the mod creates
-  it inside the container under `~/.resonite-io/`. The host **desktop** screenshot
-  bridge (the `just resonite-screenshot` recipe / host-agent / `pyscreenshot`) is
-  removed; screenshots now go through the existing in-engine `resoio screenshot`
-  (`CameraClient.shot()`, Camera v2 framebuffer — e.g. `resoio screenshot -o foo.png`).
-  `just resonite-up` is renamed to `just resonite-vanilla`. The `GaleProfile` /
-  `GaleBin` env vars are dropped (the Gale profile is read from `./gale`)
+  the debug socket `~/.resonite-io-debug/host-agent.sock` are all removed.
+
+  - The production gRPC UDS is **no longer bind-shared with the host** — the mod
+    creates it inside the container under `~/.resonite-io/`.
+  - The host **desktop** screenshot bridge (the `just resonite-screenshot` recipe
+    / host-agent / `pyscreenshot`) is removed; screenshots now go through the
+    existing in-engine `resoio screenshot` (`CameraClient.shot()`, Camera v2
+    framebuffer — e.g. `resoio screenshot -o foo.png`).
+  - `just resonite-up` is renamed to `just resonite-vanilla`. The `GaleProfile` /
+    `GaleBin` env vars are dropped (the Gale profile is read from `./gale`).
 
 ## [0.5.0] - 2026-06-13
 
@@ -229,7 +259,7 @@ screenshot, inventory thumbnail fetching, and engine/renderer host PIDs in
 a tab/control model (gRPC route / C# surface / Python client + CLI all change),
 so update the ResoniteIO mod and the `resoio` Python package in lockstep.
 
-### Added
+### ✨ Added
 
 - **`Lifecycle.Shutdown` RPC**: A new `Lifecycle` modality with a unary
   `Shutdown` RPC that asks the engine to quit gracefully
@@ -266,9 +296,9 @@ so update the ResoniteIO mod and the `resoio` Python package in lockstep.
   `InventoryThumbnail` dataclass) and the `thumb` command in the interactive
   `resoio inventory` REPL
 
-### Changed
+### 🔧 Changed
 
-- **Breaking — the Dash modality is redesigned to a tab/control model**: the
+- **The Dash modality is redesigned to a tab/control model**: 💥 Breaking: the
   flat-tree contract (`GetTree` / `ListScreens` / `SetScreen` with the
   `DashTree` / `DashElement` / `DashRect` / `DashScreen` / `DashScreenList`
   messages) is replaced by a tab-first model. The bottom tab bar is enumerated
@@ -293,9 +323,9 @@ ray-based targeting model, and redesigns the CLI
 `display` split into `get` / `set`). Update the ResoniteIO mod and the
 `resoio` Python package in lockstep.
 
-### Changed
+### 🔧 Changed
 
-- **Breaking — the Manipulation modality is renamed to Grabber**: the gRPC
+- **The Manipulation modality is renamed to Grabber**: 💥 Breaking: the gRPC
   route changed from `/resonite_io.v1.Manipulation/*` to
   `/resonite_io.v1.Grabber/*` (`manipulation.proto` → `grabber.proto`,
   `Manipulation*` messages → `Grabber*`), the C# surface is now
@@ -304,7 +334,7 @@ ray-based targeting model, and redesigns the CLI
   `GrabResult` / `GrabState` dataclasses keep their names). An old mod and a
   new client (or vice versa) cannot talk over the renamed route — update the
   ResoniteIO mod and the `resoio` Python package in lockstep
-- **Breaking — Cursor `SetPosition` now holds the cursor until `Release`**:
+- **Cursor `SetPosition` now holds the cursor until `Release`**: 💥 Breaking:
   `SetPosition` was a one-shot warp (the engine cursor reverted to the OS
   pointer on the next frame, especially under Wine/Proton). It now registers a
   persistent engine-side cursor lock so the in-engine cursor stays at the set
@@ -314,7 +344,7 @@ ray-based targeting model, and redesigns the CLI
   center-pin). `InputInterface.SetMousePosition` (OS warp) is no longer called.
   While held, real mouse movement does not move the in-engine cursor (clicks
   still fire at the held position); switching world focus deactivates the hold
-- **Breaking — `Manipulation.Grab` is now ray-based**:
+- **`Manipulation.Grab` is now ray-based**: 💥 Breaking:
   `ManipulationGrabRequest.point` (`WorldPoint`) was removed (field 2 is
   reserved). Grab always targets the point where the desktop cursor ray hits
   the world and grabs grabbables within `radius` of that point. A ray miss
@@ -322,16 +352,16 @@ ray-based targeting model, and redesigns the CLI
   returns `FAILED_PRECONDITION`. The Python client's `ManipulationClient.grab`
   lost its `point` parameter and the CLI lost `--point`. Aim with
   `resoio cursor set X Y` (held until release), then `resoio grab`
-- **Breaking — `resoio display` is split into `get` / `set` subcommands**: the
+- **`resoio display` is split into `get` / `set` subcommands**: 💥 Breaking: the
   implicit branching ("no flags = get, any flag = set") is gone.
   `resoio display get` prints the current snapshot; `resoio display set`
   requires at least one of `-W/--width`, `-H/--height`, `-F/--max-fps` and
   prints the post-apply snapshot
-- **Breaking — `resoio locomotion drive` is flattened to `resoio drive`**: the
+- **`resoio locomotion drive` is flattened to `resoio drive`**: 💥 Breaking: the
   `locomotion` command group is removed; the flags
   (`--sprint` / `--look-rate` / `--no-wait`) are unchanged
-- **Breaking — `resoio manipulate` is renamed to `resoio grab`** (following
-  the modality rename): the action positional
+- **`resoio manipulate` is renamed to `resoio grab`** (following the modality
+  rename): 💥 Breaking: the action positional
   (`grab` / `release` / `state` / `interactive`) is optional and defaults to
   `grab`, and `--hand` / `--radius` are accepted before or after the action
 - **CLI required arguments are now enforced by argparse**:
@@ -340,7 +370,7 @@ ray-based targeting model, and redesigns the CLI
   a usage error at parse time instead of failing mid-command. The argv shape
   of valid invocations is unchanged
 
-### Added
+### ✨ Added
 
 - **`Cursor.Release` RPC**: releases the held cursor and returns control to the
   OS pointer. Idempotent (releasing while not held succeeds and returns the
@@ -350,7 +380,7 @@ ray-based targeting model, and redesigns the CLI
   returned by `SetPosition` / `GetPosition` / `Release` and shown in the CLI
   output (`held=True/False`)
 
-### Fixed
+### 🐛 Fixed
 
 - **Grabbed objects no longer fly behind the user's head**: in desktop mode
   the hand moves from its rest pose to a holding pose right after a grab, and
@@ -364,7 +394,7 @@ ray-based targeting model, and redesigns the CLI
 Adds a mod/client version-compatibility check and switches distribution to
 GitHub Release only (Thunderstore upload paused).
 
-### Added
+### ✨ Added
 
 - **`Connection.GetModVersion`**: Added a unary RPC that returns the running
   mod version. The Python client probes it once per process on first connect
@@ -375,7 +405,7 @@ GitHub Release only (Thunderstore upload paused).
   the Core `ConnectionService` (Core ← Mod direction preserved; the Mod supplies
   `PluginMetadata.VERSION` via `GrpcHost.Start(modVersion)`)
 
-### Changed
+### 🔧 Changed
 
 - **Distribution**: Switched to distributing via GitHub Release only.
   Thunderstore upload is paused (package unapproved + layout mismatch); the mod
@@ -395,15 +425,15 @@ input model into a partial-update scheme and fixes a bug where view rotation
 (yaw/pitch) was not applied on the live client. Migrating from 0.1.x requires
 following the API changes listed under Removed / Changed below.
 
-### Added
+### ✨ Added
 
 - **Python `resoio`**: Added the received-chunk type `SpeakerChunk` and the
   generated proto response types `ListSessionsResponse` / `ListRecordsResponse` /
   `FetchThumbnailResponse` for the `World` modality to the top-level exports
 
-### Changed
+### 🔧 Changed
 
-- **Python `resoio` Locomotion (breaking)**: Reworked movement input from the
+- **Python `resoio` Locomotion**: 💥 Breaking: Reworked movement input from the
   single-shot command `LocomotionCmd` (all fields required) into the partial
   update `LocomotionClient.send(field=None)` that sends only changed fields.
   Fields left as `None` are not put on the wire, and the Resonite-side bridge
@@ -412,22 +442,22 @@ following the API changes listed under Removed / Changed below.
   the 8 control fields of the proto `LocomotionCommand` were made `optional`
   (field presence), and `LocomotionPartialInput` + `MergeInto` were added to the
   C# Core to merge only present fields into the held state
-- **Python `resoio` Speaker (breaking)**: Renamed the received-chunk type
+- **Python `resoio` Speaker**: 💥 Breaking: Renamed the received-chunk type
   `AudioChunk` to `SpeakerChunk`. Removed the constants `CHANNELS` / `DTYPE` /
   `SAMPLE_RATE` from the top-level exports (kept at the `resoio.speaker`
   module level since they collide with microphone names)
-- **Python `resoio` Microphone (breaking)**: Removed the wrapper type
+- **Python `resoio` Microphone**: 💥 Breaking: Removed the wrapper type
   `MicrophoneAudioChunk`; `stream()` / `paced()` now take a raw NumPy ndarray
   directly (frame_id / unix_nanos are managed automatically by the library)
-- **Python `resoio` Camera (breaking)**: Changed `Frame.width` / `height` /
+- **Python `resoio` Camera**: 💥 Breaking: Changed `Frame.width` / `height` /
   `channels` into read-only properties derived from `pixels`. Removed the
   `width` / `height` / `fps_limit` arguments from `stream()` (resolution config
   is the responsibility of the Display modality)
-- **Python `resoio` World (breaking)**: Removed the output mirror dataclasses
+- **Python `resoio` World**: 💥 Breaking: Removed the output mirror dataclasses
   `RecordPage` / `SessionPage` / `Thumbnail` and now expose the generated proto
   response types directly. The input-side enum remaps (`RecordSort`, etc.) are
   retained
-- **Python `resoio` (breaking)**: Moved the socket exceptions
+- **Python `resoio`**: 💥 Breaking: Moved the socket exceptions
   `AmbiguousSocketError` / `SocketNotFoundError` from `resoio.connection` to the
   internal `resoio._client` and re-exported them from the top level. The
   `resoio.connection` module is now purified to `Ping` only (the top-level
@@ -439,14 +469,14 @@ following the API changes listed under Removed / Changed below.
 - **Documentation**: Documented Linux-only support (no Windows support) in the
   README and docs site
 
-### Removed
+### 🗑️ Removed
 
 - **Python `resoio`**: Removed `LocomotionCmd` / `AudioChunk` /
   `MicrophoneAudioChunk` / `CHANNELS` / `DTYPE` / `SAMPLE_RATE` / `RecordPage` /
   `SessionPage` / `Thumbnail` from the top-level exports (following the API
   rework under Changed above)
 
-### Fixed
+### 🐛 Fixed
 
 - **Thunderstore mod**: Fixed an issue where the distributed package bundled the
   entire ASP.NET Core shared framework, bloating to 131 files / 24MB (including
@@ -478,7 +508,7 @@ following the API changes listed under Removed / Changed below.
 A hotfix for packaging defects found after the 0.1.0 release. Fixes 2 issues
 that made the distributed artifacts non-functional.
 
-### Fixed
+### 🐛 Fixed
 
 - **Thunderstore mod**: Fixed an issue where the distributed package contained
   only `ResoniteIO.dll` / `.pdb` and was missing the Core/Mod two-layer
@@ -498,7 +528,7 @@ The first public release. A complete foundation for the bidirectional IPC
 bridge that uses Resonite as an execution environment for AI agents (C# mod
 `ResoniteIO` ↔ Python package `resoio`, gRPC over Unix Domain Socket).
 
-### Added
+### ✨ Added
 
 - **IPC foundation**: A bidirectional bridge over gRPC over Unix Domain Socket.
   Production IPC uses the UDS at `$HOME/.resonite-io/`, and the debug bridge uses

@@ -66,6 +66,14 @@ Add high-quality documentation to the codebase by:
 
 This project (`resonite-io`) uses both Python and C#:
 
+### CHANGELOG.md polishing
+
+You also own polishing `CHANGELOG.md` (Keep a Changelog format) when asked. Rules:
+
+- Apply emoji category headers consistently: `### ✨ Added` / `### 🔧 Changed` / `### 🗑️ Removed` / `### 🐛 Fixed` / `### 🔒 Security` / `### ⚠️ Deprecated`. Mark breaking changes with a `💥 Breaking:` prefix in the entry body.
+- **Never touch the load-bearing parts**: the `## [X.Y.Z] - YYYY-MM-DD` / `## [Unreleased]` version headings (no emoji — `publish.yml` extracts the Release body via a `## \[X.Y.Z\]` regex) and the trailing `[version]: url` link reference definitions.
+- It's release notes: tighten prose for scannability but **preserve all factual content**, especially breaking-change migration details (old→new names, removed args, lockstep instructions). See [`feedback_changelog_emoji_convention.md`](../../memory/feedback_changelog_emoji_convention.md).
+
 ### Python (`python/src/resoio/`)
 
 - **Python ≥3.12** with strict `pyright` on `./src/`. Your docstrings must not introduce contradictions with type hints.
