@@ -230,7 +230,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         // DashBridge も engine 状態を保持せず IDisposable でもないため、参照 null 化のみで足りる。
         _dashBridge = null;
 
-        // GrabberBridge も engine 状態を保持せず IDisposable でもないため参照 null 化のみ。
+        // GrabberBridge は Use/Unuse の hold 状態 (ExternalInput を毎 tick 再注入する
+        // self-rescheduling repeater) を持つため、Dispose で hold をクリアしてボタン
+        // 押しっぱなし leak を防ぐ (Locomotion と同じく engine input 注入を止める)。
+        SafeDispose(_grabberBridge, nameof(_grabberBridge));
         _grabberBridge = null;
 
         // WorldBridge も engine 状態を保持せず (manager 参照を読むだけ、event 購読

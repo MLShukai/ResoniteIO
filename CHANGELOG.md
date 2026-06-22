@@ -136,6 +136,26 @@ GitHub Release body. The format follows
   CLI wraps it: it prints the resolved socket path on success, takes an optional
   `pid` to target `resonite-{pid}.sock`, and `-T/--timeout` (default 30s, `<=0`
   tries once) bounds the wait. `--format` is not added (path-only output)
+- **Grabber post-grab interactions (`Use` / `Unuse` / `Equip` / `Dequip`)**: The
+  Grabber service gained four unary RPCs (all returning `GrabberGrabState`) for
+  operating what a hand holds. `Use` presses a virtual button (`primary` =
+  left-click / `secondary` = right-click) and **holds it down** until `Unuse`,
+  driven by a per-tick `ExternalInput` re-injection repeater (Locomotion-style) so
+  the press survives across RPCs; `primary` injects **both** the digital `Interact`
+  action **and** the analog press-strength action, which is what makes
+  strength-driven tools such as Pens / Geometry Line Brushes (the `BrushTool`
+  family, which fire on analog `primaryStrength`, not on the digital press) draw —
+  hold `Use`, sweep the cursor with `cursor set` to move the tip, then `Unuse`.
+  `Equip` finds an `ITool` on a grabbed object and equips it into the hand;
+  `Dequip` removes the equipped tool (both no-ops when nothing applies). `Use`
+  takes an optional `strength` (analog primary press pressure, `0..1`, default
+  `1.0`, server-clamped, ignored for `secondary` and missing → `1.0`) usable as
+  e.g. brush pressure. `GrabberGrabState` gained `is_tool_equipped` /
+  `equipped_tool_name` / `held_buttons`. Exposed as
+  `GrabberClient.use` / `unuse` / `click` (a press+release convenience) / `equip` /
+  `dequip` (`use` / `click` take `strength: float = 1.0`) and the `resoio grabber`
+  actions `use` / `unuse` / `click` / `equip` / `dequip` with
+  `--button {primary,secondary}` and `--strength` (default `1.0`)
 
 ### Changed
 

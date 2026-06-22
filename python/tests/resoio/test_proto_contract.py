@@ -85,12 +85,17 @@ from resoio._generated.resonite_io.v1 import (
     GetCurrentResponse,
     GetServerInfoRequest,
     GetUserRoleOverridesResponse,
+    GrabberButton,
+    GrabberDequipRequest,
+    GrabberEquipRequest,
     GrabberGetStateRequest,
     GrabberGrabRequest,
     GrabberGrabResult,
     GrabberGrabState,
     GrabberHand,
     GrabberReleaseRequest,
+    GrabberUnuseRequest,
+    GrabberUseRequest,
     InventoryCopyRequest,
     InventoryEntry,
     InventoryEntryKind,
@@ -423,11 +428,34 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     GrabberGetStateRequest: {
         "hand": 1,
     },
+    # `strength` (field 3) is proto3 `optional float`: an absent field means
+    # "use the server default 1.0", distinct from an explicit 0.0. Appending it
+    # keeps the wire backward-compatible (old peers ignore field 3).
+    GrabberUseRequest: {
+        "hand": 1,
+        "button": 2,
+        "strength": 3,
+    },
+    GrabberUnuseRequest: {
+        "hand": 1,
+        "button": 2,
+    },
+    GrabberEquipRequest: {
+        "hand": 1,
+    },
+    GrabberDequipRequest: {
+        "hand": 1,
+    },
+    # Fields 5-7 were appended when post-grab interaction (use/unuse/equip/
+    # dequip) landed; appending keeps the wire backward-compatible.
     GrabberGrabState: {
         "hand": 1,
         "is_holding": 2,
         "object_names": 3,
         "unix_nanos": 4,
+        "is_tool_equipped": 5,
+        "equipped_tool_name": 6,
+        "held_buttons": 7,
     },
     GrabberGrabResult: {
         "grabbed": 1,
@@ -797,6 +825,11 @@ _EXPECTED_ENUM_VALUES: dict[type, dict[str, int]] = {
         "PRIMARY": 1,
         "LEFT": 2,
         "RIGHT": 3,
+    },
+    GrabberButton: {
+        "UNSPECIFIED": 0,
+        "PRIMARY": 1,
+        "SECONDARY": 2,
     },
     # Info. The C# peer maps FrooxEngine.Platform onto these wire values;
     # renumbering silently misreports the server platform to old clients.

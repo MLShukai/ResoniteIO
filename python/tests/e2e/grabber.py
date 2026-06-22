@@ -1,11 +1,30 @@
 """E2E: drive the Grabber modality against a live Resonite.
 
 This verifies the Grabber RPC path (``get_state`` / ``grab`` /
-``release``) end-to-end against a live Resonite: the mod loads, the
-bridge reaches the real per-hand ``Grabber`` without throwing, responses
+``release`` / ``use`` / ``unuse`` / ``equip`` / ``dequip``) end-to-end
+against a live Resonite: the mod loads, the bridge reaches the real
+per-hand ``Grabber`` / ``InteractionHandler`` without throwing, responses
 are well-formed, and the requested hand resolves correctly
 (``left`` → left, ``right`` → right, ``primary`` → the engine's primary
 hand, which is the right hand per ``InputInterface.PrimaryHand``).
+
+After the positive grab, the post-grab interactions are exercised on the
+real engine: ``use`` presses-and-holds the primary button (verifying the
+``ExternalInput`` injection repeater) so ``held_buttons`` reports
+``"primary"`` and that hold *persists across a separate* ``get_state``
+RPC, then ``unuse`` clears it. ``equip`` / ``dequip`` are driven as
+no-ops on the (non-tool) Mirror — they must not throw and leave
+``is_tool_equipped`` False.
+
+A second scenario (``test_spawned_tool_equip_use_draw``) spawns a real
+``ITool`` (the Geometry Line Brush Tool), grabs it, and asserts the
+genuine tool path: ``equip`` flips ``is_tool_equipped`` True with the
+tool named in ``equipped_tool_name`` (the branch the non-tool Mirror
+cannot reach), then drives a draw stroke via ``use(strength=...)`` + a
+cursor sweep + ``unuse``, and ``dequip``. The drawn line is checked only
+by saved Camera shots (human inspection), not by pixel assertions. The
+free-floating tool can be hard to grab, so that scenario skips with an
+explicit message if every aim point misses, to keep CI deterministic.
 
 Grab is cursor-ray based: it picks a grabbable within ``radius`` metres of
 the point where the desktop cursor ray hits the world (aim with
@@ -48,6 +67,7 @@ from datetime import datetime
 from pathlib import Path
 
 import grpclib
+import pytest
 from grpclib.const import Status
 
 from resoio.cursor import CursorClient
@@ -87,12 +107,74 @@ _AIM_POINTS: tuple[tuple[float, float], ...] = (
 )
 _GRAB_RADIUS = 0.5
 
+# Inventory path of a known spawnable ITool: the Geometry Line Brush Tool spawns
+# in as a slot named "Geometry Line Brush Tool". Unlike the Mirror it has a real
+# ITool, so equipping it actually drives the engine's tool-equip path
+# (is_tool_equipped True), which the Mirror scenario cannot exercise.
+_TOOL_INVENTORY_PATH = "/Inventory/Resonite Essentials/Tools/Geometry Line Brush Tool"
+# The grabbed slot / equipped tool name both contain this substring (the slot is
+# named "Geometry Line Brush Tool" on a verified run, but we assert on a
+# substring so a minor rename in the asset does not make the test brittle).
+_TOOL_NAME_SUBSTRING = "Geometry Line Brush"
+
+# The Line Brush Tool floats in mid-air near the doorway and is harder to aim at
+# than the Mirror (which lands at a deterministic spot). The cursor ray passes the
+# floating tool and hits the wall several metres behind it, so the hit point sits
+# well beyond a 1 m grab sphere; a 2 m radius reliably reaches the tool while still
+# grabbing only it (verified on hardware: radius 1.5-3.0 all grab just the tool at
+# the center aim point, radius 1.0 misses). Sweep a grid of center-biased aim points.
+# The tool lands horizontally centered (x≈0.5) but the grab is very sensitive to
+# the vertical aim: the cursor ray must hit a surface within radius of the floating
+# tool, and only a narrow band around y≈0.47 does so (verified on hardware: at x=0.5,
+# y=0.47/0.48 grab the tool while y=0.45/0.50 miss even at radius 4.0 — the rays just
+# off the band hit the distant floor/wall, far beyond the grab sphere). So sweep a
+# dense vertical scan at x=0.5 (hit band first), with a couple of horizontal nudges.
+_TOOL_AIM_POINTS: tuple[tuple[float, float], ...] = (
+    (0.5, 0.47),
+    (0.5, 0.48),
+    (0.5, 0.46),
+    (0.5, 0.49),
+    (0.5, 0.45),
+    (0.5, 0.5),
+    (0.5, 0.44),
+    (0.5, 0.51),
+    (0.5, 0.43),
+    (0.5, 0.52),
+    (0.48, 0.47),
+    (0.52, 0.47),
+)
+_TOOL_GRAB_RADIUS = 2.0
+
+# Pause after aiming the cursor lock before grabbing, so the forced position
+# reaches the engine's mouse before the grab ray samples it (the sweep is rapid).
+_TOOL_AIM_SETTLE_S = 0.2
+
+# The pen pressure (0..1) used while drawing; a non-default strength so the
+# use(strength=...) path added in this PR is exercised over the real engine.
+_DRAW_STRENGTH = 0.8
+
+# Cursor sweep that drags the equipped pen tip to draw a visible stroke (a small
+# arc across the view center). Normalized window coordinates.
+_DRAW_SWEEP: tuple[tuple[float, float], ...] = (
+    (0.40, 0.50),
+    (0.45, 0.45),
+    (0.50, 0.43),
+    (0.55, 0.45),
+    (0.60, 0.50),
+)
+# Short pause between cursor moves so the engine samples the pen tip at each
+# point and the renderer presents the growing stroke.
+_DRAW_STEP_S = 0.25
+
 
 def _format_state(state: GrabState) -> str:
     names = ", ".join(state.object_names)
+    held = ", ".join(state.held_buttons)
     return (
         f"hand={state.hand} is_holding={state.is_holding} "
-        f"objects=[{names}] unix_nanos={state.unix_nanos}"
+        f"objects=[{names}] equipped={state.is_tool_equipped} "
+        f"tool={state.equipped_tool_name} held=[{held}] "
+        f"unix_nanos={state.unix_nanos}"
     )
 
 
@@ -231,6 +313,45 @@ class TestGrabber:
                     assert grab_result.state.unix_nanos > 0
                     await cursor.release()
 
+                # 3b. use (hold primary): pressing the primary button while
+                #     holding drives the engine's StartInteraction via the
+                #     ExternalInput repeater. The button stays held — the
+                #     bridge reports it in held_buttons.
+                use_state = await client.use(button="primary")
+                record("05b_use_primary", use_state)
+                assert "primary" in use_state.held_buttons, (
+                    "use(primary) should report the primary button as held"
+                )
+                await settle_shot("04_after_use")
+
+                # 3c. the hold persists across a *separate* RPC (it is not a
+                #     one-shot): a fresh get_state still sees the held button.
+                held_state = await client.get_state()
+                record("05c_state_while_held", held_state)
+                assert "primary" in held_state.held_buttons, (
+                    "the primary hold must persist until unuse, across RPCs"
+                )
+
+                # 3d. unuse: releasing the button clears the hold.
+                unuse_state = await client.unuse(button="primary")
+                record("05d_unuse_primary", unuse_state)
+                assert "primary" not in unuse_state.held_buttons, (
+                    "unuse(primary) should clear the held button"
+                )
+
+                # 3e. equip / dequip are no-ops on the non-tool Mirror: they
+                #     must reach the real InteractionHandler without throwing
+                #     and leave nothing equipped (a Mirror has no ITool).
+                equip_state = await client.equip()
+                record("05e_equip_noop", equip_state)
+                assert isinstance(equip_state.is_tool_equipped, bool)
+                assert not equip_state.is_tool_equipped, (
+                    "equipping a non-tool grab must be a no-op"
+                )
+                dequip_state = await client.dequip()
+                record("05f_dequip_noop", dequip_state)
+                assert not dequip_state.is_tool_equipped
+
                 # 4. release: the Mirror is dropped and the hand reports empty.
                 release_state = await client.release()
                 record("06_release", release_state)
@@ -255,9 +376,227 @@ class TestGrabber:
             """
             try:
                 async with GrabberClient() as client:
+                    # Drop any held buttons first so a failed run cannot leave
+                    # the primary/secondary button stuck down on the engine.
+                    await client.unuse(button="primary")
+                    await client.unuse(button="secondary")
                     await client.release()
             except Exception as e:  # noqa: BLE001 - teardown must not mask the test
                 print(f"best-effort grabber release failed (ignored): {e!r}")
+            try:
+                async with CursorClient() as cursor:
+                    await cursor.release()
+            except Exception as e:  # noqa: BLE001 - teardown must not mask the test
+                print(f"best-effort cursor release failed (ignored): {e!r}")
+
+        async def run() -> None:
+            try:
+                await scenario()
+            finally:
+                await best_effort_cleanup()
+
+        try:
+            asyncio.run(run())
+        finally:
+            log_path.write_text("\n\n".join(log_lines), encoding="utf-8")
+            print(f"E2E artifacts: {out_dir}")
+
+    @mark_e2e
+    def test_spawned_tool_equip_use_draw(self, resonite_session: Path) -> None:
+        """A spawned ITool (Geometry Line Brush Tool) equips and draws.
+
+        This is the tool-specific counterpart to the Mirror scenario: the
+        Mirror has no ``ITool`` so its ``equip`` is a no-op and the real
+        tool-equip engine path is never reached. Here we spawn an actual
+        pen-like tool, grab it, and assert ``equip`` genuinely equips it
+        (``is_tool_equipped`` True, ``equipped_tool_name`` naming the
+        tool), then drive a draw stroke with ``use(strength=...)`` + a
+        cursor sweep + ``unuse``, and ``dequip``.
+
+        The line that gets drawn is verified only by saved Camera shots
+        (human inspection); we do not assert pixel content.
+
+        CI stability: the Line Brush Tool floats free in mid-air, so it is
+        materially harder to grab reliably than the Mirror. We retry a wide
+        grid of aim points at a larger radius, but if every attempt still
+        misses we ``pytest.skip`` with an explicit message rather than
+        hard-failing — a flaky grab on a floating object would otherwise
+        make this scenario non-deterministic in CI. When the grab *does*
+        land, the equip/use/draw/dequip assertions all run, so the real
+        tool path is exercised whenever the environment cooperates.
+        """
+        del resonite_session  # fixture only manages Resonite lifecycle
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir = ARTIFACT_ROOT / f"grabber_tool_{timestamp}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        log_path = out_dir / "states.txt"
+        log_lines: list[str] = []
+
+        def record(step: str, state: GrabState) -> None:
+            block = f"=== {step} ===\n{_format_state(state)}"
+            log_lines.append(block)
+            print(block)
+
+        def record_result(step: str, result: GrabResult) -> None:
+            block = (
+                f"=== {step} ===\n"
+                f"grabbed={result.grabbed}\n{_format_state(result.state)}"
+            )
+            log_lines.append(block)
+            print(block)
+
+        async def wait_for_ready() -> GrabState:
+            deadline = time.monotonic() + _READY_TIMEOUT_S
+            while True:
+                try:
+                    async with GrabberClient() as client:
+                        return await client.get_state()
+                except grpclib.exceptions.GRPCError as e:
+                    if e.status != Status.FAILED_PRECONDITION:
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise AssertionError(
+                            "Grabber bridge never became ready "
+                            f"within {_READY_TIMEOUT_S:.0f}s"
+                        ) from e
+                    await asyncio.sleep(_READY_RETRY_INTERVAL_S)
+
+        async def settle_shot(name: str) -> None:
+            await asyncio.sleep(_SETTLE_S)
+            await save_camera_shot(out_dir / f"{name}.png")
+
+        async def grab_tool_with_aim_retries(
+            client: GrabberClient, cursor: CursorClient
+        ) -> GrabResult:
+            """Sweep the wide tool aim grid until a grab lands.
+
+            Returns the first successful :class:`GrabResult`, or the last
+            attempt's result if every aim point misses (the caller turns a
+            final miss into a skip).
+            """
+            result: GrabResult | None = None
+            for index, (aim_x, aim_y) in enumerate(_TOOL_AIM_POINTS):
+                await cursor.set_position(aim_x, aim_y)
+                # Let the forced cursor lock position propagate to the engine's
+                # Mouse.NormalizedWindowPosition before the grab ray samples it;
+                # without this the rapid sweep can grab against the previous aim.
+                await asyncio.sleep(_TOOL_AIM_SETTLE_S)
+                result = await client.grab(radius=_TOOL_GRAB_RADIUS)
+                record_result(f"02_grab_attempt_{index}_at_{aim_x}_{aim_y}", result)
+                if result.grabbed:
+                    return result
+            assert result is not None  # _TOOL_AIM_POINTS is non-empty
+            return result
+
+        async def scenario() -> None:
+            # 1. baseline ready + spawn the Geometry Line Brush Tool, then let
+            #    it settle (it floats in mid-air, so give it the same settle the
+            #    Mirror gets before aiming at it).
+            initial = await wait_for_ready()
+            record("00_initial", initial)
+            await settle_shot("00_initial")
+            assert not initial.is_holding, "hands should start empty"
+
+            async with InventoryClient() as inventory:
+                spawned = await inventory.spawn(_TOOL_INVENTORY_PATH)
+            log_lines.append(
+                f"=== 01_spawn ===\nsource_path={spawned.source_path} "
+                f"slot_id={spawned.spawned_slot_id} "
+                f"slot_name={spawned.spawned_slot_name}"
+            )
+            assert _TOOL_NAME_SUBSTRING in spawned.spawned_slot_name, (
+                "spawned slot should be the Geometry Line Brush Tool, got "
+                f"{spawned.spawned_slot_name!r}"
+            )
+            await asyncio.sleep(_SPAWN_SETTLE_S)
+            await settle_shot("01_after_spawn")
+
+            async with GrabberClient() as client, CursorClient() as cursor:
+                # 2. grab the floating tool. If the wide aim sweep still
+                #    misses, skip (see the docstring): a flaky grab on a
+                #    free-floating object must not hard-fail CI.
+                grab_result = await grab_tool_with_aim_retries(client, cursor)
+                await settle_shot("02_after_grab")
+                if not grab_result.grabbed:
+                    await cursor.release()
+                    pytest.skip(
+                        "could not grab the floating Geometry Line Brush Tool "
+                        f"after sweeping aim points {_TOOL_AIM_POINTS} at "
+                        f"radius {_TOOL_GRAB_RADIUS}; skipping the tool "
+                        "equip/use/draw scenario to keep CI deterministic"
+                    )
+                assert grab_result.state.is_holding
+                assert any(
+                    _TOOL_NAME_SUBSTRING in name
+                    for name in grab_result.state.object_names
+                ), (
+                    "grabbed object should be the Line Brush Tool, got "
+                    f"{grab_result.state.object_names}"
+                )
+                assert grab_result.state.unix_nanos > 0
+
+                # 3. equip: with a real ITool grabbed this genuinely equips the
+                #    tool into the hand (the Mirror scenario cannot reach this
+                #    branch). This is the first place is_tool_equipped flips True.
+                equip_state = await client.equip()
+                record("03_equip", equip_state)
+                assert equip_state.is_tool_equipped, (
+                    "equipping a grabbed ITool must equip it into the hand"
+                )
+                assert _TOOL_NAME_SUBSTRING in equip_state.equipped_tool_name, (
+                    "equipped_tool_name should name the Line Brush Tool, got "
+                    f"{equip_state.equipped_tool_name!r}"
+                )
+                await settle_shot("03_after_equip")
+
+                # 4. draw: press-and-hold the primary button at the draw
+                #    pressure, then drag the cursor across the view so the pen
+                #    tip follows and lays down a stroke. Camera shots along the
+                #    way capture the growing line for human inspection.
+                use_state = await client.use(button="primary", strength=_DRAW_STRENGTH)
+                record("04_use_primary_strength", use_state)
+                assert "primary" in use_state.held_buttons, (
+                    "use(primary) should report the primary button as held"
+                )
+
+                for index, (sweep_x, sweep_y) in enumerate(_DRAW_SWEEP):
+                    await cursor.set_position(sweep_x, sweep_y)
+                    await asyncio.sleep(_DRAW_STEP_S)
+                    await save_camera_shot(out_dir / f"04_draw_{index}.png")
+
+                # 5. unuse: releasing the primary button finishes the stroke and
+                #    clears the hold.
+                unuse_state = await client.unuse(button="primary")
+                record("05_unuse_primary", unuse_state)
+                assert "primary" not in unuse_state.held_buttons, (
+                    "unuse(primary) should clear the held button"
+                )
+                await settle_shot("05_after_unuse")
+
+                # 6. dequip: removing the equipped tool flips is_tool_equipped
+                #    back to False.
+                dequip_state = await client.dequip()
+                record("06_dequip", dequip_state)
+                assert not dequip_state.is_tool_equipped, (
+                    "dequip should remove the equipped tool"
+                )
+
+                # 7. tidy up the grab/cursor holds (the spawned tool itself
+                #    cannot be deleted; the home world resets on next start).
+                await cursor.release()
+                await client.release()
+
+        async def best_effort_cleanup() -> None:
+            """Teardown: never leave a button hold, grab, or cursor hold behind."""
+            try:
+                async with GrabberClient() as client:
+                    await client.unuse(button="primary")
+                    await client.unuse(button="secondary")
+                    await client.dequip()
+                    await client.release()
+            except Exception as e:  # noqa: BLE001 - teardown must not mask the test
+                print(f"best-effort grabber cleanup failed (ignored): {e!r}")
             try:
                 async with CursorClient() as cursor:
                     await cursor.release()

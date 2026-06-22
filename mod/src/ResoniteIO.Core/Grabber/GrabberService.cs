@@ -49,39 +49,76 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
         };
     }
 
-    public override async Task<V1.GrabberGrabState> Release(
+    public override Task<V1.GrabberGrabState> Release(
         V1.GrabberReleaseRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Release");
         var hand = ToSelector(request.Hand);
-
-        var snapshot = await InvokeBridge(
-                "Release",
-                ct => bridge.ReleaseAsync(hand, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("Release", (b, ct) => b.ReleaseAsync(hand, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> GetState(
+    public override Task<V1.GrabberGrabState> GetState(
         V1.GrabberGetStateRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("GetState");
         var hand = ToSelector(request.Hand);
+        return RunStateRpc("GetState", (b, ct) => b.GetStateAsync(hand, ct), context);
+    }
 
-        var snapshot = await InvokeBridge(
-                "GetState",
-                ct => bridge.GetStateAsync(hand, ct),
-                context.CancellationToken
-            )
+    public override Task<V1.GrabberGrabState> Use(
+        V1.GrabberUseRequest request,
+        ServerCallContext context
+    )
+    {
+        var hand = ToSelector(request.Hand);
+        var button = ToButton(request.Button);
+        var strength = request.HasStrength ? Math.Clamp(request.Strength, 0f, 1f) : 1.0f;
+        return RunStateRpc("Use", (b, ct) => b.UseAsync(hand, button, strength, ct), context);
+    }
+
+    public override Task<V1.GrabberGrabState> Unuse(
+        V1.GrabberUnuseRequest request,
+        ServerCallContext context
+    )
+    {
+        var hand = ToSelector(request.Hand);
+        var button = ToButton(request.Button);
+        return RunStateRpc("Unuse", (b, ct) => b.UnuseAsync(hand, button, ct), context);
+    }
+
+    public override Task<V1.GrabberGrabState> Equip(
+        V1.GrabberEquipRequest request,
+        ServerCallContext context
+    )
+    {
+        var hand = ToSelector(request.Hand);
+        return RunStateRpc("Equip", (b, ct) => b.EquipAsync(hand, ct), context);
+    }
+
+    public override Task<V1.GrabberGrabState> Dequip(
+        V1.GrabberDequipRequest request,
+        ServerCallContext context
+    )
+    {
+        var hand = ToSelector(request.Hand);
+        return RunStateRpc("Dequip", (b, ct) => b.DequipAsync(hand, ct), context);
+    }
+
+    /// <summary>
+    /// <see cref="GrabSnapshot"/> を返す RPC の共通尾部: bridge を要求し、engine へ marshal して
+    /// 実行後 state を取り、proto state へ map する。Grab だけは戻り型が異なるため別扱い。
+    /// </summary>
+    private async Task<V1.GrabberGrabState> RunStateRpc(
+        string rpc,
+        Func<IGrabberBridge, CancellationToken, Task<GrabSnapshot>> call,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge(rpc);
+        var snapshot = await InvokeBridge(rpc, ct => call(bridge, ct), context.CancellationToken)
             .ConfigureAwait(false);
-
         return MapToProtoState(snapshot);
     }
 
@@ -129,15 +166,32 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
             _ => V1.GrabberHand.Primary,
         };
 
+    private static GrabberButtonSelector ToButton(V1.GrabberButton button) =>
+        button == V1.GrabberButton.Secondary
+            ? GrabberButtonSelector.Secondary
+            // UNSPECIFIED / PRIMARY / 未知の値はすべて Primary 扱い。
+            : GrabberButtonSelector.Primary;
+
+    private static V1.GrabberButton ToProtoButton(GrabberButtonSelector button) =>
+        button == GrabberButtonSelector.Secondary
+            ? V1.GrabberButton.Secondary
+            : V1.GrabberButton.Primary;
+
     private static V1.GrabberGrabState MapToProtoState(GrabSnapshot snapshot)
     {
         var state = new V1.GrabberGrabState
         {
             Hand = ToProtoHand(snapshot.Hand),
             IsHolding = snapshot.IsHolding,
+            IsToolEquipped = snapshot.IsToolEquipped,
+            EquippedToolName = snapshot.EquippedToolName,
             UnixNanos = UnixNanosClock.Now(),
         };
         state.ObjectNames.AddRange(snapshot.ObjectNames);
+        foreach (var button in snapshot.HeldButtons)
+        {
+            state.HeldButtons.Add(ToProtoButton(button));
+        }
         return state;
     }
 }

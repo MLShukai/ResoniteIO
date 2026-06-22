@@ -447,3 +447,36 @@ def test_list_records_param_annotations_and_defaults_match_snapshot():
         if name != "self"
     }
     assert actual == _EXPECTED_LIST_RECORDS_PARAMS
+
+
+# ---------------------------------------------------------------------------
+# GrabberClient.use / click expose the `strength` keyword
+#
+# Pins that the analog press-strength keyword is part of the public surface
+# (a downstream caller writes ``client.use(strength=0.5)`` /
+# ``client.click(strength=0.5)``). Contract pin, not a behaviour test — the
+# wire round-trip lives in test_grabber.py. An intentional signature change
+# updates this snapshot in the same commit.
+# ---------------------------------------------------------------------------
+
+
+def test_use_exposes_keyword_only_strength_defaulting_to_one():
+    """``GrabberClient.use`` must publish a keyword-only ``strength`` param
+    defaulting to ``1.0`` (the backward-compatible full-press strength)."""
+    sig = inspect.signature(resoio.GrabberClient.use)
+    assert "strength" in sig.parameters
+    param = sig.parameters["strength"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default == 1.0
+    assert param.annotation == "float"
+
+
+def test_click_exposes_keyword_only_strength_defaulting_to_one():
+    """``GrabberClient.click`` mirrors ``use``: keyword-only ``strength``
+    defaulting to ``1.0``, so a click can carry an analog press strength."""
+    sig = inspect.signature(resoio.GrabberClient.click)
+    assert "strength" in sig.parameters
+    param = sig.parameters["strength"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default == 1.0
+    assert param.annotation == "float"
