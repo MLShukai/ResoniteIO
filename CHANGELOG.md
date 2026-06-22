@@ -118,13 +118,13 @@ GitHub Release body. The format follows
   returns the engine's host PID, or "resonite not running" / `None` when no
   engine is reachable
 - **`resoio --format human|json`**: Commands that return structured data
-  (`ping`, `info`, `display`, `cursor`, `grab`, `context-menu`, `dash`, `world`,
+  (`ping`, `info`, `display`, `cursor`, `grabber`, `context-menu`, `dash`, `world`,
   `mic`, `session`) gained a `--format` flag. `human` (default) keeps the
   existing text output unchanged; `json` prints one machine-readable document to
   stdout (proto field names in snake_case, enums as their name, big ints exact,
   non-ASCII preserved). `--format` is not added to pid/path-only commands
   (`shutdown` / `terminate`, `screenshot` / `record` / `world thumbnail`),
-  interactive commands (`drive` / `grab interactive` / `inventory`), or the
+  interactive commands (`drive` / `grabber interactive` / `inventory`), or the
   side-effect-only `session user kick` / `ban` / `respawn` leaves
 - **`resoio wait` / `resoio.wait_for_ready`**: A new startup-readiness gate that
   blocks until the Resonite IO server answers `Connection.Ping`. The public async
@@ -139,6 +139,14 @@ GitHub Release body. The format follows
 
 ### Changed
 
+- **`resoio grab` is renamed to `resoio grabber` (breaking)**: the top-level
+  Grabber command is now `resoio grabber`. The positional action is unchanged,
+  so the default grab runs as `resoio grabber` (alias `resoio grabber grab`),
+  with `resoio grabber release` / `state` / `interactive` as before. The old
+  `resoio grab` command name is **removed** — there is no alias, so argparse
+  rejects it. This aligns the command with the `Grabber` modality name (like
+  `cursor` / `display` / `world`). The Python API (`GrabberClient`) and the gRPC
+  wire are unchanged
 - **`resoio terminate` / `resoio.terminate` now force-stops the processes
   (breaking)**: it was a deprecated alias of `resoio shutdown` (a graceful
   `Lifecycle.Shutdown` over gRPC); it now **kills** the engine + renderer host
