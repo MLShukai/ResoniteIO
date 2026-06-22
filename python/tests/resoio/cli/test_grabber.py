@@ -1,4 +1,4 @@
-"""CLI tests for ``resoio grab`` (renamed from ``resoio manipulate``).
+"""CLI tests for ``resoio grabber`` (renamed from ``resoio grab``).
 
 The CLI register/_run path is driven against a real ``grpclib.server.Server``
 hosting an inline fake :class:`GrabberBase` over a real UDS (no mocking of
@@ -9,14 +9,14 @@ grab always targets the desktop cursor-ray hit point, there is no
 
 Contract under test (CLI restructure spec):
 
-* ``resoio grab`` with no subaction performs the grab action (default);
-  ``resoio grab grab`` is the explicit synonym
-* ``resoio grab release`` / ``resoio grab state`` / ``resoio grab
-  interactive`` select the other actions
+* the action positional is **required** — bare ``resoio grabber`` errors
+  with the argparse usage code (the old implicit-``grab`` default is gone)
+* ``resoio grabber grab`` / ``release`` / ``state`` / ``interactive`` select
+  the action explicitly
 * ``--hand`` / ``--radius`` / ``-s/--socket`` are accepted both before and
   after the subaction
 * an unknown subaction exits with the argparse usage code (2)
-* output format and RPC semantics are unchanged from ``resoio manipulate``
+* output format and RPC semantics are unchanged from ``resoio grab``
 
 The interactive raw-tty loop is out of scope (hard to drive
 deterministically) and is not exercised here.
@@ -108,18 +108,30 @@ async def _invoke(argv: list[str]) -> int:
     return await _amain(args)
 
 
-# --- default subaction = grab ---------------------------------------------
+# --- action is required (no implicit-grab default) ------------------------
 
 
-async def test_grab_without_subaction_performs_grab(
+def test_no_action_exits_with_usage_code():
+    """The action positional is required: bare ``resoio grabber`` errors.
+
+    Removing the old implicit-``grab`` default is a breaking change, so the
+    parser must reject a missing action with the argparse usage code (2)
+    rather than silently grabbing.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(["grabber"])
+    assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
+
+
+async def test_grab_subaction_performs_grab(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab"])
+    rc = await _invoke(["grabber", "grab"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
-    # No subaction means grab — release/state must not fire.
+    # grab must not release or read state.
     assert grabber_server.release_requests == []
     assert grabber_server.get_state_requests == []
 
@@ -128,10 +140,10 @@ async def test_grab_without_subaction_performs_grab(
     assert "Cube" in out
 
 
-async def test_grab_without_subaction_defaults_to_primary_hand_and_zero_radius(
+async def test_grab_defaults_to_primary_hand_and_zero_radius(
     grabber_server: _EchoGrabber,
 ):
-    rc = await _invoke(["grab"])
+    rc = await _invoke(["grabber", "grab"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
@@ -142,28 +154,13 @@ async def test_grab_without_subaction_defaults_to_primary_hand_and_zero_radius(
     assert grabber_server.grab_requests[0].radius == 0.0
 
 
-async def test_grab_with_explicit_grab_subaction_is_synonym_for_default(
-    grabber_server: _EchoGrabber,
-    capsys: pytest.CaptureFixture[str],
-):
-    rc = await _invoke(["grab", "grab"])
-    assert rc == 0
-
-    assert len(grabber_server.grab_requests) == 1
-    assert grabber_server.release_requests == []
-    assert grabber_server.get_state_requests == []
-
-    out = capsys.readouterr().out
-    assert "Cube" in out
-
-
 # --- flag placement: before or after the subaction -------------------------
 
 
 async def test_grab_flags_after_subaction_forward_hand_and_radius(
     grabber_server: _EchoGrabber,
 ):
-    rc = await _invoke(["grab", "grab", "--radius", "0.5", "--hand", "left"])
+    rc = await _invoke(["grabber", "grab", "--radius", "0.5", "--hand", "left"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
@@ -175,19 +172,7 @@ async def test_grab_flags_after_subaction_forward_hand_and_radius(
 async def test_grab_flags_before_subaction_forward_hand_and_radius(
     grabber_server: _EchoGrabber,
 ):
-    rc = await _invoke(["grab", "--radius", "0.5", "--hand", "left", "grab"])
-    assert rc == 0
-
-    assert len(grabber_server.grab_requests) == 1
-    wire = grabber_server.grab_requests[0]
-    assert wire.hand == GrabberHand.LEFT
-    assert wire.radius == _RADIUS
-
-
-async def test_grab_flags_with_no_subaction_apply_to_default_grab(
-    grabber_server: _EchoGrabber,
-):
-    rc = await _invoke(["grab", "--hand", "left", "--radius", "0.5"])
+    rc = await _invoke(["grabber", "--radius", "0.5", "--hand", "left", "grab"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
@@ -199,7 +184,7 @@ async def test_grab_flags_with_no_subaction_apply_to_default_grab(
 async def test_release_accepts_hand_flag_before_subaction(
     grabber_server: _EchoGrabber,
 ):
-    rc = await _invoke(["grab", "--hand", "left", "release"])
+    rc = await _invoke(["grabber", "--hand", "left", "release"])
     assert rc == 0
 
     assert len(grabber_server.release_requests) == 1
@@ -214,7 +199,7 @@ async def test_release_invokes_release_rpc_with_hand(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "release", "--hand", "right"])
+    rc = await _invoke(["grabber", "release", "--hand", "right"])
     assert rc == 0
 
     assert len(grabber_server.release_requests) == 1
@@ -231,7 +216,7 @@ async def test_state_invokes_get_state_rpc(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "state"])
+    rc = await _invoke(["grabber", "state"])
     assert rc == 0
 
     assert len(grabber_server.get_state_requests) == 1
@@ -259,7 +244,7 @@ async def test_socket_flag_after_subaction_routes_to_get_state(
     await server.start(path=str(socket_path))
     try:
         monkeypatch.delenv("RESONITE_IO_SOCKET", raising=False)
-        rc = await _invoke(["grab", "state", "-s", str(socket_path)])
+        rc = await _invoke(["grabber", "state", "-s", str(socket_path)])
         assert rc == 0
         assert len(fake.get_state_requests) == 1
     finally:
@@ -277,7 +262,7 @@ async def test_socket_flag_before_subaction_routes_to_get_state(
     await server.start(path=str(socket_path))
     try:
         monkeypatch.delenv("RESONITE_IO_SOCKET", raising=False)
-        rc = await _invoke(["grab", "-s", str(socket_path), "state"])
+        rc = await _invoke(["grabber", "-s", str(socket_path), "state"])
         assert rc == 0
         assert len(fake.get_state_requests) == 1
     finally:
@@ -290,21 +275,23 @@ async def test_socket_flag_before_subaction_routes_to_get_state(
 
 def test_unknown_subaction_exits_with_usage_code():
     with pytest.raises(SystemExit) as excinfo:
-        _build_parser().parse_args(["grab", "bogus"])
+        _build_parser().parse_args(["grabber", "bogus"])
     assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
 
 
 @pytest.mark.api_contract
-def test_manipulate_command_name_is_retired():
-    """Contract pin, not a behaviour test: the command was renamed
-    ``manipulate`` -> ``grab`` (CLI restructure, breaking).
+def test_retired_top_level_command_names_are_rejected():
+    """Contract pin, not a behaviour test: the top-level command was renamed
+    ``manipulate`` -> ``grab`` -> ``grabber`` (CLI restructure, breaking).
 
-    argparse must reject the old name so the rename cannot silently
-    regress into an alias.
+    argparse must reject the retired top-level names so a rename cannot
+    silently regress into an alias. ``grab`` survives only as the positional
+    *action* under ``grabber`` (``resoio grabber grab``), never as a command.
     """
-    with pytest.raises(SystemExit) as excinfo:
-        _build_parser().parse_args(["manipulate", "grab"])
-    assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
+    for retired in ("manipulate", "grab"):
+        with pytest.raises(SystemExit) as excinfo:
+            _build_parser().parse_args([retired, "grab"])
+        assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
 
 
 @pytest.mark.api_contract
@@ -316,14 +303,14 @@ def test_grab_rejects_removed_point_flag():
     ``SystemExit`` — this detects a silent reintroduction of the flag.
     """
     with pytest.raises(SystemExit):
-        _build_parser().parse_args(["grab", "grab", "--point", "1", "2", "3"])
+        _build_parser().parse_args(["grabber", "grab", "--point", "1", "2", "3"])
 
 
 # --- --format json --------------------------------------------------------
 #
 # ``--format json`` emits a single machine-readable document on stdout.
-# ``grab grab`` flattens GrabResult + GrabState into one object; ``grab
-# release`` / ``grab state`` emit the GrabState shape directly. ``hand`` is
+# ``grabber grab`` flattens GrabResult + GrabState into one object; ``grabber
+# release`` / ``grabber state`` emit the GrabState shape directly. ``hand`` is
 # the resolved string label ("primary"/"left"/"right"), object_names is an
 # array, and unix_nanos round-trips as an exact integer.
 
@@ -344,7 +331,7 @@ async def test_grab_json_flattens_result_and_state_into_one_object(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "--format", "json"])
+    rc = await _invoke(["grabber", "grab", "--format", "json"])
     assert rc == 0
 
     payload = _sole_json_document(capsys.readouterr().out)
@@ -362,7 +349,7 @@ async def test_grab_json_reports_requested_hand_label(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "grab", "--hand", "left", "--format", "json"])
+    rc = await _invoke(["grabber", "grab", "--hand", "left", "--format", "json"])
     assert rc == 0
 
     payload = _sole_json_document(capsys.readouterr().out)
@@ -375,7 +362,7 @@ async def test_grab_release_json_emits_grab_state_shape(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "release", "--hand", "right", "--format", "json"])
+    rc = await _invoke(["grabber", "release", "--hand", "right", "--format", "json"])
     assert rc == 0
 
     payload = _sole_json_document(capsys.readouterr().out)
@@ -391,7 +378,7 @@ async def test_grab_state_json_emits_grab_state_shape(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grab", "state", "--format", "json"])
+    rc = await _invoke(["grabber", "state", "--format", "json"])
     assert rc == 0
 
     payload = _sole_json_document(capsys.readouterr().out)
@@ -406,15 +393,15 @@ async def test_grab_state_json_emits_grab_state_shape(
 async def test_grab_interactive_rejects_structured_format(
     capsys: pytest.CaptureFixture[str],
 ):
-    """``grab interactive`` is a human-only carve-out.
+    """``grabber interactive`` is a human-only carve-out.
 
-    ``--format`` lives on the shared flat ``grab`` parser (so grab/release/
+    ``--format`` lives on the shared flat ``grabber`` parser (so grab/release/
     state can emit json), but the interactive loop has no structured output.
     Requesting ``--format json`` must fail with the usage exit code (2) and a
     stderr note rather than silently running the REPL. The guard returns
     before any stdin / RPC interaction, so no fake server or tty is needed.
     """
-    rc = await _invoke(["grab", "interactive", "--format", "json"])
+    rc = await _invoke(["grabber", "interactive", "--format", "json"])
     assert rc == 2
 
     captured = capsys.readouterr()

@@ -116,7 +116,7 @@ examples では「最短コード」を優先しているため、以下は意�
 | `microphone_send.py`       | [`cli/mic.py`](../src/resoio/cli/mic.py)                    | [`tests/e2e/mic_send.py`](../tests/e2e/mic_send.py)                     |
 | `locomotion_drive.py`      | [`cli/drive.py`](../src/resoio/cli/drive.py)                | [`tests/e2e/locomotion.py`](../tests/e2e/locomotion.py)                 |
 | `display_config.py`        | [`cli/display.py`](../src/resoio/cli/display.py)            | [`tests/e2e/display_resolution.py`](../tests/e2e/display_resolution.py) |
-| `grabber_grab.py`          | [`cli/grab.py`](../src/resoio/cli/grab.py)                  | [`tests/e2e/grabber.py`](../tests/e2e/grabber.py)                       |
+| `grabber_grab.py`          | [`cli/grabber.py`](../src/resoio/cli/grabber.py)            | [`tests/e2e/grabber.py`](../tests/e2e/grabber.py)                       |
 | `world_browse.py`          | [`cli/world.py`](../src/resoio/cli/world.py)                | [`tests/e2e/world.py`](../tests/e2e/world.py)                           |
 | `context_menu_interact.py` | [`cli/context_menu.py`](../src/resoio/cli/context_menu.py)  | [`tests/e2e/context_menu.py`](../tests/e2e/context_menu.py)             |
 | `dash_navigate.py`         | [`cli/dash.py`](../src/resoio/cli/dash.py)                  | [`tests/e2e/dash.py`](../tests/e2e/dash.py)                             |

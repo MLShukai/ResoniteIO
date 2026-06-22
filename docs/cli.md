@@ -19,7 +19,7 @@ resoio --help
 | `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o PATH` (`.png`) or `-o -` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. On file save the saved absolute path is printed to stdout. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
-| `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (`grab` / `release` / `state` / `interactive`) defaults to `grab`; `--hand` / `--radius` work before or after it. |
+| `resoio grabber` | Grabber | unary | Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (`grab` / `release` / `state` / `interactive`) is required; `--hand` / `--radius` work before or after it. |
 | `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config (`-W/--width`, `-H/--height`, `-F/--max-fps` — at least one required) and prints the post-apply snapshot. |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
@@ -118,8 +118,8 @@ line instead of as JSON:
 - `screenshot` / `record` / `world thumbnail` print the **saved absolute path** when writing a file
   (and `-o -` streams raw bytes to stdout with no path line).
 
-Interactive commands (`drive`, `grab interactive`, `inventory`) have no structured output and do not
-accept `--format` (`grab interactive --format json` exits with code 2).
+Interactive commands (`drive`, `grabber interactive`, `inventory`) have no structured output and do not
+accept `--format` (`grabber interactive --format json` exits with code 2).
 
 ## Examples
 
@@ -160,8 +160,8 @@ resoio display set --max-fps 30
 
 # Aim with the held cursor, grab at the ray hit point, then release
 resoio cursor center
-resoio grab --radius 0.5
-resoio grab release
+resoio grabber grab --radius 0.5
+resoio grabber release
 resoio cursor release
 
 # Start Resonite (engine + renderer) and capture both PIDs

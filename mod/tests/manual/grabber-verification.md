@@ -65,8 +65,8 @@ uv run --project python resoio inventory
 
 ```sh
 uv run --project python resoio cursor set 0.5 0.45
-uv run --project python resoio grab --radius 0.5
-uv run --project python resoio grab state
+uv run --project python resoio grabber grab --radius 0.5
+uv run --project python resoio grabber state
 ```
 
 `grabbed=True` / `is_holding=True` / `objects=[Mirror]` を確認したら、
@@ -77,7 +77,7 @@ uv run --project python resoio grab state
 
 ```sh
 uv run --project python resoio cursor release
-uv run --project python resoio grab release
+uv run --project python resoio grabber release
 ```
 
 `is_holding=False` になり、Mirror がその場に残ることを目視確認する。
@@ -91,8 +91,8 @@ spawn した Mirror を world から削除する API は無いので放置して
 
 ```sh
 uv run --project python resoio cursor set <x> <y>   # 2 つの box が重なる照準
-uv run --project python resoio grab --hand right --radius 0.3
-uv run --project python resoio grab state --hand right
+uv run --project python resoio grabber grab --hand right --radius 0.3
+uv run --project python resoio grabber state --hand right
 ```
 
 `objects=[...]` が **手前の box の slot 名** であることを確認する
@@ -105,7 +105,7 @@ VR モードで Resonite を起動する (または Dash からデスクトッ�
 切り替える)。container 内 shell から:
 
 ```sh
-uv run --project python resoio grab --hand right
+uv run --project python resoio grabber grab --hand right
 ```
 
 CLI が **`FAILED_PRECONDITION` エラーで失敗** し、エラーメッセージに
@@ -159,6 +159,6 @@ Grabber / Mouse が未確定。Userspace でなく Home World 等いずれかの
 
 ```sh
 uv run --project python resoio cursor release   # カーソル保持が残っていれば解放
-uv run --project python resoio grab release
+uv run --project python resoio grabber release
 just resonite-stop             # container → host bridge 経由で Resonite を停止
 ```
