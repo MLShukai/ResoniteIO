@@ -117,24 +117,37 @@ _TOOL_INVENTORY_PATH = "/Inventory/Resonite Essentials/Tools/Geometry Line Brush
 # substring so a minor rename in the asset does not make the test brittle).
 _TOOL_NAME_SUBSTRING = "Geometry Line Brush"
 
-# The Line Brush Tool floats in mid-air and is harder to aim at than the Mirror,
-# which lands at a deterministic spot. Sweep a wider grid of aim points at a
-# larger radius until a grab lands; on a verified run it grabbed near the center.
+# The Line Brush Tool floats in mid-air near the doorway and is harder to aim at
+# than the Mirror (which lands at a deterministic spot). The cursor ray passes the
+# floating tool and hits the wall several metres behind it, so the hit point sits
+# well beyond a 1 m grab sphere; a 2 m radius reliably reaches the tool while still
+# grabbing only it (verified on hardware: radius 1.5-3.0 all grab just the tool at
+# the center aim point, radius 1.0 misses). Sweep a grid of center-biased aim points.
+# The tool lands horizontally centered (x≈0.5) but the grab is very sensitive to
+# the vertical aim: the cursor ray must hit a surface within radius of the floating
+# tool, and only a narrow band around y≈0.47 does so (verified on hardware: at x=0.5,
+# y=0.47/0.48 grab the tool while y=0.45/0.50 miss even at radius 4.0 — the rays just
+# off the band hit the distant floor/wall, far beyond the grab sphere). So sweep a
+# dense vertical scan at x=0.5 (hit band first), with a couple of horizontal nudges.
 _TOOL_AIM_POINTS: tuple[tuple[float, float], ...] = (
-    (0.5, 0.5),
+    (0.5, 0.47),
+    (0.5, 0.48),
+    (0.5, 0.46),
+    (0.5, 0.49),
     (0.5, 0.45),
-    (0.45, 0.5),
-    (0.55, 0.5),
-    (0.5, 0.55),
-    (0.45, 0.45),
-    (0.55, 0.55),
-    (0.45, 0.55),
-    (0.55, 0.45),
-    (0.5, 0.4),
-    (0.4, 0.5),
-    (0.6, 0.5),
+    (0.5, 0.5),
+    (0.5, 0.44),
+    (0.5, 0.51),
+    (0.5, 0.43),
+    (0.5, 0.52),
+    (0.48, 0.47),
+    (0.52, 0.47),
 )
-_TOOL_GRAB_RADIUS = 1.0
+_TOOL_GRAB_RADIUS = 2.0
+
+# Pause after aiming the cursor lock before grabbing, so the forced position
+# reaches the engine's mouse before the grab ray samples it (the sweep is rapid).
+_TOOL_AIM_SETTLE_S = 0.2
 
 # The pen pressure (0..1) used while drawing; a non-default strength so the
 # use(strength=...) path added in this PR is exercised over the real engine.
@@ -465,6 +478,10 @@ class TestGrabber:
             result: GrabResult | None = None
             for index, (aim_x, aim_y) in enumerate(_TOOL_AIM_POINTS):
                 await cursor.set_position(aim_x, aim_y)
+                # Let the forced cursor lock position propagate to the engine's
+                # Mouse.NormalizedWindowPosition before the grab ray samples it;
+                # without this the rapid sweep can grab against the previous aim.
+                await asyncio.sleep(_TOOL_AIM_SETTLE_S)
                 result = await client.grab(radius=_TOOL_GRAB_RADIUS)
                 record_result(f"02_grab_attempt_{index}_at_{aim_x}_{aim_y}", result)
                 if result.grabbed:
