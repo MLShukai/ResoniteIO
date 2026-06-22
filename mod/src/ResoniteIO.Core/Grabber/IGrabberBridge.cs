@@ -74,12 +74,18 @@ public interface IGrabberBridge
     /// 指定 <paramref name="hand"/> の item を <paramref name="button"/> で押下する (hold 開始)。
     /// grab 中なら整列、装備 tool 中なら機能発現。<see cref="UnuseAsync"/> まで hold が継続する。
     /// </summary>
+    /// <param name="strength">
+    /// primary ボタンの analog 押下強度 (0..1)。Service が clamp 済みの値を渡す。hold 中ずっと
+    /// 同一値で注入され続け、<see cref="GrabberButtonSelector.Secondary"/> では無視される
+    /// (secondary は digital のみ)。
+    /// </param>
     /// <exception cref="GrabberNotReadyException">
     /// local user / handler が未準備、または desktop (screen) モードが非 active (VR)。
     /// </exception>
     Task<GrabSnapshot> UseAsync(
         GrabberHandSelector hand,
         GrabberButtonSelector button,
+        float strength,
         CancellationToken ct
     );
 

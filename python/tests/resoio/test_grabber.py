@@ -353,6 +353,72 @@ class TestGrabberClient:
         assert fake.use_requests[0].button == GrabberButton.SECONDARY
         assert state.held_buttons == ("secondary",)
 
+    async def test_use_sends_default_strength_one_when_omitted(
+        self, uds_server: UdsServer
+    ):
+        # Spec FR-5 / scenario A: omitting `strength` sends the client default
+        # 1.0 on the wire (backward compatible with pre-strength callers).
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            await client.use(hand="left")
+
+        assert len(fake.use_requests) == 1
+        assert fake.use_requests[0].strength == 1.0
+
+    async def test_use_sends_explicit_strength(self, uds_server: UdsServer):
+        # Spec FR-5 / scenario B: an explicit analog press strength reaches the
+        # wire verbatim (server-side clamp is a C#-Core concern, not pinned here).
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            await client.use(button="primary", strength=0.5)
+
+        assert fake.use_requests[0].strength == 0.5
+
+    async def test_use_sends_zero_strength_with_presence_preserved(
+        self, uds_server: UdsServer
+    ):
+        # Spec OQ-1: the proto3 `optional float` must carry an explicit 0.0 with
+        # field presence, so the server sees strength=0.0 (NOT a missing field
+        # that would fall back to the 1.0 default). This is the critical wire
+        # check that 0.0 is distinguishable from "unset".
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            await client.use(strength=0.0)
+
+        assert len(fake.use_requests) == 1
+        assert fake.use_requests[0].strength == 0.0
+        # Presence (not None) is what makes 0.0 survive the round-trip rather
+        # than being indistinguishable from the proto3 scalar default.
+        assert fake.use_requests[0].strength is not None
+
+    async def test_click_forwards_strength_to_use(self, uds_server: UdsServer):
+        # Spec FR-5 / scenario E: `click` forwards its `strength` to the `use`
+        # (press) RPC; the `unuse` (release) RPC carries no strength.
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            await client.click(hand="left", button="primary", strength=0.7)
+
+        assert len(fake.use_requests) == 1
+        # 0.7 is not exactly representable in float32 (proto `float`), so
+        # compare with tolerance rather than pinning the drifted value.
+        assert fake.use_requests[0].strength == pytest.approx(0.7)
+        # unuse has no strength concept — it must not be set to the click value.
+        assert len(fake.unuse_requests) == 1
+        assert not hasattr(fake.unuse_requests[0], "strength")
+
+    async def test_click_default_strength_is_one(self, uds_server: UdsServer):
+        # Spec FR-5: `click` defaults to the same 1.0 press strength as `use`.
+        fake = _EchoGrabber()
+        await uds_server(fake)
+        async with GrabberClient() as client:
+            await client.click()
+
+        assert fake.use_requests[0].strength == 1.0
+
     async def test_unuse_sends_button_and_returns_released_state(
         self, uds_server: UdsServer
     ):

@@ -93,10 +93,11 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
         var bridge = RequireBridge("Use");
         var hand = ToSelector(request.Hand);
         var button = ToButton(request.Button);
+        var strength = request.HasStrength ? Math.Clamp(request.Strength, 0f, 1f) : 1.0f;
 
         var snapshot = await InvokeBridge(
                 "Use",
-                ct => bridge.UseAsync(hand, button, ct),
+                ct => bridge.UseAsync(hand, button, strength, ct),
                 context.CancellationToken
             )
             .ConfigureAwait(false);

@@ -226,6 +226,7 @@ class GrabberClient(_BaseClient[GrabberStub]):
         *,
         hand: GrabberHandArg = "primary",
         button: GrabberButtonArg = "primary",
+        strength: float = 1.0,
     ) -> GrabState:
         """Press ``button`` and hold it down until :meth:`unuse`.
 
@@ -237,10 +238,18 @@ class GrabberClient(_BaseClient[GrabberStub]):
         :meth:`resoio.CursorClient.set_position`, then released with
         :meth:`unuse` to draw a stroke.
 
+        ``strength`` is the analog press strength (0..1) of the primary
+        button, e.g. the pen pressure a ``BrushTool`` reads (default
+        ``1.0``). It is held at the same value for the duration of the
+        hold and is ignored for ``button="secondary"`` (which is digital
+        only). Out-of-range values are clamped by the server.
+
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
         request = GrabberUseRequest(
-            hand=_hand_to_proto(hand), button=_button_to_proto(button)
+            hand=_hand_to_proto(hand),
+            button=_button_to_proto(button),
+            strength=strength,
         )
         return await self._dispatch(lambda stub: stub.use(request), _state_from_proto)
 
@@ -265,6 +274,7 @@ class GrabberClient(_BaseClient[GrabberStub]):
         *,
         hand: GrabberHandArg = "primary",
         button: GrabberButtonArg = "primary",
+        strength: float = 1.0,
     ) -> GrabState:
         """Press and release ``button`` once (a :meth:`use` then
         :meth:`unuse`).
@@ -274,9 +284,13 @@ class GrabberClient(_BaseClient[GrabberStub]):
         two RPCs run on separate engine ticks so the press registers
         before the release. Returns the state after :meth:`unuse`.
 
+        ``strength`` is forwarded to the :meth:`use` press (analog
+        primary press strength 0..1, default ``1.0``, ignored for
+        secondary); :meth:`unuse` carries no strength.
+
         gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.
         """
-        await self.use(hand=hand, button=button)
+        await self.use(hand=hand, button=button, strength=strength)
         return await self.unuse(hand=hand, button=button)
 
     async def equip(self, *, hand: GrabberHandArg = "primary") -> GrabState:

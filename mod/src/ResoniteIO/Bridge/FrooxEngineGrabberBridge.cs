@@ -37,7 +37,7 @@ namespace ResoniteIO.Bridge;
 /// (<c>World.RunInUpdates(0, …)</c>) が毎 engine tick その入力 action の <c>ExternalInput</c>
 /// を再注入し続ける (engine 1-frame 寿命 ExternalInput と RPC レートのギャップを吸収)。
 /// primary は <see cref="InteractionHandlerInputs.Interact"/> (digital) と
-/// <see cref="InteractionHandlerInputs.Strength"/> (analog=1) の両方、secondary は
+/// <see cref="InteractionHandlerInputs.Strength"/> (analog=use で指定された強度) の両方、secondary は
 /// <see cref="InteractionHandlerInputs.Secondary"/> (digital) を立てる (実マウス左ボタンが
 /// digital と analog strength を同時に駆動するのを再現し、整列・laser press と BrushTool 系
 /// (Pen 等、primaryStrength で発火) の双方を成立させる。詳細は <see cref="InjectHeld"/>)。
@@ -67,9 +67,11 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     private readonly WorldManager _worldManager;
     private readonly ILogSink _log;
 
-    // hold 状態 (Use 済み Unuse 前の (手, ボタン)) と repeater の running フラグ / 世代を守る単一 lock。
+    // hold 状態 (Use 済み Unuse 前の (手, ボタン) → 採用済み strength) と repeater の
+    // running フラグ / 世代を守る単一 lock。
     private readonly object _holdLock = new();
-    private readonly HashSet<(Chirality Side, GrabberButtonSelector Button)> _held = new();
+    private readonly Dictionary<(Chirality Side, GrabberButtonSelector Button), float> _held =
+        new();
     private bool _repeaterRunning;
 
     // repeater の世代。world 切替 / Dispose で進めて旧世代のコルーチンを supersede する。
@@ -174,6 +176,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     public Task<GrabSnapshot> UseAsync(
         GrabberHandSelector hand,
         GrabberButtonSelector button,
+        float strength,
         CancellationToken ct
     )
     {
@@ -184,10 +187,11 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
                     var world = ResolveWorld();
                     var (resolved, handler, grabber) = ResolveHand(world, hand);
 
-                    // (手, ボタン) を hold 集合へ。repeater が毎 tick ExternalInput を再注入する。
+                    // (手, ボタン) を hold 集合へ (strength を payload に保持。再 use は上書き)。
+                    // repeater が毎 tick ExternalInput を再注入する。
                     lock (_holdLock)
                     {
-                        _held.Add((ToChirality(resolved), button));
+                        _held[(ToChirality(resolved), button)] = strength;
                     }
                     EnsureRepeaterStarted(world);
 
@@ -563,7 +567,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
         var buttons = new List<GrabberButtonSelector>(2);
         lock (_holdLock)
         {
-            foreach (var (heldSide, button) in _held)
+            foreach (var ((heldSide, button), _) in _held)
             {
                 if (heldSide == side)
                 {
@@ -637,7 +641,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     /// </summary>
     private void HoldTickStep(long generation)
     {
-        (Chirality Side, GrabberButtonSelector Button)[] held;
+        (Chirality Side, GrabberButtonSelector Button, float Strength)[] held;
         lock (_holdLock)
         {
             if (_holdGeneration != generation)
@@ -649,8 +653,12 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
                 _repeaterRunning = false;
                 return;
             }
-            held = new (Chirality, GrabberButtonSelector)[_held.Count];
-            _held.CopyTo(held);
+            held = new (Chirality, GrabberButtonSelector, float)[_held.Count];
+            var i = 0;
+            foreach (var ((side, button), strength) in _held)
+            {
+                held[i++] = (side, button, strength);
+            }
         }
 
         var world = _worldManager.FocusedWorld;
@@ -685,10 +693,11 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     }
 
     /// <summary>
-    /// engine thread 上で、<paramref name="held"/> の各 (手, ボタン) に対応する入力 action へ
+    /// engine thread 上で、<paramref name="held"/> の各 (手, ボタン, strength) に対応する入力 action へ
     /// <c>ExternalInput</c> を注入する。primary は <see cref="InteractionHandlerInputs.Interact"/>
-    /// (digital) と <see cref="InteractionHandlerInputs.Strength"/> (analog=1) の両方、secondary は
-    /// <see cref="InteractionHandlerInputs.Secondary"/> (digital) を立てる。
+    /// (digital) と <see cref="InteractionHandlerInputs.Strength"/> (analog=その entry の strength) の
+    /// 両方、secondary は <see cref="InteractionHandlerInputs.Secondary"/> (digital) を立てる
+    /// (strength は無視)。
     /// </summary>
     /// <remarks>
     /// <para>
@@ -710,7 +719,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     /// </remarks>
     private static void InjectHeld(
         World world,
-        (Chirality Side, GrabberButtonSelector Button)[] held
+        (Chirality Side, GrabberButtonSelector Button, float Strength)[] held
     )
     {
         var localUser = world.LocalUser;
@@ -718,7 +727,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
         {
             return;
         }
-        foreach (var (side, button) in held)
+        foreach (var (side, button, strength) in held)
         {
             var inputs = localUser.GetInteractionHandler(side)?.Inputs;
             if (inputs is null)
@@ -732,7 +741,7 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
             else
             {
                 inputs.Interact.ExternalInput = true;
-                inputs.Strength.ExternalInput = 1f;
+                inputs.Strength.ExternalInput = strength;
             }
         }
     }

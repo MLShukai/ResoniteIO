@@ -22,7 +22,9 @@
       equipped it activates the tool. The hold persists across RPCs, so a
       Pen can be pressed, dragged via
       [`CursorClient.set_position`](cursor.md), then released to draw a
-      stroke.
+      stroke. The optional `strength` (0..1, default `1.0`) is the analog
+      pressure of the primary press — a `BrushTool`/Pen reads it as pen
+      pressure — and is ignored for the secondary button.
     - [`click`](#resoio.grabber.GrabberClient.click) is a convenience for
       a single press+release (e.g. one-shot align).
     - [`equip`](#resoio.grabber.GrabberClient.equip) /

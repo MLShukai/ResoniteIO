@@ -509,6 +509,48 @@ async def test_unuse_invokes_unuse_rpc_with_button(
     assert grabber_server.use_requests == []
 
 
+async def test_use_default_strength_is_one(
+    grabber_server: _EchoGrabber,
+):
+    # Spec FR-6: omitting --strength forwards the default 1.0 press strength.
+    rc = await _invoke(["grab", "use"])
+    assert rc == 0
+
+    assert len(grabber_server.use_requests) == 1
+    assert grabber_server.use_requests[0].strength == 1.0
+
+
+async def test_use_forwards_strength_flag(
+    grabber_server: _EchoGrabber,
+):
+    # Spec FR-6: --strength on the use action reaches the wire as a float.
+    rc = await _invoke(["grab", "use", "--strength", "0.3"])
+    assert rc == 0
+
+    assert len(grabber_server.use_requests) == 1
+    assert grabber_server.use_requests[0].strength == pytest.approx(0.3)
+
+
+async def test_click_forwards_strength_flag(
+    grabber_server: _EchoGrabber,
+):
+    # Spec FR-6: --strength applies to the click action too (forwarded to use).
+    rc = await _invoke(["grab", "click", "--strength", "0.3"])
+    assert rc == 0
+
+    assert len(grabber_server.use_requests) == 1
+    assert grabber_server.use_requests[0].strength == pytest.approx(0.3)
+
+
+async def test_invalid_strength_exits_with_usage_code():
+    # Spec FR-6 / §10.3: a non-numeric --strength is rejected by argparse's
+    # float type with the standard usage exit code (2); the CLI adds no custom
+    # handling.
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(["grab", "use", "--strength", "abc"])
+    assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
+
+
 async def test_click_invokes_use_then_unuse(
     grabber_server: _EchoGrabber,
 ):

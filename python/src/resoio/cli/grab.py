@@ -105,6 +105,15 @@ def register(
         default="primary",
         help="Button for use/unuse/click (default: primary = left-click).",
     )
+    parser.add_argument(
+        "--strength",
+        type=float,
+        default=1.0,
+        help=(
+            "Primary press strength 0..1 for use/click (default 1.0); "
+            "ignored for other actions and for the secondary button."
+        ),
+    )
     output.add_format_argument(parser)
     parser.set_defaults(func=_run)
 
@@ -269,11 +278,15 @@ async def _run(args: argparse.Namespace) -> int:
         elif action == "state":
             state = await client.get_state(hand=args.hand)
         elif action == "use":
-            state = await client.use(hand=args.hand, button=args.button)
+            state = await client.use(
+                hand=args.hand, button=args.button, strength=args.strength
+            )
         elif action == "unuse":
             state = await client.unuse(hand=args.hand, button=args.button)
         elif action == "click":
-            state = await client.click(hand=args.hand, button=args.button)
+            state = await client.click(
+                hand=args.hand, button=args.button, strength=args.strength
+            )
         elif action == "equip":
             state = await client.equip(hand=args.hand)
         else:

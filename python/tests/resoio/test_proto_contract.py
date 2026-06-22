@@ -428,9 +428,13 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
     GrabberGetStateRequest: {
         "hand": 1,
     },
+    # `strength` (field 3) is proto3 `optional float`: an absent field means
+    # "use the server default 1.0", distinct from an explicit 0.0. Appending it
+    # keeps the wire backward-compatible (old peers ignore field 3).
     GrabberUseRequest: {
         "hand": 1,
         "button": 2,
+        "strength": 3,
     },
     GrabberUnuseRequest: {
         "hand": 1,

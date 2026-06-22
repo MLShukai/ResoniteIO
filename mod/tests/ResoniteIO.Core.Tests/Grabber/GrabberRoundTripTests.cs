@@ -348,6 +348,103 @@ public sealed class GrabberRoundTripTests
         Assert.Equal(expected, call.Button);
     }
 
+    // ----- Use: strength (analog 押下強度) の解決 + forward -----
+
+    [Fact]
+    public async Task Use_forwards_explicit_strength_to_bridge()
+    {
+        // 仕様 (FR-3 / シナリオ B): 明示された strength は Service が [0,1] 内なら
+        // そのまま採用し Bridge へ forward する。0.5 が Fake まで届くこと。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest
+            {
+                Hand = GrabberHand.Left,
+                Button = GrabberButton.Primary,
+                Strength = 0.5f,
+            }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal("Use", call.Method);
+        Assert.Equal(0.5f, call.Strength);
+    }
+
+    [Fact]
+    public async Task Use_without_strength_defaults_to_one()
+    {
+        // 仕様 (FR-2 / シナリオ A / 後方互換): strength を set しない (HasStrength=false)
+        // request では Service が既定 1.0 を採用して Bridge へ渡す。旧 client 後方互換の核心。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        // Strength を一切 set しない (presence なし)。
+        await client.UseAsync(
+            new GrabberUseRequest { Hand = GrabberHand.Left, Button = GrabberButton.Primary }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal(1.0f, call.Strength);
+    }
+
+    [Theory]
+    [InlineData(1.5f, 1.0f)]
+    [InlineData(-0.2f, 0.0f)]
+    [InlineData(0.0f, 0.0f)]
+    [InlineData(1.0f, 1.0f)]
+    public async Task Use_clamps_strength_into_unit_range(float requested, float expected)
+    {
+        // 仕様 (FR-3 / シナリオ C / E-4): presence ありの strength は [0,1] に clamp して採用。
+        // 1.5 → 1.0、-0.2 → 0.0。両端 (0.0 / 1.0) は有効値でそのまま通る。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest
+            {
+                Hand = GrabberHand.Left,
+                Button = GrabberButton.Primary,
+                Strength = requested,
+            }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal(expected, call.Strength);
+    }
+
+    [Fact]
+    public async Task Use_forwards_strength_even_for_secondary_button()
+    {
+        // 仕様 (§10.1 / シナリオ D): Service は button を見ずに解決済み strength を常に forward する。
+        // secondary で strength を無視するのは Bridge の責務であって、Core round-trip では
+        // strength が forward されるのが正しい (secondary + 0.3 が Fake に届く)。
+        var bridge = new FakeGrabberBridge();
+        await using var harness = await GrpcHostHarness.StartAsync(grabberBridge: bridge);
+        using var channel = harness.CreateChannel();
+        var client = new V1.Grabber.GrabberClient(channel);
+
+        await client.UseAsync(
+            new GrabberUseRequest
+            {
+                Hand = GrabberHand.Right,
+                Button = GrabberButton.Secondary,
+                Strength = 0.3f,
+            }
+        );
+
+        var call = Assert.Single(bridge.Calls);
+        Assert.Equal(GrabberButtonSelector.Secondary, call.Button);
+        Assert.Equal(0.3f, call.Strength);
+    }
+
     [Fact]
     public async Task Use_then_Unuse_round_trips_held_buttons()
     {

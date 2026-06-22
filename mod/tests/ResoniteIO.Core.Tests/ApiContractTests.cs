@@ -729,6 +729,7 @@ public sealed class ApiContractTests
                 {
                     typeof(GrabberHandSelector),
                     typeof(GrabberButtonSelector),
+                    typeof(float),
                     typeof(CancellationToken),
                 }
             ),

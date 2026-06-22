@@ -19,7 +19,7 @@ resoio --help
 | `resoio screenshot` | Camera | Resonite → Python | Save a single frame as an opaque PNG. `-o PATH` (`.png`) or `-o -` for stdout; omitted writes `screenshot_<timestamp>.png` to the current directory. On file save the saved absolute path is printed to stdout. |
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
-| `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point, then operate the held / equipped item (desktop mode only). The action positional (`grab` / `release` / `state` / `use` / `unuse` / `click` / `equip` / `dequip` / `interactive`) defaults to `grab`; `--hand` / `--radius` / `--button {primary,secondary}` work before or after it. `use` holds a button down until `unuse` (left-click aligns / activates a tool); `click` is press+release; `equip` / `dequip` handle tools. |
+| `resoio grab` | Grabber | unary | Grab at the desktop cursor ray hit point, then operate the held / equipped item (desktop mode only). The action positional (`grab` / `release` / `state` / `use` / `unuse` / `click` / `equip` / `dequip` / `interactive`) defaults to `grab`; `--hand` / `--radius` / `--button {primary,secondary}` work before or after it. `use` holds a button down until `unuse` (left-click aligns / activates a tool); `click` is press+release; both take `--strength` (analog primary press pressure 0..1, default 1.0, e.g. BrushTool/Pen, ignored for the secondary button); `equip` / `dequip` handle tools. |
 | `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config (`-W/--width`, `-H/--height`, `-F/--max-fps` — at least one required) and prints the post-apply snapshot. |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
@@ -167,7 +167,7 @@ resoio cursor release
 # Equip a grabbed tool (e.g. a Pen), draw by holding the primary button
 # while moving the cursor, then release the button and dequip
 resoio grab equip
-resoio grab use --button primary     # press and hold
+resoio grab use --button primary --strength 0.8   # press and hold (pen pressure)
 resoio cursor set 0.4 0.5            # drag the cursor to draw a stroke
 resoio cursor set 0.6 0.5
 resoio grab unuse --button primary   # release the button

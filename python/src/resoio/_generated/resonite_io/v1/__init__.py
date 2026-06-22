@@ -1957,6 +1957,15 @@ class GrabberUseRequest(betterproto2.Message):
     押下するボタン。UNSPECIFIED は PRIMARY 扱い。
     """
 
+    strength: "float | None" = betterproto2.field(
+        3, betterproto2.TYPE_FLOAT, optional=True
+    )
+    """
+    primary の analog 押下強度 (0..1)。BrushTool (Pen 等) の筆圧として効く。
+    未指定なら server は 1.0 として扱う。範囲外は server が [0,1] に clamp する。
+    secondary (右クリック相当) では無視される (secondary は digital のみ)。
+    """
+
 
 default_message_pool.register_message(
     "resonite_io.v1", "GrabberUseRequest", GrabberUseRequest
@@ -4207,6 +4216,7 @@ class GrabberStub(betterproto2_grpclib.ServiceStub):
         指定した手の item を指定ボタンで押下する (hold 開始)。grab 中なら整列、装備
         tool 中なら機能発現。Unuse まで hold が継続する (Pen 描画等)。cursor ray は
         使わないため desktop / VR を問わない (handler 未準備のみ FAILED_PRECONDITION)。
+        primary は `strength` で analog 押下強度を指定可 (BrushTool の筆圧等)。
         """
 
         return await self._unary_unary(
@@ -5723,6 +5733,7 @@ class GrabberBase(betterproto2_grpclib.ServiceBase):
         指定した手の item を指定ボタンで押下する (hold 開始)。grab 中なら整列、装備
         tool 中なら機能発現。Unuse まで hold が継続する (Pen 描画等)。cursor ray は
         使わないため desktop / VR を問わない (handler 未準備のみ FAILED_PRECONDITION)。
+        primary は `strength` で analog 押下強度を指定可 (BrushTool の筆圧等)。
         """
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)

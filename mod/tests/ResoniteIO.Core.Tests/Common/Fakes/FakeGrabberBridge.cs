@@ -8,7 +8,9 @@ namespace ResoniteIO.Core.Tests.Common.Fakes;
 /// append-only list に記録し、手ごとに簡単な保持 / 装備 / hold 状態をシミュレートする。
 /// Grab で <see cref="GrabbedObjectNames"/> を保持し <c>IsHolding=true</c> に、Release で
 /// 空にして <c>IsHolding=false</c> に遷移する。Use で (手, ボタン) を hold 集合へ入れ Unuse で
-/// 外す。Equip で <see cref="EquippedToolName"/> を装備し Dequip で外すため、これら操作の
+/// 外す。Use は受領した <c>strength</c> も <see cref="Call.Strength"/> に記録するため、Service が
+/// 解決した analog 押下強度 (未指定→1.0 / clamp 済み) が Bridge まで forward されることを実 wire で
+/// 検証できる。Equip で <see cref="EquippedToolName"/> を装備し Dequip で外すため、これら操作の
 /// 観測可能な状態変化を実 wire で検証できる。
 /// </summary>
 /// <remarks>
@@ -23,12 +25,14 @@ namespace ResoniteIO.Core.Tests.Common.Fakes;
 internal sealed class FakeGrabberBridge : IGrabberBridge
 {
     /// <summary>記録された 1 回の RPC 呼び出し。<paramref name="Radius"/> は Grab のみ、
-    /// <paramref name="Button"/> は Use / Unuse のみ意味を持ち、それ以外では既定値。</summary>
+    /// <paramref name="Button"/> は Use / Unuse のみ、<paramref name="Strength"/> は Use のみ
+    /// 意味を持ち、それ以外では既定値。</summary>
     public sealed record Call(
         string Method,
         GrabberHandSelector Hand,
         float Radius = 0f,
-        GrabberButtonSelector? Button = null
+        GrabberButtonSelector? Button = null,
+        float? Strength = null
     );
 
     private readonly List<Call> _calls = new();
@@ -130,13 +134,14 @@ internal sealed class FakeGrabberBridge : IGrabberBridge
     public Task<GrabSnapshot> UseAsync(
         GrabberHandSelector hand,
         GrabberButtonSelector button,
+        float strength,
         CancellationToken ct
     )
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _calls.Add(new Call("Use", hand, Button: button));
+            _calls.Add(new Call("Use", hand, Button: button, Strength: strength));
 
             if (ThrowOnNextCall is { } ex)
             {
