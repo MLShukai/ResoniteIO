@@ -9,8 +9,10 @@ namespace ResoniteIO.Core.Session;
 /// <see cref="ISessionBridge"/> は optional DI: null なら <c>Unavailable</c> を返し、
 /// Core 単体テストや session 非対応 engine 構成も成立させる (InventoryService と同 pattern)。
 /// 各 RPC は engine を知らず、proto を Core POCO に変換して bridge に渡すだけ。例外翻訳は
-/// <see cref="SessionNotReadyException"/> / <see cref="SessionAmbiguousUserException"/> /
-/// <see cref="SessionResoniteLinkException"/> → <c>FailedPrecondition</c>、
+/// <see cref="SessionNotReadyException"/> / <see cref="SessionAmbiguousUserException"/>
+// 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+//   上の AmbiguousUser に続けて " / <see cref="SessionResoniteLinkException"/>" を戻す。
+/// → <c>FailedPrecondition</c>、
 /// <see cref="SessionUserNotFoundException"/> /
 /// <see cref="SessionRoleNotFoundException"/> → <c>NotFound</c>、
 /// <see cref="SessionPermissionDeniedException"/> → <c>PermissionDenied</c>、
@@ -283,15 +285,16 @@ public sealed class SessionService : V1.Session.SessionBase
                     "role not found",
                     roleNotFound
                 );
-            case SessionResoniteLinkException resoniteLink:
-                return BridgeFault.Translate(
-                    _log,
-                    "Session",
-                    rpc,
-                    StatusCode.FailedPrecondition,
-                    "resonite link",
-                    resoniteLink
-                );
+            // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+            // case SessionResoniteLinkException resoniteLink:
+            //     return BridgeFault.Translate(
+            //         _log,
+            //         "Session",
+            //         rpc,
+            //         StatusCode.FailedPrecondition,
+            //         "resonite link",
+            //         resoniteLink
+            //     );
             case SessionPermissionDeniedException denied:
                 return BridgeFault.Translate(
                     _log,
@@ -355,9 +358,10 @@ public sealed class SessionService : V1.Session.SessionBase
                 ? request.AutoCleanupIntervalSeconds
                 : null,
             Tags = tags,
-            ResoniteLinkEnabled = request.HasResoniteLinkEnabled
-                ? request.ResoniteLinkEnabled
-                : (bool?)null,
+            // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+            // ResoniteLinkEnabled = request.HasResoniteLinkEnabled
+            //     ? request.ResoniteLinkEnabled
+            //     : (bool?)null,
         };
     }
 
@@ -384,8 +388,9 @@ public sealed class SessionService : V1.Session.SessionBase
             AutoCleanupIntervalSeconds = snapshot.AutoCleanupIntervalSeconds,
             SessionId = snapshot.SessionId,
             IsHost = snapshot.IsHost,
-            ResoniteLinkEnabled = snapshot.ResoniteLinkEnabled,
-            ResoniteLinkPort = snapshot.ResoniteLinkPort,
+            // 予約 (GameLibs が World.ResoniteLink API を公開したら復活):
+            // ResoniteLinkEnabled = snapshot.ResoniteLinkEnabled,
+            // ResoniteLinkPort = snapshot.ResoniteLinkPort,
         };
         settings.Tags.AddRange(snapshot.Tags);
         return settings;

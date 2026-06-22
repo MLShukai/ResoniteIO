@@ -123,17 +123,20 @@ def test_settings_set_no_variant_maps_to_false():
     assert args.hide_from_listing is False
 
 
-def test_settings_set_resonite_link_flag_is_enable_only_const_true():
-    """``--resonite-link`` is an enable-only switch (store_const True): the
-    engine has no runtime-disable API so there is no ``--no-`` variant.
-
-    Present -> True, absent -> None ("leave unchanged").
-    """
-    parser = _build_parser()
-    on = parser.parse_args(["session", "settings", "set", "--resonite-link"])
-    assert on.resonite_link_enabled is True
-    off = parser.parse_args(["session", "settings", "set", "--world-name", "X"])
-    assert off.resonite_link_enabled is None
+# ResoniteLink を 0.6.0 publish 修正で全層コメントアウト。--resonite-link フラグが
+# CLI から消えるため、それを parse する test 関数をコメントアウトする (parse_args が
+# exit-2 で落ちる)。GameLibs が World.ResoniteLink API を公開したらコメントを外す。
+# def test_settings_set_resonite_link_flag_is_enable_only_const_true():
+#     """``--resonite-link`` is an enable-only switch (store_const True): the
+#     engine has no runtime-disable API so there is no ``--no-`` variant.
+#
+#     Present -> True, absent -> None ("leave unchanged").
+#     """
+#     parser = _build_parser()
+#     on = parser.parse_args(["session", "settings", "set", "--resonite-link"])
+#     assert on.resonite_link_enabled is True
+#     off = parser.parse_args(["session", "settings", "set", "--world-name", "X"])
+#     assert off.resonite_link_enabled is None
 
 
 def test_settings_set_access_level_rejects_unknown_choice():
@@ -394,31 +397,35 @@ async def test_settings_set_tags_are_split_and_replace_flag_set(
     assert list(patch.tags) == ["a", "b", "c"]
 
 
-async def test_settings_set_resonite_link_dispatches_enabled_true(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """``settings set --resonite-link`` alone satisfies the "at least one flag"
-    gate (rc 0, not the exit-2 empty case) and maps to an explicit
-    ``resonite_link_enabled=True`` on the patch — distinct from None, so the
-    server starts the endpoint."""
-    socket_path = tmp_path / "rio-session.sock"
-    server, fake = await _serve(socket_path)
-    try:
-        rc = await _run_session(
-            ["session", "settings", "set", "--resonite-link"],
-            socket_path,
-            monkeypatch,
-        )
-        assert rc == 0
-    finally:
-        server.close()
-        await server.wait_closed()
-
-    patch = fake.last_patch
-    assert patch is not None
-    assert patch.resonite_link_enabled is True
-    # No other field was touched — proves the lone flag rode through.
-    assert patch.world_name is None
+# ResoniteLink を 0.6.0 publish 修正で全層コメントアウト。--resonite-link フラグの
+# dispatch を検証する test 関数をコメントアウトする (フラグが消え parse_args が落ち、
+# 生成物 SessionSettingsPatch の resonite_link_enabled 属性も無くなるため)。
+# GameLibs が World.ResoniteLink API を公開したらコメントを外して復活させる。
+# async def test_settings_set_resonite_link_dispatches_enabled_true(
+#     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# ):
+#     """``settings set --resonite-link`` alone satisfies the "at least one flag"
+#     gate (rc 0, not the exit-2 empty case) and maps to an explicit
+#     ``resonite_link_enabled=True`` on the patch — distinct from None, so the
+#     server starts the endpoint."""
+#     socket_path = tmp_path / "rio-session.sock"
+#     server, fake = await _serve(socket_path)
+#     try:
+#         rc = await _run_session(
+#             ["session", "settings", "set", "--resonite-link"],
+#             socket_path,
+#             monkeypatch,
+#         )
+#         assert rc == 0
+#     finally:
+#         server.close()
+#         await server.wait_closed()
+#
+#     patch = fake.last_patch
+#     assert patch is not None
+#     assert patch.resonite_link_enabled is True
+#     # No other field was touched — proves the lone flag rode through.
+#     assert patch.world_name is None
 
 
 async def test_settings_set_without_flags_exits_with_code_2(

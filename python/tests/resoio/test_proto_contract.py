@@ -632,8 +632,12 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "tags": 13,
         "session_id": 14,
         "is_host": 15,
-        "resonite_link_enabled": 16,
-        "resonite_link_port": 17,
+        # ResoniteLink を 0.6.0 publish 修正で全層コメントアウトしたため、生成物から
+        # この 2 field が消える。この expected は実生成物との厳密 dict 等値比較なので、
+        # 行を残すと比較が落ちる。予約番号 16/17 は他 field に再利用しないこと。
+        # GameLibs が World.ResoniteLink API を公開したらコメントを外して復活。
+        # "resonite_link_enabled": 16,
+        # "resonite_link_port": 17,
     },
     SessionSettingsPatch: {
         "world_name": 1,
@@ -650,7 +654,10 @@ _EXPECTED_FIELDS: dict[type, dict[str, int]] = {
         "auto_cleanup_interval_seconds": 12,
         "replace_tags": 13,
         "tags": 14,
-        "resonite_link_enabled": 15,
+        # ResoniteLink を 0.6.0 publish 修正で全層コメントアウトしたため、生成物から
+        # この field が消える。expected は実生成物との厳密 dict 等値比較なので行を残すと
+        # 比較が落ちる。予約番号 15 は他 field に再利用しないこと。復活時はコメントを外す。
+        # "resonite_link_enabled": 15,
     },
     SessionUser: {
         "user_id": 1,

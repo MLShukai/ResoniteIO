@@ -160,7 +160,10 @@ public sealed class ApiContractTests
             "ResoniteIO.Core.Session.SessionAmbiguousUserException",
             "ResoniteIO.Core.Session.SessionNotReadyException",
             "ResoniteIO.Core.Session.SessionPermissionDeniedException",
-            "ResoniteIO.Core.Session.SessionResoniteLinkException",
+            // ResoniteLink を 0.6.0 publish 修正で全層コメントアウトしたため、
+            // 例外型 SessionResoniteLinkException も public surface から外す。
+            // GameLibs が World.ResoniteLink API を公開したらコメントを外して復活。
+            // "ResoniteIO.Core.Session.SessionResoniteLinkException",
             "ResoniteIO.Core.Session.SessionRoleNotFoundException",
             "ResoniteIO.Core.Session.SessionRoleSnapshot",
             "ResoniteIO.Core.Session.SessionRolesSnapshot",
