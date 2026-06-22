@@ -33,7 +33,8 @@ git switch -c chore/$(date +%Y%m%d)/release-vX.Y.Z main
    `pyproject.toml` の `version` / `uv.lock` の 3 ファイルを lockstep で bump する
 2. `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` セクションを追加 (`## [Unreleased]` を確定版に移す)。
    **末尾の link reference definitions も忘れず追加する** (`[X.Y.Z]: https://github.com/MLShukai/ResoniteIO/releases/tag/vX.Y.Z` と `[unreleased]: ...compare/vX.Y.Z...HEAD`)。
-   これが無いと `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、§2-4 の changelog 抽出 (`## \[X.Y.Z\]` regex) が失敗して Release ノートが generic な "Release X.Y.Z" にフォールバックする。Keep a Changelog 慣習どおり全 version 分の `[version]: url` を揃える
+   これが無いと `mdformat` が見出しを `## \[X.Y.Z\]` にエスケープし、§2-4 の changelog 抽出 (`## \[X.Y.Z\]` regex) が失敗して Release ノートが generic な "Release X.Y.Z" にフォールバックする。Keep a Changelog 慣習どおり全 version 分の `[version]: url` を揃える。
+   **絵文字セクション見出し規約**: カテゴリ見出しは `### ✨ Added` / `### 🔧 Changed` / `### 🗑️ Removed` / `### 🐛 Fixed` / `### 🔒 Security` / `### ⚠️ Deprecated` の絵文字付きで書く。breaking change は本文先頭に `💥 Breaking:` マーカーを付ける。**`## [X.Y.Z]` の version 見出しには絵文字を付けない** (上記抽出 regex を壊さないため)。polish/整形は `docstring-author` agent に委譲できる。詳細は [`feedback_changelog_emoji_convention.md`](../../../memory/feedback_changelog_emoji_convention.md)
 3. `just run` (`format`→`gen-proto`→`build`→`test`→`type`→`check-renderer-prebuilt`) が green になるまで回す。
    末尾の `check-renderer-prebuilt` が落ちたら Camera v2 Renderer prebuilt が stale。**Resonite のあるローカルで**
    `just renderer-prebuild` → `mod/prebuilt/` の差分を commit する (§7 の prebuilt note 参照)。CI では rebuild できないので
