@@ -49,114 +49,76 @@ public sealed class GrabberService : V1.Grabber.GrabberBase
         };
     }
 
-    public override async Task<V1.GrabberGrabState> Release(
+    public override Task<V1.GrabberGrabState> Release(
         V1.GrabberReleaseRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Release");
         var hand = ToSelector(request.Hand);
-
-        var snapshot = await InvokeBridge(
-                "Release",
-                ct => bridge.ReleaseAsync(hand, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("Release", (b, ct) => b.ReleaseAsync(hand, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> GetState(
+    public override Task<V1.GrabberGrabState> GetState(
         V1.GrabberGetStateRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("GetState");
         var hand = ToSelector(request.Hand);
-
-        var snapshot = await InvokeBridge(
-                "GetState",
-                ct => bridge.GetStateAsync(hand, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("GetState", (b, ct) => b.GetStateAsync(hand, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> Use(
+    public override Task<V1.GrabberGrabState> Use(
         V1.GrabberUseRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Use");
         var hand = ToSelector(request.Hand);
         var button = ToButton(request.Button);
         var strength = request.HasStrength ? Math.Clamp(request.Strength, 0f, 1f) : 1.0f;
-
-        var snapshot = await InvokeBridge(
-                "Use",
-                ct => bridge.UseAsync(hand, button, strength, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("Use", (b, ct) => b.UseAsync(hand, button, strength, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> Unuse(
+    public override Task<V1.GrabberGrabState> Unuse(
         V1.GrabberUnuseRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Unuse");
         var hand = ToSelector(request.Hand);
         var button = ToButton(request.Button);
-
-        var snapshot = await InvokeBridge(
-                "Unuse",
-                ct => bridge.UnuseAsync(hand, button, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("Unuse", (b, ct) => b.UnuseAsync(hand, button, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> Equip(
+    public override Task<V1.GrabberGrabState> Equip(
         V1.GrabberEquipRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Equip");
         var hand = ToSelector(request.Hand);
-
-        var snapshot = await InvokeBridge(
-                "Equip",
-                ct => bridge.EquipAsync(hand, ct),
-                context.CancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return MapToProtoState(snapshot);
+        return RunStateRpc("Equip", (b, ct) => b.EquipAsync(hand, ct), context);
     }
 
-    public override async Task<V1.GrabberGrabState> Dequip(
+    public override Task<V1.GrabberGrabState> Dequip(
         V1.GrabberDequipRequest request,
         ServerCallContext context
     )
     {
-        var bridge = RequireBridge("Dequip");
         var hand = ToSelector(request.Hand);
+        return RunStateRpc("Dequip", (b, ct) => b.DequipAsync(hand, ct), context);
+    }
 
-        var snapshot = await InvokeBridge(
-                "Dequip",
-                ct => bridge.DequipAsync(hand, ct),
-                context.CancellationToken
-            )
+    /// <summary>
+    /// <see cref="GrabSnapshot"/> を返す RPC の共通尾部: bridge を要求し、engine へ marshal して
+    /// 実行後 state を取り、proto state へ map する。Grab だけは戻り型が異なるため別扱い。
+    /// </summary>
+    private async Task<V1.GrabberGrabState> RunStateRpc(
+        string rpc,
+        Func<IGrabberBridge, CancellationToken, Task<GrabSnapshot>> call,
+        ServerCallContext context
+    )
+    {
+        var bridge = RequireBridge(rpc);
+        var snapshot = await InvokeBridge(rpc, ct => call(bridge, ct), context.CancellationToken)
             .ConfigureAwait(false);
-
         return MapToProtoState(snapshot);
     }
 

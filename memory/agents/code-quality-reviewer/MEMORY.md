@@ -10,7 +10,7 @@
 - [Bridge permission-gate dedup](project_bridge_permission_gate_dedup.md) — Session 等 host-write Bridge の繰り返す `if (!CanXxx()) throw DeniedException` を private static RequirePermission(bool, string) に畳む。Session 限定
 - [GrpcHost Register helper](project_grpchost_register_helper.md) — DI 登録+未設定 WARN は Register<T> local function に統合済み。MapGrpcService ×12 は手書き維持 (canonical 追加箇所)
 - [World CLI surface pins](feedback_world_cli_surface_pins.md) — world.py/cli/world.py の pinned 表面 (Thumbnail/fetch_thumbnail/CLI flags/列/footer) と自由に触れる内部 helper の線引き
-- [Grabber: HandleAsync に統合しない](feedback_grabber_service_no_handleasync.md) — RPC 形が違い Release/GetState は 2 回のみで dedup 閾値内。無理に共通化しない
+- [Grabber: state RPC は RunStateRpc に畳む](feedback_grabber_service_no_handleasync.md) — PR #55 で state-返す RPC が 6 本になり dedup。Grab だけ別 proto 型なので畳まない
 - [Bridge refactor notes](bridge_refactor_notes.md) — Renderite.Shared の Chirality は消せない using / composed resolver・AddRange の既存先例 / 実機検証済み engine ロジックは verbatim 移動のみ
 - [muxed-pipeline review checklist](reference_muxed_pipeline_review_checklist.md) — PyAV muxed (video+audio) 実装をレビューするときに必ず通す観点 7 つ
 - [private-module cross-import の命名規約](reference_private_module_all_for_cross_import.md) — `_foo.py` から cross-import されるシンボルは `_` prefix を付けない (privacy はモジュール名が担う)。__all__ で表面明示、テスト pin の旧名は import alias で互換
@@ -20,3 +20,4 @@
 - [session.py は既に規約準拠](feedback_session_py_already_at_convention.md) — session.py / cli/session.py は実装時点で world.py 系規約に一致。flag_values tuple 畳みは lateral か型安全性低下なので手を入れない
 - [CLI handler conventions](reference_cli_conventions.md) — cli/<modality>.py の handler/output/GRPCError/--format json 契約。input(prompt) は stdout に書くので json 経路を汚す点に注意
 - [UnixNanos DateTime 変換の重複/精度ドリフト](feedback_unixnanos_dt_conversion.md) — World/Inventory は ticks(100ns)、Auth は ms 精度で inline 再実装。新 bridge の DateTime→nanos は精度/Kind 差を flag
+- [Grabber bridge dispatch prologue](project_grabber_bridge_dispatch.md) — FrooxEngine\*Bridge の resolve-world→marshal→resolve-hand プロローグは RunWithHandAsync に畳む。hold-repeater のロック内ガードは畳まない

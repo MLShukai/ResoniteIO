@@ -97,79 +97,71 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     /// <inheritdoc/>
     public Task<GrabOutcome> GrabAsync(GrabberHandSelector hand, float radius, CancellationToken ct)
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                var (origin, dir) = ComputeCursorRay(world);
+
+                // 自前 raycast (decompiled RaycastDriver.cs:62 パターン)。自分の
+                // アバター / 手のコライダは除外。先頭 hit が最手前である前提。
+                var hits = new List<RaycastHit>();
+                world.Physics.RaycastAll(
+                    in origin,
+                    in dir,
+                    float.MaxValue,
+                    hits,
+                    c => !c.IsUnderLocalUser,
+                    hitTriggers: false
+                );
+
+                if (hits.Count == 0)
                 {
-                    var world = ResolveWorld();
-                    var (resolved, handler, grabber) = ResolveHand(world, hand);
-                    var (origin, dir) = ComputeCursorRay(world);
+                    // レイ miss は grabbed=false の正常結果 (Grab は呼ばない)。
+                    return new GrabOutcome(false, ReadSnapshot(resolved, handler, grabber));
+                }
 
-                    // 自前 raycast (decompiled RaycastDriver.cs:62 パターン)。自分の
-                    // アバター / 手のコライダは除外。先頭 hit が最手前である前提。
-                    var hits = new List<RaycastHit>();
-                    world.Physics.RaycastAll(
-                        in origin,
-                        in dir,
-                        float.MaxValue,
-                        hits,
-                        c => !c.IsUnderLocalUser,
-                        hitTriggers: false
-                    );
+                // Grabber.Grab(float3 point, float radius) — proximity grab。
+                // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
+                var before = grabber.GrabbedObjects.Count;
+                var grabbed = grabber.Grab(hits[0].Point, radius);
 
-                    if (hits.Count == 0)
-                    {
-                        // レイ miss は grabbed=false の正常結果 (Grab は呼ばない)。
-                        return new GrabOutcome(false, ReadSnapshot(resolved, handler, grabber));
-                    }
+                if (grabbed)
+                {
+                    PinGrabbedAtGrabPose(world, grabber, before);
+                }
 
-                    // Grabber.Grab(float3 point, float radius) — proximity grab。
-                    // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:224
-                    var before = grabber.GrabbedObjects.Count;
-                    var grabbed = grabber.Grab(hits[0].Point, radius);
-
-                    if (grabbed)
-                    {
-                        PinGrabbedAtGrabPose(world, grabber, before);
-                    }
-
-                    return new GrabOutcome(grabbed, ReadSnapshot(resolved, handler, grabber));
-                },
-                ct
-            );
+                return new GrabOutcome(grabbed, ReadSnapshot(resolved, handler, grabber));
+            }
+        );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> ReleaseAsync(GrabberHandSelector hand, CancellationToken ct)
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
-                {
-                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
+                // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
+                grabber.Release();
 
-                    // Grabber.Release(bool supressEvents = false) — 保持中の全オブジェクトを離す。
-                    // decompiled/FrooxEngine/FrooxEngine/Grabber.cs:358
-                    grabber.Release();
-
-                    return ReadSnapshot(resolved, handler, grabber);
-                },
-                ct
-            );
+                return ReadSnapshot(resolved, handler, grabber);
+            }
+        );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> GetStateAsync(GrabberHandSelector hand, CancellationToken ct)
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
-                {
-                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
-                    return ReadSnapshot(resolved, handler, grabber);
-                },
-                ct
-            );
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) => ReadSnapshot(resolved, handler, grabber)
+        );
     }
 
     /// <inheritdoc/>
@@ -180,25 +172,22 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
         CancellationToken ct
     )
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                // (手, ボタン) を hold 集合へ (strength を payload に保持。再 use は上書き)。
+                // repeater が毎 tick ExternalInput を再注入する。
+                lock (_holdLock)
                 {
-                    var world = ResolveWorld();
-                    var (resolved, handler, grabber) = ResolveHand(world, hand);
+                    _held[(ToChirality(resolved), button)] = strength;
+                }
+                EnsureRepeaterStarted(world);
 
-                    // (手, ボタン) を hold 集合へ (strength を payload に保持。再 use は上書き)。
-                    // repeater が毎 tick ExternalInput を再注入する。
-                    lock (_holdLock)
-                    {
-                        _held[(ToChirality(resolved), button)] = strength;
-                    }
-                    EnsureRepeaterStarted(world);
-
-                    return ReadSnapshot(resolved, handler, grabber);
-                },
-                ct
-            );
+                return ReadSnapshot(resolved, handler, grabber);
+            }
+        );
     }
 
     /// <inheritdoc/>
@@ -208,81 +197,104 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
         CancellationToken ct
     )
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                // 集合から外すだけ。翌 tick に repeater が注入を止め、engine が
+                // ExternalInput 不在を held=false と評価して OnPrimaryRelease を発火する。
+                lock (_holdLock)
                 {
-                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
+                    _held.Remove((ToChirality(resolved), button));
+                }
 
-                    // 集合から外すだけ。翌 tick に repeater が注入を止め、engine が
-                    // ExternalInput 不在を held=false と評価して OnPrimaryRelease を発火する。
-                    lock (_holdLock)
-                    {
-                        _held.Remove((ToChirality(resolved), button));
-                    }
-
-                    return ReadSnapshot(resolved, handler, grabber);
-                },
-                ct
-            );
+                return ReadSnapshot(resolved, handler, grabber);
+            }
+        );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> EquipAsync(GrabberHandSelector hand, CancellationToken ct)
     {
-        return ResolveWorld()
-            .RunOnEngineAsync(
-                () =>
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                // engine EquipGrabbed (decompiled InteractionHandler.cs:3582) を手本に、
+                // grab 中の grabbable から最初の ITool を探して装備する。tool が無ければ no-op。
+                var grabbed = grabber.GrabbedObjects;
+                for (var i = 0; i < grabbed.Count; i++)
                 {
-                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
-
-                    // engine EquipGrabbed (decompiled InteractionHandler.cs:3582) を手本に、
-                    // grab 中の grabbable から最初の ITool を探して装備する。tool が無ければ no-op。
-                    var grabbed = grabber.GrabbedObjects;
-                    for (var i = 0; i < grabbed.Count; i++)
+                    var grabbable = grabbed[i];
+                    if (grabbable is null)
                     {
-                        var grabbable = grabbed[i];
-                        if (grabbable is null)
-                        {
-                            continue;
-                        }
-                        var tool = grabbable.Slot?.GetComponent<ITool>();
-                        if (tool is not null)
-                        {
-                            // engine の Equip は permission-gated world 等で拒否されうる。
-                            // 先に Release してから拒否されると tool を落とすだけになるため、
-                            // CanEquip で装備可能を確認できたときだけ grab を手放す
-                            // (不可なら no-op で掴んだまま残す)。
-                            // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3436
-                            if (handler.CanEquip(tool))
-                            {
-                                grabber.Release(grabbable, supressEvents: true);
-                                handler.Equip(tool, lockEquip: true);
-                            }
-                            break;
-                        }
+                        continue;
                     }
+                    var tool = grabbable.Slot?.GetComponent<ITool>();
+                    if (tool is not null)
+                    {
+                        // engine の Equip は permission-gated world 等で拒否されうる。
+                        // 先に Release してから拒否されると tool を落とすだけになるため、
+                        // CanEquip で装備可能を確認できたときだけ grab を手放す
+                        // (不可なら no-op で掴んだまま残す)。
+                        // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3436
+                        if (handler.CanEquip(tool))
+                        {
+                            grabber.Release(grabbable, supressEvents: true);
+                            handler.Equip(tool, lockEquip: true);
+                        }
+                        break;
+                    }
+                }
 
-                    return ReadSnapshot(resolved, handler, grabber);
-                },
-                ct
-            );
+                return ReadSnapshot(resolved, handler, grabber);
+            }
+        );
     }
 
     /// <inheritdoc/>
     public Task<GrabSnapshot> DequipAsync(GrabberHandSelector hand, CancellationToken ct)
     {
+        return RunWithHandAsync(
+            hand,
+            ct,
+            (world, resolved, handler, grabber) =>
+            {
+                // InteractionHandler.Dequip(bool popOff) — 装備中 tool を外す。未装備は no-op。
+                // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3606
+                handler.Dequip(popOff: true);
+
+                return ReadSnapshot(resolved, handler, grabber);
+            }
+        );
+    }
+
+    /// <summary>
+    /// 全 RPC 共通の前段をまとめる: focused world を解決し、engine thread に one-shot で
+    /// marshal して、その上で <paramref name="hand"/> を実際の手へ解決した
+    /// (world, 解決後の手, handler, grabber) を <paramref name="body"/> に渡す。
+    /// 各メソッドは body に操作本体だけを書けばよい。
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="body"/> は必ず engine thread 上で実行されるので、引数の
+    /// FrooxEngine オブジェクトに直接触れてよい (呼び出し元での再 marshal は不要)。
+    /// world / 手未準備時は body に到達せず <see cref="GrabberNotReadyException"/>。
+    /// </remarks>
+    private Task<T> RunWithHandAsync<T>(
+        GrabberHandSelector hand,
+        CancellationToken ct,
+        Func<World, GrabberHandSelector, InteractionHandler, Grabber, T> body
+    )
+    {
         return ResolveWorld()
             .RunOnEngineAsync(
                 () =>
                 {
-                    var (resolved, handler, grabber) = ResolveHand(ResolveWorld(), hand);
-
-                    // InteractionHandler.Dequip(bool popOff) — 装備中 tool を外す。未装備は no-op。
-                    // decompiled/FrooxEngine/FrooxEngine/InteractionHandler.cs:3606
-                    handler.Dequip(popOff: true);
-
-                    return ReadSnapshot(resolved, handler, grabber);
+                    var world = ResolveWorld();
+                    var (resolved, handler, grabber) = ResolveHand(world, hand);
+                    return body(world, resolved, handler, grabber);
                 },
                 ct
             );

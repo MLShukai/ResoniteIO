@@ -207,15 +207,15 @@ async def _run_interactive(args: argparse.Namespace) -> int:
                         state = await client.get_state(hand=hand)
                         print(_format_state(state))
                     elif key in ("u", "U"):
-                        button = "secondary" if key == "U" else "primary"
+                        button = "secondary" if key.isupper() else "primary"
                         state = await client.use(hand=hand, button=button)
                         print(_format_state(state))
                     elif key in ("i", "I"):
-                        button = "secondary" if key == "I" else "primary"
+                        button = "secondary" if key.isupper() else "primary"
                         state = await client.unuse(hand=hand, button=button)
                         print(_format_state(state))
                     elif key in ("c", "C"):
-                        button = "secondary" if key == "C" else "primary"
+                        button = "secondary" if key.isupper() else "primary"
                         state = await client.click(hand=hand, button=button)
                         print(_format_state(state))
                     elif key == "e":
