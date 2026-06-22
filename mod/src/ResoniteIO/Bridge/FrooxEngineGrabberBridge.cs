@@ -34,11 +34,15 @@ namespace ResoniteIO.Bridge;
 /// <para>
 /// Use / Unuse は <b>hold セマンティクス</b>を持つ stateful 操作。Use した
 /// (手, ボタン) を内部集合に保持し、self-rescheduling repeater
-/// (<c>World.RunInUpdates(0, …)</c>) が毎 engine tick その
-/// <see cref="InteractionHandlerInputs.Interact"/> / <see cref="InteractionHandlerInputs.Secondary"/>
-/// の <c>ExternalInput = true</c> を再注入し続ける (engine 1-frame 寿命 ExternalInput と
-/// RPC レートのギャップを吸収)。初 tick で engine が <c>OnPrimaryPress</c> (整列 / 装備 tool の
-/// 機能発現) を、以後 <c>OnPrimaryHold</c> を毎フレーム発火する。Unuse で集合から外すと
+/// (<c>World.RunInUpdates(0, …)</c>) が毎 engine tick その入力 action の <c>ExternalInput</c>
+/// を再注入し続ける (engine 1-frame 寿命 ExternalInput と RPC レートのギャップを吸収)。
+/// primary は <see cref="InteractionHandlerInputs.Interact"/> (digital) と
+/// <see cref="InteractionHandlerInputs.Strength"/> (analog=1) の両方、secondary は
+/// <see cref="InteractionHandlerInputs.Secondary"/> (digital) を立てる (実マウス左ボタンが
+/// digital と analog strength を同時に駆動するのを再現し、整列・laser press と BrushTool 系
+/// (Pen 等、primaryStrength で発火) の双方を成立させる。詳細は <see cref="InjectHeld"/>)。
+/// 初 tick で engine が <c>OnPrimaryPress</c> (整列 / 装備 tool の機能発現) を、以後
+/// <c>OnPrimaryHold</c> / <c>ITool.Update</c> を毎フレーム駆動する。Unuse で集合から外すと
 /// 翌 tick に注入が止まり engine が <c>OnPrimaryRelease</c> を発火、repeater は集合が空に
 /// なった時点で self-terminate する。Locomotion の継続入力と同型
 /// (<c>memory/feedback_locomotion_external_input.md</c>)。world 切替 / Dispose 時は
@@ -681,12 +685,28 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
     }
 
     /// <summary>
-    /// engine thread 上で、<paramref name="held"/> の各 (手, ボタン) に対応する
-    /// <see cref="DigitalAction.ExternalInput"/> を <c>true</c> にする。
+    /// engine thread 上で、<paramref name="held"/> の各 (手, ボタン) に対応する入力 action へ
+    /// <c>ExternalInput</c> を注入する。primary は <see cref="InteractionHandlerInputs.Interact"/>
+    /// (digital) と <see cref="InteractionHandlerInputs.Strength"/> (analog=1) の両方、secondary は
+    /// <see cref="InteractionHandlerInputs.Secondary"/> (digital) を立てる。
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>ExternalInput</c> は engine が毎 Evaluate で OR-merge 後に null へ戻す 1-frame 寿命の
-    /// フックなので、hold を継続するには毎 tick の再注入が要る (false は明示不要)。
+    /// フックなので、hold を継続するには毎 tick の再注入が要る (off は明示不要)。
+    /// </para>
+    /// <para>
+    /// primary で Strength も注入するのが要点。実マウス左ボタンは同一 binding で
+    /// Interact(digital) と Strength(analog) の両方を駆動する。Interact は
+    /// <c>StartInteraction</c>/<c>HoldInteraction</c> (掴んだ object の整列・laser press) を、
+    /// Strength は <c>ITool.Update(primaryStrength, …)</c> を駆動する
+    /// (decompiled InteractionHandler.cs:2304,2327 — <c>primaryStrength = BlockPrimary ? 0 :
+    /// (float)_inputs.Strength</c>)。<see cref="BrushTool"/> 系 (Pen / Geometry Line Brush 等) は
+    /// <c>OnPrimaryHold</c> ではなく <c>Update</c> 内で <c>Pressure</c> (← primaryStrength) が
+    /// <c>ActivationThreshold</c>(0.05) を超えたら描画する (decompiled BrushTool.cs:524-535)。
+    /// digital だけでは primaryStrength=0 のままで brush が一切発火しないため、Strength を
+    /// 注入しないと Pen で線が引けない。
+    /// </para>
     /// </remarks>
     private static void InjectHeld(
         World world,
@@ -705,11 +725,14 @@ internal sealed class FrooxEngineGrabberBridge : IGrabberBridge, IDisposable
             {
                 continue;
             }
-            var action =
-                button == GrabberButtonSelector.Secondary ? inputs.Secondary : inputs.Interact;
-            if (action is not null)
+            if (button == GrabberButtonSelector.Secondary)
             {
-                action.ExternalInput = true;
+                inputs.Secondary.ExternalInput = true;
+            }
+            else
+            {
+                inputs.Interact.ExternalInput = true;
+                inputs.Strength.ExternalInput = 1f;
             }
         }
     }

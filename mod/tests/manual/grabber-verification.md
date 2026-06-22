@@ -106,44 +106,53 @@ uv run --project python resoio grab state --hand right
 
 ## 手順: tool を equip → use で押下保持して描画 (Pen)
 
-`use` / `unuse` の hold セマンティクス (押下保持中に `OnPrimaryHold` が毎フレーム
-駆動される) は **ITool を持つ spawn 対象** と描いた線の目視でしか確認できない。
-e2e は RPC 経路 (`held_buttons` の round-trip / hold が RPC を跨いで持続すること /
-equip・dequip が非 tool grab で no-op になること) までを自動化済みなので、ここでは
-**実際に Pen で線が引けること** だけを目視する。
+`use` / `unuse` の hold セマンティクス (押下保持中に tool が毎フレーム駆動される) は
+**ITool を持つ spawn 対象** と描いた線の目視でしか確認できない。e2e は RPC 経路
+(`held_buttons` の round-trip / hold が RPC を跨いで持続すること / equip・dequip が
+非 tool grab で no-op になること) までを自動化済みなので、ここでは **実際に Pen で
+線が引けること** だけを目視する。
 
-ITool を持つ既知の inventory アイテム (例: Resonite Essentials の Pen 系ツール) を
-spawn し、カーソル照準で grab してから装備 → 押下保持して描く:
+`Geometry Line Brush Tool` (Resonite Essentials の描画ツール) を spawn し、カーソル
+照準で grab → 装備 → 押下保持しながら **カーソルを掃引して描く**。tool 装備中は手が
+頭から固定オフセットに pin され、**カーソル位置に向けて tip が回転して追従する**ため、
+`cursor set` を多点動かすことで線が描ける (体を `drive` で動かしても stroke 空間ごと
+回るため線にはならない — 描画はカーソル掃引で行う):
 
 ```sh
-# REPL 内で ITool を持つツールを spawn (パスは環境の inventory に合わせる)
+# REPL 内でツールを spawn
 uv run --project python resoio inventory
-#   resoio:/Inventory$ spawn "/Inventory/<...>/Pen"
+#   resoio:/Inventory$ spawn "/Inventory/Resonite Essentials/Tools/Geometry Line Brush Tool"
 #   resoio:/Inventory$ exit
 
-uv run --project python resoio cursor set 0.5 0.45
-uv run --project python resoio grab --radius 0.5       # ツールを掴む
+# 空中に浮く tool はレイ hit 点から radius 内に入りにくいので radius を広げ、
+# 当たらなければ照準を数点ずらして掴む (grabbed=True になるまで)
+uv run --project python resoio cursor set 0.5 0.5
+uv run --project python resoio grab --radius 1.0       # ツールを掴む
 uv run --project python resoio grab equip              # 手に装備
-uv run --project python resoio grab state              # equipped=True / tool=<名前> を確認
+uv run --project python resoio grab state              # equipped=True / tool=Geometry Line Brush Tool を確認
 
-# 押下保持 → カーソルを数点動かす → 解放 (描画ストローク)
+# 押下保持 → カーソルを大きく多点掃引 → 解放 (描画ストローク)
 uv run --project python resoio grab use --button primary
-uv run --project python resoio cursor set 0.4 0.5
-uv run --project python resoio cursor set 0.6 0.5
-uv run --project python resoio cursor set 0.5 0.6
+for xy in "0.35 0.5" "0.4 0.4" "0.5 0.35" "0.6 0.4" "0.65 0.5" "0.6 0.6" "0.5 0.65" "0.4 0.6" "0.35 0.5"; do
+  uv run --project python resoio cursor set $xy ; sleep 0.1
+done
 uv run --project python resoio grab unuse --button primary
 
+uv run --project python resoio cursor set 0.5 0.5      # 手をどかして描いた線を見やすくする
+uv run --project python resoio screenshot -o /tmp/pen.png
 uv run --project python resoio grab dequip             # 装備解除
 ```
 
-`grab use` から `grab unuse` までの間に **カーソルを動かした軌跡に沿って線が
-描かれる** ことを目視する (Pen が `OnPrimaryHold` で毎フレーム描画する)。
-`grab state` で装備中は `equipped=True` / `tool=<ツール名>`、`use` 中は
-`held=[primary]`、`unuse` 後は `held=[]` になることも併せて確認する。
+`grab use` から `grab unuse` までの間に **カーソルを動かした軌跡 (上記なら円弧) に沿って
+線が描かれる** ことを screenshot で目視する。`grab state` で装備中は `equipped=True` /
+`tool=Geometry Line Brush Tool`、`use` 中は `held=[primary]`、`unuse` 後は `held=[]` に
+なることも併せて確認する。
 
-> 注: Wine/Proton 上では実 OS カーソルを動かせないため、描画位置の更新は
-> `cursor set` (engine 内カーソルの正規化座標) で行う。`use` の hold は
-> `InputAction.ExternalInput` 経由で OS を介さないため、フォーカス非依存で効く。
+> 注: Wine/Proton 上では実 OS カーソルを動かせないため、照準・掃引は `cursor set`
+> (engine 内カーソルの正規化座標) で行う。`use` の hold は `InputAction.ExternalInput`
+> 経由で OS を介さないため、フォーカス非依存で効く。**primary は digital `Interact` と
+> analog `Strength` の両方が立っていないと Pen 系 (BrushTool) が発火しない**ため、bridge は
+> 両方を毎 tick 注入している (詳細は `memory/feedback_grabber_engine_api.md`)。
 
 ## 手順: VR モードで FAILED_PRECONDITION
 

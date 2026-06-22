@@ -1,6 +1,6 @@
 ---
 name: grabber-engine-api
-description: Grabber modality (旧称 Manipulation) の engine 経路 — Grab はカーソルレイ hit 点中心の radius grab (point 指定は廃止)、Grabber API、hand-pose 注入が不可な理由、unary RPC 採用、home に grabbable が無い e2e 制約。
+description: Grabber modality (旧称 Manipulation) の engine 経路 — Grab はカーソルレイ hit 点中心の radius grab (point 指定は廃止)、Grabber API、hand-pose 注入が不可な理由、unary RPC 採用、home に grabbable が無い e2e 制約、Use/Unuse の hold は digital Interact + analog Strength の両方注入が必要 (BrushTool/Pen 発火) + tip はカーソルに追従。
 metadata:
   type: feedback
 ---
@@ -96,6 +96,39 @@ grab 時 object は world 位置を保ったまま HolderSlot 下に reparent �
   laser の指す先)。任意 pose を押し込む input source が無い。
 - 代替: `Grab(point, radius)` は任意 world point を取れるので、**手を動かさずカーソルレイの
   hit 点で掴める** (pose 制御の代用。2026-06-10 以降、中心点は常にレイ hit 点で API からの直接指定は不可)。
+
+## Use/Unuse の tool 発火: digital Interact だけでなく analog Strength も注入する (2026-06-22)
+
+grab 後の **Use (押下 hold) / Unuse (解放)** は Locomotion 流の self-rescheduling repeater
+(\[\[feedback_locomotion_external_input\]\]) で毎 engine tick `ExternalInput` を再注入して表現する。
+ここで **`InteractionHandlerInputs.Interact` (digital) だけ注入しても Pen 等の BrushTool 系は
+一切描画しない**。原因は tool 駆動経路がアナログ:
+
+- `InteractionHandler.OnInputUpdate` は毎 tick `ActiveTool.Update(primaryStrength, axis, primary, secondary)`
+  を呼ぶ。`primaryStrength = BlockPrimary ? 0f : (float)_inputs.Strength`
+  (`decompiled/.../InteractionHandler.cs:2304,2327`)。
+- `BrushTool` (Pen / Geometry Line Brush 等の基底) は `OnPrimaryPress/Hold` を override せず、
+  `Update` 内で `Pressure.Value` を `primaryStrength` へ lerp し、`Pressure >= ActivationThreshold`(0.05)
+  で stroke を開始する (`decompiled/.../BrushTool.cs:524-535`)。digital の `Interact` は読まない。
+- 実マウス左ボタンは同一 binding で `Interact` (digital) と `Strength` (analog) の **両方**を駆動する。
+  これを再現するため `InjectHeld` は **primary で `Interact.ExternalInput = true` と
+  `Strength.ExternalInput = 1f` の両方**を注入する (secondary は `Secondary.ExternalInput = true`
+  のみ。secondary 用 strength 軸は無い)。
+- `AnalogAction : InputAction<float>`、`ExternalInput` は `float?` で digital と同じ「毎 Evaluate で
+  消費して null へ戻す」1-frame 寿命 (`decompiled/.../AnalogAction.cs` / `InputAction.cs:46`)。
+- 実機確認 (2026-06-22、MLShukaiAMI1 home + Geometry Line Brush Tool): 修正前 `strength=0 / toolInUse=False`、修正後 `strength=1.000 / toolInUse=True / strokeActive=True / visibleMesh=True`。
+  `grab use` + `cursor set` でカーソルを掃引すると白い線が実際に描かれる (screenshot で円を描画確認)。
+
+### desktop の tool tip はカーソルに追従する (描画は cursor 掃引で行う)
+
+tool 装備中、手は `OverrideHandPosition` で **頭から固定オフセット** (0.25 右 / -0.22 下 / 0.2 前)
+に pin され、**回転だけが `Laser.LastInteractionTargetPoint` を向く**
+(`decompiled/.../InteractionHandler.cs:1827`, `HandSimulator.cs:73`)。Use 中はレーザーが active に
+なり target がカーソルレイ hit 点を追うため、**`cursor.set_position` を動かすと tip が掃引して線が描ける**
+(実機計測: 正弦波カーソルで tip が X 方向に ~30cm スイープ)。逆に Locomotion の yaw/move で
+体ごと動かすと stroke 空間 (LocalUserSpace) も一緒に回る/動くため tip は相対的にほぼ静止し、
+線にならない (~3cm の滲みのみ)。**agent の描画フローは「`grab equip` → `grab use` →
+`cursor set` で軌跡を描く → `grab unuse`」**。
 
 ## RPC 形は unary (plan の client-streaming から変更)
 
