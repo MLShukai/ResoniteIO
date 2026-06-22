@@ -15,3 +15,4 @@
 - [Contact modality V1 proto type list](reference_contact_v1_types.md) — exact ResoniteIO.V1.\* reflection entries for Contact, for the ApiContract snapshot
 - [Core.Tests grpc gen split](feedback_core_tests_grpc_gen_split.md) — test asm gen Client stubs, Core src gen server +XxxBase; ApiContract pins Core asm
 - [Public vs wire enum pins](pattern_public_vs_wire_enum_pins.md) — re-export 型 enum は proto pin のみ、offset-fold 型は proto+api_contract 両方にピンする判定
+- [Comment-out test adjustments](feedback_commentout_test_adjustments.md) — 機能を削除でなくコメントアウトで外す修正の追従: C# record 末尾化 / proto 厳密集合一致 / orphan doc comment 回避 / ビルド禁止時の ast.parse 検証
