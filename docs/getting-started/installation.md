@@ -2,7 +2,7 @@
 
 ResoniteIO has two halves that install separately: the **C# mod** (runs inside the Resonite
 client) and the **`resonite-io` Python client** (imported as `resoio`, runs wherever your
-agent code runs). They
+Python code runs). They
 connect over a Unix Domain Socket, so both halves must run on the same host (or share the
 socket directory).
 
