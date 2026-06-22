@@ -9,10 +9,8 @@
 3. **VR モードで grab が `FAILED_PRECONDITION` になること**
    (VR への切替は人間の HMD 操作が必要)
 
-実装計画上の対応:
+自動化状況:
 
-- [resonite_io_plan.md](../../../resonite_io_plan.md) Step 6 (Grabber、旧称
-  Manipulation) の grab/release の目視確認相当
 - **ポジティブ grab は自動 e2e 化済み**:
   [python/tests/e2e/grabber.py](../../../python/tests/e2e/grabber.py)
   が `InventoryClient.spawn("/Inventory/Resonite Essentials/Mirror")` で

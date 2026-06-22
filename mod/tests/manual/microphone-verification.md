@@ -5,10 +5,8 @@ device を `AudioSystem.RegisterAudioInput` で登録し、Python 側
 `MicrophoneClient` / `resoio mic` から音声を流し込めることを実機で確認する
 手動検証手順。
 
-実装計画上の対応:
+自動化状況:
 
-- [resonite_io_plan.md](../../../resonite_io_plan.md) Step 7 (Microphone) の
-  voice として聞こえるかの耳確認相当
 - default mic への昇格は Bridge ctor で
   `AudioSystem.OverrideAudioInputIndex` 経由 (非永続) に自動化済み。Resonite
   UI 操作は不要。起動時と dispose 時のログ行を観測するだけの自動 e2e は

@@ -25,7 +25,7 @@ ResoniteIO の公開ドキュメントは **MkDocs Material + `mkdocstrings[pyth
 
 **ユーザー docs と project docs を分ける**: `docs/` は **公開サイト (ユーザー向け) 専用**。
 RELEASE.md などの maintainer / プロジェクト向けドキュメントは **repo root** に置く
-(`resonite_io_plan.md` / `CLAUDE.md` / `README.md` と同列、GitHub 上で読む)。`docs/` に
+(`CLAUDE.md` / `README.md` と同列、GitHub 上で読む)。`docs/` に
 maintainer doc を混ぜない (混ぜると mkdocs が拾い、`exclude_docs` での除外管理が増える)。
 
 アイコンは **master 1 つ + 派生 + symlink** で重複と手作業を避ける:
@@ -114,7 +114,7 @@ docs deps (`mkdocs` / `mkdocs-material` / `mkdocstrings` / `mike`) は `python/p
 - `docs/cli.md` — `resoio` flat command 一覧。
 
 これらは手書き。コード例や表は実装に追従させる (CLI コマンドやモダリティの方向/RPC 種別は
-`resonite_io_plan.md` と各 `*.proto` が正)。
+各 `*.proto` と `python/src/resoio/` の実装が正)。
 
 ## 4.1 図は mermaid で書く
 
@@ -128,7 +128,7 @@ docs deps (`mkdocs` / `mkdocs-material` / `mkdocstrings` / `mike`) は `python/p
 **mkdocstrings は C# を扱えない** (C# handler は存在せず、要望 issue は "not planned")。
 Python と C# を両対応する「Material 品質」の単一ツールは無いと確認済み (Doxygen / Breathe は
 見た目と片側の描画品質を犠牲にする)。よって C# は `docs/architecture/csharp-mod.md` の
-**手書き概念ページ** でカバーし、深掘りは `resonite_io_plan.md` と `add-new-modality` skill に
+**手書き概念ページ** でカバーし、深掘りは `add-new-modality` skill に
 リンクする。クラス単位の C# API ref は今回スコープ外。
 
 ## 6. モダリティを追加したときの docs 手順
