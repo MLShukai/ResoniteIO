@@ -1545,10 +1545,10 @@
 <td>Interactive WASD driving (<code>--sprint</code> / <code>--look-rate</code> / <code>--no-wait</code>).</td>
 </tr>
 <tr>
-<td><code>resoio grab</code></td>
+<td><code>resoio grabber</code></td>
 <td>Grabber</td>
 <td>unary</td>
-<td>Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (<code>grab</code> / <code>release</code> / <code>state</code> / <code>interactive</code>) defaults to <code>grab</code>; <code>--hand</code> / <code>--radius</code> work before or after it.</td>
+<td>Grab at the desktop cursor ray hit point / release (desktop mode only). The action positional (<code>grab</code> / <code>release</code> / <code>state</code> / <code>interactive</code>) is required; <code>--hand</code> / <code>--radius</code> work before or after it.</td>
 </tr>
 <tr>
 <td><code>resoio display</code></td>
@@ -1702,8 +1702,8 @@ line instead of as JSON:</p>
 <li><code>screenshot</code> / <code>record</code> / <code>world thumbnail</code> print the <strong>saved absolute path</strong> when writing a file
   (and <code>-o -</code> streams raw bytes to stdout with no path line).</li>
 </ul>
-<p>Interactive commands (<code>drive</code>, <code>grab interactive</code>, <code>inventory</code>) have no structured output and do not
-accept <code>--format</code> (<code>grab interactive --format json</code> exits with code 2).</p>
+<p>Interactive commands (<code>drive</code>, <code>grabber interactive</code>, <code>inventory</code>) have no structured output and do not
+accept <code>--format</code> (<code>grabber interactive --format json</code> exits with code 2).</p>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Liveness</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>resoio<span class="w"> </span>ping<span class="w"> </span>--message<span class="w"> </span>hello
@@ -1741,8 +1741,8 @@ accept <code>--format</code> (<code>grab interactive --format json</code> exits 
 <a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a>
 <a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="c1"># Aim with the held cursor, grab at the ray hit point, then release</span>
 <a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>center
-<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a>resoio<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
-<a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a>resoio<span class="w"> </span>grab<span class="w"> </span>release
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a>resoio<span class="w"> </span>grabber<span class="w"> </span>grab<span class="w"> </span>--radius<span class="w"> </span><span class="m">0</span>.5
+<a id="__codelineno-2-38" name="__codelineno-2-38" href="#__codelineno-2-38"></a>resoio<span class="w"> </span>grabber<span class="w"> </span>release
 <a id="__codelineno-2-39" name="__codelineno-2-39" href="#__codelineno-2-39"></a>resoio<span class="w"> </span>cursor<span class="w"> </span>release
 <a id="__codelineno-2-40" name="__codelineno-2-40" href="#__codelineno-2-40"></a>
 <a id="__codelineno-2-41" name="__codelineno-2-41" href="#__codelineno-2-41"></a><span class="c1"># Start Resonite (engine + renderer) and capture both PIDs</span>
