@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Bidirectional IPC bridge that turns Resonite into a runtime environment for AI agents — a C# mod and the resoio Python client connected over gRPC/UDS.">
+        <meta name="description" content="Bidirectional IPC bridge between Resonite and Python — a C# mod and the resoio Python client connected over gRPC/UDS.">
       
       
       
@@ -1610,8 +1610,8 @@ any subset.</p>
 matching <a href="../../api/connection/">API Reference</a> page links it.</p>
 <h2 id="direction-conventions">Direction conventions<a class="headerlink" href="#direction-conventions" title="Permanent link">&para;</a></h2>
 <p>Audio is split by direction on purpose: <strong>Speaker</strong> carries Resonite → Python audio (what
-the agent "hears"), and <strong>Microphone</strong> carries Python → Resonite audio (what the agent
-"says"). The same split logic gives Camera (out) and the input modalities (Locomotion,
+Resonite plays out), and <strong>Microphone</strong> carries Python → Resonite audio (what you push in as
+a virtual mic). The same split logic gives Camera (out) and the input modalities (Locomotion,
 Microphone) their streaming directions.</p>
 <h2 id="mirrored-structure">Mirrored structure<a class="headerlink" href="#mirrored-structure" title="Permanent link">&para;</a></h2>
 <p>The C# and Python sides mirror each other per modality. Adding a new one means a

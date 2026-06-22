@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Bidirectional IPC bridge that turns Resonite into a runtime environment for AI agents — a C# mod and the resoio Python client connected over gRPC/UDS.">
+        <meta name="description" content="Bidirectional IPC bridge between Resonite and Python — a C# mod and the resoio Python client connected over gRPC/UDS.">
       
       
       
@@ -442,10 +442,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design-philosophy" class="md-nav__link">
+  <a href="#design" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design philosophy
+        Design
       
     </span>
   </a>
@@ -1420,10 +1420,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design-philosophy" class="md-nav__link">
+  <a href="#design" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design philosophy
+        Design
       
     </span>
   </a>
@@ -1485,21 +1485,19 @@
 
 <h1 id="resoniteio">ResoniteIO<a class="headerlink" href="#resoniteio" title="Permanent link">&para;</a></h1>
 <p><img alt="ResoniteIO — Resonite ⇄ Python" src="assets/banner.png" /></p>
-<p><strong>ResoniteIO</strong> is a bidirectional IPC bridge that turns <a href="https://resonite.com/">Resonite</a>
-into a runtime environment for AI agents. A C# mod running inside the Resonite client
-(<code>ResoniteIO</code>, loaded via BepisLoader) and a Python package (<code>resoio</code>) talk to each other
-over <strong>gRPC on a Unix Domain Socket</strong>.</p>
+<p><strong>ResoniteIO</strong> is a bidirectional IPC bridge between <a href="https://resonite.com/">Resonite</a> and
+Python. A C# mod running inside the Resonite client (<code>ResoniteIO</code>, loaded via BepisLoader)
+and a Python package (<code>resoio</code>) talk to each other over <strong>gRPC on a Unix Domain Socket</strong>.</p>
 <div class="admonition note">
 <p class="admonition-title">Linux only</p>
 <p>ResoniteIO targets Resonite running on Linux through Steam Play (Proton). Windows is not
 supported. See <a href="getting-started/installation/">Installation</a> for details.</p>
 </div>
-<h2 id="design-philosophy">Design philosophy<a class="headerlink" href="#design-philosophy" title="Permanent link">&para;</a></h2>
-<p>ResoniteIO is built like <strong>real-time robotics middleware, not a reinforcement-learning
-environment</strong>. There is no <code>Observation</code> / <code>Action</code> abstraction and no global <code>step()</code>.
-Instead, each capability is exposed as an independent, asynchronous <strong>modality</strong> stream,
-each carrying its own timestamps. Any synchronization you need is done on the receiving
-side.</p>
+<h2 id="design">Design<a class="headerlink" href="#design" title="Permanent link">&para;</a></h2>
+<p>Each Resonite capability is exposed as an independent, asynchronous <strong>modality</strong> stream,
+each carrying its own timestamps. There is no global clock or <code>step()</code> barrier, so any
+synchronization you need is done on the receiving side — and you can use any modality on its
+own, without the others.</p>
 <ul>
 <li><strong>Camera / Speaker</strong> — Resonite → Python (server-streaming): vision and audio out.</li>
 <li><strong>Microphone / Locomotion</strong> — Python → Resonite (client-streaming): voice in, movement.</li>
