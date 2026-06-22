@@ -1077,6 +1077,61 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        use
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.unuse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unuse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.click" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        click
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.equip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        equip
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.dequip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dequip
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1499,6 +1554,61 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        use
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.unuse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unuse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.click" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        click
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.equip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        equip
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resoio.grabber.GrabberClient.dequip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dequip
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1559,6 +1669,31 @@ point</strong> — aim first with
 <div class="admonition example">
 <p class="admonition-title">Runnable example</p>
 <p><a href="https://github.com/MLShukai/ResoniteIO/blob/main/python/examples/grabber_grab.py"><code>python/examples/grabber_grab.py</code></a> — a full positive pick-up: spawn a Mirror from the inventory, hold the cursor on it, <code>grab</code> at the ray hit point, then <code>release</code>. The grabbed object stays at the cursor position where it was grabbed and follows the hand from there.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Operating the held / equipped item</p>
+<p>After grabbing, drive the interactions an avatar can perform on the
+held object:</p>
+<ul>
+<li><a href="#resoio.grabber.GrabberClient.use"><code>use</code></a> presses a button
+  (<code>primary</code> = left-click, <code>secondary</code> = right-click) and <strong>holds it
+  down</strong> until <a href="#resoio.grabber.GrabberClient.unuse"><code>unuse</code></a>. While
+  grabbing, a primary press aligns the object; while a tool is
+  equipped it activates the tool. The hold persists across RPCs, so a
+  Pen can be pressed, dragged via
+  <a href="../cursor/"><code>CursorClient.set_position</code></a>, then released to draw a
+  stroke. The optional <code>strength</code> (0..1, default <code>1.0</code>) is the analog
+  pressure of the primary press — a <code>BrushTool</code>/Pen reads it as pen
+  pressure — and is ignored for the secondary button.</li>
+<li><a href="#resoio.grabber.GrabberClient.click"><code>click</code></a> is a convenience for
+  a single press+release (e.g. one-shot align).</li>
+<li><a href="#resoio.grabber.GrabberClient.equip"><code>equip</code></a> /
+  <a href="#resoio.grabber.GrabberClient.dequip"><code>dequip</code></a> equip a grabbed
+  tool into the hand / remove it. <code>equip</code> is a no-op when no <code>ITool</code>
+  is grabbed.</li>
+</ul>
+<p><code>GrabState.held_buttons</code>, <code>is_tool_equipped</code>, and
+<code>equipped_tool_name</code> report the resulting state.</p>
 </div>
 
 
@@ -1656,47 +1791,47 @@ call fails with :class:<code>grpclib.exceptions.GRPCError</code>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/grabber.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-143">143</a></span>
-<span class="normal"><a href="#__codelineno-0-144">144</a></span>
-<span class="normal"><a href="#__codelineno-0-145">145</a></span>
-<span class="normal"><a href="#__codelineno-0-146">146</a></span>
-<span class="normal"><a href="#__codelineno-0-147">147</a></span>
-<span class="normal"><a href="#__codelineno-0-148">148</a></span>
-<span class="normal"><a href="#__codelineno-0-149">149</a></span>
-<span class="normal"><a href="#__codelineno-0-150">150</a></span>
-<span class="normal"><a href="#__codelineno-0-151">151</a></span>
-<span class="normal"><a href="#__codelineno-0-152">152</a></span>
-<span class="normal"><a href="#__codelineno-0-153">153</a></span>
-<span class="normal"><a href="#__codelineno-0-154">154</a></span>
-<span class="normal"><a href="#__codelineno-0-155">155</a></span>
-<span class="normal"><a href="#__codelineno-0-156">156</a></span>
-<span class="normal"><a href="#__codelineno-0-157">157</a></span>
-<span class="normal"><a href="#__codelineno-0-158">158</a></span>
-<span class="normal"><a href="#__codelineno-0-159">159</a></span>
-<span class="normal"><a href="#__codelineno-0-160">160</a></span>
-<span class="normal"><a href="#__codelineno-0-161">161</a></span>
-<span class="normal"><a href="#__codelineno-0-162">162</a></span>
-<span class="normal"><a href="#__codelineno-0-163">163</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-143" name="__codelineno-0-143"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">grab</span><span class="p">(</span>
-<a id="__codelineno-0-144" name="__codelineno-0-144"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-146" name="__codelineno-0-146"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a>    <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-<a id="__codelineno-0-148" name="__codelineno-0-148"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span><span class="p">:</span>
-<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Grab a grabbable near the cursor ray hit point.</span>
-<a id="__codelineno-0-150" name="__codelineno-0-150"></a>
-<a id="__codelineno-0-151" name="__codelineno-0-151"></a><span class="sd">    Grabs a grabbable within ``radius`` metres (``&lt;= 0`` lets the</span>
-<a id="__codelineno-0-152" name="__codelineno-0-152"></a><span class="sd">    server apply its default, 0.1m) of the current desktop cursor</span>
-<a id="__codelineno-0-153" name="__codelineno-0-153"></a><span class="sd">    ray&#39;s hit point. Aim beforehand with</span>
-<a id="__codelineno-0-154" name="__codelineno-0-154"></a><span class="sd">    :meth:`resoio.CursorClient.set_position`. A ray miss or nothing</span>
-<a id="__codelineno-0-155" name="__codelineno-0-155"></a><span class="sd">    grabbable in range is reported as</span>
-<a id="__codelineno-0-156" name="__codelineno-0-156"></a><span class="sd">    ``GrabResult.grabbed == False``, not an error. In VR mode the</span>
-<a id="__codelineno-0-157" name="__codelineno-0-157"></a><span class="sd">    call fails with :class:`grpclib.exceptions.GRPCError`</span>
-<a id="__codelineno-0-158" name="__codelineno-0-158"></a><span class="sd">    (``FAILED_PRECONDITION``).</span>
-<a id="__codelineno-0-159" name="__codelineno-0-159"></a>
-<a id="__codelineno-0-160" name="__codelineno-0-160"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-161" name="__codelineno-0-161"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-162" name="__codelineno-0-162"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberGrabRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="n">radius</span><span class="p">)</span>
-<a id="__codelineno-0-163" name="__codelineno-0-163"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">grab</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_result_from_proto</span><span class="p">)</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span>
+<span class="normal"><a href="#__codelineno-0-185">185</a></span>
+<span class="normal"><a href="#__codelineno-0-186">186</a></span>
+<span class="normal"><a href="#__codelineno-0-187">187</a></span>
+<span class="normal"><a href="#__codelineno-0-188">188</a></span>
+<span class="normal"><a href="#__codelineno-0-189">189</a></span>
+<span class="normal"><a href="#__codelineno-0-190">190</a></span>
+<span class="normal"><a href="#__codelineno-0-191">191</a></span>
+<span class="normal"><a href="#__codelineno-0-192">192</a></span>
+<span class="normal"><a href="#__codelineno-0-193">193</a></span>
+<span class="normal"><a href="#__codelineno-0-194">194</a></span>
+<span class="normal"><a href="#__codelineno-0-195">195</a></span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span>
+<span class="normal"><a href="#__codelineno-0-197">197</a></span>
+<span class="normal"><a href="#__codelineno-0-198">198</a></span>
+<span class="normal"><a href="#__codelineno-0-199">199</a></span>
+<span class="normal"><a href="#__codelineno-0-200">200</a></span>
+<span class="normal"><a href="#__codelineno-0-201">201</a></span>
+<span class="normal"><a href="#__codelineno-0-202">202</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">grab</span><span class="p">(</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>    <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabResult</span><span class="p">:</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Grab a grabbable near the cursor ray hit point.</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">    Grabs a grabbable within ``radius`` metres (``&lt;= 0`` lets the</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">    server apply its default, 0.1m) of the current desktop cursor</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">    ray&#39;s hit point. Aim beforehand with</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">    :meth:`resoio.CursorClient.set_position`. A ray miss or nothing</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">    grabbable in range is reported as</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">    ``GrabResult.grabbed == False``, not an error. In VR mode the</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">    call fails with :class:`grpclib.exceptions.GRPCError`</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">    (``FAILED_PRECONDITION``).</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberGrabRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="n">radius</span><span class="p">)</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">grab</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_result_from_proto</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1726,23 +1861,23 @@ call fails with :class:<code>grpclib.exceptions.GRPCError</code>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/grabber.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-165">165</a></span>
-<span class="normal"><a href="#__codelineno-0-166">166</a></span>
-<span class="normal"><a href="#__codelineno-0-167">167</a></span>
-<span class="normal"><a href="#__codelineno-0-168">168</a></span>
-<span class="normal"><a href="#__codelineno-0-169">169</a></span>
-<span class="normal"><a href="#__codelineno-0-170">170</a></span>
-<span class="normal"><a href="#__codelineno-0-171">171</a></span>
-<span class="normal"><a href="#__codelineno-0-172">172</a></span>
-<span class="normal"><a href="#__codelineno-0-173">173</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-165" name="__codelineno-0-165"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
-<a id="__codelineno-0-166" name="__codelineno-0-166"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Release everything the hand is holding and return the new state.</span>
-<a id="__codelineno-0-167" name="__codelineno-0-167"></a>
-<a id="__codelineno-0-168" name="__codelineno-0-168"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-170" name="__codelineno-0-170"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberReleaseRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
-<a id="__codelineno-0-171" name="__codelineno-0-171"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span>
-<a id="__codelineno-0-172" name="__codelineno-0-172"></a>        <span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span>
-<a id="__codelineno-0-173" name="__codelineno-0-173"></a>    <span class="p">)</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-204">204</a></span>
+<span class="normal"><a href="#__codelineno-0-205">205</a></span>
+<span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Release everything the hand is holding and return the new state.</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberReleaseRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>        <span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1772,23 +1907,377 @@ call fails with :class:<code>grpclib.exceptions.GRPCError</code>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/grabber.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-175">175</a></span>
-<span class="normal"><a href="#__codelineno-0-176">176</a></span>
-<span class="normal"><a href="#__codelineno-0-177">177</a></span>
-<span class="normal"><a href="#__codelineno-0-178">178</a></span>
-<span class="normal"><a href="#__codelineno-0-179">179</a></span>
-<span class="normal"><a href="#__codelineno-0-180">180</a></span>
-<span class="normal"><a href="#__codelineno-0-181">181</a></span>
-<span class="normal"><a href="#__codelineno-0-182">182</a></span>
-<span class="normal"><a href="#__codelineno-0-183">183</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-175" name="__codelineno-0-175"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
-<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the hand&#39;s current hold state without modifying it.</span>
-<a id="__codelineno-0-177" name="__codelineno-0-177"></a>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
-<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-180" name="__codelineno-0-180"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberGetStateRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span>
-<a id="__codelineno-0-182" name="__codelineno-0-182"></a>        <span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_state</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="p">)</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-214">214</a></span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span>
+<span class="normal"><a href="#__codelineno-0-222">222</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the hand&#39;s current hold state without modifying it.</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberGetStateRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>        <span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">get_state</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.grabber.GrabberClient.use" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">use</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.grabber.GrabberClient.use" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">use</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Press <code>button</code> and hold it down until :meth:<code>unuse</code>.</p>
+<p><code>button="primary"</code> is a left-click, <code>"secondary"</code> a
+right-click. While grabbing, a primary press aligns the held
+object; while a tool is equipped it activates the tool. The
+button stays held (re-injected every engine frame), so a Pen can
+be pressed, dragged via
+:meth:<code>resoio.CursorClient.set_position</code>, then released with
+:meth:<code>unuse</code> to draw a stroke.</p>
+<p><code>strength</code> is the analog press strength (0..1) of the primary
+button, e.g. the pen pressure a <code>BrushTool</code> reads (default
+<code>1.0</code>). It is held at the same value for the duration of the
+hold and is ignored for <code>button="secondary"</code> (which is digital
+only). Out-of-range values are clamped by the server.</p>
+<p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/grabber.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-224">224</a></span>
+<span class="normal"><a href="#__codelineno-0-225">225</a></span>
+<span class="normal"><a href="#__codelineno-0-226">226</a></span>
+<span class="normal"><a href="#__codelineno-0-227">227</a></span>
+<span class="normal"><a href="#__codelineno-0-228">228</a></span>
+<span class="normal"><a href="#__codelineno-0-229">229</a></span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span>
+<span class="normal"><a href="#__codelineno-0-234">234</a></span>
+<span class="normal"><a href="#__codelineno-0-235">235</a></span>
+<span class="normal"><a href="#__codelineno-0-236">236</a></span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span>
+<span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-224" name="__codelineno-0-224"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">use</span><span class="p">(</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Press ``button`` and hold it down until :meth:`unuse`.</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a><span class="sd">    ``button=&quot;primary&quot;`` is a left-click, ``&quot;secondary&quot;`` a</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a><span class="sd">    right-click. While grabbing, a primary press aligns the held</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a><span class="sd">    object; while a tool is equipped it activates the tool. The</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a><span class="sd">    button stays held (re-injected every engine frame), so a Pen can</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a><span class="sd">    be pressed, dragged via</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a><span class="sd">    :meth:`resoio.CursorClient.set_position`, then released with</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a><span class="sd">    :meth:`unuse` to draw a stroke.</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a><span class="sd">    ``strength`` is the analog press strength (0..1) of the primary</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a><span class="sd">    button, e.g. the pen pressure a ``BrushTool`` reads (default</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a><span class="sd">    ``1.0``). It is held at the same value for the duration of the</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a><span class="sd">    hold and is ignored for ``button=&quot;secondary&quot;`` (which is digital</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a><span class="sd">    only). Out-of-range values are clamped by the server.</span>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberUseRequest</span><span class="p">(</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a>        <span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a>        <span class="n">button</span><span class="o">=</span><span class="n">_button_to_proto</span><span class="p">(</span><span class="n">button</span><span class="p">),</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a>        <span class="n">strength</span><span class="o">=</span><span class="n">strength</span><span class="p">,</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>    <span class="p">)</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.grabber.GrabberClient.unuse" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">unuse</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.grabber.GrabberClient.unuse" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">unuse</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span> <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Release <code>button</code> previously held via :meth:<code>use</code> (no-op if not
+held).</p>
+<p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/grabber.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span>
+<span class="normal"><a href="#__codelineno-0-264">264</a></span>
+<span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span>
+<span class="normal"><a href="#__codelineno-0-270">270</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">unuse</span><span class="p">(</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Release ``button`` previously held via :meth:`use` (no-op if not</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">    held).</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberUnuseRequest</span><span class="p">(</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a>        <span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">),</span> <span class="n">button</span><span class="o">=</span><span class="n">_button_to_proto</span><span class="p">(</span><span class="n">button</span><span class="p">)</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a>    <span class="p">)</span>
+<a id="__codelineno-0-270" name="__codelineno-0-270"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">unuse</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.grabber.GrabberClient.click" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">click</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.grabber.GrabberClient.click" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">click</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Press and release <code>button</code> once (a :meth:<code>use</code> then
+:meth:<code>unuse</code>).</p>
+<p>A convenience for single-shot interactions such as aligning a
+grabbed object, where the hold of :meth:<code>use</code> is not needed. The
+two RPCs run on separate engine ticks so the press registers
+before the release. Returns the state after :meth:<code>unuse</code>.</p>
+<p><code>strength</code> is forwarded to the :meth:<code>use</code> press (analog
+primary press strength 0..1, default <code>1.0</code>, ignored for
+secondary); :meth:<code>unuse</code> carries no strength.</p>
+<p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/grabber.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-272">272</a></span>
+<span class="normal"><a href="#__codelineno-0-273">273</a></span>
+<span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span>
+<span class="normal"><a href="#__codelineno-0-276">276</a></span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-272" name="__codelineno-0-272"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">click</span><span class="p">(</span>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a>    <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="n">button</span><span class="p">:</span> <span class="n">GrabberButtonArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a>    <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Press and release ``button`` once (a :meth:`use` then</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    :meth:`unuse`).</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    A convenience for single-shot interactions such as aligning a</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    grabbed object, where the hold of :meth:`use` is not needed. The</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a><span class="sd">    two RPCs run on separate engine ticks so the press registers</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    before the release. Returns the state after :meth:`unuse`.</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">    ``strength`` is forwarded to the :meth:`use` press (analog</span>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">    primary press strength 0..1, default ``1.0``, ignored for</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    secondary); :meth:`unuse` carries no strength.</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a>    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">hand</span><span class="p">,</span> <span class="n">button</span><span class="o">=</span><span class="n">button</span><span class="p">,</span> <span class="n">strength</span><span class="o">=</span><span class="n">strength</span><span class="p">)</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">unuse</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">hand</span><span class="p">,</span> <span class="n">button</span><span class="o">=</span><span class="n">button</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.grabber.GrabberClient.equip" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">equip</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.grabber.GrabberClient.equip" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">equip</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s1">&#39;primary&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Equip the grabbed tool into the hand (no-op if no tool is grabbed).</p>
+<p>Searches the hand's grabbed objects for an <code>ITool</code> component
+and equips the first one found. After equipping, :meth:<code>use</code>
+activates the tool's function.</p>
+<p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/grabber.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span>
+<span class="normal"><a href="#__codelineno-0-300">300</a></span>
+<span class="normal"><a href="#__codelineno-0-301">301</a></span>
+<span class="normal"><a href="#__codelineno-0-302">302</a></span>
+<span class="normal"><a href="#__codelineno-0-303">303</a></span>
+<span class="normal"><a href="#__codelineno-0-304">304</a></span>
+<span class="normal"><a href="#__codelineno-0-305">305</a></span>
+<span class="normal"><a href="#__codelineno-0-306">306</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">equip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Equip the grabbed tool into the hand (no-op if no tool is grabbed).</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">    Searches the hand&#39;s grabbed objects for an ``ITool`` component</span>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">    and equips the first one found. After equipping, :meth:`use`</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">    activates the tool&#39;s function.</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberEquipRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span><span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">equip</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="resoio.grabber.GrabberClient.dequip" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">dequip</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#resoio.grabber.GrabberClient.dequip" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">dequip</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s1">&#39;primary&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Remove the tool currently equipped on the hand (no-op if none).</p>
+<p>gRPC failures surface as :class:<code>grpclib.exceptions.GRPCError</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/resoio/grabber.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span>
+<span class="normal"><a href="#__codelineno-0-310">310</a></span>
+<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+<span class="normal"><a href="#__codelineno-0-312">312</a></span>
+<span class="normal"><a href="#__codelineno-0-313">313</a></span>
+<span class="normal"><a href="#__codelineno-0-314">314</a></span>
+<span class="normal"><a href="#__codelineno-0-315">315</a></span>
+<span class="normal"><a href="#__codelineno-0-316">316</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">dequip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">hand</span><span class="p">:</span> <span class="n">GrabberHandArg</span> <span class="o">=</span> <span class="s2">&quot;primary&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GrabState</span><span class="p">:</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Remove the tool currently equipped on the hand (no-op if none).</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">    gRPC failures surface as :class:`grpclib.exceptions.GRPCError`.</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>    <span class="n">request</span> <span class="o">=</span> <span class="n">GrabberDequipRequest</span><span class="p">(</span><span class="n">hand</span><span class="o">=</span><span class="n">_hand_to_proto</span><span class="p">(</span><span class="n">hand</span><span class="p">))</span>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">(</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a>        <span class="k">lambda</span> <span class="n">stub</span><span class="p">:</span> <span class="n">stub</span><span class="o">.</span><span class="n">dequip</span><span class="p">(</span><span class="n">request</span><span class="p">),</span> <span class="n">_state_from_proto</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1876,20 +2365,27 @@ after the call.</p>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">is_holding</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">object_names</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">unix_nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">is_tool_equipped</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">equipped_tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">held_buttons</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">GrabberButtonArg</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
 
 
 
-        <p>Snapshot of what a hand is currently holding.</p>
+        <p>Snapshot of what a hand is currently holding / operating.</p>
 <p><code>hand</code> echoes back which hand the server actually acted on, so a
 caller that passed <code>"primary"</code> learns whether it resolved to left
 or right (it is never <code>"unspecified"</code> — <code>UNSPECIFIED</code> decodes as
 <code>"primary"</code>). <code>object_names</code> is a best-effort list of held
 grabbable slot names and may be empty even when <code>is_holding</code> is
-<code>True</code>.</p>
+<code>True</code>. <code>is_tool_equipped</code> / <code>equipped_tool_name</code> describe the
+tool currently equipped on the hand (<code>equipped_tool_name</code> is empty
+when nothing is equipped). <code>held_buttons</code> lists the buttons
+currently held down via :meth:<code>GrabberClient.use</code> (cleared by
+:meth:<code>GrabberClient.unuse</code>).</p>
 
 
 
