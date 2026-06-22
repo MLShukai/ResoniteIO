@@ -35,13 +35,14 @@ Linux 上の Resonite は **engine と renderer でランタイムが分かれ�
 - `ServerInfo` に `resonite_pid` (=`Environment.ProcessId`) と `renderer_pid`
   (=`RenderSystem.RendererProcess?.Id ?? 0`) を持たせる (どちらも host PID)。`info` は RPC なので
   container からでも取れる。
-- `resoio shutdown` は **`Lifecycle.Shutdown` (graceful) のみ**。SIGTERM/SIGKILL のシグナル
-  エスカレーションは持たない: engine が `Engine.RequestShutdown` で自分で終了し、Steam/Proton が
-  renderer と launch wrapper を自動回収する (e2e で host status が running=False になるのを確認)。
-  純 gRPC なので host-native 制約も無く container からも動く。`shutdown` は engine PID
-  (Info 由来) を報告のために返すだけ。**旧名 `terminate` は deprecated** (2026-06-14): CLI /
-  `resoio.terminate` ともに `shutdown` に forward しつつ警告を出すだけのエイリアスで、メンテ
-  対象外・将来削除予定。新規利用は `shutdown` を使う。
+- `resoio shutdown` は **`Lifecycle.Shutdown` (graceful、best-effort)**: engine が
+  `Engine.RequestShutdown` で自分で終了し、Steam/Proton が renderer と launch wrapper を
+  自動回収する (e2e で host status が running=False になるのを確認)。純 gRPC なので host-native
+  制約も無く container からも動き、engine PID (Info 由来) を報告のために返す。SIGTERM/SIGKILL の
+  シグナルエスカレーションは持たない。
+- **force-kill が要る場合は別系統の `resoio terminate`** (`python/src/resoio/launcher.py`、
+  `just resonite-stop`): host PID を psutil で SIGTERM→3s→SIGKILL する process 制御で、gRPC が
+  応答しない時の fallback。停止は `shutdown` (graceful) → 効かなければ `terminate` (force) の二段構え。
 
 > 注意: 「engine も Wine だから `Environment.ProcessId` は Wine 側 PID で使えない」は **誤り**
 > (engine はネイティブ Linux)。一方で「engine を `pgrep -f Resonite.exe` で見つけられる」も **誤り**

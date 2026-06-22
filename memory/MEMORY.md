@@ -2,20 +2,21 @@
 
 resonite-io プロジェクトの規約・知見・ユーザーの好みを記録するインデックス。詳細は各ファイルを参照。
 
-タスク発火型の手順 (環境セットアップ / debug / 新規モダリティ追加) は [`.agents/skills/`](../.agents/skills/) 配下に置き、Codex が trigger に応じて自動で読み込む。
+タスク発火型の手順 (環境セットアップ / debug / 新規モダリティ追加) は [`.claude/skills/`](../.claude/skills/) 配下に置き、Claude harness が trigger に応じて自動で読み込む。
 
 ## Skills
 
-- [`setup-resonite-env`](../.agents/skills/setup-resonite-env/SKILL.md) — 初回環境構築、Gale プロファイル、Steam Launch Options、UDS パス
-- [`debug-resonite-mod`](../.agents/skills/debug-resonite-mod/SKILL.md) — print-debug + ログ tailing、decompile、container ↔ host Resonite bridge
-- [`add-new-modality`](../.agents/skills/add-new-modality/SKILL.md) — 新規モダリティ追加 (proto + Core + Mod + Python + CLI + tests)
-- [`github-ops`](../.agents/skills/github-ops/SKILL.md) — gh CLI で PR / issue を作成・レビュー、ブランチ push、`gh auth` 設定
-- [`testing-strategy`](../.agents/skills/testing-strategy/SKILL.md) — real resource 優先のテスト方針、4 区分、Kestrel in-process gRPC + grpclib e2e、mock 禁止対象
-- [`merge-main`](../.agents/skills/merge-main/SKILL.md) — PR 前に main を作業ブランチへ取り込み、コンフリクト解消
-- [`migrate-claude`](../.agents/skills/migrate-claude/SKILL.md) — Claude 側資産を Codex へ移す判断手順。settings の形式変換は `just migrate-codex`
-- [`maximize-parallels`](../.agents/skills/maximize-parallels/SKILL.md) — 独立な tool 呼び出しを 1 メッセージで並列発火する判定基準
-- [`write-docs`](../.agents/skills/write-docs/SKILL.md) — ドキュメントサイト (MkDocs Material + mkdocstrings) の配置・preview/build・API ページ規約・モダリティ追加時の docs 手順
-- [`release-resonite`](../.agents/skills/release-resonite/SKILL.md) — version bump + tag push で Thunderstore mod + PyPI を同時公開、一回限りの setup
+- [`setup-resonite-env`](../.claude/skills/setup-resonite-env/SKILL.md) — 初回環境構築、Gale プロファイル、Steam Launch Options、UDS パス
+- [`debug-resonite-mod`](../.claude/skills/debug-resonite-mod/SKILL.md) — print-debug + ログ tailing、decompile、container 内 Resonite 起動/停止
+- [`add-new-modality`](../.claude/skills/add-new-modality/SKILL.md) — 新規モダリティ追加 (proto + Core + Mod + Python + CLI + tests)
+- [`cli-design`](../.claude/skills/cli-design/SKILL.md) — `resoio` CLI の設計・出力規約 (flat command、`--format human|json`、output シリアライザ)
+- [`github-ops`](../.claude/skills/github-ops/SKILL.md) — gh CLI で PR / issue を作成・レビュー、ブランチ push、`gh auth` 設定
+- [`testing-strategy`](../.claude/skills/testing-strategy/SKILL.md) — real resource 優先のテスト方針、4 区分、Kestrel in-process gRPC + grpclib e2e、mock 禁止対象
+- [`merge-main`](../.claude/skills/merge-main/SKILL.md) — PR 前に main を作業ブランチへ取り込み、コンフリクト解消
+- [`maximize-parallels`](../.claude/skills/maximize-parallels/SKILL.md) — 独立な tool 呼び出しを 1 メッセージで並列発火する判定基準
+- [`write-docs`](../.claude/skills/write-docs/SKILL.md) — ドキュメントサイト (MkDocs Material + mkdocstrings) の配置・preview/build・API ページ規約・モダリティ追加時の docs 手順
+- [`release-resonite`](../.claude/skills/release-resonite/SKILL.md) — version bump + tag push で Thunderstore mod + PyPI を同時公開、一回限りの setup
+- [`migrate-codex`](../.claude/skills/migrate-codex/SKILL.md) — Claude 側から Codex 設定 (`.codex/rules/`) を `just migrate-codex` で同期。skill/agent/prose の移植は Codex 側 `migrate-claude` の責務
 
 ## Feedback (project-wide convention / 落とし穴)
 
@@ -24,20 +25,19 @@ resonite-io プロジェクトの規約・知見・ユーザーの好みを記�
 - [Core/Mod 二層構成](feedback_core_mod_layering.md) — コアは Resonite 非依存ライブラリ、mod は engine bridging のみの薄いアダプタ。proto/Service は Core、Bridge 実装は mod。
 - [Bridge IF は proto 型ではなく Core POCO を返す](feedback_bridge_iface_uses_core_poco.md) — Fake bridge が interface 実装すると CS0738 で fail。Camera 同様 Core POCO + Service の MapToProto で挟む。
 - [Bridge での engine thread ディスパッチ](feedback_bridge_engine_thread_dispatch.md) — コンポーネントグラフ変更は World.RunSynchronously + TaskCompletionSource、純粋読みは任意スレッド。
-- [Connection Bridge 導入時に proto を変えない](feedback_session_bridge_no_proto_change.md) — Step 2 で Bridge IF 注入のみに留め Ping proto は据え置いた判断。波及コストを測る習慣の根拠。
+- [Connection Bridge 導入時に proto を変えない](feedback_session_bridge_no_proto_change.md) — Bridge IF 注入のみに留め Ping proto は据え置いた判断。波及コストを測る習慣の根拠。
 - [FrooxEngine Settings API](feedback_frooxengine_settings_api.md) — `Settings.GetActiveSetting<T>() / UpdateActiveSetting<T>()` が公式、内部 `RunSynchronously` で engine thread に dispatch。foreground fps は engine 公式経路で制御不可。
 - [SaveRecord は upload task を await する](feedback_record_save_await_upload_task.md) — `RecordManager.SaveRecord` は upload task を enqueue して即返すだけ。`RecordSaveResult.task.Task` を await しないと直後の GetRecordAtPath/GetRecords で record が見えない (e2e でのみ顕在化)。DeleteRecord(Record) は durable。
 
 ### モダリティ実装パターン
 
 - [Camera v2 制約集約](feedback_camera_v2_constraints.md) — Renderite framebuffer 直取り経路の確定アーキ、Wine sandbox 制約、InterprocessLib / OverlayCamera / Settings API の落とし穴を 1 本に集約。
-- [Locomotion ExternalInput 経路の落とし穴](feedback_locomotion_external_input.md) — stateful repeater / Reset RPC / disconnect 検知 / pitch 符号 / `AccessTools.FieldRefAccess` の generic 引数順 / velocity 単位元 / Move body-local 変換 (HeadFacingRotation) / Camera 既存 bug を集約。
-- [Locomotion HeadFacingRotation で body-relative 成立](feedback_locomotion_headfacing_body_relative.md) — 2026-05-19 実機計測で V_B / V_D の角度差 87.1° を観測、`HeadFacingRotation` 経路が正しいと定量確認。
+- [Locomotion ExternalInput 経路の落とし穴](feedback_locomotion_external_input.md) — stateful repeater / Reset RPC / disconnect 検知 / pitch 符号 / `AccessTools.FieldRefAccess` の generic 引数順 / velocity 単位元 / Move body-local 変換 (HeadFacingRotation で body-relative 成立、実機計測で定量確認) / Camera 既存 bug を集約。
 - [Speaker engine tap と方向別 modality 分割](feedback_speaker_engine_tap.md) — Audio は Speaker/Microphone に方向別分離、Speaker は `AudioOutputDriver.AudioFrameRendered` を HarmonyLib Postfix で tap、WASAPI thread の hot path 設計と SafeShutdown 順序。
 - [Microphone engine tap](feedback_microphone_engine_tap.md) — Microphone は `AudioInput` 派生 + `AudioSystem.RegisterAudioInput` で完結。`MonoSample` (Elements.Assets) 固定、`UnregisterAudioInput` 不在の制約、ring buffer + Locomotion 流 self-rescheduling repeater 設計、UI 手動切替方針。
 - [Dash overlay は ContextMenu と別系統](feedback_dash_overlay_vs_contextmenu.md) — ESC の dash は `Userspace.UserspaceWorld` 配下の `UserspaceRadiantDash`。UI 要素は言語非依存の `Slot.ReferenceID` + `LocaleStringDriver.Key` で識別 (`Text.LocaleContent` は setter 専用)。pixel 直指しは不採用。
-- [Grabber engine 経路 (旧称 Manipulation)](feedback_grabber_engine_api.md) — Grab/Release は `InteractionHandler.Grabber.Grab(point,radius)`/`Release()` (掴むと HolderSlot へ reparent し手に自動追従、edge-triggered one-shot)。hand-pose は TrackedDevicePositioner が毎フレーム上書きし注入不可でスコープ外。ContextMenu と同形の unary RPC、home に grabbable 無く positive grab は manual。
-- [Cursor set は one-shot warp](feedback_cursor_lock_mechanism.md) — `SetMousePosition` warp (Wine では no-op) + 一時 `RegisterCursorLock` → settle 確認後に即 unregister。位置は保持しない (マウストラップ解消)。Wine の menu-at-cursor は同一操作内のみ有効。正規化 \[0,1\] 座標。
+- [Grabber engine 経路 (旧称 Manipulation)](feedback_grabber_engine_api.md) — Grab/Release は `InteractionHandler.Grabber.Grab(point,radius)`/`Release()` (掴むと HolderSlot へ reparent し手に自動追従、edge-triggered one-shot)。grab は常にデスクトップカーソルレイの hit 点を中心に掴む (point 指定なし、VR は FailedPrecondition)。hand-pose は TrackedDevicePositioner が毎フレーム上書きし注入不可でスコープ外。
+- [Cursor set は永続保持](feedback_cursor_lock_mechanism.md) — `RegisterCursorLock` を RPC 跨ぎで保持し `release` で解放、OS ポインタは `CollectOutputState` の Harmony 偽装で奪わない (`lockCursorPosition` だけ null 化すると中央 pin になる罠)。Wine でも cross-RPC で位置維持。正規化 \[0,1\] 座標。
 - [Auth modality (cloud login/logout/status)](feedback_auth_login_api.md) — `Engine.Cloud.Session.Login(credential, new PasswordLogin(pwd), LocalDB.SecretMachineID, rememberMe, totp)` で login、`CloudResult.Content=="TOTP"` が 2FA signal、status は `CurrentSession`/`CurrentUserID`/`SessionExpire`。Cloud REST は thread-agnostic で engine dispatch 不要。password は非保存・非ログ・例外メッセージ generic、`--password` flag 無し (env/stdin/hidden prompt)。既存 `Session` modality (world admin) とは別物。
 
 ### proto / build
@@ -53,10 +53,8 @@ resonite-io プロジェクトの規約・知見・ユーザーの好みを記�
 
 ### 検証フロー
 
-- [Codex が e2e 検証を回す](feedback_codex_drives_e2e_verification.md) — container 内 `just resonite-launch/stop` + `resoio screenshot` で Resonite を Codex が自動起動・停止・撮影できるので、検証は Codex が完結させる。`mod/tests/manual/*.md` は本質的に人間しかできない確認 (UI 手動切替・voice 受信確認等) に限定する。
-- [問いかける前に起動状態を確認](feedback_resonite_status_before_asking.md) — e2e/実機の可否を聞く前に必ず `pgrep -af Renderite.Renderer.exe` で起動状態を確認する。Resonite は container 内で `just resonite-launch` 起動できるので「立ち上げた?」と毎回聞かない。
-- [sign-in 必須 e2e は 1 boot に畳む](feedback_e2e_single_signin_per_boot.md) — resonite_session fixture は test ごとに Resonite を再起動するが、連続 2 回目の boot は cloud sign-in が確実に通らない。Inventory/World 等 sign-in を要する e2e は 1 file = 1 test に統合して 1 boot / 1 sign-in に閉じる。
-- [e2e は不可逆な cloud write を実行しない](feedback_e2e_no_irreversible_cloud_writes.md) — フレンド申請/承認/拒否・ban 等、相手や cloud に取り消せない副作用を出す操作は e2e で撃たない。状態変化系は fake bridge の integration test のみで検証し、e2e は read-only に限定する。
+- [e2e は agent が container 内で自動駆動](feedback_codex_drives_e2e_verification.md) — `just resonite-launch`/`stop` + `resoio screenshot` で起動・撮影まで完結。可否を問う前に `pgrep -af Renderite.Renderer.exe` で起動状態を確認する。`mod/tests/manual/*.md` は本質的に人間しかできない確認のみに限定する。
+- [e2e safety 制約](feedback_e2e_single_signin_per_boot.md) — sign-in は boot ごとに確実に通らないので sign-in 必須シナリオは 1 file = 1 test に畳む。不可逆・対外的な cloud write (friend 申請/承認/拒否・ban 等) は e2e で撃たず read-only に限定し、状態変化系は fake bridge の integration test で検証する。
 
 ### gRPC streaming テスト
 
@@ -84,11 +82,10 @@ resonite-io プロジェクトの規約・知見・ユーザーの好みを記�
 - [Resonite modding wiki 抜粋](reference_resonite_modding.md) — BepisLoader / BepInEx / `bep6resonite` テンプレ / `ResoniteHooks` / Thunderstore packaging の要点と URL マップ。
 - [pressure-vessel の filesystem 共有経路](reference_pressure_vessel_paths.md) — `/home/$USER` は通る、`/run/user/<UID>` と `/tmp` は通らない。`~/.resonite-io/` を採用した経緯。
 - [WorldManager.WorldFocused 仕様](reference_worldmanager_world_focused.md) — event 発火タイミング、`World.Name` / `User.UserName` の tearing 許容性、Bridge での snapshot 読み戦略。
-- [Camera.RenderToBitmap は ~31ms の hard cap](reference_camera_render_to_bitmap_30fps_cap.md) — 640×480 RGBA8 で natural 30fps cap。送信側最適化は基本効かない。
 - [Generated proto layout](reference_generated_proto_layout.md) — `python/src/resoio/_generated/` の構造と pyright / ruff / coverage 除外規約。
 - [betterproto2 packaging](reference_betterproto2_packaging.md) — `betterproto2` に `[compiler]` extra は存在せず、`betterproto2_compiler` は別 distribution。
 - [Load-bearing whys](reference_load_bearing_whys.md) — `mod/src/` + `python/src/resoio/` + Core テストの中で docstring trim 時に削ってはいけない WHY コメント一覧 (Connection loader / Camera v2 renderer bridge / Locomotion / Speaker WASAPI tap / Microphone AudioInput など)。
-- [Resonite Linux: engine はネイティブ・renderer のみ Wine](reference_resonite_linux_native_engine.md) — `is_wine=false`。`Environment.ProcessId`/`RenderSystem.RendererProcess.Id` は本物の host Linux PID だが `pgrep -f Resonite.exe` は engine でなく Steam/Proton wrapper にヒットする。`ServerInfo` PID と `resoio shutdown` (旧名 `terminate` は deprecated) を graceful 専用にした根拠。
+- [Resonite Linux: engine はネイティブ・renderer のみ Wine](reference_resonite_linux_native_engine.md) — `is_wine=false`。`Environment.ProcessId`/`RenderSystem.RendererProcess.Id` は本物の host Linux PID だが `pgrep -f Resonite.exe` は engine でなく Steam/Proton wrapper にヒットする。`ServerInfo` PID と graceful `resoio shutdown` を分けた根拠。
 
 ## サブエージェント由来のメモ
 
