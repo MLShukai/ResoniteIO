@@ -9,10 +9,10 @@ grab always targets the desktop cursor-ray hit point, there is no
 
 Contract under test (CLI restructure spec):
 
-* ``resoio grabber`` with no subaction performs the grab action (default);
-  ``resoio grabber grab`` is the explicit synonym
-* ``resoio grabber release`` / ``resoio grabber state`` / ``resoio grabber
-  interactive`` select the other actions
+* the action positional is **required** — bare ``resoio grabber`` errors
+  with the argparse usage code (the old implicit-``grab`` default is gone)
+* ``resoio grabber grab`` / ``release`` / ``state`` / ``interactive`` select
+  the action explicitly
 * ``--hand`` / ``--radius`` / ``-s/--socket`` are accepted both before and
   after the subaction
 * an unknown subaction exits with the argparse usage code (2)
@@ -108,18 +108,30 @@ async def _invoke(argv: list[str]) -> int:
     return await _amain(args)
 
 
-# --- default subaction = grab ---------------------------------------------
+# --- action is required (no implicit-grab default) ------------------------
 
 
-async def test_grab_without_subaction_performs_grab(
+def test_no_action_exits_with_usage_code():
+    """The action positional is required: bare ``resoio grabber`` errors.
+
+    Removing the old implicit-``grab`` default is a breaking change, so the
+    parser must reject a missing action with the argparse usage code (2)
+    rather than silently grabbing.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        _build_parser().parse_args(["grabber"])
+    assert excinfo.value.code == _ARGPARSE_USAGE_EXIT_CODE
+
+
+async def test_grab_subaction_performs_grab(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grabber"])
+    rc = await _invoke(["grabber", "grab"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
-    # No subaction means grab — release/state must not fire.
+    # grab must not release or read state.
     assert grabber_server.release_requests == []
     assert grabber_server.get_state_requests == []
 
@@ -128,10 +140,10 @@ async def test_grab_without_subaction_performs_grab(
     assert "Cube" in out
 
 
-async def test_grab_without_subaction_defaults_to_primary_hand_and_zero_radius(
+async def test_grab_defaults_to_primary_hand_and_zero_radius(
     grabber_server: _EchoGrabber,
 ):
-    rc = await _invoke(["grabber"])
+    rc = await _invoke(["grabber", "grab"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
@@ -140,21 +152,6 @@ async def test_grab_without_subaction_defaults_to_primary_hand_and_zero_radius(
     # No --radius given -> 0.0 travels verbatim; resolving <=0 to the
     # server default (0.1m) is a C#-Core concern.
     assert grabber_server.grab_requests[0].radius == 0.0
-
-
-async def test_grab_with_explicit_grab_subaction_is_synonym_for_default(
-    grabber_server: _EchoGrabber,
-    capsys: pytest.CaptureFixture[str],
-):
-    rc = await _invoke(["grabber", "grab"])
-    assert rc == 0
-
-    assert len(grabber_server.grab_requests) == 1
-    assert grabber_server.release_requests == []
-    assert grabber_server.get_state_requests == []
-
-    out = capsys.readouterr().out
-    assert "Cube" in out
 
 
 # --- flag placement: before or after the subaction -------------------------
@@ -176,18 +173,6 @@ async def test_grab_flags_before_subaction_forward_hand_and_radius(
     grabber_server: _EchoGrabber,
 ):
     rc = await _invoke(["grabber", "--radius", "0.5", "--hand", "left", "grab"])
-    assert rc == 0
-
-    assert len(grabber_server.grab_requests) == 1
-    wire = grabber_server.grab_requests[0]
-    assert wire.hand == GrabberHand.LEFT
-    assert wire.radius == _RADIUS
-
-
-async def test_grab_flags_with_no_subaction_apply_to_default_grab(
-    grabber_server: _EchoGrabber,
-):
-    rc = await _invoke(["grabber", "--hand", "left", "--radius", "0.5"])
     assert rc == 0
 
     assert len(grabber_server.grab_requests) == 1
@@ -346,7 +331,7 @@ async def test_grab_json_flattens_result_and_state_into_one_object(
     grabber_server: _EchoGrabber,
     capsys: pytest.CaptureFixture[str],
 ):
-    rc = await _invoke(["grabber", "--format", "json"])
+    rc = await _invoke(["grabber", "grab", "--format", "json"])
     assert rc == 0
 
     payload = _sole_json_document(capsys.readouterr().out)

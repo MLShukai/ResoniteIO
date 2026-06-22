@@ -65,7 +65,7 @@ uv run --project python resoio inventory
 
 ```sh
 uv run --project python resoio cursor set 0.5 0.45
-uv run --project python resoio grabber --radius 0.5
+uv run --project python resoio grabber grab --radius 0.5
 uv run --project python resoio grabber state
 ```
 
@@ -91,7 +91,7 @@ spawn した Mirror を world から削除する API は無いので放置して
 
 ```sh
 uv run --project python resoio cursor set <x> <y>   # 2 つの box が重なる照準
-uv run --project python resoio grabber --hand right --radius 0.3
+uv run --project python resoio grabber grab --hand right --radius 0.3
 uv run --project python resoio grabber state --hand right
 ```
 
@@ -105,7 +105,7 @@ VR モードで Resonite を起動する (または Dash からデスクトッ�
 切り替える)。container 内 shell から:
 
 ```sh
-uv run --project python resoio grabber --hand right
+uv run --project python resoio grabber grab --hand right
 ```
 
 CLI が **`FAILED_PRECONDITION` エラーで失敗** し、エラーメッセージに

@@ -139,14 +139,15 @@ GitHub Release body. The format follows
 
 ### Changed
 
-- **`resoio grab` is renamed to `resoio grabber` (breaking)**: the top-level
-  Grabber command is now `resoio grabber`. The positional action is unchanged,
-  so the default grab runs as `resoio grabber` (alias `resoio grabber grab`),
-  with `resoio grabber release` / `state` / `interactive` as before. The old
-  `resoio grab` command name is **removed** — there is no alias, so argparse
-  rejects it. This aligns the command with the `Grabber` modality name (like
-  `cursor` / `display` / `world`). The Python API (`GrabberClient`) and the gRPC
-  wire are unchanged
+- **`resoio grab` is renamed to `resoio grabber`, and the action is now
+  required (breaking)**: the top-level Grabber command is `resoio grabber` and
+  the action must be named explicitly — `resoio grabber grab` / `release` /
+  `state` / `interactive`. Bare `resoio grabber` now errors with the argparse
+  usage code; the old implicit-`grab` default (where `resoio grab` ran a grab
+  with no action) is **removed**. The old `resoio grab` command name is also
+  removed (no alias), so argparse rejects it. This aligns the command with the
+  `Grabber` modality name (like `cursor` / `display` / `world`). The Python API
+  (`GrabberClient`) and the gRPC wire are unchanged
 - **`resoio terminate` / `resoio.terminate` now force-stops the processes
   (breaking)**: it was a deprecated alias of `resoio shutdown` (a graceful
   `Lifecycle.Shutdown` over gRPC); it now **kills** the engine + renderer host

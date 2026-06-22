@@ -1,10 +1,9 @@
 """``resoio grabber`` subcommand: grab / release objects in Resonite.
 
-A single parser with an optional positional ``action`` (default
-``grab``), so flags resolve naturally whether placed before or after
-the action:
+A single parser with a required positional ``action``, so flags
+resolve naturally whether placed before or after the action:
 
-* ``resoio grabber`` / ``resoio grabber grab`` — try to grab a grabbable
+* ``resoio grabber grab`` — try to grab a grabbable
   within ``--radius`` metres of the cursor ray hit point (desktop mode
   only)
 * ``resoio grabber release`` — release everything the hand holds
@@ -44,9 +43,8 @@ def register(
 ) -> None:
     """Register the ``grabber`` subparser.
 
-    One flat parser: the positional ``action`` is optional
-    (``nargs="?"``, default ``grab``) and dispatch happens on
-    ``args.action`` inside :func:`_run`.
+    One flat parser: the positional ``action`` is required and
+    dispatch happens on ``args.action`` inside :func:`_run`.
     """
     parser = subparsers.add_parser(
         "grabber",
@@ -54,17 +52,16 @@ def register(
         help="Grab / release objects (grab/release/state/interactive).",
         description=(
             "Drive the Resonite IO Grabber service from the shell. "
-            "Without an action the grab action runs, taking a --radius "
-            "around the cursor ray hit point (desktop mode only). The "
-            "resulting hold state is printed after every action."
+            "Name the action explicitly (grab / release / state / "
+            "interactive); grab takes a --radius around the cursor ray "
+            "hit point (desktop mode only). The resulting hold state is "
+            "printed after every action."
         ),
     )
     parser.add_argument(
         "action",
-        nargs="?",
-        default="grab",
         choices=["grab", "release", "state", "interactive"],
-        help="The grab action to perform (default: grab).",
+        help="The grab action to perform.",
     )
     parser.add_argument(
         "--hand",
