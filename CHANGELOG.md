@@ -7,8 +7,30 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+### 🐛 Fixed
+
+- **`resoio launch` could not find a properly installed mod**: `launch` looked for
+  the plugin DLL only at the flat path `BepInEx/plugins/ResoniteIO/ResoniteIO.dll`,
+  but a Thunderstore / Gale install nests it one level deeper —
+  `BepInEx/plugins/ResoniteIO/ResoniteIO/ResoniteIO.dll`, with the package's
+  project files (`manifest.json` / `icon.png` / …) sitting directly under
+  `BepInEx/plugins/ResoniteIO/` (the same layout every other mod uses). `launch`
+  now searches `BepInEx/plugins/` **recursively** for `ResoniteIO.dll` — the way
+  BepInEx itself discovers plugins — so it works regardless of how the mod was
+  installed (nested Thunderstore layout, namespaced package dir, or a flat copy).
+
 ### 🔧 Changed
 
+- **`just deploy-mod` now deploys the real distribution artifact**: instead of
+  copying loose DLLs into a flat `BepInEx/plugins/ResoniteIO/`, `deploy-mod` builds
+  the Thunderstore package (`just mod-pack`) and unpacks it into the Gale profile
+  exactly the way Gale's installer does — project files + `plugins/` →
+  `BepInEx/plugins/ResoniteIO/` (DLLs nested under `…/ResoniteIO/ResoniteIO/`), and
+  `Renderer/` → `Renderer/BepInEx/plugins/ResoniteIO/` (renderer DLLs under
+  `…/ResoniteIO/ResoniteIO.Renderer/`). The local dev layout now
+  matches what users get from Thunderstore. The build-time auto-deploy (the mod and
+  renderer csproj `PostBuild` copies into the Gale profile) is removed; deployment
+  goes through `just deploy-mod` only.
 - **Documentation**: Reworded the `resonite-io` (Python) and ResoniteIO (mod) READMEs and the
   Thunderstore package description to drop the "runtime / execution environment for AI agents"
   framing, describing ResoniteIO neutrally as a bidirectional IPC bridge that lets your Python

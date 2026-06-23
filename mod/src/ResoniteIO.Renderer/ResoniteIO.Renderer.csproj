@@ -17,9 +17,9 @@
         されていないため engine 側のような fallback は組まない (resolve
         できる前提でクリーンに失敗する)。
 
-    PostBuild: $(GalePath)/Renderer/BepInEx/plugins/$(AssemblyName)/ に
-      DLL + PDB + RendererShared.dll + System.Memory.dll を deploy する。
-      Gale 未セットアップ環境では skip (Condition で防御)。
+    Renderer plugin の Gale への配置は `just deploy-mod` (Thunderstore zip を pack し
+      実インストールと同じレイアウトで展開) に一本化した。本 csproj は build only で、
+      配布物に同梱する prebuilt 成果物は `just renderer-prebuild` が bin から更新する。
   -->
 
   <PropertyGroup>
@@ -30,8 +30,9 @@
     <Deterministic>true</Deterministic>
     <!--
       BepInEx 5 plugin は隣接 DLL のみ AssemblyLoadContext で解決するため、
-      不要な transitive DLL を bin/ にコピーしない。RendererShared と
-      System.Memory のみ PostBuild で deploy する (deploy 対象は Target 側で明示)。
+      不要な transitive DLL を bin/ にコピーしない。配布物 (prebuilt) には
+      RendererShared と System.Memory のみ同梱する (`just renderer-prebuild` が
+      bin から拾う対象)。
     -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
 
@@ -60,7 +61,6 @@
     <GalePath Condition="'$(GalePath)' == ''">$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath>
     <RendererBepInExDir>$(GalePath)Renderer/BepInEx/core/</RendererBepInExDir>
     <InterprocessUnityDir>$(GalePath)Renderer/BepInEx/plugins/Nytra-InterprocessLib/InterprocessLib.BepInEx/</InterprocessUnityDir>
-    <RendererPluginTargetDir>$(GalePath)Renderer/BepInEx/plugins/$(AssemblyName)/</RendererPluginTargetDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -119,56 +119,4 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
-
-  <!-- Renderer plugin として配る file 集合 (@(RendererPluginFiles)) を 1 箇所で算出する。
-       Gale deploy (DeployRendererPlugin) と prebuild recipe (just renderer-prebuild)
-       が同じ集合を共有するため、ここに集約して重複・drift を避ける (engine 側 csproj の
-       ComputePluginFiles と同じパターン)。
-       同梱物: 本 plugin DLL + PDB + RendererShared DLL + System.Memory polyfill。
-       System.Memory は RendererShared (netstandard2.0) が Span/BinaryPrimitives 用に
-       transitive で要求するが、CopyLocalLockFileAssemblies=false のため bin に出ない
-       ことがある。出ていれば同梱する (Exists 条件)。 -->
-  <Target Name="ComputeRendererPluginFiles">
-    <ItemGroup>
-      <RendererPluginFiles Include="$(TargetPath)" />
-      <RendererPluginFiles
-        Include="$(TargetDir)$(TargetName).pdb"
-        Condition="Exists('$(TargetDir)$(TargetName).pdb')"
-      />
-      <RendererPluginFiles
-        Include="$(TargetDir)ResoniteIO.RendererShared.dll"
-        Condition="Exists('$(TargetDir)ResoniteIO.RendererShared.dll')"
-      />
-      <RendererPluginFiles
-        Include="$(TargetDir)System.Memory.dll"
-        Condition="Exists('$(TargetDir)System.Memory.dll')"
-      />
-    </ItemGroup>
-  </Target>
-
-  <!-- PostBuild: Gale Renderer profile の plugins/ResoniteIO.Renderer/ に
-       @(RendererPluginFiles) を deploy する。Gale 未セットアップ環境 (CI 等) では
-       Copy タスクを skip する (target の Condition ではなくタスク側に置くことで、
-       ComputeRendererPluginFiles は常に走らせる; engine 側 PostBuild と同じ作法)。 -->
-  <Target
-    Name="DeployRendererPlugin"
-    AfterTargets="Build"
-    DependsOnTargets="ComputeRendererPluginFiles"
-  >
-    <MakeDir
-      Directories="$(RendererPluginTargetDir)"
-      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
-    />
-    <Copy
-      SourceFiles="@(RendererPluginFiles)"
-      DestinationFolder="$(RendererPluginTargetDir)"
-      SkipUnchangedFiles="true"
-      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
-    />
-    <Message
-      Text="Copied @(RendererPluginFiles->Count()) renderer plugin file(s) to $(RendererPluginTargetDir)"
-      Importance="high"
-      Condition="'$(GalePath)' != '' and Exists('$(GalePath)Renderer/BepInEx')"
-    />
-  </Target>
 </Project>

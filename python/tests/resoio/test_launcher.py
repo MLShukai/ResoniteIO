@@ -165,7 +165,9 @@ def test_resolve_mod_path_requires_deployed_mod(
     with pytest.raises(LauncherError, match="Install the ResoniteIO mod"):
         _resolve_mod_path(str(profile))
 
-    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO"
+    # Deploy the mod the way `just deploy-mod` / a Thunderstore install does:
+    # the DLL nests one level deeper under the package dir.
+    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO" / "ResoniteIO"
     plugin.mkdir(parents=True)
     (plugin / "ResoniteIO.dll").write_text("")
     assert _resolve_mod_path(str(profile)) == str(profile)
@@ -173,15 +175,38 @@ def test_resolve_mod_path_requires_deployed_mod(
 
 def test_resolve_mod_path_reads_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     profile = tmp_path / "gale"
-    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO"
+    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO" / "ResoniteIO"
     plugin.mkdir(parents=True)
     (plugin / "ResoniteIO.dll").write_text("")
     monkeypatch.setenv("MOD_PATH", str(profile))
     assert _resolve_mod_path(None) == str(profile)
 
 
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "BepInEx/plugins/ResoniteIO/ResoniteIO.dll",  # legacy flat dev copy
+        "BepInEx/plugins/ResoniteIO/ResoniteIO/ResoniteIO.dll",  # Thunderstore/Gale
+        "BepInEx/plugins/mlshukai-ResoniteIO/ResoniteIO/ResoniteIO.dll",  # namespaced
+    ],
+)
+def test_resolve_mod_path_accepts_any_layout_under_plugins(tmp_path: Path, rel: str):
+    # BepInEx discovers plugins by scanning plugins/ recursively, so launch must
+    # accept ResoniteIO.dll wherever it lands — the flat dev copy, the nested
+    # Thunderstore/Gale layout, or a namespaced package dir. Pins that the
+    # resolver mirrors BepInEx's discovery rather than one hard-coded path.
+    profile = tmp_path / "gale"
+    dll = profile / rel
+    dll.parent.mkdir(parents=True)
+    dll.write_text("")
+    assert _resolve_mod_path(str(profile)) == str(profile)
+
+
 def _deploy_mod(profile: Path, *, with_preloader: bool = True) -> None:
-    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO"
+    # Mirror `just deploy-mod`: the engine DLL nests under the package dir
+    # (BepInEx/plugins/ResoniteIO/ResoniteIO/ResoniteIO.dll) the way a real
+    # Thunderstore / Gale install lays it out.
+    plugin = profile / "BepInEx" / "plugins" / "ResoniteIO" / "ResoniteIO"
     plugin.mkdir(parents=True)
     (plugin / "ResoniteIO.dll").write_text("")
     if with_preloader:

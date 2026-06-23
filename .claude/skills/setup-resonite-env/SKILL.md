@@ -55,13 +55,13 @@ ______________________________________________________________________
    - `GaleProfile.r2z` はあくまで利便のための snapshot であり、必須部品の正本は `just check-gale` (下記 step 4)
 3. Gale で Resonite を起動すると `LinuxBootstrap.sh` がプロファイル版に差し替わり、BepInEx が有効化される
 4. `just check-gale` (または `just init`) で必須 DLL の在中を検証
-5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される (deploy 先 dir は csproj の `<Copy>` が自動 mkdir する)
+5. `just deploy-mod` で Thunderstore zip を pack し `gale/BepInEx/plugins/ResoniteIO/` 配下へ実インストールと同じレイアウトで展開する (engine DLL は一段ネストして `…/ResoniteIO/ResoniteIO/` に入る。build 時の自動 deploy は廃止し deploy-mod の 1 経路に集約済み)
 
 `just check-gale` は BepInExRenderer 検出時に `Renderer/BepInEx/core/BepInEx.Preloader.dll` の存在で判定する (plugin dir ではなく framework dir に deploy するため。`feedback_bepinex_renderer_as_framework.md` 参照)。
 
 ### Camera v2 Renderer plugin (committed prebuilt)
 
-Camera v2 の Renderer 側 plugin (`ResoniteIO.Renderer`、net472 Unity Mono、BepInEx 5) は、ローカル build 時に Renderer.csproj の `DeployRendererPlugin` が `gale/Renderer/BepInEx/plugins/ResoniteIO.Renderer/` へ DLL を deploy する (engine 側 `gale/BepInEx/plugins/ResoniteIO/` とは別系統)。
+Camera v2 の Renderer 側 plugin (`ResoniteIO.Renderer`、net472 Unity Mono、BepInEx 5) は、`just deploy-mod` が pack 済み zip 内の committed prebuilt を `gale/Renderer/BepInEx/plugins/ResoniteIO/ResoniteIO.Renderer/` へ展開する (engine 側 `gale/BepInEx/plugins/ResoniteIO/` とは別系統)。
 
 UnityEngine.CoreModule が非再配布で CI build 不可のため、配布物 (Thunderstore zip) には **committed prebuilt** `mod/prebuilt/renderer/` を同梱する (release-resonite skill §7 参照)。**Renderer のソース (`mod/src/ResoniteIO.Renderer/` ∥ `mod/src/ResoniteIO.RendererShared/`) を変更したら、Resonite のあるローカルで `just renderer-prebuild` を実行し `mod/prebuilt/` の差分を commit する**。忘れると `just run` 末尾の `check-renderer-prebuilt` (および CI の drift guard) が fail する。
 

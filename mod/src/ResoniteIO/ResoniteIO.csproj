@@ -21,12 +21,13 @@
     proto は Grpc.Tools の <Protobuf> ItemGroup で build-time に C# 生成
     (Server スタブ; mod 側は server 役)。生成物は obj/ に出るため commit しない。
 
-    PostBuild Copy 先 ($(GalePath) は **deploy 先専用**):
-      - $(GalePath) (env var) が指す Gale プロファイルの
-        BepInEx/plugins/$(AssemblyName)/ に DLL+PDB を Copy する
+    Gale プロファイル参照 ($(GalePath) は **build-time 参照解決専用**):
+      - $(GalePath) (env var) が指す Gale プロファイルから Camera v2 の
+        InterprocessLib.FrooxEngine.dll を HintPath 解決する (後段の Reference)
       - env var 未設定時は repo root の ./gale/ を fallback (host 直叩き用)
-      - GalePath ディレクトリが存在しない (CI / Gale 未セットアップ) なら
-        Copy を skip する (CI 安全)
+      - mod の Gale への配置は build 時の自動 Copy ではなく `just deploy-mod`
+        (Thunderstore zip を pack し実インストールと同じレイアウトで展開) に
+        一本化した。よって本 csproj に Gale への PostBuild deploy target は持たない
 
     proto / gRPC 依存 (Google.Protobuf / Grpc.Tools / Grpc.Net.Client) は
     すべて ResoniteIO.Core 側に集約済み。mod 側は Core を ProjectReference
@@ -49,7 +50,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <CopyToPlugins>true</CopyToPlugins>
     <ThunderstorePackable>true</ThunderstorePackable>
 
     <!--
@@ -63,7 +63,7 @@
       / 不要 transport を除外しつつ、Kestrel + gRPC.AspNetCore に必要な
       transitive を網羅する。`Microsoft.AspNetCore.Http.Features` (v5) と
       `Microsoft.Extensions.Configuration` 系 (v9) は除外しない (= v10 で
-      overshadow する)。詳細は後段の Target / PostBuild コメントを参照。
+      overshadow する)。詳細は後段の Target コメントを参照。
     -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
@@ -83,7 +83,6 @@
          env var (container) → repo root の ./gale/ (host 直叩き) -->
     <GalePath Condition="'$(GalePath)' != ''">$(GalePath)/</GalePath>
     <GalePath Condition="'$(GalePath)' == ''">$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath>
-    <PluginTargetDir>$(GalePath)BepInEx\plugins\$(AssemblyName)</PluginTargetDir>
   </PropertyGroup>
 
   <!-- 必須: BepisLoader 向けの mod ランタイム依存と PluginMetadata 生成 -->
@@ -283,7 +282,6 @@
   <Target
     Name="CopyAspNetCoreSharedFrameworkRuntime"
     AfterTargets="Build"
-    BeforeTargets="PostBuild"
     Condition="'$(NetCoreRoot)' != ''"
   >
     <PropertyGroup>
@@ -304,8 +302,8 @@
   </Target>
 
   <!-- plugin folder に同梱する DLL 集合 (@(PluginFiles)) を 1 箇所で算出する。
-       Gale deploy (PostBuild) と Thunderstore staging (StageThunderstorePlugin) が
-       同じ集合を共有するため、ここに集約して重複を避ける。target 内で生成した
+       Thunderstore staging (StageThunderstorePlugin) がこの集合を pack するため、
+       ここに集約して重複を避ける。target 内で生成した
        item はビルド全体に持続し、後続 target から参照できる。CopyAspNetCoreShared-
        FrameworkRuntime が TargetDir に allow-list の ASP.NET ランタイム DLL を
        展開し終えてから参照する必要があるため DependsOnTargets で順序を保証する。
@@ -350,24 +348,9 @@
     </ItemGroup>
   </Target>
 
-  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に @(PluginFiles) を配置 (開発 deploy)。
-       Gale プロファイルが無い (CI 等) ときは Copy を skip する。 -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent" DependsOnTargets="ComputePluginFiles">
-    <Copy
-      SourceFiles="@(PluginFiles)"
-      DestinationFolder="$(PluginTargetDir)"
-      Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
-    />
-    <Message
-      Text="Copied @(PluginFiles->Count()) plugin files to $(PluginTargetDir)"
-      Importance="high"
-      Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
-    />
-  </Target>
-
   <!-- Thunderstore パッケージ用 staging。tcli (thunderstore.toml の [[build.copy]]) は
        静的なファイル列挙しかできず、Core/Mod 二層 + Kestrel/gRPC ランタイム DLL を
-       手書きで網羅・追従するのは破綻するため、PostBuild と同じ @(PluginFiles) を
+       手書きで網羅・追従するのは破綻するため、@(PluginFiles) を
        専用ディレクトリへ複製し、thunderstore.toml はそのディレクトリを丸ごと
        plugins/ResoniteIO/ に取り込む。これで配布物に必須 DLL が漏れなく入る。
        Gale プロファイル有無に依存せず常に stage する (CI には Gale が無いため)。
