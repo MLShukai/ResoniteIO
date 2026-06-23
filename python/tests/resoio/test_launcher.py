@@ -202,6 +202,51 @@ def test_resolve_mod_path_accepts_any_layout_under_plugins(tmp_path: Path, rel: 
     assert _resolve_mod_path(str(profile)) == str(profile)
 
 
+def test_resolve_mod_path_returns_absolute_for_relative_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # launch() spawns the subprocess with cwd=install_dir, so a relative profile
+    # would make --bepinex-target relative and BepisLoader rejects it ("not an
+    # absolute path"). The resolver must absolutise the profile regardless of how
+    # it was passed. We chdir into tmp_path and pass a relative name so the only
+    # way the assertion can pass is if the resolver does the abspath itself.
+    profile = tmp_path / "gale"
+    dll = (
+        profile / "BepInEx" / "plugins" / "ResoniteIO" / "ResoniteIO" / "ResoniteIO.dll"
+    )
+    dll.parent.mkdir(parents=True)
+    dll.write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    resolved = _resolve_mod_path("gale")
+
+    assert os.path.isabs(resolved)
+    assert os.path.basename(resolved) == "gale"
+
+
+def test_build_command_bepinex_target_is_absolute_for_relative_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # The same bug surfaced end-to-end: when launch is told a relative profile,
+    # the --bepinex-target value handed to the launch chain must still be
+    # absolute. Pin it on the assembled argv, not just the resolver.
+    install = _make_install(tmp_path)
+    profile = tmp_path / "gale"
+    _deploy_mod(profile)
+    monkeypatch.chdir(tmp_path)
+
+    argv, _env, _log = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        "gale",
+        vanilla=False,
+        extra_args=(),
+    )
+
+    bepinex_target = argv[argv.index("--bepinex-target") + 1]
+    assert os.path.isabs(bepinex_target)
+
+
 def _deploy_mod(profile: Path, *, with_preloader: bool = True) -> None:
     # Mirror `just deploy-mod`: the engine DLL nests under the package dir
     # (BepInEx/plugins/ResoniteIO/ResoniteIO/ResoniteIO.dll) the way a real
@@ -272,6 +317,146 @@ def test_build_command_vanilla_skips_mod_args(
     assert "--bepinex-target" not in argv
     assert "WINEDLLOVERRIDES" not in env
     assert log_path is None
+
+
+# ---------------------------------------------------------------------------
+# umu / Proton env defaults + precedence (PROTON_SET_GAME_DRIVE / GAMEID /
+# PROTONPATH / WINEPREFIX). Spec: a host launch must behave like the dev
+# container, with PROTON_SET_GAME_DRIVE forced to "0" (the $HOME-install hang
+# fix), GAMEID/PROTONPATH/WINEPREFIX following an arg > env > default precedence.
+#
+# Every test clears the relevant env vars first (delenv ..., raising=False):
+# the real CI container carries PROTONPATH/GAMEID/etc. in os.environ, so without
+# clearing we could not tell a default-derived value apart from an inherited one.
+# ---------------------------------------------------------------------------
+
+
+def _clear_proton_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("PROTON_SET_GAME_DRIVE", "GAMEID", "PROTONPATH", "WINEPREFIX"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_build_command_seeds_proton_env_defaults_when_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # With nothing in the environment, the launch defaults are applied: the
+    # game-drive mapping is disabled, GAMEID/PROTONPATH fall back to umu defaults,
+    # and WINEPREFIX is left to umu (no --prefix given).
+    _clear_proton_env(monkeypatch)
+    install = _make_install(tmp_path)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"), str(install), None, vanilla=True, extra_args=()
+    )
+
+    assert env["PROTON_SET_GAME_DRIVE"] == "0"
+    assert env["GAMEID"] == "umu-default"
+    assert env["PROTONPATH"] == "GE-Proton"
+    assert "WINEPREFIX" not in env
+
+
+def test_build_command_respects_existing_gameid_and_protonpath(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # An operator who exported GAMEID / PROTONPATH should have those honoured
+    # (setdefault), not stomped by the umu defaults.
+    _clear_proton_env(monkeypatch)
+    monkeypatch.setenv("PROTONPATH", "UMU-Proton")
+    monkeypatch.setenv("GAMEID", "foo")
+    install = _make_install(tmp_path)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"), str(install), None, vanilla=True, extra_args=()
+    )
+
+    assert env["PROTONPATH"] == "UMU-Proton"
+    assert env["GAMEID"] == "foo"
+
+
+def test_build_command_proton_path_arg_overrides_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # proton_path is the highest-precedence source: an explicit --proton-path
+    # wins over an inherited PROTONPATH.
+    _clear_proton_env(monkeypatch)
+    monkeypatch.setenv("PROTONPATH", "UMU-Proton")
+    install = _make_install(tmp_path)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        None,
+        vanilla=True,
+        extra_args=(),
+        proton_path="GE-Latest",
+    )
+
+    assert env["PROTONPATH"] == "GE-Latest"
+
+
+def test_build_command_forces_game_drive_off_even_when_env_enables_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # Regression guard for the host renderer hang: even if the environment sets
+    # PROTON_SET_GAME_DRIVE=1, the launch must force it back to "0" so umu does
+    # not map $HOME onto a Wine drive letter and break the renderer's absolute
+    # Unix paths. This is a bug fix, not a configurable default, so env must not
+    # be able to re-enable it.
+    _clear_proton_env(monkeypatch)
+    monkeypatch.setenv("PROTON_SET_GAME_DRIVE", "1")
+    install = _make_install(tmp_path)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"), str(install), None, vanilla=True, extra_args=()
+    )
+
+    assert env["PROTON_SET_GAME_DRIVE"] == "0"
+
+
+def test_build_command_prefix_arg_is_absolutized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # --prefix sets WINEPREFIX, which must be an absolute path: the launch runs
+    # the subprocess with cwd=install_dir, so a relative prefix would resolve
+    # against the install dir rather than the caller's cwd. The basename is
+    # preserved so the caller still points at the directory they named.
+    _clear_proton_env(monkeypatch)
+    install = _make_install(tmp_path)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        None,
+        vanilla=True,
+        extra_args=(),
+        prefix="rel/path",
+    )
+
+    assert os.path.isabs(env["WINEPREFIX"])
+    assert os.path.basename(env["WINEPREFIX"]) == "path"
+
+
+def test_build_command_seeds_proton_env_defaults_in_mod_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_umu: Path
+):
+    # The env defaults live in the section shared by both launch paths, so a
+    # mod-mode build gets them too (not just vanilla).
+    _clear_proton_env(monkeypatch)
+    install = _make_install(tmp_path)
+    profile = tmp_path / "gale"
+    _deploy_mod(profile)
+
+    _argv, env, _log = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        str(profile),
+        vanilla=False,
+        extra_args=(),
+    )
+
+    assert env["PROTON_SET_GAME_DRIVE"] == "0"
+    assert env["GAMEID"] == "umu-default"
+    assert env["PROTONPATH"] == "GE-Proton"
 
 
 def test_build_command_without_umu_raises(
