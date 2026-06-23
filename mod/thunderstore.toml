@@ -8,7 +8,7 @@ schemaVersion = "0.0.1"
 namespace = "mlshukai"  # MLShukai Thunderstore チーム
 name = "ResoniteIO"
 # versionNumber は ResoniteIO.csproj の <Version> から渡される (PackTS 経由)
-description = "Bidirectional IPC bridge mod that exposes Resonite as an execution environment for AI agents."
+description = "Bidirectional IPC bridge mod that lets your Python code observe and control Resonite over gRPC."
 websiteUrl = "https://github.com/MLShukai/ResoniteIO"
 containsNsfwContent = false
 
@@ -70,7 +70,7 @@ target = "/"
 repository = "https://thunderstore.io"
 communities = ["resonite"]
 
-# Resonite community のカテゴリ slug。AI エージェント実行環境を提供する開発者向け
+# Resonite community のカテゴリ slug。Resonite を外部から制御する開発者向け
 # ツールであり (tools)、Speaker/Microphone で音声を双方向に流し (audio)、
 # Locomotion/Cursor/Grabber でアバター入力を制御する (controls)。
 [publish.categories]
