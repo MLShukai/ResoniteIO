@@ -59,7 +59,7 @@ ______________________________________________________________________
 ### mod がそもそも load されない
 
 - `just check-gale` で必須 plugin 6 個 (+ BepInExRenderer framework) を確認
-- `gale/BepInEx/plugins/ResoniteIO/` に DLL + PDB が居るか
+- `gale/BepInEx/plugins/ResoniteIO/ResoniteIO/` に DLL + PDB が居るか (nested install layout。直下にはプロジェクトファイルが入る)
 - Vanilla 起動 (`just resonite-launch --vanilla` / host Steam 直起動) になっていないか — mod 込みは `just resonite-launch` で起動する
 - 詳細な setup 周りは `setup-resonite-env` skill 参照
 

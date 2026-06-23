@@ -72,6 +72,14 @@ The distribution is named `resonite-io` on PyPI but imports as `resoio`
 (`import resoio`). It requires Python ≥ 3.12, is `pyright`-strict, and ships type
 information (PEP 561).
 
+!!! note "Optional: `resoio launch` needs umu-launcher"
+    The `resoio launch` / `resoio terminate` commands start and stop the Resonite client as
+    host processes, instead of launching it yourself through Steam. They invoke
+    [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)'s `umu-run`, so it
+    must be on your `PATH` — install it from your distribution's packages or the upstream
+    release (the dev container already ships it). The rest of the client — connecting to a
+    Resonite you start via Steam — does not need it.
+
 ## Build from source
 
 Building from source is the path for contributing to ResoniteIO or running an unreleased
@@ -86,8 +94,14 @@ From inside the dev container:
 
 ```bash
 just build        # dotnet build -c Release
-just deploy-mod   # copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)
+just deploy-mod   # pack the Thunderstore zip and unpack it into the Gale profile
 ```
+
+`deploy-mod` builds the Thunderstore package (`just mod-pack`) and unpacks it into
+`gale/` exactly the way Gale's installer lays it out, so the local mod matches what
+users install — the engine plugin lands at
+`gale/BepInEx/plugins/ResoniteIO/ResoniteIO/` and the renderer plugin at
+`gale/Renderer/BepInEx/plugins/ResoniteIO/ResoniteIO.Renderer/`.
 
 The mod requires a Gale profile with BepisLoader and the supporting plugins, plus the Steam
 launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%`. The README documents the exact

@@ -155,6 +155,7 @@ mod-clean:
     @GALE_ROOT="${GalePath:-./gale}"; \
     for PLUGIN_DIR in \
         "$GALE_ROOT/BepInEx/plugins/ResoniteIO" \
+        "$GALE_ROOT/Renderer/BepInEx/plugins/ResoniteIO" \
         "$GALE_ROOT/Renderer/BepInEx/plugins/ResoniteIO.Renderer"; do \
         if [ -d "$PLUGIN_DIR" ]; then \
             rm -rf "$PLUGIN_DIR" && \
@@ -172,21 +173,67 @@ type: py-type
 
 build: mod-build
 
-# `just mod-build` で csproj の PostBuild Target が
-# $(GalePath)/BepInEx/plugins/ResoniteIO/ に DLL+PDB を Copy する。
-# 名前で意図を表すために専用レシピを残す。
-# 配置先は GalePath (container) / repo root の ./gale/ (host) を優先順で解決。
-# gale/ が無効なら build は成功するが Copy がスキップされるためエラー扱い。
-deploy-mod: mod-build
-    @GALE_ROOT="${GalePath:-./gale}"; \
-    DLL="$GALE_ROOT/BepInEx/plugins/ResoniteIO/ResoniteIO.dll"; \
-    if [ -f "$DLL" ]; then \
-        echo "Deployed to $GALE_ROOT/BepInEx/plugins/ResoniteIO/"; \
-    else \
-        echo "ERROR: 配置先に DLL が見当たりません ($DLL)。" >&2; \
-        echo "       Gale (https://github.com/Kesomannen/gale) v1.5.4+ で" >&2; \
-        echo "       '<repo>/gale' に profile を作り、BepisLoader を追加してください。" >&2; \
-        exit 1; \
+# mod を Thunderstore zip に pack し (`just mod-pack`)、それを Gale プロファイルへ
+# 「実際のインストールと同じレイアウト」で展開する。Gale (BepisLoader installer) の
+# routing を再現するので dev 配置 == 配布物 (resoio launch が探す nested レイアウト):
+#   <root files> + plugins/<X> → BepInEx/plugins/ResoniteIO/( /<X>)
+#   Renderer/<Y>               → Renderer/BepInEx/plugins/ResoniteIO/<Y>
+# PkgDir = manifest の name (= ResoniteIO)。ローカル zip を Gale に import した時の dir 名。
+# build 時の自動 deploy (csproj PostBuild) は廃止し、deploy はこの 1 経路に集約した。
+# 配置先 GalePath は container env / repo root の ./gale/ (host) を優先順で解決。
+deploy-mod: mod-pack
+    #!/usr/bin/env bash
+    set -euo pipefail
+    GALE_ROOT="${GalePath:-./gale}"
+    PKG="ResoniteIO"
+    # 正規 version (csproj <Version>) で zip を特定する。mod/build/ は pack 時に
+    # 掃除されず旧 version が残るため、mtime (ls -t) ではなく version で pin する。
+    VERSION="$(grep -oP '<Version>\K[^<]+' mod/src/ResoniteIO/ResoniteIO.csproj | head -n 1)"
+    ZIP="mod/build/mlshukai-ResoniteIO-${VERSION}.zip"
+    if [ -z "$VERSION" ] || [ ! -f "$ZIP" ]; then
+        echo "ERROR: pack 済み zip が見つかりません ($ZIP)。" >&2
+        echo "       'just mod-pack' が成功しているか確認してください。" >&2
+        exit 1
+    fi
+    if [ ! -d "$GALE_ROOT/BepInEx" ]; then
+        echo "ERROR: Gale プロファイルが見つかりません ($GALE_ROOT/BepInEx)。" >&2
+        echo "       Gale (https://github.com/Kesomannen/gale) v1.5.4+ で '<repo>/gale' に" >&2
+        echo "       profile を作り、BepisLoader と必須 plugin を追加してください。" >&2
+        exit 1
+    fi
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    unzip -q -o "$ZIP" -d "$TMP"
+    # --- engine 側: BepInEx/plugins/ResoniteIO/ をクリーンにして展開 ---
+    ENGINE_DEST="$GALE_ROOT/BepInEx/plugins/$PKG"
+    rm -rf "$ENGINE_DEST"
+    mkdir -p "$ENGINE_DEST"
+    # root files (manifest/icon/README/CHANGELOG/LICENSE) を package dir 直下へ。
+    find "$TMP" -maxdepth 1 -type f -exec cp -p {} "$ENGINE_DEST/" \;
+    # plugins/ の中身 (= ResoniteIO/) をそのまま入れる (= engine DLL が一段ネストする)。
+    if [ -d "$TMP/plugins" ]; then cp -a "$TMP/plugins/." "$ENGINE_DEST/"; fi
+    # --- renderer 側: Renderer/BepInEx/plugins/ResoniteIO/ (framework がある時だけ) ---
+    # 旧 deploy 先 (Renderer/BepInEx/plugins/ResoniteIO.Renderer) と新配置先を掃除する。
+    rm -rf "$GALE_ROOT/Renderer/BepInEx/plugins/ResoniteIO.Renderer" \
+           "$GALE_ROOT/Renderer/BepInEx/plugins/$PKG"
+    if [ -d "$TMP/Renderer" ]; then
+        if [ -d "$GALE_ROOT/Renderer/BepInEx" ]; then
+            RENDERER_DEST="$GALE_ROOT/Renderer/BepInEx/plugins/$PKG"
+            mkdir -p "$RENDERER_DEST"
+            cp -a "$TMP/Renderer/." "$RENDERER_DEST/"
+            echo "Deployed renderer plugin to $RENDERER_DEST/"
+        else
+            echo "WARN: $GALE_ROOT/Renderer/BepInEx が無いため renderer plugin は未配置。" >&2
+            echo "      Gale から Resonite を 1 度起動し BepInExRenderer の展開を待って再実行してください。" >&2
+        fi
+    fi
+    # --- 検証: engine DLL が nested layout に居ること ---
+    DLL="$ENGINE_DEST/$PKG/ResoniteIO.dll"
+    if [ -f "$DLL" ]; then
+        echo "Deployed mod to $ENGINE_DEST/ (engine DLL: $DLL)"
+    else
+        echo "ERROR: 展開後に engine DLL が見当たりません ($DLL)。zip 内容を確認してください。" >&2
+        exit 1
     fi
 
 # Gale プロファイル (./gale/) に BepisLoader と必須プラグインが揃っているか検証する。

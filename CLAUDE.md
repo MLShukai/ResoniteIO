@@ -154,7 +154,7 @@ resonite-io/
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `just run`                   | `format` → `gen-proto` → `build` → `test` → `type` → `check-renderer-prebuilt` を直列実行 (コミット前の必須 check)           |
 | `just gen-proto`             | `.proto` から Python 側コードを生成 (C# 側は csproj が build-time 生成)                                                      |
-| `just deploy-mod`            | mod build + `gale/BepInEx/plugins/ResoniteIO/` へ DLL+PDB 配置                                                               |
+| `just deploy-mod`            | mod を pack し Gale プロファイルへ実インストールと同じレイアウトで展開 (engine DLL は `plugins/ResoniteIO/ResoniteIO/`)      |
 | `just log`                   | `gale/BepInEx/LogOutput.log` を tail -F (print-debug の主経路。umu/Proton 起動ノイズは `gale/BepInEx/umu-launch.log` に分離) |
 | `just decompile`             | Resonite first-party DLL を ILSpy で `decompiled/` に展開                                                                    |
 | `just init`                  | host 側で初回 setup (docker / docker compose v2 検出 / `.env` 作成・検証 / `ResonitePath` 検証 / Gale プロファイル確認)      |
