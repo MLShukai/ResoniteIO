@@ -52,6 +52,19 @@ def register(
         help="Launch without loading any mod (skips the mod-profile checks).",
     )
     parser.add_argument(
+        "--prefix",
+        default=None,
+        help="Wine prefix dir (WINEPREFIX). Default: umu's (~/Games/umu/$GAMEID).",
+    )
+    parser.add_argument(
+        "--proton-path",
+        default=None,
+        help=(
+            "Proton build (PROTONPATH); a compat-tools name like GE-Proton or a "
+            "path. Default: GE-Proton."
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=60.0,
@@ -78,6 +91,8 @@ async def _run(args: argparse.Namespace) -> int:
             mod_path=args.profile,
             vanilla=args.vanilla,
             extra_args=args.args,
+            prefix=args.prefix,
+            proton_path=args.proton_path,
             wait_timeout=args.timeout,
         )
     except LauncherError as exc:

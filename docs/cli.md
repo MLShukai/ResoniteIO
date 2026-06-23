@@ -29,7 +29,7 @@ resoio --help
 | `resoio contact` | Contact | unary | Browse and manage contacts (friends) via nested subcommands: `list` (`--search` / `--filter all\|accepted\|requests` / `--include-hidden`), `get`, `search` (`--exact`), `add` (`--username`), `accept`, `remove`. `list` hides dash-hidden (ignored / blocked) contacts by default; `--include-hidden` shows them. The mutating ops (`add` / `accept` / `remove`) write the real cloud contact list. |
 | `resoio auth` | Auth | unary | Resonite cloud sign-in via nested subcommands: `login` (credential positional; password via env/stdin/prompt, never a flag), `logout`, `status`. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
-| `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. Non-gRPC. |
+| `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. `--prefix` (`WINEPREFIX`) and `--proton-path` (`PROTONPATH`, default `GE-Proton`) pick the Wine prefix and Proton build. Non-gRPC. |
 | `resoio terminate` | — (signals) | local process | Force-stop Resonite by killing the engine + renderer (`SIGTERM` → `SIGKILL`). Takes `[resonite_pid] [renderer_pid]` (from `launch`) or auto-detects the single running instance. Non-gRPC. |
 | `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`). Best-effort — on Linux the engine often hangs during teardown and never exits, so follow up with `terminate` when you need a guaranteed stop. Prints the engine's host PID (from `Info`). |
 
@@ -175,6 +175,9 @@ resoio grabber dequip
 
 # Start Resonite (engine + renderer) and capture both PIDs
 resoio launch --format json     # {"resonite_pid": ..., "renderer_pid": ...}
+
+# Pick a specific Wine prefix and Proton build
+resoio launch --prefix ~/prefixes/resonite --proton-path GE-Proton
 
 # Stop it — by the PIDs from launch, or auto-detect the running instance
 resoio terminate 12345 12399

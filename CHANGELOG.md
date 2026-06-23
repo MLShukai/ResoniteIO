@@ -5,6 +5,30 @@ This file holds the project's release notes. On `v*` tag publish,
 GitHub Release body. The format follows
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### ✨ Added
+
+- **`resoio launch --prefix` / `--proton-path`**: choose the Wine prefix
+  (`WINEPREFIX`) and the Proton build (`PROTONPATH`) per launch. `--proton-path`
+  takes a compatibility-tools name like `GE-Proton` (the default) or a path.
+
+### 🐛 Fixed
+
+- **`resoio launch` hung on a host install under `$HOME`**: the renderer never
+  started (and the engine waited forever) when launching from a Steam install
+  beneath `$HOME`. umu/Proton's game-drive feature maps `$HOME` onto a Wine drive
+  letter, so the launch directory (the process's cwd) landed on a non-`Z:` drive
+  and the renderer's absolute Unix paths (the renderer executable, the `/dev/shm`
+  IPC) misresolved. `launch` now sets `PROTON_SET_GAME_DRIVE=0` (and defaults
+  `GAMEID` / `PROTONPATH=GE-Proton`) so the prefix exposes only `c:` / `z:` — the
+  same layout Steam's prefix uses — and a `$HOME`-resident install launches. The
+  dev container was unaffected (its install lives outside `$HOME`).
+- **`resoio launch` rejected a relative mod profile**: a relative `--profile` /
+  `MOD_PATH` reached BepInEx as a relative `--bepinex-target`, which BepisLoader
+  rejects ("is not an absolute path"). The profile is now resolved to an absolute
+  path before launch.
+
 ## [0.6.1] - 2026-06-23
 
 ### 🐛 Fixed
@@ -597,3 +621,4 @@ bridge that uses Resonite as an execution environment for AI agents (C# mod
 [0.5.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.4.0...v0.5.0
 [0.6.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.5.0...v0.6.0
 [0.6.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.6.0...v0.6.1
+[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.6.1...HEAD
