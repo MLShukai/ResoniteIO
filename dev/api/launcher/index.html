@@ -1511,9 +1511,11 @@ quit is <a href="../lifecycle/"><code>resoio.shutdown</code></a>. See the <a hre
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">mod_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">vanilla</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">extra_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">60.0</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">proton_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">60.0</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1612,6 +1614,49 @@ resolves it from <code>MOD_PATH</code>; with neither set this raises (unless
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
                       <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>prefix</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Wine prefix directory (<code>WINEPREFIX</code>). <code>None</code> lets umu use its
+default (<code>~/Games/umu/$GAMEID</code>).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>proton_path</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Proton build (<code>PROTONPATH</code>) — a compat-tools name like
+<code>GE-Proton</code> or a path. <code>None</code> resolves it from <code>PROTONPATH</code>,
+then <code>GE-Proton</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
                   </span>
               </p>
             </td>
@@ -1721,35 +1766,7 @@ detected, or a process did not appear before <code>wait_timeout</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/launcher.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-325">325</a></span>
-<span class="normal"><a href="#__codelineno-0-326">326</a></span>
-<span class="normal"><a href="#__codelineno-0-327">327</a></span>
-<span class="normal"><a href="#__codelineno-0-328">328</a></span>
-<span class="normal"><a href="#__codelineno-0-329">329</a></span>
-<span class="normal"><a href="#__codelineno-0-330">330</a></span>
-<span class="normal"><a href="#__codelineno-0-331">331</a></span>
-<span class="normal"><a href="#__codelineno-0-332">332</a></span>
-<span class="normal"><a href="#__codelineno-0-333">333</a></span>
-<span class="normal"><a href="#__codelineno-0-334">334</a></span>
-<span class="normal"><a href="#__codelineno-0-335">335</a></span>
-<span class="normal"><a href="#__codelineno-0-336">336</a></span>
-<span class="normal"><a href="#__codelineno-0-337">337</a></span>
-<span class="normal"><a href="#__codelineno-0-338">338</a></span>
-<span class="normal"><a href="#__codelineno-0-339">339</a></span>
-<span class="normal"><a href="#__codelineno-0-340">340</a></span>
-<span class="normal"><a href="#__codelineno-0-341">341</a></span>
-<span class="normal"><a href="#__codelineno-0-342">342</a></span>
-<span class="normal"><a href="#__codelineno-0-343">343</a></span>
-<span class="normal"><a href="#__codelineno-0-344">344</a></span>
-<span class="normal"><a href="#__codelineno-0-345">345</a></span>
-<span class="normal"><a href="#__codelineno-0-346">346</a></span>
-<span class="normal"><a href="#__codelineno-0-347">347</a></span>
-<span class="normal"><a href="#__codelineno-0-348">348</a></span>
-<span class="normal"><a href="#__codelineno-0-349">349</a></span>
-<span class="normal"><a href="#__codelineno-0-350">350</a></span>
-<span class="normal"><a href="#__codelineno-0-351">351</a></span>
-<span class="normal"><a href="#__codelineno-0-352">352</a></span>
-<span class="normal"><a href="#__codelineno-0-353">353</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-353">353</a></span>
 <span class="normal"><a href="#__codelineno-0-354">354</a></span>
 <span class="normal"><a href="#__codelineno-0-355">355</a></span>
 <span class="normal"><a href="#__codelineno-0-356">356</a></span>
@@ -1803,89 +1820,147 @@ detected, or a process did not appear before <code>wait_timeout</code>.</p>
 <span class="normal"><a href="#__codelineno-0-404">404</a></span>
 <span class="normal"><a href="#__codelineno-0-405">405</a></span>
 <span class="normal"><a href="#__codelineno-0-406">406</a></span>
-<span class="normal"><a href="#__codelineno-0-407">407</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-325" name="__codelineno-0-325"></a><span class="k">def</span><span class="w"> </span><span class="nf">launch</span><span class="p">(</span>
-<a id="__codelineno-0-326" name="__codelineno-0-326"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-327" name="__codelineno-0-327"></a>    <span class="n">resonite_exe</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="n">mod_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-329" name="__codelineno-0-329"></a>    <span class="n">vanilla</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<a id="__codelineno-0-330" name="__codelineno-0-330"></a>    <span class="n">extra_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-<a id="__codelineno-0-331" name="__codelineno-0-331"></a>    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">60.0</span><span class="p">,</span>
-<a id="__codelineno-0-332" name="__codelineno-0-332"></a>    <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-0-333" name="__codelineno-0-333"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span><span class="p">:</span>
-<a id="__codelineno-0-334" name="__codelineno-0-334"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch Resonite (engine + renderer) via umu-launcher and return both</span>
-<a id="__codelineno-0-335" name="__codelineno-0-335"></a><span class="sd">    PIDs.</span>
-<a id="__codelineno-0-336" name="__codelineno-0-336"></a>
-<a id="__codelineno-0-337" name="__codelineno-0-337"></a><span class="sd">    Spawns the umu-run chain detached (the caller can exit without taking</span>
-<a id="__codelineno-0-338" name="__codelineno-0-338"></a><span class="sd">    Resonite down), then PID-diffs the engine and renderer processes into</span>
-<a id="__codelineno-0-339" name="__codelineno-0-339"></a><span class="sd">    existence and returns their host PIDs. Pure process control — no gRPC.</span>
-<a id="__codelineno-0-340" name="__codelineno-0-340"></a>
-<a id="__codelineno-0-341" name="__codelineno-0-341"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-342" name="__codelineno-0-342"></a><span class="sd">        resonite_exe: Path to ``Resonite.exe``. ``None`` resolves it from the</span>
-<a id="__codelineno-0-343" name="__codelineno-0-343"></a><span class="sd">            ``RESONITE_EXE`` env var, then the default Steam install path.</span>
-<a id="__codelineno-0-344" name="__codelineno-0-344"></a><span class="sd">        mod_path: Gale profile directory holding the ResoniteIO mod. ``None``</span>
-<a id="__codelineno-0-345" name="__codelineno-0-345"></a><span class="sd">            resolves it from ``MOD_PATH``; with neither set this raises (unless</span>
-<a id="__codelineno-0-346" name="__codelineno-0-346"></a><span class="sd">            ``vanilla``). The profile must already have the mod deployed.</span>
-<a id="__codelineno-0-347" name="__codelineno-0-347"></a><span class="sd">        vanilla: Launch without loading any mod (skips the mod-profile checks).</span>
-<a id="__codelineno-0-348" name="__codelineno-0-348"></a><span class="sd">        extra_args: Extra arguments forwarded to ``Resonite.exe``.</span>
-<a id="__codelineno-0-349" name="__codelineno-0-349"></a><span class="sd">        wait_timeout: Seconds to wait for both processes to appear.</span>
-<a id="__codelineno-0-350" name="__codelineno-0-350"></a><span class="sd">        poll_interval: Seconds between process-table polls.</span>
-<a id="__codelineno-0-351" name="__codelineno-0-351"></a>
-<a id="__codelineno-0-352" name="__codelineno-0-352"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-353" name="__codelineno-0-353"></a><span class="sd">        The :class:`LaunchResult` with the engine and renderer host PIDs.</span>
-<a id="__codelineno-0-354" name="__codelineno-0-354"></a>
-<a id="__codelineno-0-355" name="__codelineno-0-355"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-356" name="__codelineno-0-356"></a><span class="sd">        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, an</span>
-<a id="__codelineno-0-357" name="__codelineno-0-357"></a><span class="sd">            instance is already running, more than one engine/renderer is</span>
-<a id="__codelineno-0-358" name="__codelineno-0-358"></a><span class="sd">            detected, or a process did not appear before ``wait_timeout``.</span>
-<a id="__codelineno-0-359" name="__codelineno-0-359"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-360" name="__codelineno-0-360"></a>    <span class="n">exe</span> <span class="o">=</span> <span class="n">_resolve_resonite_exe</span><span class="p">(</span><span class="n">resonite_exe</span><span class="p">)</span>
-<a id="__codelineno-0-361" name="__codelineno-0-361"></a>    <span class="n">install_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">exe</span><span class="p">))</span>
-<a id="__codelineno-0-362" name="__codelineno-0-362"></a>
-<a id="__codelineno-0-363" name="__codelineno-0-363"></a>    <span class="n">already</span> <span class="o">=</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
-<a id="__codelineno-0-364" name="__codelineno-0-364"></a>    <span class="k">if</span> <span class="n">already</span><span class="p">:</span>
-<a id="__codelineno-0-365" name="__codelineno-0-365"></a>        <span class="k">raise</span> <span class="n">LauncherError</span><span class="p">(</span>
-<a id="__codelineno-0-366" name="__codelineno-0-366"></a>            <span class="sa">f</span><span class="s2">&quot;Resonite is already running (engine pid(s) </span><span class="si">{</span><span class="n">already</span><span class="si">}</span><span class="s2">). Stop it first &quot;</span>
-<a id="__codelineno-0-367" name="__codelineno-0-367"></a>            <span class="s2">&quot;with `resoio terminate` before launching a new instance.&quot;</span>
-<a id="__codelineno-0-368" name="__codelineno-0-368"></a>        <span class="p">)</span>
-<a id="__codelineno-0-369" name="__codelineno-0-369"></a>
-<a id="__codelineno-0-370" name="__codelineno-0-370"></a>    <span class="n">argv</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">log_path</span> <span class="o">=</span> <span class="n">_build_command</span><span class="p">(</span>
-<a id="__codelineno-0-371" name="__codelineno-0-371"></a>        <span class="n">exe</span><span class="p">,</span> <span class="n">install_dir</span><span class="p">,</span> <span class="n">mod_path</span><span class="p">,</span> <span class="n">vanilla</span><span class="p">,</span> <span class="n">extra_args</span>
-<a id="__codelineno-0-372" name="__codelineno-0-372"></a>    <span class="p">)</span>
-<a id="__codelineno-0-373" name="__codelineno-0-373"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;launching Resonite: </span><span class="si">%s</span><span class="s2"> (cwd=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">argv</span><span class="p">),</span> <span class="n">install_dir</span><span class="p">)</span>
-<a id="__codelineno-0-374" name="__codelineno-0-374"></a>
-<a id="__codelineno-0-375" name="__codelineno-0-375"></a>    <span class="c1"># Detach fully: new session + closed stdio so the parent (CLI / caller) can</span>
-<a id="__codelineno-0-376" name="__codelineno-0-376"></a>    <span class="c1"># exit without signalling Resonite. cwd is the install dir so umu maps it to</span>
-<a id="__codelineno-0-377" name="__codelineno-0-377"></a>    <span class="c1"># the Z: drive and absolute Unix paths resolve correctly.</span>
-<a id="__codelineno-0-378" name="__codelineno-0-378"></a>    <span class="n">stdout</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span>
-<a id="__codelineno-0-379" name="__codelineno-0-379"></a>    <span class="n">log_handle</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-380" name="__codelineno-0-380"></a>    <span class="k">if</span> <span class="n">log_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-381" name="__codelineno-0-381"></a>        <span class="n">log_handle</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_path</span><span class="p">,</span> <span class="s2">&quot;ab&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-382" name="__codelineno-0-382"></a>        <span class="n">stdout</span> <span class="o">=</span> <span class="n">log_handle</span>
-<a id="__codelineno-0-383" name="__codelineno-0-383"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-384" name="__codelineno-0-384"></a>        <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>  <span class="c1"># noqa: S603 - argv built from validated paths</span>
-<a id="__codelineno-0-385" name="__codelineno-0-385"></a>            <span class="n">argv</span><span class="p">,</span>
-<a id="__codelineno-0-386" name="__codelineno-0-386"></a>            <span class="n">cwd</span><span class="o">=</span><span class="n">install_dir</span><span class="p">,</span>
-<a id="__codelineno-0-387" name="__codelineno-0-387"></a>            <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
-<a id="__codelineno-0-388" name="__codelineno-0-388"></a>            <span class="n">stdin</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
-<a id="__codelineno-0-389" name="__codelineno-0-389"></a>            <span class="n">stdout</span><span class="o">=</span><span class="n">stdout</span><span class="p">,</span>  <span class="c1"># pyright: ignore[reportArgumentType]</span>
-<a id="__codelineno-0-390" name="__codelineno-0-390"></a>            <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">STDOUT</span><span class="p">,</span>
-<a id="__codelineno-0-391" name="__codelineno-0-391"></a>            <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-392" name="__codelineno-0-392"></a>        <span class="p">)</span>
-<a id="__codelineno-0-393" name="__codelineno-0-393"></a>    <span class="k">finally</span><span class="p">:</span>
-<a id="__codelineno-0-394" name="__codelineno-0-394"></a>        <span class="k">if</span> <span class="n">log_handle</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-395" name="__codelineno-0-395"></a>            <span class="n">log_handle</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-<a id="__codelineno-0-396" name="__codelineno-0-396"></a>
-<a id="__codelineno-0-397" name="__codelineno-0-397"></a>    <span class="n">deadline</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">wait_timeout</span>
-<a id="__codelineno-0-398" name="__codelineno-0-398"></a>    <span class="n">resonite_pid</span> <span class="o">=</span> <span class="n">_wait_for_single</span><span class="p">(</span>
-<a id="__codelineno-0-399" name="__codelineno-0-399"></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">),</span> <span class="s2">&quot;engine&quot;</span><span class="p">,</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">poll_interval</span>
-<a id="__codelineno-0-400" name="__codelineno-0-400"></a>    <span class="p">)</span>
-<a id="__codelineno-0-401" name="__codelineno-0-401"></a>    <span class="n">renderer_pid</span> <span class="o">=</span> <span class="n">_wait_for_single</span><span class="p">(</span>
-<a id="__codelineno-0-402" name="__codelineno-0-402"></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">_find_renderer_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">),</span> <span class="s2">&quot;renderer&quot;</span><span class="p">,</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">poll_interval</span>
-<a id="__codelineno-0-403" name="__codelineno-0-403"></a>    <span class="p">)</span>
-<a id="__codelineno-0-404" name="__codelineno-0-404"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-405" name="__codelineno-0-405"></a>        <span class="s2">&quot;Resonite launched: resonite_pid=</span><span class="si">%d</span><span class="s2"> renderer_pid=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">resonite_pid</span><span class="p">,</span> <span class="n">renderer_pid</span>
-<a id="__codelineno-0-406" name="__codelineno-0-406"></a>    <span class="p">)</span>
-<a id="__codelineno-0-407" name="__codelineno-0-407"></a>    <span class="k">return</span> <span class="n">LaunchResult</span><span class="p">(</span><span class="n">resonite_pid</span><span class="o">=</span><span class="n">resonite_pid</span><span class="p">,</span> <span class="n">renderer_pid</span><span class="o">=</span><span class="n">renderer_pid</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-407">407</a></span>
+<span class="normal"><a href="#__codelineno-0-408">408</a></span>
+<span class="normal"><a href="#__codelineno-0-409">409</a></span>
+<span class="normal"><a href="#__codelineno-0-410">410</a></span>
+<span class="normal"><a href="#__codelineno-0-411">411</a></span>
+<span class="normal"><a href="#__codelineno-0-412">412</a></span>
+<span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span>
+<span class="normal"><a href="#__codelineno-0-418">418</a></span>
+<span class="normal"><a href="#__codelineno-0-419">419</a></span>
+<span class="normal"><a href="#__codelineno-0-420">420</a></span>
+<span class="normal"><a href="#__codelineno-0-421">421</a></span>
+<span class="normal"><a href="#__codelineno-0-422">422</a></span>
+<span class="normal"><a href="#__codelineno-0-423">423</a></span>
+<span class="normal"><a href="#__codelineno-0-424">424</a></span>
+<span class="normal"><a href="#__codelineno-0-425">425</a></span>
+<span class="normal"><a href="#__codelineno-0-426">426</a></span>
+<span class="normal"><a href="#__codelineno-0-427">427</a></span>
+<span class="normal"><a href="#__codelineno-0-428">428</a></span>
+<span class="normal"><a href="#__codelineno-0-429">429</a></span>
+<span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span>
+<span class="normal"><a href="#__codelineno-0-437">437</a></span>
+<span class="normal"><a href="#__codelineno-0-438">438</a></span>
+<span class="normal"><a href="#__codelineno-0-439">439</a></span>
+<span class="normal"><a href="#__codelineno-0-440">440</a></span>
+<span class="normal"><a href="#__codelineno-0-441">441</a></span>
+<span class="normal"><a href="#__codelineno-0-442">442</a></span>
+<span class="normal"><a href="#__codelineno-0-443">443</a></span>
+<span class="normal"><a href="#__codelineno-0-444">444</a></span>
+<span class="normal"><a href="#__codelineno-0-445">445</a></span>
+<span class="normal"><a href="#__codelineno-0-446">446</a></span>
+<span class="normal"><a href="#__codelineno-0-447">447</a></span>
+<span class="normal"><a href="#__codelineno-0-448">448</a></span>
+<span class="normal"><a href="#__codelineno-0-449">449</a></span>
+<span class="normal"><a href="#__codelineno-0-450">450</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-353" name="__codelineno-0-353"></a><span class="k">def</span><span class="w"> </span><span class="nf">launch</span><span class="p">(</span>
+<a id="__codelineno-0-354" name="__codelineno-0-354"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-355" name="__codelineno-0-355"></a>    <span class="n">resonite_exe</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-356" name="__codelineno-0-356"></a>    <span class="n">mod_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-357" name="__codelineno-0-357"></a>    <span class="n">vanilla</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-358" name="__codelineno-0-358"></a>    <span class="n">extra_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-359" name="__codelineno-0-359"></a>    <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-360" name="__codelineno-0-360"></a>    <span class="n">proton_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-361" name="__codelineno-0-361"></a>    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">60.0</span><span class="p">,</span>
+<a id="__codelineno-0-362" name="__codelineno-0-362"></a>    <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-0-363" name="__codelineno-0-363"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span><span class="p">:</span>
+<a id="__codelineno-0-364" name="__codelineno-0-364"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch Resonite (engine + renderer) via umu-launcher and return both</span>
+<a id="__codelineno-0-365" name="__codelineno-0-365"></a><span class="sd">    PIDs.</span>
+<a id="__codelineno-0-366" name="__codelineno-0-366"></a>
+<a id="__codelineno-0-367" name="__codelineno-0-367"></a><span class="sd">    Spawns the umu-run chain detached (the caller can exit without taking</span>
+<a id="__codelineno-0-368" name="__codelineno-0-368"></a><span class="sd">    Resonite down), then PID-diffs the engine and renderer processes into</span>
+<a id="__codelineno-0-369" name="__codelineno-0-369"></a><span class="sd">    existence and returns their host PIDs. Pure process control — no gRPC.</span>
+<a id="__codelineno-0-370" name="__codelineno-0-370"></a>
+<a id="__codelineno-0-371" name="__codelineno-0-371"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-372" name="__codelineno-0-372"></a><span class="sd">        resonite_exe: Path to ``Resonite.exe``. ``None`` resolves it from the</span>
+<a id="__codelineno-0-373" name="__codelineno-0-373"></a><span class="sd">            ``RESONITE_EXE`` env var, then the default Steam install path.</span>
+<a id="__codelineno-0-374" name="__codelineno-0-374"></a><span class="sd">        mod_path: Gale profile directory holding the ResoniteIO mod. ``None``</span>
+<a id="__codelineno-0-375" name="__codelineno-0-375"></a><span class="sd">            resolves it from ``MOD_PATH``; with neither set this raises (unless</span>
+<a id="__codelineno-0-376" name="__codelineno-0-376"></a><span class="sd">            ``vanilla``). The profile must already have the mod deployed.</span>
+<a id="__codelineno-0-377" name="__codelineno-0-377"></a><span class="sd">        vanilla: Launch without loading any mod (skips the mod-profile checks).</span>
+<a id="__codelineno-0-378" name="__codelineno-0-378"></a><span class="sd">        extra_args: Extra arguments forwarded to ``Resonite.exe``.</span>
+<a id="__codelineno-0-379" name="__codelineno-0-379"></a><span class="sd">        prefix: Wine prefix directory (``WINEPREFIX``). ``None`` lets umu use its</span>
+<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="sd">            default (``~/Games/umu/$GAMEID``).</span>
+<a id="__codelineno-0-381" name="__codelineno-0-381"></a><span class="sd">        proton_path: Proton build (``PROTONPATH``) — a compat-tools name like</span>
+<a id="__codelineno-0-382" name="__codelineno-0-382"></a><span class="sd">            ``GE-Proton`` or a path. ``None`` resolves it from ``PROTONPATH``,</span>
+<a id="__codelineno-0-383" name="__codelineno-0-383"></a><span class="sd">            then ``GE-Proton``.</span>
+<a id="__codelineno-0-384" name="__codelineno-0-384"></a><span class="sd">        wait_timeout: Seconds to wait for both processes to appear.</span>
+<a id="__codelineno-0-385" name="__codelineno-0-385"></a><span class="sd">        poll_interval: Seconds between process-table polls.</span>
+<a id="__codelineno-0-386" name="__codelineno-0-386"></a>
+<a id="__codelineno-0-387" name="__codelineno-0-387"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="sd">        The :class:`LaunchResult` with the engine and renderer host PIDs.</span>
+<a id="__codelineno-0-389" name="__codelineno-0-389"></a>
+<a id="__codelineno-0-390" name="__codelineno-0-390"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-391" name="__codelineno-0-391"></a><span class="sd">        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, an</span>
+<a id="__codelineno-0-392" name="__codelineno-0-392"></a><span class="sd">            instance is already running, more than one engine/renderer is</span>
+<a id="__codelineno-0-393" name="__codelineno-0-393"></a><span class="sd">            detected, or a process did not appear before ``wait_timeout``.</span>
+<a id="__codelineno-0-394" name="__codelineno-0-394"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-395" name="__codelineno-0-395"></a>    <span class="n">exe</span> <span class="o">=</span> <span class="n">_resolve_resonite_exe</span><span class="p">(</span><span class="n">resonite_exe</span><span class="p">)</span>
+<a id="__codelineno-0-396" name="__codelineno-0-396"></a>    <span class="n">install_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">exe</span><span class="p">))</span>
+<a id="__codelineno-0-397" name="__codelineno-0-397"></a>
+<a id="__codelineno-0-398" name="__codelineno-0-398"></a>    <span class="n">already</span> <span class="o">=</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
+<a id="__codelineno-0-399" name="__codelineno-0-399"></a>    <span class="k">if</span> <span class="n">already</span><span class="p">:</span>
+<a id="__codelineno-0-400" name="__codelineno-0-400"></a>        <span class="k">raise</span> <span class="n">LauncherError</span><span class="p">(</span>
+<a id="__codelineno-0-401" name="__codelineno-0-401"></a>            <span class="sa">f</span><span class="s2">&quot;Resonite is already running (engine pid(s) </span><span class="si">{</span><span class="n">already</span><span class="si">}</span><span class="s2">). Stop it first &quot;</span>
+<a id="__codelineno-0-402" name="__codelineno-0-402"></a>            <span class="s2">&quot;with `resoio terminate` before launching a new instance.&quot;</span>
+<a id="__codelineno-0-403" name="__codelineno-0-403"></a>        <span class="p">)</span>
+<a id="__codelineno-0-404" name="__codelineno-0-404"></a>
+<a id="__codelineno-0-405" name="__codelineno-0-405"></a>    <span class="n">argv</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">log_path</span> <span class="o">=</span> <span class="n">_build_command</span><span class="p">(</span>
+<a id="__codelineno-0-406" name="__codelineno-0-406"></a>        <span class="n">exe</span><span class="p">,</span>
+<a id="__codelineno-0-407" name="__codelineno-0-407"></a>        <span class="n">install_dir</span><span class="p">,</span>
+<a id="__codelineno-0-408" name="__codelineno-0-408"></a>        <span class="n">mod_path</span><span class="p">,</span>
+<a id="__codelineno-0-409" name="__codelineno-0-409"></a>        <span class="n">vanilla</span><span class="p">,</span>
+<a id="__codelineno-0-410" name="__codelineno-0-410"></a>        <span class="n">extra_args</span><span class="p">,</span>
+<a id="__codelineno-0-411" name="__codelineno-0-411"></a>        <span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">,</span>
+<a id="__codelineno-0-412" name="__codelineno-0-412"></a>        <span class="n">proton_path</span><span class="o">=</span><span class="n">proton_path</span><span class="p">,</span>
+<a id="__codelineno-0-413" name="__codelineno-0-413"></a>    <span class="p">)</span>
+<a id="__codelineno-0-414" name="__codelineno-0-414"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;launching Resonite: </span><span class="si">%s</span><span class="s2"> (cwd=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">argv</span><span class="p">),</span> <span class="n">install_dir</span><span class="p">)</span>
+<a id="__codelineno-0-415" name="__codelineno-0-415"></a>
+<a id="__codelineno-0-416" name="__codelineno-0-416"></a>    <span class="c1"># Detach fully: new session + closed stdio so the parent (CLI / caller) can</span>
+<a id="__codelineno-0-417" name="__codelineno-0-417"></a>    <span class="c1"># exit without signalling Resonite. PROTON_SET_GAME_DRIVE=0 (set in</span>
+<a id="__codelineno-0-418" name="__codelineno-0-418"></a>    <span class="c1"># _build_command) suppresses umu&#39;s game-drive mapping of $HOME onto a Wine</span>
+<a id="__codelineno-0-419" name="__codelineno-0-419"></a>    <span class="c1"># drive letter, so even a $HOME-resident install resolves the renderer&#39;s</span>
+<a id="__codelineno-0-420" name="__codelineno-0-420"></a>    <span class="c1"># absolute Unix paths (renderer exe / /dev/shm IPC) correctly.</span>
+<a id="__codelineno-0-421" name="__codelineno-0-421"></a>    <span class="n">stdout</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span>
+<a id="__codelineno-0-422" name="__codelineno-0-422"></a>    <span class="n">log_handle</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="k">if</span> <span class="n">log_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-424" name="__codelineno-0-424"></a>        <span class="n">log_handle</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_path</span><span class="p">,</span> <span class="s2">&quot;ab&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-425" name="__codelineno-0-425"></a>        <span class="n">stdout</span> <span class="o">=</span> <span class="n">log_handle</span>
+<a id="__codelineno-0-426" name="__codelineno-0-426"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-427" name="__codelineno-0-427"></a>        <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>  <span class="c1"># noqa: S603 - argv built from validated paths</span>
+<a id="__codelineno-0-428" name="__codelineno-0-428"></a>            <span class="n">argv</span><span class="p">,</span>
+<a id="__codelineno-0-429" name="__codelineno-0-429"></a>            <span class="n">cwd</span><span class="o">=</span><span class="n">install_dir</span><span class="p">,</span>
+<a id="__codelineno-0-430" name="__codelineno-0-430"></a>            <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+<a id="__codelineno-0-431" name="__codelineno-0-431"></a>            <span class="n">stdin</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+<a id="__codelineno-0-432" name="__codelineno-0-432"></a>            <span class="n">stdout</span><span class="o">=</span><span class="n">stdout</span><span class="p">,</span>  <span class="c1"># pyright: ignore[reportArgumentType]</span>
+<a id="__codelineno-0-433" name="__codelineno-0-433"></a>            <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">STDOUT</span><span class="p">,</span>
+<a id="__codelineno-0-434" name="__codelineno-0-434"></a>            <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="p">)</span>
+<a id="__codelineno-0-436" name="__codelineno-0-436"></a>    <span class="k">finally</span><span class="p">:</span>
+<a id="__codelineno-0-437" name="__codelineno-0-437"></a>        <span class="k">if</span> <span class="n">log_handle</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-438" name="__codelineno-0-438"></a>            <span class="n">log_handle</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<a id="__codelineno-0-439" name="__codelineno-0-439"></a>
+<a id="__codelineno-0-440" name="__codelineno-0-440"></a>    <span class="n">deadline</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">wait_timeout</span>
+<a id="__codelineno-0-441" name="__codelineno-0-441"></a>    <span class="n">resonite_pid</span> <span class="o">=</span> <span class="n">_wait_for_single</span><span class="p">(</span>
+<a id="__codelineno-0-442" name="__codelineno-0-442"></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">),</span> <span class="s2">&quot;engine&quot;</span><span class="p">,</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">poll_interval</span>
+<a id="__codelineno-0-443" name="__codelineno-0-443"></a>    <span class="p">)</span>
+<a id="__codelineno-0-444" name="__codelineno-0-444"></a>    <span class="n">renderer_pid</span> <span class="o">=</span> <span class="n">_wait_for_single</span><span class="p">(</span>
+<a id="__codelineno-0-445" name="__codelineno-0-445"></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">_find_renderer_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">),</span> <span class="s2">&quot;renderer&quot;</span><span class="p">,</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">poll_interval</span>
+<a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="p">)</span>
+<a id="__codelineno-0-447" name="__codelineno-0-447"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+<a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="s2">&quot;Resonite launched: resonite_pid=</span><span class="si">%d</span><span class="s2"> renderer_pid=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">resonite_pid</span><span class="p">,</span> <span class="n">renderer_pid</span>
+<a id="__codelineno-0-449" name="__codelineno-0-449"></a>    <span class="p">)</span>
+<a id="__codelineno-0-450" name="__codelineno-0-450"></a>    <span class="k">return</span> <span class="n">LaunchResult</span><span class="p">(</span><span class="n">resonite_pid</span><span class="o">=</span><span class="n">resonite_pid</span><span class="p">,</span> <span class="n">renderer_pid</span><span class="o">=</span><span class="n">renderer_pid</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -2067,105 +2142,105 @@ path, or a given PID is alive but is not the expected Resonite process.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/resoio/launcher.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-443">443</a></span>
-<span class="normal"><a href="#__codelineno-0-444">444</a></span>
-<span class="normal"><a href="#__codelineno-0-445">445</a></span>
-<span class="normal"><a href="#__codelineno-0-446">446</a></span>
-<span class="normal"><a href="#__codelineno-0-447">447</a></span>
-<span class="normal"><a href="#__codelineno-0-448">448</a></span>
-<span class="normal"><a href="#__codelineno-0-449">449</a></span>
-<span class="normal"><a href="#__codelineno-0-450">450</a></span>
-<span class="normal"><a href="#__codelineno-0-451">451</a></span>
-<span class="normal"><a href="#__codelineno-0-452">452</a></span>
-<span class="normal"><a href="#__codelineno-0-453">453</a></span>
-<span class="normal"><a href="#__codelineno-0-454">454</a></span>
-<span class="normal"><a href="#__codelineno-0-455">455</a></span>
-<span class="normal"><a href="#__codelineno-0-456">456</a></span>
-<span class="normal"><a href="#__codelineno-0-457">457</a></span>
-<span class="normal"><a href="#__codelineno-0-458">458</a></span>
-<span class="normal"><a href="#__codelineno-0-459">459</a></span>
-<span class="normal"><a href="#__codelineno-0-460">460</a></span>
-<span class="normal"><a href="#__codelineno-0-461">461</a></span>
-<span class="normal"><a href="#__codelineno-0-462">462</a></span>
-<span class="normal"><a href="#__codelineno-0-463">463</a></span>
-<span class="normal"><a href="#__codelineno-0-464">464</a></span>
-<span class="normal"><a href="#__codelineno-0-465">465</a></span>
-<span class="normal"><a href="#__codelineno-0-466">466</a></span>
-<span class="normal"><a href="#__codelineno-0-467">467</a></span>
-<span class="normal"><a href="#__codelineno-0-468">468</a></span>
-<span class="normal"><a href="#__codelineno-0-469">469</a></span>
-<span class="normal"><a href="#__codelineno-0-470">470</a></span>
-<span class="normal"><a href="#__codelineno-0-471">471</a></span>
-<span class="normal"><a href="#__codelineno-0-472">472</a></span>
-<span class="normal"><a href="#__codelineno-0-473">473</a></span>
-<span class="normal"><a href="#__codelineno-0-474">474</a></span>
-<span class="normal"><a href="#__codelineno-0-475">475</a></span>
-<span class="normal"><a href="#__codelineno-0-476">476</a></span>
-<span class="normal"><a href="#__codelineno-0-477">477</a></span>
-<span class="normal"><a href="#__codelineno-0-478">478</a></span>
-<span class="normal"><a href="#__codelineno-0-479">479</a></span>
-<span class="normal"><a href="#__codelineno-0-480">480</a></span>
-<span class="normal"><a href="#__codelineno-0-481">481</a></span>
-<span class="normal"><a href="#__codelineno-0-482">482</a></span>
-<span class="normal"><a href="#__codelineno-0-483">483</a></span>
-<span class="normal"><a href="#__codelineno-0-484">484</a></span>
-<span class="normal"><a href="#__codelineno-0-485">485</a></span>
-<span class="normal"><a href="#__codelineno-0-486">486</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-486">486</a></span>
 <span class="normal"><a href="#__codelineno-0-487">487</a></span>
 <span class="normal"><a href="#__codelineno-0-488">488</a></span>
 <span class="normal"><a href="#__codelineno-0-489">489</a></span>
 <span class="normal"><a href="#__codelineno-0-490">490</a></span>
 <span class="normal"><a href="#__codelineno-0-491">491</a></span>
-<span class="normal"><a href="#__codelineno-0-492">492</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-443" name="__codelineno-0-443"></a><span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span>
-<a id="__codelineno-0-444" name="__codelineno-0-444"></a>    <span class="n">resonite_pid</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-445" name="__codelineno-0-445"></a>    <span class="n">renderer_pid</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-447" name="__codelineno-0-447"></a>    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
-<a id="__codelineno-0-448" name="__codelineno-0-448"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span><span class="p">:</span>
-<a id="__codelineno-0-449" name="__codelineno-0-449"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop Resonite by signalling its engine and renderer processes.</span>
-<a id="__codelineno-0-450" name="__codelineno-0-450"></a>
-<a id="__codelineno-0-451" name="__codelineno-0-451"></a><span class="sd">    Each target is sent ``SIGTERM``, given ``timeout`` seconds to exit, then</span>
-<a id="__codelineno-0-452" name="__codelineno-0-452"></a><span class="sd">    ``SIGKILL`` if still alive. Idempotent: a PID that is already gone is</span>
-<a id="__codelineno-0-453" name="__codelineno-0-453"></a><span class="sd">    skipped. With **no** arguments, the single running instance is auto-detected</span>
-<a id="__codelineno-0-454" name="__codelineno-0-454"></a><span class="sd">    from the process table (``RESONITE_EXE``&#39;s install dir); detecting more than</span>
-<a id="__codelineno-0-455" name="__codelineno-0-455"></a><span class="sd">    one engine or renderer is an error (pass explicit PIDs to disambiguate).</span>
-<a id="__codelineno-0-456" name="__codelineno-0-456"></a>
-<a id="__codelineno-0-457" name="__codelineno-0-457"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-458" name="__codelineno-0-458"></a><span class="sd">        resonite_pid: Engine host PID to kill (e.g. ``LaunchResult.resonite_pid``).</span>
-<a id="__codelineno-0-459" name="__codelineno-0-459"></a><span class="sd">        renderer_pid: Renderer host PID to kill.</span>
-<a id="__codelineno-0-460" name="__codelineno-0-460"></a><span class="sd">        timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL``.</span>
-<a id="__codelineno-0-461" name="__codelineno-0-461"></a>
-<a id="__codelineno-0-462" name="__codelineno-0-462"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-463" name="__codelineno-0-463"></a><span class="sd">        The :class:`LaunchResult` of PIDs actually signalled (``0`` for a role</span>
-<a id="__codelineno-0-464" name="__codelineno-0-464"></a><span class="sd">        that was not running).</span>
-<a id="__codelineno-0-465" name="__codelineno-0-465"></a>
-<a id="__codelineno-0-466" name="__codelineno-0-466"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-467" name="__codelineno-0-467"></a><span class="sd">        LauncherError: more than one instance was detected in the no-argument</span>
-<a id="__codelineno-0-468" name="__codelineno-0-468"></a><span class="sd">            path, or a given PID is alive but is not the expected Resonite process.</span>
-<a id="__codelineno-0-469" name="__codelineno-0-469"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-470" name="__codelineno-0-470"></a>    <span class="k">if</span> <span class="n">resonite_pid</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">renderer_pid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-471" name="__codelineno-0-471"></a>        <span class="n">install_dir</span> <span class="o">=</span> <span class="n">_install_dir_for_detection</span><span class="p">()</span>
-<a id="__codelineno-0-472" name="__codelineno-0-472"></a>        <span class="n">engines</span> <span class="o">=</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
-<a id="__codelineno-0-473" name="__codelineno-0-473"></a>        <span class="n">renderers</span> <span class="o">=</span> <span class="n">_find_renderer_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
-<a id="__codelineno-0-474" name="__codelineno-0-474"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">engines</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">renderers</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-<a id="__codelineno-0-475" name="__codelineno-0-475"></a>            <span class="k">raise</span> <span class="n">LauncherError</span><span class="p">(</span>
-<a id="__codelineno-0-476" name="__codelineno-0-476"></a>                <span class="sa">f</span><span class="s2">&quot;multiple Resonite instances detected (engine=</span><span class="si">{</span><span class="n">engines</span><span class="si">}</span><span class="s2"> &quot;</span>
-<a id="__codelineno-0-477" name="__codelineno-0-477"></a>                <span class="sa">f</span><span class="s2">&quot;renderer=</span><span class="si">{</span><span class="n">renderers</span><span class="si">}</span><span class="s2">); pass explicit PIDs to choose which to stop.&quot;</span>
-<a id="__codelineno-0-478" name="__codelineno-0-478"></a>            <span class="p">)</span>
-<a id="__codelineno-0-479" name="__codelineno-0-479"></a>        <span class="n">resonite_pid</span> <span class="o">=</span> <span class="n">engines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">engines</span> <span class="k">else</span> <span class="kc">None</span>
-<a id="__codelineno-0-480" name="__codelineno-0-480"></a>        <span class="n">renderer_pid</span> <span class="o">=</span> <span class="n">renderers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">renderers</span> <span class="k">else</span> <span class="kc">None</span>
-<a id="__codelineno-0-481" name="__codelineno-0-481"></a>
-<a id="__codelineno-0-482" name="__codelineno-0-482"></a>    <span class="n">killed_engine</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-483" name="__codelineno-0-483"></a>        <span class="n">_kill_pid</span><span class="p">(</span><span class="n">resonite_pid</span><span class="p">,</span> <span class="n">_ENGINE_ARGV0_SUFFIX</span><span class="p">,</span> <span class="s2">&quot;engine&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
-<a id="__codelineno-0-484" name="__codelineno-0-484"></a>        <span class="k">if</span> <span class="n">resonite_pid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<a id="__codelineno-0-485" name="__codelineno-0-485"></a>        <span class="k">else</span> <span class="mi">0</span>
-<a id="__codelineno-0-486" name="__codelineno-0-486"></a>    <span class="p">)</span>
-<a id="__codelineno-0-487" name="__codelineno-0-487"></a>    <span class="n">killed_renderer</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="n">_kill_pid</span><span class="p">(</span><span class="n">renderer_pid</span><span class="p">,</span> <span class="n">_RENDERER_ARGV0_SUFFIX</span><span class="p">,</span> <span class="s2">&quot;renderer&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
-<a id="__codelineno-0-489" name="__codelineno-0-489"></a>        <span class="k">if</span> <span class="n">renderer_pid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<a id="__codelineno-0-490" name="__codelineno-0-490"></a>        <span class="k">else</span> <span class="mi">0</span>
-<a id="__codelineno-0-491" name="__codelineno-0-491"></a>    <span class="p">)</span>
-<a id="__codelineno-0-492" name="__codelineno-0-492"></a>    <span class="k">return</span> <span class="n">LaunchResult</span><span class="p">(</span><span class="n">resonite_pid</span><span class="o">=</span><span class="n">killed_engine</span><span class="p">,</span> <span class="n">renderer_pid</span><span class="o">=</span><span class="n">killed_renderer</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span>
+<span class="normal"><a href="#__codelineno-0-497">497</a></span>
+<span class="normal"><a href="#__codelineno-0-498">498</a></span>
+<span class="normal"><a href="#__codelineno-0-499">499</a></span>
+<span class="normal"><a href="#__codelineno-0-500">500</a></span>
+<span class="normal"><a href="#__codelineno-0-501">501</a></span>
+<span class="normal"><a href="#__codelineno-0-502">502</a></span>
+<span class="normal"><a href="#__codelineno-0-503">503</a></span>
+<span class="normal"><a href="#__codelineno-0-504">504</a></span>
+<span class="normal"><a href="#__codelineno-0-505">505</a></span>
+<span class="normal"><a href="#__codelineno-0-506">506</a></span>
+<span class="normal"><a href="#__codelineno-0-507">507</a></span>
+<span class="normal"><a href="#__codelineno-0-508">508</a></span>
+<span class="normal"><a href="#__codelineno-0-509">509</a></span>
+<span class="normal"><a href="#__codelineno-0-510">510</a></span>
+<span class="normal"><a href="#__codelineno-0-511">511</a></span>
+<span class="normal"><a href="#__codelineno-0-512">512</a></span>
+<span class="normal"><a href="#__codelineno-0-513">513</a></span>
+<span class="normal"><a href="#__codelineno-0-514">514</a></span>
+<span class="normal"><a href="#__codelineno-0-515">515</a></span>
+<span class="normal"><a href="#__codelineno-0-516">516</a></span>
+<span class="normal"><a href="#__codelineno-0-517">517</a></span>
+<span class="normal"><a href="#__codelineno-0-518">518</a></span>
+<span class="normal"><a href="#__codelineno-0-519">519</a></span>
+<span class="normal"><a href="#__codelineno-0-520">520</a></span>
+<span class="normal"><a href="#__codelineno-0-521">521</a></span>
+<span class="normal"><a href="#__codelineno-0-522">522</a></span>
+<span class="normal"><a href="#__codelineno-0-523">523</a></span>
+<span class="normal"><a href="#__codelineno-0-524">524</a></span>
+<span class="normal"><a href="#__codelineno-0-525">525</a></span>
+<span class="normal"><a href="#__codelineno-0-526">526</a></span>
+<span class="normal"><a href="#__codelineno-0-527">527</a></span>
+<span class="normal"><a href="#__codelineno-0-528">528</a></span>
+<span class="normal"><a href="#__codelineno-0-529">529</a></span>
+<span class="normal"><a href="#__codelineno-0-530">530</a></span>
+<span class="normal"><a href="#__codelineno-0-531">531</a></span>
+<span class="normal"><a href="#__codelineno-0-532">532</a></span>
+<span class="normal"><a href="#__codelineno-0-533">533</a></span>
+<span class="normal"><a href="#__codelineno-0-534">534</a></span>
+<span class="normal"><a href="#__codelineno-0-535">535</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-486" name="__codelineno-0-486"></a><span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a>    <span class="n">resonite_pid</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a>    <span class="n">renderer_pid</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a>    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
+<a id="__codelineno-0-491" name="__codelineno-0-491"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LaunchResult</span><span class="p">:</span>
+<a id="__codelineno-0-492" name="__codelineno-0-492"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop Resonite by signalling its engine and renderer processes.</span>
+<a id="__codelineno-0-493" name="__codelineno-0-493"></a>
+<a id="__codelineno-0-494" name="__codelineno-0-494"></a><span class="sd">    Each target is sent ``SIGTERM``, given ``timeout`` seconds to exit, then</span>
+<a id="__codelineno-0-495" name="__codelineno-0-495"></a><span class="sd">    ``SIGKILL`` if still alive. Idempotent: a PID that is already gone is</span>
+<a id="__codelineno-0-496" name="__codelineno-0-496"></a><span class="sd">    skipped. With **no** arguments, the single running instance is auto-detected</span>
+<a id="__codelineno-0-497" name="__codelineno-0-497"></a><span class="sd">    from the process table (``RESONITE_EXE``&#39;s install dir); detecting more than</span>
+<a id="__codelineno-0-498" name="__codelineno-0-498"></a><span class="sd">    one engine or renderer is an error (pass explicit PIDs to disambiguate).</span>
+<a id="__codelineno-0-499" name="__codelineno-0-499"></a>
+<a id="__codelineno-0-500" name="__codelineno-0-500"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-501" name="__codelineno-0-501"></a><span class="sd">        resonite_pid: Engine host PID to kill (e.g. ``LaunchResult.resonite_pid``).</span>
+<a id="__codelineno-0-502" name="__codelineno-0-502"></a><span class="sd">        renderer_pid: Renderer host PID to kill.</span>
+<a id="__codelineno-0-503" name="__codelineno-0-503"></a><span class="sd">        timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL``.</span>
+<a id="__codelineno-0-504" name="__codelineno-0-504"></a>
+<a id="__codelineno-0-505" name="__codelineno-0-505"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-506" name="__codelineno-0-506"></a><span class="sd">        The :class:`LaunchResult` of PIDs actually signalled (``0`` for a role</span>
+<a id="__codelineno-0-507" name="__codelineno-0-507"></a><span class="sd">        that was not running).</span>
+<a id="__codelineno-0-508" name="__codelineno-0-508"></a>
+<a id="__codelineno-0-509" name="__codelineno-0-509"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-510" name="__codelineno-0-510"></a><span class="sd">        LauncherError: more than one instance was detected in the no-argument</span>
+<a id="__codelineno-0-511" name="__codelineno-0-511"></a><span class="sd">            path, or a given PID is alive but is not the expected Resonite process.</span>
+<a id="__codelineno-0-512" name="__codelineno-0-512"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-513" name="__codelineno-0-513"></a>    <span class="k">if</span> <span class="n">resonite_pid</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">renderer_pid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-514" name="__codelineno-0-514"></a>        <span class="n">install_dir</span> <span class="o">=</span> <span class="n">_install_dir_for_detection</span><span class="p">()</span>
+<a id="__codelineno-0-515" name="__codelineno-0-515"></a>        <span class="n">engines</span> <span class="o">=</span> <span class="n">_find_engine_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
+<a id="__codelineno-0-516" name="__codelineno-0-516"></a>        <span class="n">renderers</span> <span class="o">=</span> <span class="n">_find_renderer_pids</span><span class="p">(</span><span class="n">install_dir</span><span class="p">)</span>
+<a id="__codelineno-0-517" name="__codelineno-0-517"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">engines</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">renderers</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+<a id="__codelineno-0-518" name="__codelineno-0-518"></a>            <span class="k">raise</span> <span class="n">LauncherError</span><span class="p">(</span>
+<a id="__codelineno-0-519" name="__codelineno-0-519"></a>                <span class="sa">f</span><span class="s2">&quot;multiple Resonite instances detected (engine=</span><span class="si">{</span><span class="n">engines</span><span class="si">}</span><span class="s2"> &quot;</span>
+<a id="__codelineno-0-520" name="__codelineno-0-520"></a>                <span class="sa">f</span><span class="s2">&quot;renderer=</span><span class="si">{</span><span class="n">renderers</span><span class="si">}</span><span class="s2">); pass explicit PIDs to choose which to stop.&quot;</span>
+<a id="__codelineno-0-521" name="__codelineno-0-521"></a>            <span class="p">)</span>
+<a id="__codelineno-0-522" name="__codelineno-0-522"></a>        <span class="n">resonite_pid</span> <span class="o">=</span> <span class="n">engines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">engines</span> <span class="k">else</span> <span class="kc">None</span>
+<a id="__codelineno-0-523" name="__codelineno-0-523"></a>        <span class="n">renderer_pid</span> <span class="o">=</span> <span class="n">renderers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">renderers</span> <span class="k">else</span> <span class="kc">None</span>
+<a id="__codelineno-0-524" name="__codelineno-0-524"></a>
+<a id="__codelineno-0-525" name="__codelineno-0-525"></a>    <span class="n">killed_engine</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-526" name="__codelineno-0-526"></a>        <span class="n">_kill_pid</span><span class="p">(</span><span class="n">resonite_pid</span><span class="p">,</span> <span class="n">_ENGINE_ARGV0_SUFFIX</span><span class="p">,</span> <span class="s2">&quot;engine&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+<a id="__codelineno-0-527" name="__codelineno-0-527"></a>        <span class="k">if</span> <span class="n">resonite_pid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<a id="__codelineno-0-528" name="__codelineno-0-528"></a>        <span class="k">else</span> <span class="mi">0</span>
+<a id="__codelineno-0-529" name="__codelineno-0-529"></a>    <span class="p">)</span>
+<a id="__codelineno-0-530" name="__codelineno-0-530"></a>    <span class="n">killed_renderer</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-531" name="__codelineno-0-531"></a>        <span class="n">_kill_pid</span><span class="p">(</span><span class="n">renderer_pid</span><span class="p">,</span> <span class="n">_RENDERER_ARGV0_SUFFIX</span><span class="p">,</span> <span class="s2">&quot;renderer&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+<a id="__codelineno-0-532" name="__codelineno-0-532"></a>        <span class="k">if</span> <span class="n">renderer_pid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<a id="__codelineno-0-533" name="__codelineno-0-533"></a>        <span class="k">else</span> <span class="mi">0</span>
+<a id="__codelineno-0-534" name="__codelineno-0-534"></a>    <span class="p">)</span>
+<a id="__codelineno-0-535" name="__codelineno-0-535"></a>    <span class="k">return</span> <span class="n">LaunchResult</span><span class="p">(</span><span class="n">resonite_pid</span><span class="o">=</span><span class="n">killed_engine</span><span class="p">,</span> <span class="n">renderer_pid</span><span class="o">=</span><span class="n">killed_renderer</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

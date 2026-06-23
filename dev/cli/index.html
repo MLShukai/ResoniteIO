@@ -1608,7 +1608,7 @@
 <td><code>resoio launch</code></td>
 <td>— (umu-launcher)</td>
 <td>local process</td>
-<td>Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. <code>-e/--exe</code> / <code>RESONITE_EXE</code> and <code>-p/--profile</code> / <code>MOD_PATH</code> select the install + mod profile; <code>--vanilla</code> skips the mod. Non-gRPC.</td>
+<td>Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. <code>-e/--exe</code> / <code>RESONITE_EXE</code> and <code>-p/--profile</code> / <code>MOD_PATH</code> select the install + mod profile; <code>--vanilla</code> skips the mod. <code>--prefix</code> (<code>WINEPREFIX</code>) and <code>--proton-path</code> (<code>PROTONPATH</code>, default <code>GE-Proton</code>) pick the Wine prefix and Proton build. Non-gRPC.</td>
 </tr>
 <tr>
 <td><code>resoio terminate</code></td>
@@ -1757,12 +1757,15 @@ accept <code>--format</code> (<code>grabber interactive --format json</code> exi
 <a id="__codelineno-2-50" name="__codelineno-2-50" href="#__codelineno-2-50"></a><span class="c1"># Start Resonite (engine + renderer) and capture both PIDs</span>
 <a id="__codelineno-2-51" name="__codelineno-2-51" href="#__codelineno-2-51"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--format<span class="w"> </span>json<span class="w">     </span><span class="c1"># {&quot;resonite_pid&quot;: ..., &quot;renderer_pid&quot;: ...}</span>
 <a id="__codelineno-2-52" name="__codelineno-2-52" href="#__codelineno-2-52"></a>
-<a id="__codelineno-2-53" name="__codelineno-2-53" href="#__codelineno-2-53"></a><span class="c1"># Stop it — by the PIDs from launch, or auto-detect the running instance</span>
-<a id="__codelineno-2-54" name="__codelineno-2-54" href="#__codelineno-2-54"></a>resoio<span class="w"> </span>terminate<span class="w"> </span><span class="m">12345</span><span class="w"> </span><span class="m">12399</span>
-<a id="__codelineno-2-55" name="__codelineno-2-55" href="#__codelineno-2-55"></a>resoio<span class="w"> </span>terminate
-<a id="__codelineno-2-56" name="__codelineno-2-56" href="#__codelineno-2-56"></a>
-<a id="__codelineno-2-57" name="__codelineno-2-57" href="#__codelineno-2-57"></a><span class="c1"># ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)</span>
-<a id="__codelineno-2-58" name="__codelineno-2-58" href="#__codelineno-2-58"></a>resoio<span class="w"> </span>shutdown
+<a id="__codelineno-2-53" name="__codelineno-2-53" href="#__codelineno-2-53"></a><span class="c1"># Pick a specific Wine prefix and Proton build</span>
+<a id="__codelineno-2-54" name="__codelineno-2-54" href="#__codelineno-2-54"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--prefix<span class="w"> </span>~/prefixes/resonite<span class="w"> </span>--proton-path<span class="w"> </span>GE-Proton
+<a id="__codelineno-2-55" name="__codelineno-2-55" href="#__codelineno-2-55"></a>
+<a id="__codelineno-2-56" name="__codelineno-2-56" href="#__codelineno-2-56"></a><span class="c1"># Stop it — by the PIDs from launch, or auto-detect the running instance</span>
+<a id="__codelineno-2-57" name="__codelineno-2-57" href="#__codelineno-2-57"></a>resoio<span class="w"> </span>terminate<span class="w"> </span><span class="m">12345</span><span class="w"> </span><span class="m">12399</span>
+<a id="__codelineno-2-58" name="__codelineno-2-58" href="#__codelineno-2-58"></a>resoio<span class="w"> </span>terminate
+<a id="__codelineno-2-59" name="__codelineno-2-59" href="#__codelineno-2-59"></a>
+<a id="__codelineno-2-60" name="__codelineno-2-60" href="#__codelineno-2-60"></a><span class="c1"># ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)</span>
+<a id="__codelineno-2-61" name="__codelineno-2-61" href="#__codelineno-2-61"></a>resoio<span class="w"> </span>shutdown
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>
