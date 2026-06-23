@@ -1,8 +1,8 @@
 # resonite-io
 
 Python client for [ResoniteIO](https://github.com/MLShukai/ResoniteIO) — a bidirectional IPC
-bridge that turns [Resonite](https://resonite.com/) into a runtime environment for AI agents.
-The `resonite-io` distribution imports as `resoio` and wraps the `resonite_io.v1` gRPC schema
+bridge that lets your Python code observe and control [Resonite](https://resonite.com/). The
+`resonite-io` distribution imports as `resoio` and wraps the `resonite_io.v1` gRPC schema
 (Unix Domain Socket transport, async via `grpclib`) into a friendly, fully typed client
 library and a `resoio` CLI.
 
@@ -20,6 +20,11 @@ no plans to support it.
 
 A Resonite client running the **ResoniteIO mod** on the same host (the two halves connect
 over a Unix Domain Socket). See the documentation for installing the mod.
+
+The optional `resoio launch` / `resoio terminate` commands start and stop Resonite as host
+processes; they require [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)
+(`umu-run`) on your `PATH`. Connecting to a Resonite you start yourself (e.g. via Steam) does
+not need it.
 
 ## Quick start
 

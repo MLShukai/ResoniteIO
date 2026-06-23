@@ -7,6 +7,16 @@ GitHub Release body. The format follows
 
 ## [Unreleased]
 
+### 🔧 Changed
+
+- **Documentation**: Reworded the `resonite-io` (Python) and ResoniteIO (mod) READMEs and the
+  Thunderstore package description to drop the "runtime / execution environment for AI agents"
+  framing, describing ResoniteIO neutrally as a bidirectional IPC bridge that lets your Python
+  code observe and control Resonite (matching the repository README and the docs site).
+- **Documentation**: Documented that the optional `resoio launch` / `resoio terminate`
+  commands require [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)
+  (`umu-run`) on `PATH`, in the installation guide and the `resonite-io` README.
+
 ## [0.6.0] - 2026-06-22
 
 ### ✨ Added
