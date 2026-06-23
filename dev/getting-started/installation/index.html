@@ -1603,6 +1603,15 @@ launch option is mandatory. Prefer to build the mod yourself? See
 <p>The distribution is named <code>resonite-io</code> on PyPI but imports as <code>resoio</code>
 (<code>import resoio</code>). It requires Python ≥ 3.12, is <code>pyright</code>-strict, and ships type
 information (PEP 561).</p>
+<div class="admonition note">
+<p class="admonition-title">Optional: <code>resoio launch</code> needs umu-launcher</p>
+<p>The <code>resoio launch</code> / <code>resoio terminate</code> commands start and stop the Resonite client as
+host processes, instead of launching it yourself through Steam. They invoke
+<a href="https://github.com/Open-Wine-Components/umu-launcher">umu-launcher</a>'s <code>umu-run</code>, so it
+must be on your <code>PATH</code> — install it from your distribution's packages or the upstream
+release (the dev container already ships it). The rest of the client — connecting to a
+Resonite you start via Steam — does not need it.</p>
+</div>
 <h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
 <p>Building from source is the path for contributing to ResoniteIO or running an unreleased
 version. The full development environment — .NET 10, <code>uv</code>,
@@ -1612,8 +1621,13 @@ version. The full development environment — .NET 10, <code>uv</code>,
 <h3 id="c-mod">C# mod<a class="headerlink" href="#c-mod" title="Permanent link">&para;</a></h3>
 <p>From inside the dev container:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>just<span class="w"> </span>build<span class="w">        </span><span class="c1"># dotnet build -c Release</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># copy DLL + PDB into the Gale profile (gale/BepInEx/plugins/ResoniteIO/)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>just<span class="w"> </span>deploy-mod<span class="w">   </span><span class="c1"># pack the Thunderstore zip and unpack it into the Gale profile</span>
 </code></pre></div>
+<p><code>deploy-mod</code> builds the Thunderstore package (<code>just mod-pack</code>) and unpacks it into
+<code>gale/</code> exactly the way Gale's installer lays it out, so the local mod matches what
+users install — the engine plugin lands at
+<code>gale/BepInEx/plugins/ResoniteIO/ResoniteIO/</code> and the renderer plugin at
+<code>gale/Renderer/BepInEx/plugins/ResoniteIO/ResoniteIO.Renderer/</code>.</p>
 <p>The mod requires a Gale profile with BepisLoader and the supporting plugins, plus the Steam
 launch option <code>WINEDLLOVERRIDES="winhttp=n,b" %command%</code>. The README documents the exact
 plugin list and why the launch option is mandatory.</p>
