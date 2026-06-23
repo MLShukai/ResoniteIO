@@ -9,17 +9,9 @@ GitHub Release body. The format follows
 
 ### ✨ Added
 
-- **`resoio launch` runs multiple instances**: `launch` no longer refuses to start
-  when Resonite is already running. Each call spawns another client and returns
-  only the engine / renderer pair it started (identified by diffing the process
-  table before and after the launch), so you can run several instances side by
-  side.
 - **`resoio launch --prefix` / `--proton-path`**: choose the Wine prefix
   (`WINEPREFIX`) and the Proton build (`PROTONPATH`) per launch. `--proton-path`
-  takes a compatibility-tools name like `GE-Proton` (the default) or a path; give
-  each concurrent instance its own `--prefix`.
-- **`resoio terminate --all`**: stop every running Resonite instance in one call
-  (cannot be combined with explicit PIDs).
+  takes a compatibility-tools name like `GE-Proton` (the default) or a path.
 
 ### 🐛 Fixed
 

@@ -48,7 +48,6 @@ __all__ = [
     "LauncherError",
     "launch",
     "terminate",
-    "terminate_all",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -76,9 +75,9 @@ class LauncherError(RuntimeError):
     """A ``resoio launch`` / ``terminate`` operation could not be completed.
 
     Raised for actionable conditions: Resonite.exe / the mod not found, no
-    ``umu-run`` on PATH, more than one new engine / renderer appearing from a
-    single launch, more than one instance detected where exactly one is expected,
-    or the engine / renderer not appearing before the timeout.
+    ``umu-run`` on PATH, an instance already running, more than one instance
+    detected (the single-instance assumption is violated), or the engine /
+    renderer not appearing before the timeout.
     """
 
 
@@ -325,27 +324,23 @@ def _build_command(
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_new(
-    finder: Callable[[], list[int]],
-    before: set[int],
-    label: str,
-    deadline: float,
-    poll_interval: float,
+def _wait_for_single(
+    finder: Callable[[], list[int]], label: str, deadline: float, poll_interval: float
 ) -> int:
-    """Poll until a PID not in ``before`` appears; return it.
+    """Poll ``finder`` until it returns exactly one PID; return it.
 
-    before の集合差分で本 launch が spawn した個体を特定するので、他インスタンスが
-    既に動いていても機能する。新規が複数 = 想定外の並行 launch でエラー。
+    Raises :class:`LauncherError` if more than one is ever seen (the
+    single-instance assumption is violated) or if none appears by ``deadline``.
     """
     while True:
-        new = [pid for pid in finder() if pid not in before]
-        if len(new) > 1:
+        pids = finder()
+        if len(pids) > 1:
             raise LauncherError(
-                f"multiple new {label} processes appeared ({new}); "
-                "expected exactly one from this launch."
+                f"multiple {label} processes detected ({pids}); expected exactly "
+                "one. Stop the extra Resonite instances and retry."
             )
-        if len(new) == 1:
-            return new[0]
+        if len(pids) == 1:
+            return pids[0]
         if time.monotonic() >= deadline:
             raise LauncherError(
                 f"timed out waiting for the Resonite {label} process to appear. "
@@ -393,12 +388,19 @@ def launch(
         The :class:`LaunchResult` with the engine and renderer host PIDs.
 
     Raises:
-        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, more than
-            one new engine/renderer appears from this launch, or a process did
-            not appear before ``wait_timeout``.
+        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, an
+            instance is already running, more than one engine/renderer is
+            detected, or a process did not appear before ``wait_timeout``.
     """
     exe = _resolve_resonite_exe(resonite_exe)
     install_dir = os.path.dirname(os.path.realpath(exe))
+
+    already = _find_engine_pids(install_dir)
+    if already:
+        raise LauncherError(
+            f"Resonite is already running (engine pid(s) {already}). Stop it first "
+            "with `resoio terminate` before launching a new instance."
+        )
 
     argv, env, log_path = _build_command(
         exe,
@@ -410,12 +412,6 @@ def launch(
         proton_path=proton_path,
     )
     _logger.info("launching Resonite: %s (cwd=%s)", " ".join(argv), install_dir)
-
-    # Snapshot the existing engine/renderer PIDs so we can identify the ones this
-    # launch spawns by set difference (the argv0-based finders cannot tell two
-    # instances of the same install apart).
-    before_engines = set(_find_engine_pids(install_dir))
-    before_renderers = set(_find_renderer_pids(install_dir))
 
     # Detach fully: new session + closed stdio so the parent (CLI / caller) can
     # exit without signalling Resonite. PROTON_SET_GAME_DRIVE=0 (set in
@@ -442,19 +438,11 @@ def launch(
             log_handle.close()
 
     deadline = time.monotonic() + wait_timeout
-    resonite_pid = _wait_for_new(
-        lambda: _find_engine_pids(install_dir),
-        before_engines,
-        "engine",
-        deadline,
-        poll_interval,
+    resonite_pid = _wait_for_single(
+        lambda: _find_engine_pids(install_dir), "engine", deadline, poll_interval
     )
-    renderer_pid = _wait_for_new(
-        lambda: _find_renderer_pids(install_dir),
-        before_renderers,
-        "renderer",
-        deadline,
-        poll_interval,
+    renderer_pid = _wait_for_single(
+        lambda: _find_renderer_pids(install_dir), "renderer", deadline, poll_interval
     )
     _logger.info(
         "Resonite launched: resonite_pid=%d renderer_pid=%d", resonite_pid, renderer_pid
@@ -545,35 +533,3 @@ def terminate(
         else 0
     )
     return LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
-
-
-def terminate_all(*, timeout: float = 3.0) -> list[int]:
-    """Stop every running Resonite instance and return the PIDs signalled.
-
-    Detects all engine and renderer processes for the configured install
-    (``RESONITE_EXE``'s install dir) and stages ``SIGTERM`` → ``SIGKILL`` on each,
-    unlike :func:`terminate` which targets a single instance. Idempotent: a PID
-    that is already gone is skipped (and excluded from the result).
-
-    Args:
-        timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL`` (per PID).
-
-    Returns:
-        The host PIDs actually signalled (engine and renderer), in detection
-        order; an empty list means nothing was running.
-
-    Raises:
-        LauncherError: a detected PID is alive but is not the expected Resonite
-            process (a reused PID).
-    """
-    install_dir = _install_dir_for_detection()
-    killed: list[int] = []
-    for pid in _find_engine_pids(install_dir):
-        result = _kill_pid(pid, _ENGINE_ARGV0_SUFFIX, "engine", timeout)
-        if result:
-            killed.append(result)
-    for pid in _find_renderer_pids(install_dir):
-        result = _kill_pid(pid, _RENDERER_ARGV0_SUFFIX, "renderer", timeout)
-        if result:
-            killed.append(result)
-    return killed

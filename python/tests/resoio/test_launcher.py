@@ -13,7 +13,6 @@ command construction, the already-running guard, and the kill/detection logic.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import shutil
 import subprocess
@@ -33,10 +32,8 @@ from resoio.launcher import (
     _find_renderer_pids,
     _resolve_mod_path,
     _resolve_resonite_exe,
-    _wait_for_new,
     launch,
     terminate,
-    terminate_all,
 )
 
 _SLEEP = shutil.which("sleep") or "/bin/sleep"
@@ -572,165 +569,11 @@ def test_terminate_no_args_errors_on_multiple_instances(
         terminate()
 
 
-# ---------------------------------------------------------------------------
-# Multi-instance: _wait_for_new (PID set-difference) + terminate_all
-# ---------------------------------------------------------------------------
-#
-# launch() no longer refuses when an instance is already running (multi-instance
-# support): it identifies the engine/renderer it spawned by the set difference
-# against a `before` snapshot, so an existing instance is ignored rather than an
-# error. _wait_for_new encodes that contract.
-
-
-def test_wait_for_new_returns_pid_absent_from_before(
-    tmp_path: Path, spawn: Callable[..., int]
-):
-    # An engine PID already present in `before` is ignored; only the PID spawned
-    # afterwards (the one this launch created) is returned.
-    install = _make_install(tmp_path)
-    existing = spawn(install / "dotnet-runtime" / "dotnet", "60")
-    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
-    before = {existing}
-
-    fresh = spawn(install / "dotnet-runtime" / "dotnet", "60")
-    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
-
-    deadline = time.monotonic() + 5.0
-    new_pid = _wait_for_new(
-        lambda: _find_engine_pids(str(install)),
-        before,
-        "engine",
-        deadline,
-        0.02,
-    )
-
-    assert new_pid == fresh
-
-
-def test_wait_for_new_raises_when_multiple_new_appear(
-    tmp_path: Path, spawn: Callable[..., int]
-):
-    # Two engines not in `before` means an unexpected concurrent launch; the
-    # set-difference can no longer pick a single owner, so it errors.
+def test_launch_refuses_when_already_running(tmp_path: Path, spawn: Callable[..., int]):
     install = _make_install(tmp_path)
     spawn(install / "dotnet-runtime" / "dotnet", "60")
-    spawn(install / "dotnet-runtime" / "dotnet", "60")
-    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
-
-    deadline = time.monotonic() + 5.0
-    with pytest.raises(LauncherError, match="multiple new"):
-        _wait_for_new(
-            lambda: _find_engine_pids(str(install)),
-            set(),
-            "engine",
-            deadline,
-            0.02,
-        )
-
-
-def test_wait_for_new_times_out_when_no_new_appears(tmp_path: Path):
-    # No new engine ever appears; once the deadline passes the wait gives up with
-    # a timeout error rather than blocking forever.
-    install = _make_install(tmp_path)
-    deadline = time.monotonic() - 1.0  # already expired
-
-    with pytest.raises(LauncherError, match="timed out"):
-        _wait_for_new(
-            lambda: _find_engine_pids(str(install)),
-            set(),
-            "engine",
-            deadline,
-            0.02,
-        )
-
-
-def test_launch_starts_additional_instance_without_already_running_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
-):
-    # End-to-end multi-instance contract: with one instance already running,
-    # launch() must NOT raise "already running" and must return the PIDs of the
-    # *new* engine/renderer (the ones absent from the before-snapshot). We stand
-    # in for umu-run with a script that spawns fresh engine+renderer sleep copies
-    # at the install-relative argv0 paths the finders key off, so the real
-    # set-difference / wait path runs without a live Resonite.
-    install = _make_install(tmp_path)
-    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
-
-    existing_engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
-    existing_renderer = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
     _wait_pids(lambda: _find_engine_pids(str(install)), 1)
-    _wait_pids(lambda: _find_renderer_pids(str(install)), 1)
 
-    # Fake umu-run: detach two more long-lived copies at the engine/renderer
-    # argv0 paths, then exit. start_new_session means they outlive this script,
-    # so launch()'s PID-diff sees them as the new pair.
-    engine_path = install / "dotnet-runtime" / "dotnet"
-    renderer_path = install / "Renderer" / "Renderite.Renderer.exe"
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    umu = bindir / "umu-run"
-    umu.write_text(
-        "#!/bin/sh\n"
-        f"setsid '{engine_path}' 60 </dev/null >/dev/null 2>&1 &\n"
-        f"setsid '{renderer_path}' 60 </dev/null >/dev/null 2>&1 &\n"
-        "exit 0\n"
-    )
-    umu.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
-
-    try:
-        result = launch(
-            resonite_exe=str(install / "Resonite.exe"),
-            vanilla=True,
-            wait_timeout=10.0,
-            poll_interval=0.05,
-        )
-
-        # The returned pair are the freshly spawned instances, not the ones that
-        # were already running.
-        assert result.resonite_pid != existing_engine
-        assert result.renderer_pid != existing_renderer
-        assert result.resonite_pid in _find_engine_pids(str(install))
-        assert result.renderer_pid in _find_renderer_pids(str(install))
-    finally:
-        # Reap the detached fakes launch() spawned (the `spawn` fixture only
-        # tracks the two it created directly).
-        for pid in (
-            set(_find_engine_pids(str(install)))
-            | set(_find_renderer_pids(str(install)))
-        ) - {existing_engine, existing_renderer}:
-            with contextlib.suppress(psutil.NoSuchProcess):
-                psutil.Process(pid).kill()
-
-
-def test_terminate_all_kills_every_running_instance(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
-):
-    # terminate_all stops every running engine/renderer (not just a single
-    # instance) and returns the PIDs it signalled. We spawn two engines and two
-    # renderers and assert all four are killed and reported.
-    install = _make_install(tmp_path)
-    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
-    engine_a = spawn(install / "dotnet-runtime" / "dotnet", "60")
-    engine_b = spawn(install / "dotnet-runtime" / "dotnet", "60")
-    renderer_a = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
-    renderer_b = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
-    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
-    _wait_pids(lambda: _find_renderer_pids(str(install)), 2)
-
-    killed = terminate_all(timeout=3.0)
-
-    assert set(killed) == {engine_a, engine_b, renderer_a, renderer_b}
-    assert _wait_pids(lambda: _find_engine_pids(str(install)), 0) == []
-    assert _wait_pids(lambda: _find_renderer_pids(str(install)), 0) == []
-
-
-def test_terminate_all_returns_empty_when_nothing_running(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    # With no instance running, terminate_all is a no-op that reports an empty
-    # list rather than erroring.
-    install = _make_install(tmp_path)
-    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
-
-    assert terminate_all(timeout=3.0) == []
+    # The already-running guard fires before umu/mod resolution, so vanilla is fine.
+    with pytest.raises(LauncherError, match="already running"):
+        launch(resonite_exe=str(install / "Resonite.exe"), vanilla=True)
