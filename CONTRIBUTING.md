@@ -113,22 +113,22 @@ On startup the container runs:
 
 Inside the container, drive everything through `just`:
 
-| Recipe                 | Role                                                                       |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `just init`            | Host setup (docker / `.env` / Gale profile checks)                         |
-| `just gen-proto`       | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`) |
-| `just format`          | Format both sides (ruff for Python, csharpier for C#)                      |
-| `just test`            | Run both test suites (pytest+cov, dotnet test)                             |
-| `just type`            | Run pyright in strict mode                                                 |
-| `just build`           | `dotnet build -c Release` for the mod                                      |
-| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)   |
-| `just deploy-mod`      | Copy DLL+PDB into the Gale profile (`gale/BepInEx/plugins/ResoniteIO/`)    |
-| `just check-gale`      | Verify BepisLoader and the required plugins are present                    |
-| `just resonite-launch` | Launch mod-loaded Resonite from `./gale` in the container (see below)      |
-| `just resonite-stop`   | Terminate the in-container Resonite (`SIGTERM` → 3 s → `SIGKILL`)          |
-| `just docs-serve`      | Preview the docs site (MkDocs) with live reload                            |
-| `just docs-build`      | Build the docs site with `--strict`                                        |
-| `just clean`           | Remove build/cache output on both sides                                    |
+| Recipe                 | Role                                                                        |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `just init`            | Host setup (docker / `.env` / Gale profile checks)                          |
+| `just gen-proto`       | Regenerate the Python code from `.proto` (`python/src/resoio/_generated/`)  |
+| `just format`          | Format both sides (ruff for Python, csharpier for C#)                       |
+| `just test`            | Run both test suites (pytest+cov, dotnet test)                              |
+| `just type`            | Run pyright in strict mode                                                  |
+| `just build`           | `dotnet build -c Release` for the mod                                       |
+| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` (the pre-commit gate)    |
+| `just deploy-mod`      | Pack the Thunderstore zip and unpack it into the Gale profile (real layout) |
+| `just check-gale`      | Verify BepisLoader and the required plugins are present                     |
+| `just resonite-launch` | Launch mod-loaded Resonite from `./gale` in the container (see below)       |
+| `just resonite-stop`   | Terminate the in-container Resonite (`SIGTERM` → 3 s → `SIGKILL`)           |
+| `just docs-serve`      | Preview the docs site (MkDocs) with live reload                             |
+| `just docs-build`      | Build the docs site with `--strict`                                         |
+| `just clean`           | Remove build/cache output on both sides                                     |
 
 `just --list` shows everything; per-side sub-recipes (`py-test`, `mod-build`, …) are
 fallbacks for running one half. Container start/stop is handled by the dev container tooling,
@@ -188,12 +188,17 @@ The mod uses the BepisLoader official template layout (`Microsoft.NET.Sdk` + exp
 `PackageReference`). FrooxEngine DLLs under `$(ResonitePath)` are referenced at build time;
 proto C# stubs are generated into `obj/` by `Grpc.Tools` (not committed).
 
-- **Deploy:** the `PostBuild` target in
-  [`mod/src/ResoniteIO/ResoniteIO.csproj`](mod/src/ResoniteIO/ResoniteIO.csproj) copies
-  `ResoniteIO.dll`/`.pdb` into `$(ResonitePath)/BepInEx/plugins/ResoniteIO/`. The path is
-  resolved from (1) `.env` `ResonitePath`, (2) Steam Windows, (3) Steam Linux, falling back
-  to the `Resonite.GameLibs` NuGet (build-time only, copy skipped — CI-safe). Write
-  `ResonitePath` as an absolute path (dotenv does not expand `~` / `$HOME`).
+- **Deploy:** `just deploy-mod` builds the Thunderstore package (`just mod-pack`) and
+  unpacks it into the Gale profile exactly the way Gale's installer lays it out, so the
+  local mod matches what users install — the engine plugin lands at
+  `gale/BepInEx/plugins/ResoniteIO/ResoniteIO/` and the renderer at
+  `gale/Renderer/BepInEx/plugins/ResoniteIO/ResoniteIO.Renderer/`. The profile is resolved
+  from `GalePath`
+  (container env) or the repo-root `./gale/` (host). There is no build-time auto-deploy;
+  deployment goes through `just deploy-mod` only. (FrooxEngine/Unity DLLs are still
+  referenced at build time from `$(ResonitePath)`, falling back to the `Resonite.GameLibs`
+  NuGet — build-time only. Write `ResonitePath` as an absolute path; dotenv does not expand
+  `~` / `$HOME`.)
 - **F5 debug:** select the `Launch` profile in `Properties/launchSettings.json` to start
   `$(GamePath)Renderite.Host.exe` for BepisLoader debug attach.
 - **Thunderstore packaging:** `just mod-pack` (or `dotnet build -c Release -t:PackTS`) builds

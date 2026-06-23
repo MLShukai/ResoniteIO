@@ -38,7 +38,7 @@ BepInEx 6 mod (`Microsoft.NET.Sdk` ベースのライブラリ csproj) で AspNe
 - 検証手順 (intersection check) — plugin folder と Resonite ディレクトリの DLL 重複を 1 行で確認:
 
   ```sh
-  comm -12 <(ls "$ResonitePath" | sort) <(ls gale/BepInEx/plugins/ResoniteIO | sort)
+  comm -12 <(ls "$ResonitePath" | sort) <(ls gale/BepInEx/plugins/ResoniteIO/ResoniteIO | sort)
   ```
 
   期待される出力は **意図した overshadow target のみ** (現状: Http.Features + Configuration trio の 4 個 + Google.Protobuf。それ以外が出てきたら deny-list 漏れか新規 skew の可能性)。

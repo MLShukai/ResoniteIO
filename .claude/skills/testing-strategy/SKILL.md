@@ -251,7 +251,7 @@ Resonite は devcontainer 内で umu-run (Proton/Wine) 経由で動く。contain
 - container 内から `just resonite-launch` (mod 込み起動) / `just resonite-stop` を叩くと、`resoio launch` / `resoio terminate` (`python/src/resoio/launcher.py`) が umu-run launch chain を起動 / 停止する
 - BepInEx のログは `gale/BepInEx/LogOutput.log` に出る。container 内から `just log` で tail -F できる (umu/Proton の起動ノイズは `gale/BepInEx/umu-launch.log`)
 - UDS path は container 内 `/home/dev/.resonite-io/`。mod (GrpcHost) が bind 前に自分で mkdir し、同 container 内の Python client がそこへ connect する (host とは共有しない)
-- mod 配置は `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL + PDB を書き込む形
+- mod 配置は `just deploy-mod` で Thunderstore zip を pack し `gale/BepInEx/plugins/ResoniteIO/ResoniteIO/` へ展開する形 (実インストールと同じ nested layout)
 
 ### Resonite engine thread / SafeShutdown
 
