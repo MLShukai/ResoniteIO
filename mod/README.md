@@ -1,9 +1,9 @@
 # ResoniteIO
 
-**ResoniteIO** turns [Resonite](https://resonite.com/) into a runtime environment for AI
-agents. This mod runs inside the Resonite client and exposes vision, audio, movement, and UI
-control to an external agent over gRPC on a Unix Domain Socket. You drive it from the
-companion [`resonite-io`](https://pypi.org/project/resonite-io/) Python client (imported as `resoio`).
+**ResoniteIO** is a bidirectional IPC bridge that lets your Python code observe and control
+[Resonite](https://resonite.com/). This mod runs inside the Resonite client and exposes
+vision, audio, movement, and UI control over gRPC on a Unix Domain Socket. You drive it from
+the companion [`resonite-io`](https://pypi.org/project/resonite-io/) Python client (imported as `resoio`).
 
 ## Requirements
 
