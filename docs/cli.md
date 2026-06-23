@@ -20,7 +20,7 @@ resoio --help
 | `resoio mic` | Microphone | Python → Resonite | Stream audio into Resonite as a virtual mic. |
 | `resoio drive` | Locomotion | Python → Resonite | Interactive WASD driving (`--sprint` / `--look-rate` / `--no-wait`). |
 | `resoio grabber` | Grabber | unary | Grab at the desktop cursor ray hit point, then operate the held / equipped item (desktop mode only). The action positional (`grab` / `release` / `state` / `use` / `unuse` / `click` / `equip` / `dequip` / `interactive`) is required; `--hand` / `--radius` / `--button {primary,secondary}` work before or after it. `use` holds a button down until `unuse` (left-click aligns / activates a tool); `click` is press+release; both take `--strength` (analog primary press pressure 0..1, default 1.0, e.g. BrushTool/Pen, ignored for the secondary button); `equip` / `dequip` handle tools. |
-| `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config (`-W/--width`, `-H/--height`, `-F/--max-fps` — at least one required) and prints the post-apply snapshot. |
+| `resoio display` | Display | unary | `get` prints the current snapshot; `set` applies a partial config and prints the post-apply snapshot. Resolution can be a preset (`hd`/`fhd`/`qhd`/`uhd`) or `WIDTHxHEIGHT` with an optional `@FPS` suffix (e.g. `resoio display set fhd@30`); the `-W/--width`, `-H/--height`, `-F/--max-fps` flags override the spec field by field (at least one of the spec or a flag is required). |
 | `resoio world` | World | unary | List / open worlds and sessions. |
 | `resoio context-menu` | ContextMenu | unary | Open / select the radial menu. |
 | `resoio dash` | Dash | unary | Drive the ESC dash overlay. |
@@ -154,9 +154,12 @@ resoio world sessions --format json | jq '.[].name'
 resoio session users list --format json | jq '.[].user_name'
 resoio contact list --filter requests --format json | jq '.[].username'
 
-# Read the display settings, then cap the background fps
+# Read the display settings, then set the resolution / fps
 resoio display get
-resoio display set --max-fps 30
+resoio display set fhd            # preset -> 1920x1080
+resoio display set 1280x720@60   # explicit WIDTHxHEIGHT@FPS
+resoio display set fhd -F 144    # preset resolution, fps overridden by -F
+resoio display set --max-fps 30  # just cap the background fps (no resolution)
 
 # Aim with the held cursor, grab at the ray hit point, then release
 resoio cursor center
