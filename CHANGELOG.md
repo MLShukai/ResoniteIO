@@ -5,7 +5,7 @@ This file holds the project's release notes. On `v*` tag publish,
 GitHub Release body. The format follows
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.6.1] - 2026-06-23
 
 ### 🐛 Fixed
 
@@ -596,4 +596,4 @@ bridge that uses Resonite as an execution environment for AI agents (C# mod
 [0.4.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.3.0...v0.4.0
 [0.5.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.4.0...v0.5.0
 [0.6.0]: https://github.com/MLShukai/ResoniteIO/compare/v0.5.0...v0.6.0
-[unreleased]: https://github.com/MLShukai/ResoniteIO/compare/v0.6.0...HEAD
+[0.6.1]: https://github.com/MLShukai/ResoniteIO/compare/v0.6.0...v0.6.1
