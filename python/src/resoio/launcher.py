@@ -182,7 +182,17 @@ def _resolve_mod_path(explicit: str | None) -> str:
     it.
 
     Order: explicit ``--profile`` → ``MOD_PATH`` env. With neither set, or with
-    the ResoniteIO plugin DLL missing, raises with install guidance.
+    no ``ResoniteIO.dll`` anywhere under ``BepInEx/plugins/``, raises with install
+    guidance.
+
+    BepInEx discovers plugins by scanning ``BepInEx/plugins/`` **recursively**, so
+    ``ResoniteIO.dll`` lands at different depths depending on how the mod was
+    installed. A Thunderstore / Gale install (and ``just deploy-mod``) nests it
+    under the package directory
+    (``BepInEx/plugins/<pkg>/ResoniteIO/ResoniteIO.dll`` — the same one-level-deep
+    layout every other mod uses), while an older flat copy put it directly at
+    ``BepInEx/plugins/ResoniteIO/ResoniteIO.dll``. We mirror BepInEx and accept the
+    DLL wherever it is under ``plugins/`` rather than pinning one exact path.
     """
     profile = explicit or os.environ.get("MOD_PATH")
     if not profile:
@@ -191,14 +201,13 @@ def _resolve_mod_path(explicit: str | None) -> str:
             "to the Gale profile holding the ResoniteIO mod (or use --vanilla to "
             "launch Resonite without any mod)."
         )
-    plugin_dll = os.path.join(
-        profile, "BepInEx", "plugins", "ResoniteIO", "ResoniteIO.dll"
-    )
-    if not os.path.isfile(plugin_dll):
+    plugins_root = Path(profile) / "BepInEx" / "plugins"
+    found = plugins_root.is_dir() and next(plugins_root.rglob("ResoniteIO.dll"), None)
+    if not found:
         raise LauncherError(
-            f"ResoniteIO mod not found in {profile!r} (missing {plugin_dll}). "
-            "Install the ResoniteIO mod into this profile first — via Gale or the "
-            "Thunderstore package."
+            f"ResoniteIO mod not found in {profile!r} (no ResoniteIO.dll under "
+            f"{plugins_root}). Install the ResoniteIO mod into this profile first — "
+            "via Gale or the Thunderstore package, or run `just deploy-mod`."
         )
     return profile
 
