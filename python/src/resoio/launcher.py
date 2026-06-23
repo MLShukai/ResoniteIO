@@ -48,6 +48,7 @@ __all__ = [
     "LauncherError",
     "launch",
     "terminate",
+    "terminate_all",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -75,9 +76,9 @@ class LauncherError(RuntimeError):
     """A ``resoio launch`` / ``terminate`` operation could not be completed.
 
     Raised for actionable conditions: Resonite.exe / the mod not found, no
-    ``umu-run`` on PATH, an instance already running, more than one instance
-    detected (the single-instance assumption is violated), or the engine /
-    renderer not appearing before the timeout.
+    ``umu-run`` on PATH, more than one new engine / renderer appearing from a
+    single launch, more than one instance detected where exactly one is expected,
+    or the engine / renderer not appearing before the timeout.
     """
 
 
@@ -209,7 +210,11 @@ def _resolve_mod_path(explicit: str | None) -> str:
             f"{plugins_root}). Install the ResoniteIO mod into this profile first — "
             "via Gale or the Thunderstore package, or run `just deploy-mod`."
         )
-    return profile
+    # launch() は cwd=install_dir で subprocess を起動するため、相対 profile だと
+    # --bepinex-target が相対になり BepisLoader が "not an absolute path" で落ちる。
+    # BepisLoader は絶対性のみ要求 (symlink 解決は不要) なので realpath でなく abspath。
+    # profile は argv0 マッチには使わないので symlink 非解決でも齟齬は出ない。
+    return os.path.abspath(profile)
 
 
 def _find_renderer_preloader(profile: str) -> str | None:
@@ -238,6 +243,9 @@ def _build_command(
     mod_path: str | None,
     vanilla: bool,
     extra_args: Sequence[str],
+    *,
+    prefix: str | None = None,
+    proton_path: str | None = None,
 ) -> tuple[list[str], dict[str, str], str | None]:
     """Build the umu-run argv, environment, and log path.
 
@@ -245,6 +253,13 @@ def _build_command(
     (``--hookfxr-enable --bepinex-target``), renderer-side doorstop, the
     pressure-vessel profile bind, and the ``winhttp=n,b`` Wine override. Returns
     ``log_path=None`` (→ ``/dev/null``) for a vanilla launch.
+
+    Also seeds umu/Proton env defaults so a host launch behaves like the dev
+    container: ``PROTON_SET_GAME_DRIVE=0`` (forced — fixes the ``$HOME``-install
+    hang where umu maps ``$HOME`` to a Wine drive letter and breaks the
+    renderer's absolute Unix paths), plus ``GAMEID``, ``PROTONPATH`` (from
+    ``proton_path`` arg, then env, then ``GE-Proton``), and ``WINEPREFIX`` (from
+    the ``prefix`` arg only).
     """
     if shutil.which("umu-run") is None:
         raise LauncherError(
@@ -254,6 +269,20 @@ def _build_command(
 
     argv = ["umu-run", exe, "-SkipIntroTutorial"]
     env = dict(os.environ)
+    # umu/Proton env defaults — make a host launch behave like the dev container.
+    # PROTON_SET_GAME_DRIVE は「設定」ではなく $HOME-install ハングのバグ修正なので
+    # 直接代入する (env に 1 が残っていても踏み潰す。setdefault だと修正が無効化されうる)。
+    env["PROTON_SET_GAME_DRIVE"] = "0"
+    env.setdefault("GAMEID", "umu-default")  # umu-run は GAMEID 必須
+    # PROTONPATH: arg > env > GE-Proton (arg は setdefault の前に処理。1 行 setdefault に混ぜない)
+    if proton_path is not None:
+        env["PROTONPATH"] = proton_path
+    else:
+        env.setdefault("PROTONPATH", "GE-Proton")
+    # WINEPREFIX: --prefix 指定時のみ (絶対化)。未指定なら umu の既定 (~/Games/umu/$GAMEID) に委ねる。
+    # PROTONPATH は GE-Proton のような論理名も取るので abspath しない (WINEPREFIX のみ abspath)。
+    if prefix is not None:
+        env["WINEPREFIX"] = os.path.abspath(prefix)
     log_path: str | None = None
 
     if not vanilla:
@@ -296,23 +325,27 @@ def _build_command(
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_single(
-    finder: Callable[[], list[int]], label: str, deadline: float, poll_interval: float
+def _wait_for_new(
+    finder: Callable[[], list[int]],
+    before: set[int],
+    label: str,
+    deadline: float,
+    poll_interval: float,
 ) -> int:
-    """Poll ``finder`` until it returns exactly one PID; return it.
+    """Poll until a PID not in ``before`` appears; return it.
 
-    Raises :class:`LauncherError` if more than one is ever seen (the
-    single-instance assumption is violated) or if none appears by ``deadline``.
+    before の集合差分で本 launch が spawn した個体を特定するので、他インスタンスが
+    既に動いていても機能する。新規が複数 = 想定外の並行 launch でエラー。
     """
     while True:
-        pids = finder()
-        if len(pids) > 1:
+        new = [pid for pid in finder() if pid not in before]
+        if len(new) > 1:
             raise LauncherError(
-                f"multiple {label} processes detected ({pids}); expected exactly "
-                "one. Stop the extra Resonite instances and retry."
+                f"multiple new {label} processes appeared ({new}); "
+                "expected exactly one from this launch."
             )
-        if len(pids) == 1:
-            return pids[0]
+        if len(new) == 1:
+            return new[0]
         if time.monotonic() >= deadline:
             raise LauncherError(
                 f"timed out waiting for the Resonite {label} process to appear. "
@@ -328,6 +361,8 @@ def launch(
     mod_path: str | None = None,
     vanilla: bool = False,
     extra_args: Sequence[str] = (),
+    prefix: str | None = None,
+    proton_path: str | None = None,
     wait_timeout: float = 60.0,
     poll_interval: float = 0.5,
 ) -> LaunchResult:
@@ -346,6 +381,11 @@ def launch(
             ``vanilla``). The profile must already have the mod deployed.
         vanilla: Launch without loading any mod (skips the mod-profile checks).
         extra_args: Extra arguments forwarded to ``Resonite.exe``.
+        prefix: Wine prefix directory (``WINEPREFIX``). ``None`` lets umu use its
+            default (``~/Games/umu/$GAMEID``).
+        proton_path: Proton build (``PROTONPATH``) — a compat-tools name like
+            ``GE-Proton`` or a path. ``None`` resolves it from ``PROTONPATH``,
+            then ``GE-Proton``.
         wait_timeout: Seconds to wait for both processes to appear.
         poll_interval: Seconds between process-table polls.
 
@@ -353,28 +393,35 @@ def launch(
         The :class:`LaunchResult` with the engine and renderer host PIDs.
 
     Raises:
-        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, an
-            instance is already running, more than one engine/renderer is
-            detected, or a process did not appear before ``wait_timeout``.
+        LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, more than
+            one new engine/renderer appears from this launch, or a process did
+            not appear before ``wait_timeout``.
     """
     exe = _resolve_resonite_exe(resonite_exe)
     install_dir = os.path.dirname(os.path.realpath(exe))
 
-    already = _find_engine_pids(install_dir)
-    if already:
-        raise LauncherError(
-            f"Resonite is already running (engine pid(s) {already}). Stop it first "
-            "with `resoio terminate` before launching a new instance."
-        )
-
     argv, env, log_path = _build_command(
-        exe, install_dir, mod_path, vanilla, extra_args
+        exe,
+        install_dir,
+        mod_path,
+        vanilla,
+        extra_args,
+        prefix=prefix,
+        proton_path=proton_path,
     )
     _logger.info("launching Resonite: %s (cwd=%s)", " ".join(argv), install_dir)
 
+    # Snapshot the existing engine/renderer PIDs so we can identify the ones this
+    # launch spawns by set difference (the argv0-based finders cannot tell two
+    # instances of the same install apart).
+    before_engines = set(_find_engine_pids(install_dir))
+    before_renderers = set(_find_renderer_pids(install_dir))
+
     # Detach fully: new session + closed stdio so the parent (CLI / caller) can
-    # exit without signalling Resonite. cwd is the install dir so umu maps it to
-    # the Z: drive and absolute Unix paths resolve correctly.
+    # exit without signalling Resonite. PROTON_SET_GAME_DRIVE=0 (set in
+    # _build_command) suppresses umu's game-drive mapping of $HOME onto a Wine
+    # drive letter, so even a $HOME-resident install resolves the renderer's
+    # absolute Unix paths (renderer exe / /dev/shm IPC) correctly.
     stdout: object = subprocess.DEVNULL
     log_handle = None
     if log_path is not None:
@@ -395,11 +442,19 @@ def launch(
             log_handle.close()
 
     deadline = time.monotonic() + wait_timeout
-    resonite_pid = _wait_for_single(
-        lambda: _find_engine_pids(install_dir), "engine", deadline, poll_interval
+    resonite_pid = _wait_for_new(
+        lambda: _find_engine_pids(install_dir),
+        before_engines,
+        "engine",
+        deadline,
+        poll_interval,
     )
-    renderer_pid = _wait_for_single(
-        lambda: _find_renderer_pids(install_dir), "renderer", deadline, poll_interval
+    renderer_pid = _wait_for_new(
+        lambda: _find_renderer_pids(install_dir),
+        before_renderers,
+        "renderer",
+        deadline,
+        poll_interval,
     )
     _logger.info(
         "Resonite launched: resonite_pid=%d renderer_pid=%d", resonite_pid, renderer_pid
@@ -490,3 +545,35 @@ def terminate(
         else 0
     )
     return LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
+
+
+def terminate_all(*, timeout: float = 3.0) -> list[int]:
+    """Stop every running Resonite instance and return the PIDs signalled.
+
+    Detects all engine and renderer processes for the configured install
+    (``RESONITE_EXE``'s install dir) and stages ``SIGTERM`` → ``SIGKILL`` on each,
+    unlike :func:`terminate` which targets a single instance. Idempotent: a PID
+    that is already gone is skipped (and excluded from the result).
+
+    Args:
+        timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL`` (per PID).
+
+    Returns:
+        The host PIDs actually signalled (engine and renderer), in detection
+        order; an empty list means nothing was running.
+
+    Raises:
+        LauncherError: a detected PID is alive but is not the expected Resonite
+            process (a reused PID).
+    """
+    install_dir = _install_dir_for_detection()
+    killed: list[int] = []
+    for pid in _find_engine_pids(install_dir):
+        result = _kill_pid(pid, _ENGINE_ARGV0_SUFFIX, "engine", timeout)
+        if result:
+            killed.append(result)
+    for pid in _find_renderer_pids(install_dir):
+        result = _kill_pid(pid, _RENDERER_ARGV0_SUFFIX, "renderer", timeout)
+        if result:
+            killed.append(result)
+    return killed

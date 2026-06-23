@@ -47,6 +47,11 @@ def register(
         help="Renderer host PID to kill (renderer_pid from 'resoio launch').",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Stop every running Resonite instance (cannot be combined with PIDs).",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=3.0,
@@ -56,6 +61,30 @@ def register(
 
 
 async def _run(args: argparse.Namespace) -> int:
+    # Defer the heavy import (psutil) to keep `resoio --help` fast.
+    from resoio.launcher import LauncherError, terminate, terminate_all
+
+    if args.all:
+        # --all stops every instance, so an explicit PID would be ambiguous.
+        if args.resonite_pid is not None or args.renderer_pid is not None:
+            print(
+                "error: --all cannot be combined with explicit PIDs "
+                "(it stops every running instance).",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            killed = await asyncio.to_thread(terminate_all, timeout=args.timeout)
+        except LauncherError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if not killed:
+            print("no running Resonite instances found")
+            return 0
+        pids = ", ".join(str(pid) for pid in killed)
+        print(f"terminated {len(killed)} instance process(es): {pids}")
+        return 0
+
     # Mixing one explicit PID with auto-detection is ambiguous: require both or
     # neither (neither = auto-detect the single running instance).
     if (args.resonite_pid is None) != (args.renderer_pid is None):
@@ -65,9 +94,6 @@ async def _run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-
-    # Defer the heavy import (psutil) to keep `resoio --help` fast.
-    from resoio.launcher import LauncherError, terminate
 
     try:
         result = await asyncio.to_thread(

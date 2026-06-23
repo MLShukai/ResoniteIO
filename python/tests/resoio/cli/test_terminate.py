@@ -120,3 +120,37 @@ async def test_terminate_one_pid_only_is_usage_error(
     rc = await _amain(_build_parser().parse_args(["terminate", "123"]))
     assert rc == 2
     assert "both" in capsys.readouterr().err
+
+
+async def test_terminate_all_kills_every_instance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    spawn: Callable[..., int],
+    capsys: pytest.CaptureFixture[str],
+):
+    # --all routes through terminate_all, which kills every running instance (not
+    # just the single auto-detected one). Two engines run; both must die and be
+    # reported. Driven against real processes, no mocks.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    engine_a = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    engine_b = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    _wait_engine(install, 2)
+
+    rc = await _amain(_build_parser().parse_args(["terminate", "--all"]))
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert str(engine_a) in out
+    assert str(engine_b) in out
+    _wait_engine(install, 0)
+    assert _find_engine_pids(str(install)) == []
+
+
+async def test_terminate_all_with_explicit_pid_is_usage_error(
+    capsys: pytest.CaptureFixture[str],
+):
+    # --all (kill everything) and an explicit PID (kill exactly this one) are
+    # contradictory; specifying both is rejected rather than guessing intent.
+    rc = await _amain(_build_parser().parse_args(["terminate", "--all", "123", "456"]))
+    assert rc == 1
