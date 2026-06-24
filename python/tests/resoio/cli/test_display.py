@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from resoio._generated.resonite_io.v1 import (
     DisplayState,
 )
 from resoio.cli import _amain, _build_parser
+from resoio.cli.display import _parse_spec
 
 
 class _FakeDisplay(DisplayBase):
@@ -74,6 +76,71 @@ def test_socket_flag_parses_on_both_get_and_set_leaves(tmp_path: Path):
     assert g.socket == sock
     a = parser.parse_args(["display", "set", "-W", "1920", "--socket", sock])
     assert a.socket == sock
+
+
+def test_set_positional_preset_parses_to_resolution_tuple():
+    """A bare preset spec lands as ``(width, height, None)`` (no fps)."""
+    parser = _build_parser()
+    args = parser.parse_args(["display", "set", "fhd"])
+    assert args.spec == (1920, 1080, None)
+
+
+def test_set_positional_spec_with_fps_parses_full_tuple():
+    parser = _build_parser()
+    args = parser.parse_args(["display", "set", "1280x720@60"])
+    assert args.spec == (1280, 720, 60.0)
+
+
+def test_set_invalid_spec_is_rejected_at_parse_time():
+    """A malformed spec fails in the ``type`` callable -> argparse exit 2."""
+    parser = _build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["display", "set", "1280"])
+    assert excinfo.value.code == 2
+
+
+# ===========================================================================
+# _parse_spec unit tests: preset / WxH / @fps grammar and rejection.
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("hd", (1280, 720, None)),
+        ("fhd", (1920, 1080, None)),
+        ("qhd", (2560, 1440, None)),
+        ("uhd", (3840, 2160, None)),
+        ("FHD", (1920, 1080, None)),  # preset names are case-insensitive
+        ("1280x720", (1280, 720, None)),
+        ("2560X1440", (2560, 1440, None)),  # the 'x' separator too
+        ("fhd@30", (1920, 1080, 30.0)),
+        ("1280x720@59.94", (1280, 720, 59.94)),
+    ],
+)
+def test_parse_spec_accepts_valid_specs(
+    raw: str, expected: tuple[int, int, float | None]
+):
+    assert _parse_spec(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "1280",  # no preset, no 'x' separator
+        "foo",  # unknown preset
+        "1280x0",  # non-positive dimension
+        "0x720",
+        "1280x-720",
+        "fhd@0",  # non-positive fps
+        "fhd@-5",
+        "fhd@abc",  # non-numeric fps
+        "fhd@",  # empty fps
+    ],
+)
+def test_parse_spec_rejects_invalid_specs(raw: str):
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_spec(raw)
 
 
 # ===========================================================================
@@ -210,6 +277,89 @@ async def test_set_explicit_max_fps_zero_counts_as_a_flag_and_forwards_zero(
         # Server kept its state (0 = unchanged), so the snapshot is intact.
         out = capsys.readouterr().out.strip()
         assert out == "width=640 height=480 max_fps=60.0"
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+# ===========================================================================
+# Positional spec behavior: presets / WxH@FPS resolve to the apply config,
+# and -W/-H/-F override the spec field by field.
+# ===========================================================================
+
+
+async def test_set_preset_applies_resolution_and_leaves_fps_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``set uhd`` sends the preset's width/height; with no @fps and no -F the
+    fps goes out as 0 (proto3 "leave unchanged"), so the snapshot keeps it."""
+    socket_path = tmp_path / "rio-display.sock"
+    fake = _FakeDisplay(DisplayState(width=800, height=600, max_fps=30.0))
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["display", "set", "uhd"])
+        rc = await _amain(args)
+        assert rc == 0
+        assert fake.last_apply is not None
+        assert fake.last_apply.width == 3840
+        assert fake.last_apply.height == 2160
+        assert fake.last_apply.max_fps == 0.0
+        out = capsys.readouterr().out.strip()
+        assert out == "width=3840 height=2160 max_fps=30.0"
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_preset_with_fps_suffix_forwards_fps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    socket_path = tmp_path / "rio-display.sock"
+    fake = _FakeDisplay(DisplayState(width=800, height=600, max_fps=30.0))
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(["display", "set", "fhd@144"])
+        rc = await _amain(args)
+        assert rc == 0
+        assert fake.last_apply is not None
+        assert fake.last_apply.width == 1920
+        assert fake.last_apply.height == 1080
+        assert fake.last_apply.max_fps == 144.0
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_set_flags_override_spec_field_by_field(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """``fhd@30 -W 1024 -F 144``: -W overrides the width and -F overrides the
+    @fps, while the height falls back to the preset (1080)."""
+    socket_path = tmp_path / "rio-display.sock"
+    fake = _FakeDisplay(DisplayState(width=800, height=600, max_fps=30.0))
+    server = Server([fake])
+    await server.start(path=str(socket_path))
+    try:
+        monkeypatch.setenv("RESONITE_IO_SOCKET", str(socket_path))
+        args = _build_parser().parse_args(
+            ["display", "set", "fhd@30", "-W", "1024", "-F", "144"]
+        )
+        rc = await _amain(args)
+        assert rc == 0
+        assert fake.last_apply is not None
+        assert fake.last_apply.width == 1024
+        assert fake.last_apply.height == 1080
+        assert fake.last_apply.max_fps == 144.0
     finally:
         server.close()
         await server.wait_closed()

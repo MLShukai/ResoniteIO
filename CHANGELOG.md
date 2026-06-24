@@ -12,6 +12,13 @@ GitHub Release body. The format follows
 - **`resoio launch --prefix` / `--proton-path`**: choose the Wine prefix
   (`WINEPREFIX`) and the Proton build (`PROTONPATH`) per launch. `--proton-path`
   takes a compatibility-tools name like `GE-Proton` (the default) or a path.
+- **`resoio display set` resolution presets and `WIDTHxHEIGHT[@FPS]` shorthand**:
+  `set` now takes an optional positional spec, so `resoio display set fhd` (1920×1080),
+  `resoio display set qhd@144`, or `resoio display set 1280x720@60` work instead of
+  spelling out `-W/-H/-F`. Presets (case-insensitive): `hd` 1280×720, `fhd` 1920×1080,
+  `qhd` 2560×1440, `uhd` 3840×2160; the `@FPS` suffix is optional. The classic
+  `-W/--width` / `-H/--height` / `-F/--max-fps` flags still work and override the spec
+  field-by-field (e.g. `fhd -W 1024` keeps fhd's height but sets width 1024; `fhd@30 -F 144` keeps fhd's resolution but caps fps at 144).
 
 ### 🐛 Fixed
 
