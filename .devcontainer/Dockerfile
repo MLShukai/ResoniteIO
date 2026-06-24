@@ -157,6 +157,7 @@ RUN groupadd -g ${USER_GID} dev \
  && mkdir -p \
       /home/dev/.nuget/packages \
       /home/dev/.cache/uv \
+      /home/dev/.cache/pre-commit \
       /home/dev/.claude \
       /home/dev/.codex \
       /home/dev/.config/gh \
