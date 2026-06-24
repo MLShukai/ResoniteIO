@@ -9,7 +9,7 @@ GitHub Release body. The format follows
 
 ### ✨ Added
 
-- **Typed Resonite launch options (`resoio.ResoniteOptions`)**: pass Resonite's
+- **Typed Resonite launch options (`resoio.LaunchOptions`)**: pass Resonite's
   own command-line launch arguments to `launch(options=...)` as a typed,
   immutable value object — `data_path` (`-DataPath`), `cache_path` (`-CachePath`),
   `logs_path` (`-LogsPath`), `screen`, `verbose`, `device`, `cloud_profile`,

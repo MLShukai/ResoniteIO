@@ -21,8 +21,7 @@ from pathlib import Path
 import pytest
 
 from resoio.cli import _amain, _build_parser
-from resoio.launcher import _find_engine_pids
-from resoio.resonite_options import ResoniteOptions
+from resoio.launcher import LaunchOptions, _find_engine_pids
 
 _SLEEP = shutil.which("sleep") or "/bin/sleep"
 
@@ -133,7 +132,7 @@ async def test_launch_forwards_data_cache_logs_paths_as_options(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
     # --data-path / --cache-path / --logs-path must reach launch() as a
-    # ResoniteOptions carrying those three paths (other fields at their defaults).
+    # LaunchOptions carrying those three paths (other fields at their defaults).
     captured: dict[str, object] = {}
 
     def _fake_launch(**kwargs: object):
@@ -158,7 +157,7 @@ async def test_launch_forwards_data_cache_logs_paths_as_options(
     rc = await _amain(args)
 
     assert rc == 0
-    assert captured["options"] == ResoniteOptions(
+    assert captured["options"] == LaunchOptions(
         data_path="/d", cache_path="/c", logs_path="/l"
     )
 
@@ -180,4 +179,4 @@ async def test_launch_passes_default_options_when_paths_unset(
     rc = await _amain(_build_parser().parse_args(["launch", "--vanilla"]))
 
     assert rc == 0
-    assert captured["options"] == ResoniteOptions()
+    assert captured["options"] == LaunchOptions()

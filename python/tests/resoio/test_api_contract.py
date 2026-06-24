@@ -81,6 +81,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "InventorySpawnResult",
     "InventoryThumbnail",
     "KickKind",
+    "LaunchOptions",
     "LaunchResult",
     "LauncherError",
     "LifecycleClient",
@@ -95,7 +96,6 @@ _EXPECTED_PUBLIC_NAMES = (
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
-    "ResoniteOptions",
     "ServerInfo",
     "ServerPlatform",
     "SessionAccessLevel",
@@ -486,18 +486,18 @@ def test_click_exposes_keyword_only_strength_defaulting_to_one():
 
 
 # ---------------------------------------------------------------------------
-# Public ResoniteOptions surface (typed Resonite launch options)
+# Public LaunchOptions surface (typed Resonite launch options)
 #
-# Downstream code constructs ``ResoniteOptions(data_path=..., verbose=True)`` and
+# Downstream code constructs ``LaunchOptions(data_path=..., verbose=True)`` and
 # passes it to ``launch(options=...)``, so the field names, the frozen-ness, and
 # the ``skip_intro_tutorial`` default are part of the public contract. These pin
 # the marquee fields (a superset check, so adding new Resonite args later is not
 # a breaking change) plus the two enums' member->value mapping. Contract pins,
-# not behaviour tests — the full rendering lives in test_resonite_options.py.
+# not behaviour tests — the full rendering lives in test_launcher.py.
 # ---------------------------------------------------------------------------
 
 
-_RESONITE_OPTIONS_MARQUEE_FIELDS = frozenset(
+_LAUNCH_OPTIONS_MARQUEE_FIELDS = frozenset(
     {
         "skip_intro_tutorial",
         "data_path",
@@ -515,29 +515,29 @@ _RESONITE_OPTIONS_MARQUEE_FIELDS = frozenset(
 )
 
 
-def test_resonite_options_is_a_frozen_dataclass():
-    """``ResoniteOptions`` is promised immutable; downstream may rely on it
-    being hashable-by-value / safe to share."""
-    assert dataclasses.is_dataclass(resoio.ResoniteOptions)
-    opts = resoio.ResoniteOptions()
+def test_launch_options_is_a_frozen_dataclass():
+    """``LaunchOptions`` is promised immutable; downstream may rely on it being
+    hashable-by-value / safe to share."""
+    assert dataclasses.is_dataclass(resoio.LaunchOptions)
+    opts = resoio.LaunchOptions()
     with pytest.raises(dataclasses.FrozenInstanceError):
         opts.verbose = True  # pyright: ignore[reportAttributeAccessIssue]
 
 
-def test_resonite_options_skip_intro_tutorial_defaults_true():
+def test_launch_options_skip_intro_tutorial_defaults_true():
     """The one behaviourally load-bearing default: ``launch`` keeps skipping the
     intro tutorial unless the caller opts out."""
-    assert resoio.ResoniteOptions().skip_intro_tutorial is True
+    assert resoio.LaunchOptions().skip_intro_tutorial is True
 
 
-def test_resonite_options_promises_marquee_fields():
+def test_launch_options_promises_marquee_fields():
     """Pin that the documented marquee options exist by name (a rename of any
     is breaking).
 
     A superset check keeps room for new Resonite args.
     """
-    names = {f.name for f in dataclasses.fields(resoio.ResoniteOptions)}
-    assert _RESONITE_OPTIONS_MARQUEE_FIELDS <= names
+    names = {f.name for f in dataclasses.fields(resoio.LaunchOptions)}
+    assert _LAUNCH_OPTIONS_MARQUEE_FIELDS <= names
 
 
 @pytest.mark.parametrize(
@@ -565,7 +565,7 @@ def test_resonite_options_promises_marquee_fields():
         ),
     ],
 )
-def test_resonite_options_enum_members_match_snapshot(
+def test_launch_options_enum_members_match_snapshot(
     enum_name: str, expected: dict[str, str]
 ):
     """Pin the launch-option enum member-name -> wire value (the value is what

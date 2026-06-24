@@ -99,10 +99,9 @@ def register(
 
 async def _run(args: argparse.Namespace) -> int:
     # Defer the heavy import (psutil) to keep `resoio --help` fast.
-    from resoio.launcher import LauncherError, launch
-    from resoio.resonite_options import ResoniteOptions
+    from resoio.launcher import LauncherError, LaunchOptions, launch
 
-    options = ResoniteOptions(
+    options = LaunchOptions(
         data_path=args.data_path,
         cache_path=args.cache_path,
         logs_path=args.logs_path,

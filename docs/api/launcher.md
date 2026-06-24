@@ -8,10 +8,10 @@ quit is [`resoio.shutdown`](lifecycle.md). See the [CLI](../cli.md) `resoio laun
 / `resoio terminate` commands.
 
 Pass Resonite's own command-line launch options as a typed
-[`ResoniteOptions`](#resoio.resonite_options.ResoniteOptions) via
-`launch(options=...)` (`-DataPath`, `-CachePath`, `-Screen`, `-Verbose`, …)
-instead of hand-assembling raw flag strings. Anything `ResoniteOptions` does not
-model can still be passed through `launch(extra_args=...)`.
+[`LaunchOptions`](#resoio.launcher.LaunchOptions) via `launch(options=...)`
+(`-DataPath`, `-CachePath`, `-Screen`, `-Verbose`, …) instead of hand-assembling
+raw flag strings. Anything `LaunchOptions` does not model can still be passed
+through `launch(extra_args=...)`.
 
 ::: resoio.launcher.launch
 
@@ -21,8 +21,8 @@ model can still be passed through `launch(extra_args=...)`.
 
 ::: resoio.launcher.LauncherError
 
-::: resoio.resonite_options.ResoniteOptions
+::: resoio.launcher.LaunchOptions
 
-::: resoio.resonite_options.Device
+::: resoio.launcher.Device
 
-::: resoio.resonite_options.CloudProfile
+::: resoio.launcher.CloudProfile
