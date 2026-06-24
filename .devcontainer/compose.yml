@@ -94,6 +94,7 @@ services:
       # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
       - cache-nuget:/home/dev/.nuget
       - cache-uv:/home/dev/.cache/uv
+      - cache-precommit:/home/dev/.cache/pre-commit
       - cache-claude:/home/dev/.claude
       - cache-codex:/home/dev/.codex
       # gh CLI の認証情報 (~/.config/gh/hosts.yml) を named volume に載せ、
@@ -111,6 +112,8 @@ volumes:
     name: resonite-io-cache-nuget
   cache-uv:
     name: resonite-io-cache-uv
+  cache-precommit:
+    name: resonite-io-cache-precommit
   cache-claude:
     name: resonite-io-cache-claude
   cache-codex:
