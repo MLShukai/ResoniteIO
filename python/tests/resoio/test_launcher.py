@@ -35,6 +35,7 @@ from resoio.launcher import (
     launch,
     terminate,
 )
+from resoio.resonite_options import ResoniteOptions
 
 _SLEEP = shutil.which("sleep") or "/bin/sleep"
 
@@ -317,6 +318,38 @@ def test_build_command_vanilla_skips_mod_args(
     assert "--bepinex-target" not in argv
     assert "WINEDLLOVERRIDES" not in env
     assert log_path is None
+
+
+def test_build_command_default_options_keeps_skip_intro_tutorial(
+    tmp_path: Path, fake_umu: Path
+):
+    # -SkipIntroTutorial is no longer hard-coded; it comes from the default
+    # ResoniteOptions used when options is None. This pins the unchanged behaviour.
+    install = _make_install(tmp_path)
+    argv, _env, _log = _build_command(
+        str(install / "Resonite.exe"), str(install), None, vanilla=True, extra_args=()
+    )
+    assert "-SkipIntroTutorial" in argv
+
+
+def test_build_command_weaves_options_after_umu_flags_before_extra_args(
+    tmp_path: Path, fake_umu: Path
+):
+    # Order contract: umu-run flags -> options.to_args() -> extra_args, so a raw
+    # extra_args entry can still override an option (Resonite takes the last one).
+    install = _make_install(tmp_path)
+    argv, _env, _log = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        None,
+        vanilla=True,
+        extra_args=["-Foo"],
+        options=ResoniteOptions(verbose=True),
+    )
+    assert argv[:2] == ["umu-run", str(install / "Resonite.exe")]
+    assert argv.index("-Verbose") > 1  # after the umu-run flags (exe at index 1)
+    assert argv.index("-Verbose") < argv.index("-Foo")
+    assert argv[-1] == "-Foo"
 
 
 # ---------------------------------------------------------------------------

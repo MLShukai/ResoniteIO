@@ -43,6 +43,8 @@ from pathlib import Path
 
 import psutil
 
+from resoio.resonite_options import ResoniteOptions
+
 __all__ = [
     "LaunchResult",
     "LauncherError",
@@ -243,6 +245,7 @@ def _build_command(
     vanilla: bool,
     extra_args: Sequence[str],
     *,
+    options: ResoniteOptions | None = None,
     prefix: str | None = None,
     proton_path: str | None = None,
 ) -> tuple[list[str], dict[str, str], str | None]:
@@ -266,7 +269,7 @@ def _build_command(
             "ships it) to launch Resonite."
         )
 
-    argv = ["umu-run", exe, "-SkipIntroTutorial"]
+    argv = ["umu-run", exe]
     env = dict(os.environ)
     # umu/Proton env defaults — make a host launch behave like the dev container.
     # PROTON_SET_GAME_DRIVE は「設定」ではなく $HOME-install ハングのバグ修正なので
@@ -315,6 +318,10 @@ def _build_command(
         )
         log_path = os.path.join(profile, "BepInEx", "umu-launch.log")
 
+    # Resonite launch options (incl. -SkipIntroTutorial via its default) go after
+    # the umu-run flags and before extra_args, so a raw extra_args entry can still
+    # override an option (Resonite takes the last occurrence).
+    argv += (options or ResoniteOptions()).to_args()
     argv += list(extra_args)
     return argv, env, log_path
 
@@ -355,6 +362,7 @@ def launch(
     resonite_exe: str | None = None,
     mod_path: str | None = None,
     vanilla: bool = False,
+    options: ResoniteOptions | None = None,
     extra_args: Sequence[str] = (),
     prefix: str | None = None,
     proton_path: str | None = None,
@@ -375,7 +383,12 @@ def launch(
             resolves it from ``MOD_PATH``; with neither set this raises (unless
             ``vanilla``). The profile must already have the mod deployed.
         vanilla: Launch without loading any mod (skips the mod-profile checks).
-        extra_args: Extra arguments forwarded to ``Resonite.exe``.
+        options: Typed Resonite launch options (``-DataPath``, ``-Screen``, …).
+            ``None`` uses the defaults, which still skip the intro tutorial.
+            See :class:`resoio.resonite_options.ResoniteOptions`.
+        extra_args: Extra arguments forwarded to ``Resonite.exe`` after
+            ``options``. The raw escape hatch for anything ``options`` does not
+            model; reconciling overlaps with ``options`` is the caller's job.
         prefix: Wine prefix directory (``WINEPREFIX``). ``None`` lets umu use its
             default (``~/Games/umu/$GAMEID``).
         proton_path: Proton build (``PROTONPATH``) — a compat-tools name like
@@ -408,6 +421,7 @@ def launch(
         mod_path,
         vanilla,
         extra_args,
+        options=options,
         prefix=prefix,
         proton_path=proton_path,
     )

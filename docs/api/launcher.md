@@ -7,6 +7,12 @@ the two PIDs (or auto-detects the single running instance). The cooperative gRPC
 quit is [`resoio.shutdown`](lifecycle.md). See the [CLI](../cli.md) `resoio launch`
 / `resoio terminate` commands.
 
+Pass Resonite's own command-line launch options as a typed
+[`ResoniteOptions`](#resoio.resonite_options.ResoniteOptions) via
+`launch(options=...)` (`-DataPath`, `-CachePath`, `-Screen`, `-Verbose`, …)
+instead of hand-assembling raw flag strings. Anything `ResoniteOptions` does not
+model can still be passed through `launch(extra_args=...)`.
+
 ::: resoio.launcher.launch
 
 ::: resoio.launcher.terminate
@@ -14,3 +20,9 @@ quit is [`resoio.shutdown`](lifecycle.md). See the [CLI](../cli.md) `resoio laun
 ::: resoio.launcher.LaunchResult
 
 ::: resoio.launcher.LauncherError
+
+::: resoio.resonite_options.ResoniteOptions
+
+::: resoio.resonite_options.Device
+
+::: resoio.resonite_options.CloudProfile

@@ -52,6 +52,7 @@ from resoio.microphone import (
     MicrophoneClient,
     MicrophoneStreamSummary,
 )
+from resoio.resonite_options import CloudProfile, Device, ResoniteOptions
 from resoio.session import (
     KickKind,
     SessionAccessLevel,
@@ -85,6 +86,7 @@ __all__ = [
     "AuthClient",
     "AuthStatus",
     "CameraClient",
+    "CloudProfile",
     "ConnectionClient",
     "ContactClient",
     "ContactFilter",
@@ -102,6 +104,7 @@ __all__ = [
     "DashNoMatchError",
     "DashState",
     "DashTab",
+    "Device",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
@@ -132,6 +135,7 @@ __all__ = [
     "RecordSortDirection",
     "RecordSource",
     "ResetSummary",
+    "ResoniteOptions",
     "ServerInfo",
     "ServerPlatform",
     "SessionAccessLevel",
