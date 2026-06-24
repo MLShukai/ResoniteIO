@@ -101,10 +101,8 @@ services:
       - cache-gh:/home/dev/.config/gh
       # Resonite 起動用 named volume (entrypoint.sh が /resonite から rsync し resoio launch がここから起動)。
       - resonite-app:/opt/resonite
-      # SteamRT / Proton / Resonite ユーザーデータ (named volume で永続化)。
+      # Resonite ユーザーデータ
       - resonite-share:/home/dev/.local/share/Yellow Dog Man Studios
-      # Resonite アセットキャッシュ + shader cache (cache-uv とネストするが許容)。
-      - resonite-cache:/home/dev/.cache/Yellow Dog Man Studios
       # Wine prefix (WINEPREFIX=/home/dev/prefix)。
       - resonite-prefix:/home/dev/prefix
 
