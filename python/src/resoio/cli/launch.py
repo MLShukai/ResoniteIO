@@ -65,6 +65,21 @@ def register(
         ),
     )
     parser.add_argument(
+        "--data-path",
+        default=None,
+        help="Resonite database directory (-DataPath).",
+    )
+    parser.add_argument(
+        "--cache-path",
+        default=None,
+        help="Resonite cache directory (-CachePath).",
+    )
+    parser.add_argument(
+        "--logs-path",
+        default=None,
+        help="Resonite log files directory (-LogsPath).",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=60.0,
@@ -73,7 +88,10 @@ def register(
     parser.add_argument(
         "args",
         nargs="*",
-        help="Extra arguments forwarded to Resonite.exe (use '--' to separate).",
+        help=(
+            "Extra Resonite arguments forwarded verbatim (use '--' to separate); "
+            "the escape hatch for options without a dedicated flag."
+        ),
     )
     output.add_format_argument(parser)
     parser.set_defaults(func=_run)
@@ -81,8 +99,13 @@ def register(
 
 async def _run(args: argparse.Namespace) -> int:
     # Defer the heavy import (psutil) to keep `resoio --help` fast.
-    from resoio.launcher import LauncherError, launch
+    from resoio.launcher import LauncherError, LaunchOptions, launch
 
+    options = LaunchOptions(
+        data_path=args.data_path,
+        cache_path=args.cache_path,
+        logs_path=args.logs_path,
+    )
     try:
         # launch() is blocking (it polls the process table); run it off the loop.
         result = await asyncio.to_thread(
@@ -90,6 +113,7 @@ async def _run(args: argparse.Namespace) -> int:
             resonite_exe=args.exe,
             mod_path=args.profile,
             vanilla=args.vanilla,
+            options=options,
             extra_args=args.args,
             prefix=args.prefix,
             proton_path=args.proton_path,

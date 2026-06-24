@@ -46,6 +46,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "AuthClient",
     "AuthStatus",
     "CameraClient",
+    "CloudProfile",
     "ConnectionClient",
     "ContactClient",
     "ContactFilter",
@@ -63,6 +64,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "DashNoMatchError",
     "DashState",
     "DashTab",
+    "Device",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
@@ -79,6 +81,7 @@ _EXPECTED_PUBLIC_NAMES = (
     "InventorySpawnResult",
     "InventoryThumbnail",
     "KickKind",
+    "LaunchOptions",
     "LaunchResult",
     "LauncherError",
     "LifecycleClient",
@@ -480,3 +483,93 @@ def test_click_exposes_keyword_only_strength_defaulting_to_one():
     assert param.kind is inspect.Parameter.KEYWORD_ONLY
     assert param.default == 1.0
     assert param.annotation == "float"
+
+
+# ---------------------------------------------------------------------------
+# Public LaunchOptions surface (typed Resonite launch options)
+#
+# Downstream code constructs ``LaunchOptions(data_path=..., verbose=True)`` and
+# passes it to ``launch(options=...)``, so the field names, the frozen-ness, and
+# the ``skip_intro_tutorial`` default are part of the public contract. These pin
+# the marquee fields (a superset check, so adding new Resonite args later is not
+# a breaking change) plus the two enums' member->value mapping. Contract pins,
+# not behaviour tests — the full rendering lives in test_launcher.py.
+# ---------------------------------------------------------------------------
+
+
+_LAUNCH_OPTIONS_MARQUEE_FIELDS = frozenset(
+    {
+        "skip_intro_tutorial",
+        "data_path",
+        "cache_path",
+        "logs_path",
+        "screen",
+        "verbose",
+        "device",
+        "cloud_profile",
+        "load_assembly",
+        "invisible",
+        "kiosk",
+        "no_ui",
+    }
+)
+
+
+def test_launch_options_is_a_frozen_dataclass():
+    """``LaunchOptions`` is promised immutable; downstream may rely on it being
+    hashable-by-value / safe to share."""
+    assert dataclasses.is_dataclass(resoio.LaunchOptions)
+    opts = resoio.LaunchOptions()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        opts.verbose = True  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_launch_options_skip_intro_tutorial_defaults_true():
+    """The one behaviourally load-bearing default: ``launch`` keeps skipping the
+    intro tutorial unless the caller opts out."""
+    assert resoio.LaunchOptions().skip_intro_tutorial is True
+
+
+def test_launch_options_promises_marquee_fields():
+    """Pin that the documented marquee options exist by name (a rename of any
+    is breaking).
+
+    A superset check keeps room for new Resonite args.
+    """
+    names = {f.name for f in dataclasses.fields(resoio.LaunchOptions)}
+    assert _LAUNCH_OPTIONS_MARQUEE_FIELDS <= names
+
+
+@pytest.mark.parametrize(
+    ("enum_name", "expected"),
+    [
+        (
+            "Device",
+            {
+                "STEAM_VR": "SteamVR",
+                "WINDOWS_MR": "WindowsMR",
+                "OCULUS": "Oculus",
+                "OCULUS_QUEST": "OculusQuest",
+                "SCREEN_360": "Screen360",
+                "STATIC_CAMERA": "StaticCamera",
+                "STATIC_CAMERA_360": "StaticCamera360",
+            },
+        ),
+        (
+            "CloudProfile",
+            {
+                "PRODUCTION": "Production",
+                "STAGING": "Staging",
+                "LOCAL": "Local",
+            },
+        ),
+    ],
+)
+def test_launch_options_enum_members_match_snapshot(
+    enum_name: str, expected: dict[str, str]
+):
+    """Pin the launch-option enum member-name -> wire value (the value is what
+    is emitted as the ``-Device`` / ``-CloudProfile`` argument)."""
+    enum_cls = getattr(resoio, enum_name)
+    actual = {member.name: member.value for member in enum_cls}
+    assert actual == expected

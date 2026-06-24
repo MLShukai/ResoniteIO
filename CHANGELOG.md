@@ -9,6 +9,17 @@ GitHub Release body. The format follows
 
 ### ✨ Added
 
+- **Typed Resonite launch options (`resoio.LaunchOptions`)**: pass Resonite's
+  own command-line launch arguments to `launch(options=...)` as a typed,
+  immutable value object — `data_path` (`-DataPath`), `cache_path` (`-CachePath`),
+  `logs_path` (`-LogsPath`), `screen`, `verbose`, `device`, `cloud_profile`,
+  `load_assembly`, and the rest of the documented flags — instead of
+  hand-assembling raw `extra_args` strings. `skip_intro_tutorial` defaults to
+  `True` (the previous always-on behaviour); `extra_args` remains the escape
+  hatch for anything not modelled (including `-Renderer` / `-AttachRenderer`,
+  which are intentionally not exposed because they break renderer-PID detection).
+  The CLI gains `resoio launch --data-path` / `--cache-path` / `--logs-path`;
+  other options still go after `--`.
 - **`resoio launch --prefix` / `--proton-path`**: choose the Wine prefix
   (`WINEPREFIX`) and the Proton build (`PROTONPATH`) per launch. `--proton-path`
   takes a compatibility-tools name like `GE-Proton` (the default) or a path.

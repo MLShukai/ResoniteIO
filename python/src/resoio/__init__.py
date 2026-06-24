@@ -41,7 +41,15 @@ from resoio.inventory import (
     InventorySpawnResult,
     InventoryThumbnail,
 )
-from resoio.launcher import LauncherError, LaunchResult, launch, terminate
+from resoio.launcher import (
+    CloudProfile,
+    Device,
+    LauncherError,
+    LaunchOptions,
+    LaunchResult,
+    launch,
+    terminate,
+)
 from resoio.lifecycle import LifecycleClient, shutdown
 from resoio.locomotion import (
     DriveSummary,
@@ -85,6 +93,7 @@ __all__ = [
     "AuthClient",
     "AuthStatus",
     "CameraClient",
+    "CloudProfile",
     "ConnectionClient",
     "ContactClient",
     "ContactFilter",
@@ -102,6 +111,7 @@ __all__ = [
     "DashNoMatchError",
     "DashState",
     "DashTab",
+    "Device",
     "DisplayClient",
     "DisplayInfo",
     "DriveSummary",
@@ -118,6 +128,7 @@ __all__ = [
     "InventorySpawnResult",
     "InventoryThumbnail",
     "KickKind",
+    "LaunchOptions",
     "LaunchResult",
     "LauncherError",
     "LifecycleClient",
