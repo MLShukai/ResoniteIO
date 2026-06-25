@@ -129,6 +129,24 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ./*.deb; \
     rm -rf /var/lib/apt/lists/* /tmp/*.deb
 
+# GE-Proton をバージョン固定で prefetch して image に焼き込む。
+# umu は PROTONPATH が未取得の論理名 (例: GE-Proton) だと GitHub Releases から
+# 自動取得するが、この自動 DL が不安定 (現状エラー) かつバージョンが固定できない。
+# 代わりに /opt/proton 配下へ展開し、PROTONPATH をその絶対パスに向けることで
+# 自動 DL を完全にバイパスしつつバージョンを固定する。sha512 で完全性を検証する。
+# /opt/proton は root 所有・読取専用で良い (Proton は PROTONPATH には書かず、
+# 書き込みは WINEPREFIX/compatdata 側に行く)。
+ARG GE_PROTON_VERSION=GE-Proton10-34
+RUN set -eux; \
+    cd /tmp; \
+    base="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_PROTON_VERSION}"; \
+    curl -fsSL -O "${base}/${GE_PROTON_VERSION}.tar.gz"; \
+    curl -fsSL -O "${base}/${GE_PROTON_VERSION}.sha512sum"; \
+    sha512sum -c "${GE_PROTON_VERSION}.sha512sum"; \
+    install -d /opt/proton; \
+    tar -xzf "${GE_PROTON_VERSION}.tar.gz" -C /opt/proton; \
+    rm -f "${GE_PROTON_VERSION}.tar.gz" "${GE_PROTON_VERSION}.sha512sum"
+
 # debian 13 の /etc/bash.bashrc は bash-completion ローダ部がコメントアウトされて
 # おり、`docker exec dev bash` は非 login 対話 shell で /etc/profile.d/bash_completion.sh
 # も読まれないため、明示的にローダ呼び出しを追記する。
@@ -147,7 +165,9 @@ RUN set -eux; \
 # 認証・設定 state を compose volume に載せるため先行作成する。
 # Resonite 用 named volume のマウント先も dev 所有で先行作成:
 #   /opt/resonite     : Resonite インストールコピー (HOME 外に置く理由は entrypoint 参照)
-#   /home/dev/.local/share : SteamRT / Proton + Resonite ユーザーデータ
+#   /home/dev/.local/share/Yellow Dog Man Studios : Resonite ユーザーデータ
+#     (resonite-share volume の実マウント先。ここまで dev 所有で先行作成しないと
+#      空 volume が root 所有で初期化され、engine が DataPath/ を作れず起動失敗する)
 #   /home/dev/prefix  : Wine prefix (WINEPREFIX)
 # /home/dev/.cache は resonite-cache volume のマウント先 (cache-uv とネスト)。
 # /home/dev/.config/gh は gh CLI の認証情報 (hosts.yml) を compose volume に載せ、
@@ -165,6 +185,7 @@ RUN groupadd -g ${USER_GID} dev \
       /opt/resonite \
       /home/dev/.local \
       /home/dev/.local/share \
+      "/home/dev/.local/share/Yellow Dog Man Studios" \
       /home/dev/prefix \
  && chown -R dev:dev /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
@@ -183,14 +204,15 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 USER dev
 WORKDIR /workspace
 
-# umu 用 ENV。WINEPREFIX / Proton / アセットキャッシュはすべて named volume で永続化。
+# umu 用 ENV。WINEPREFIX / アセットキャッシュは named volume で永続化。
 # GAMEID=umu-default: umu DB 未登録ゲーム向けの汎用 ID。
-# PROTONPATH=GE-Proton: GE-Proton を使うことで起動時スプラッシュロゴの描画崩れを回避
-#   (Valve Proton では Unity テクスチャがカラーバー表示になる問題がある)。
-#   umu が GitHub Releases から最新版を自動取得し ~/.local/share/Steam/compatibilitytools.d に展開する。
+# PROTONPATH=/opt/proton/GE-Proton10-34: GE-Proton を使うことで起動時スプラッシュロゴの
+#   描画崩れを回避する (Valve Proton では Unity テクスチャがカラーバー表示になる)。
+#   論理名ではなく上で prefetch した絶対パスを指すことで umu の自動 DL をバイパスし
+#   バージョンを固定する。ARG GE_PROTON_VERSION を上げたらこのパスも追従させる。
 ENV GAMEID=umu-default \
     WINEPREFIX=/home/dev/prefix \
-    PROTONPATH=GE-Proton
+    PROTONPATH=/opt/proton/GE-Proton10-34
 
 # Claude Code / Codex CLI は公式 install.sh (native installer) で最新版を入れる。
 # apt / npm 版ではなく standalone installer に揃える。どちらも $HOME/.local/bin に

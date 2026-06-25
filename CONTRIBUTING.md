@@ -141,8 +141,9 @@ not by `just`.
 Both launchers go through `resoio launch` (`python/src/resoio/launcher.py`), which starts
 Resonite via `umu-run` (umu-launcher / Proton). The read-only `/resonite` bind is synced into a
 writable `/opt/resonite` by `.devcontainer/entrypoint.sh` when the container starts; the first
-container start pulls GE-Proton and copies the ~2 GB install, so it is slow; later starts sync
-only deltas.
+container start copies the ~2 GB install, so it is slow; later starts sync only deltas. GE-Proton
+is pinned and prefetched into the image (`PROTONPATH=/opt/proton/GE-Proton10-34`), so no Proton
+download happens at container start.
 
 - **`just resonite-launch --vanilla`** runs vanilla Resonite (`Resonite.exe -SkipIntroTutorial`)
   — handy for confirming the base game launches.
