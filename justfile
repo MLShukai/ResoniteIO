@@ -382,3 +382,9 @@ resonite-launch *ARGS:
 # 引数なしで実行中インスタンスを自動検出して kill。PID を渡して個別指定も可。
 resonite-stop *ARGS:
     cd python && uv run resoio terminate {{ARGS}}
+
+# Resonite install を /resonite (ro bind) から /opt/resonite へ手動同期する。
+# entrypoint.sh が container 起動時に一度同期するが、host 側で Resonite を更新した
+# 後など、container を作り直さずに最新化したいときに使う。
+resonite-sync:
+    rsync -a --delete /resonite/ /opt/resonite/
