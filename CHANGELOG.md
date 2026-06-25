@@ -9,15 +9,16 @@ GitHub Release body. The format follows
 
 ### ✨ Added
 
-- **`resoio launch --name <label>` runs multiple isolated instances**: pass a
-  label to start a second Resonite client beside a running one. Each label gets
-  its own data tree under `~/.resonite-io/instances/<label>/` — a separate
-  WINEPREFIX, `-DataPath` / `-CachePath` / `-LogsPath`, and a private Camera IPC
-  queue token (so concurrent instances neither share Resonite data nor cross-talk
-  on the renderer frame queue). Explicit `--prefix` / `--data-path` still win over
-  the label defaults; relaunching the same label while it runs is refused.
-  Without `--name`, `launch` keeps the single-instance guard. Target a specific
-  instance with `--socket ~/.resonite-io/resonite-{pid}.sock`.
+- **`resoio launch` runs multiple instances**: `launch` no longer refuses when a
+  Resonite is already running — start as many as you like by giving each its own
+  `--data-path` (so they don't share a database). `--name <label>` is a
+  convenience that auto-allocates an isolated data tree under
+  `~/.resonite-io/instances/<label>/` — a separate WINEPREFIX, `-DataPath` /
+  `-CachePath` / `-LogsPath`, and a private Camera IPC queue token (so concurrent
+  instances neither share Resonite data nor cross-talk on the renderer frame
+  queue). Explicit `--prefix` / `--data-path` still win over the label defaults;
+  `--name` imposes no guard. Target a specific instance with
+  `--socket ~/.resonite-io/resonite-{pid}.sock`.
 - **`resoio terminate-all`**: stop every running Resonite instance in one call
   (`SIGTERM` → `SIGKILL` per process), printing one engine/renderer pair per
   instance (`--format human|json`). The multi-instance counterpart to the
