@@ -1608,13 +1608,19 @@
 <td><code>resoio launch</code></td>
 <td>— (umu-launcher)</td>
 <td>local process</td>
-<td>Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. <code>-e/--exe</code> / <code>RESONITE_EXE</code> and <code>-p/--profile</code> / <code>MOD_PATH</code> select the install + mod profile; <code>--vanilla</code> skips the mod. <code>--prefix</code> (<code>WINEPREFIX</code>) and <code>--proton-path</code> (<code>PROTONPATH</code>, default <code>GE-Proton</code>) pick the Wine prefix and Proton build. <code>--data-path</code> / <code>--cache-path</code> / <code>--logs-path</code> relocate Resonite's database / cache / logs; any other Resonite launch option goes after <code>--</code> (e.g. <code>-- -Screen -Verbose</code>). Non-gRPC.</td>
+<td>Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. <code>-e/--exe</code> / <code>RESONITE_EXE</code> and <code>-p/--profile</code> / <code>MOD_PATH</code> select the install + mod profile; <code>--vanilla</code> skips the mod. <code>--prefix</code> (<code>WINEPREFIX</code>) and <code>--proton-path</code> (<code>PROTONPATH</code>, default <code>GE-Proton</code>) pick the Wine prefix and Proton build. <code>--data-path</code> / <code>--cache-path</code> / <code>--logs-path</code> relocate Resonite's database / cache / logs; any other Resonite launch option goes after <code>--</code> (e.g. <code>-- -Screen -Verbose</code>). Never refuses when an instance is already running — run several at once by giving each a distinct <code>--data-path</code> (and prefix), or use <code>--name &lt;label&gt;</code> to auto-allocate an isolated tree under <code>~/.resonite-io/instances/&lt;label&gt;/</code> (own WINEPREFIX + data + Camera queue). Non-gRPC.</td>
 </tr>
 <tr>
 <td><code>resoio terminate</code></td>
 <td>— (signals)</td>
 <td>local process</td>
-<td>Force-stop Resonite by killing the engine + renderer (<code>SIGTERM</code> → <code>SIGKILL</code>). Takes <code>[resonite_pid] [renderer_pid]</code> (from <code>launch</code>) or auto-detects the single running instance. Non-gRPC.</td>
+<td>Force-stop a single Resonite instance by killing the engine + renderer (<code>SIGTERM</code> → <code>SIGKILL</code>). Takes <code>[resonite_pid] [renderer_pid]</code> (from <code>launch</code>) or auto-detects the single running instance. Non-gRPC.</td>
+</tr>
+<tr>
+<td><code>resoio terminate-all</code></td>
+<td>— (signals)</td>
+<td>local process</td>
+<td>Force-stop <strong>every</strong> running Resonite instance (<code>SIGTERM</code> → <code>SIGKILL</code> per process); prints one engine/renderer pair per instance (<code>--format human\|json</code>). The multi-instance counterpart to <code>terminate</code>. Non-gRPC.</td>
 </tr>
 <tr>
 <td><code>resoio shutdown</code></td>
@@ -1626,12 +1632,21 @@
 </table>
 <p><code>record</code> is the Resonite → Python capture command (it pulls Camera and Speaker), while <code>mic</code>
 is its independent Python → Resonite counterpart.</p>
-<p><code>launch</code> / <code>terminate</code> are <strong>local process control</strong> (no gRPC). <code>launch</code> spawns the
-umu-launcher chain and waits until the <strong>engine</strong> (<code>resonite_pid</code>) and <strong>renderer</strong>
-(<code>renderer_pid</code>) host processes appear, printing both; it refuses to start a second instance.
-<code>terminate</code> signals those two PIDs (<code>SIGTERM</code> → <code>SIGKILL</code>); given no PIDs it auto-detects the
-single running instance (and errors if it finds more than one). Because they work from the host
-process table they run before the UDS exists and regardless of whether the client is reachable.
+<p><code>launch</code> / <code>terminate</code> / <code>terminate-all</code> are <strong>local process control</strong> (no gRPC). <code>launch</code> spawns
+the umu-launcher chain and waits until the <strong>engine</strong> (<code>resonite_pid</code>) and <strong>renderer</strong>
+(<code>renderer_pid</code>) host processes appear, printing both. It <strong>never refuses</strong> because another
+instance is already running — to run <strong>several side by side</strong>, give each launch its own
+<code>--data-path</code> (so the instances don't share a Resonite database). <code>--name &lt;label&gt;</code> is a
+convenience that auto-allocates an isolated tree under <code>~/.resonite-io/instances/&lt;label&gt;/</code> (its
+own WINEPREFIX, <code>-DataPath</code> / <code>-CachePath</code> / <code>-LogsPath</code>, and a private Camera IPC queue so the
+instances never cross-talk on the renderer queue); explicit <code>--prefix</code> / <code>--data-path</code> still win
+over the label defaults, and <code>--name</code> imposes no guard. Each engine binds its own
+<code>resonite-{pid}.sock</code>, so target a specific instance with
+<code>--socket ~/.resonite-io/resonite-{pid}.sock</code> (or <code>RESONITE_IO_SOCKET</code>). <code>terminate</code> signals one
+instance's two PIDs (<code>SIGTERM</code> → <code>SIGKILL</code>); given no PIDs it auto-detects the single running
+instance (and errors if it finds more than one — use explicit PIDs or <code>terminate-all</code>).
+<code>terminate-all</code> stops every instance at once. Because they work from the host process table they
+run before the UDS exists and regardless of whether the client is reachable.
 <code>shutdown</code>, by contrast, is a pure gRPC call (<code>Lifecycle.Shutdown</code>) that asks a <strong>running</strong>
 engine to quit gracefully — use it when the client is up and reachable. It is best-effort,
 though: on Linux (including the dev container) FrooxEngine frequently hangs during teardown and
@@ -1763,12 +1778,20 @@ accept <code>--format</code> (<code>grabber interactive --format json</code> exi
 <a id="__codelineno-2-56" name="__codelineno-2-56" href="#__codelineno-2-56"></a><span class="c1"># Pick a specific Wine prefix and Proton build</span>
 <a id="__codelineno-2-57" name="__codelineno-2-57" href="#__codelineno-2-57"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--prefix<span class="w"> </span>~/prefixes/resonite<span class="w"> </span>--proton-path<span class="w"> </span>GE-Proton
 <a id="__codelineno-2-58" name="__codelineno-2-58" href="#__codelineno-2-58"></a>
-<a id="__codelineno-2-59" name="__codelineno-2-59" href="#__codelineno-2-59"></a><span class="c1"># Stop it — by the PIDs from launch, or auto-detect the running instance</span>
-<a id="__codelineno-2-60" name="__codelineno-2-60" href="#__codelineno-2-60"></a>resoio<span class="w"> </span>terminate<span class="w"> </span><span class="m">12345</span><span class="w"> </span><span class="m">12399</span>
-<a id="__codelineno-2-61" name="__codelineno-2-61" href="#__codelineno-2-61"></a>resoio<span class="w"> </span>terminate
-<a id="__codelineno-2-62" name="__codelineno-2-62" href="#__codelineno-2-62"></a>
-<a id="__codelineno-2-63" name="__codelineno-2-63" href="#__codelineno-2-63"></a><span class="c1"># ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)</span>
-<a id="__codelineno-2-64" name="__codelineno-2-64" href="#__codelineno-2-64"></a>resoio<span class="w"> </span>shutdown
+<a id="__codelineno-2-59" name="__codelineno-2-59" href="#__codelineno-2-59"></a><span class="c1"># Run two instances side by side. --name auto-allocates isolated data trees;</span>
+<a id="__codelineno-2-60" name="__codelineno-2-60" href="#__codelineno-2-60"></a><span class="c1"># or separate them yourself with --data-path. Then talk to one by its socket.</span>
+<a id="__codelineno-2-61" name="__codelineno-2-61" href="#__codelineno-2-61"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--name<span class="w"> </span>a<span class="w">            </span><span class="c1"># {&quot;resonite_pid&quot;: 12345, ...}</span>
+<a id="__codelineno-2-62" name="__codelineno-2-62" href="#__codelineno-2-62"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--name<span class="w"> </span>b<span class="w">            </span><span class="c1"># {&quot;resonite_pid&quot;: 23456, ...}</span>
+<a id="__codelineno-2-63" name="__codelineno-2-63" href="#__codelineno-2-63"></a>resoio<span class="w"> </span>launch<span class="w"> </span>--data-path<span class="w"> </span>~/res-c/data<span class="w"> </span>--prefix<span class="w"> </span>~/res-c/pfx<span class="w">   </span><span class="c1"># manual isolation</span>
+<a id="__codelineno-2-64" name="__codelineno-2-64" href="#__codelineno-2-64"></a>resoio<span class="w"> </span>--socket<span class="w"> </span>~/.resonite-io/resonite-12345.sock<span class="w"> </span>ping
+<a id="__codelineno-2-65" name="__codelineno-2-65" href="#__codelineno-2-65"></a>
+<a id="__codelineno-2-66" name="__codelineno-2-66" href="#__codelineno-2-66"></a><span class="c1"># Stop it — by the PIDs from launch, auto-detect the single instance, or stop every instance</span>
+<a id="__codelineno-2-67" name="__codelineno-2-67" href="#__codelineno-2-67"></a>resoio<span class="w"> </span>terminate<span class="w"> </span><span class="m">12345</span><span class="w"> </span><span class="m">12399</span>
+<a id="__codelineno-2-68" name="__codelineno-2-68" href="#__codelineno-2-68"></a>resoio<span class="w"> </span>terminate
+<a id="__codelineno-2-69" name="__codelineno-2-69" href="#__codelineno-2-69"></a>resoio<span class="w"> </span>terminate-all<span class="w"> </span>--format<span class="w"> </span>json<span class="w">   </span><span class="c1"># [{&quot;resonite_pid&quot;: ..., &quot;renderer_pid&quot;: ...}, ...]</span>
+<a id="__codelineno-2-70" name="__codelineno-2-70" href="#__codelineno-2-70"></a>
+<a id="__codelineno-2-71" name="__codelineno-2-71" href="#__codelineno-2-71"></a><span class="c1"># ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)</span>
+<a id="__codelineno-2-72" name="__codelineno-2-72" href="#__codelineno-2-72"></a>resoio<span class="w"> </span>shutdown
 </code></pre></div>
 <p>Run any command with <code>--help</code> for its full flag list. For programmatic use, see the
 <a href="../api/connection/">API Reference</a>.</p>
