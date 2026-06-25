@@ -2,50 +2,19 @@
 
 The happy path (spawning umu-run and waiting a real Resonite into existence)
 needs a live Resonite and lives in the e2e suite (``tests/e2e/launcher.py``).
-Here we pin the CLI contract: the error path (a missing exe and an
-already-running instance both render :class:`resoio.launcher.LauncherError` to
-stderr and exit 1, triggered with real conditions — a missing path and a real
-dummy process — no mocks), and the argparse-to-call plumbing for ``--prefix`` /
-``--proton-path`` (verified by stubbing our own first-party ``launch`` and
-capturing the kwargs it was called with).
+Here we pin the CLI contract: the error path (a missing exe renders
+:class:`resoio.launcher.LauncherError` to stderr and exits 1, triggered with a
+real missing path — no mocks), and the argparse-to-call plumbing for ``--prefix``
+/ ``--proton-path`` / ``--name`` (verified by stubbing our own first-party
+``launch`` and capturing the kwargs it was called with).
 """
 
 from __future__ import annotations
 
-import shutil
-import subprocess
-import time
-from collections.abc import Callable, Iterator
-from pathlib import Path
-
 import pytest
 
 from resoio.cli import _amain, _build_parser
-from resoio.launcher import LaunchOptions, _find_engine_pids
-
-_SLEEP = shutil.which("sleep") or "/bin/sleep"
-
-
-@pytest.fixture
-def spawn() -> Iterator[Callable[..., int]]:
-    procs: list[subprocess.Popen[bytes]] = []
-
-    def _spawn(path: Path, *args: str) -> int:
-        proc = subprocess.Popen(
-            [str(path), *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        procs.append(proc)
-        return proc.pid
-
-    yield _spawn
-
-    for proc in procs:
-        if proc.poll() is None:
-            proc.kill()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+from resoio.launcher import LaunchOptions
 
 
 async def test_launch_missing_exe_errors(
@@ -55,29 +24,6 @@ async def test_launch_missing_exe_errors(
     rc = await _amain(_build_parser().parse_args(["launch"]))
     assert rc == 1
     assert "not found" in capsys.readouterr().err
-
-
-async def test_launch_refuses_when_already_running(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    spawn: Callable[..., int],
-    capsys: pytest.CaptureFixture[str],
-):
-    install = tmp_path / "resonite"
-    (install / "dotnet-runtime").mkdir(parents=True)
-    shutil.copy(_SLEEP, install / "dotnet-runtime" / "dotnet")
-    (install / "dotnet-runtime" / "dotnet").chmod(0o755)
-    (install / "Resonite.exe").write_text("")
-    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
-
-    spawn(install / "dotnet-runtime" / "dotnet", "60")
-    deadline = time.monotonic() + 5.0
-    while not _find_engine_pids(str(install)) and time.monotonic() < deadline:
-        time.sleep(0.02)
-
-    rc = await _amain(_build_parser().parse_args(["launch", "--vanilla"]))
-    assert rc == 1
-    assert "already running" in capsys.readouterr().err
 
 
 async def test_launch_forwards_prefix_and_proton_path(
@@ -180,3 +126,43 @@ async def test_launch_passes_default_options_when_paths_unset(
 
     assert rc == 0
     assert captured["options"] == LaunchOptions()
+
+
+async def test_launch_forwards_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # --name on the CLI must reach launch() as name= so the launcher allocates an
+    # isolated per-instance data tree.
+    captured: dict[str, object] = {}
+
+    def _fake_launch(**kwargs: object):
+        captured.update(kwargs)
+        from resoio.launcher import LaunchResult
+
+        return LaunchResult(resonite_pid=11, renderer_pid=22)
+
+    monkeypatch.setattr("resoio.launcher.launch", _fake_launch)
+    args = _build_parser().parse_args(["launch", "--vanilla", "--name", "agent1"])
+    rc = await _amain(args)
+
+    assert rc == 0
+    assert captured["name"] == "agent1"
+
+
+async def test_launch_passes_none_name_when_unset(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Without --name, launch() receives name=None (single-instance default).
+    captured: dict[str, object] = {}
+
+    def _fake_launch(**kwargs: object):
+        captured.update(kwargs)
+        from resoio.launcher import LaunchResult
+
+        return LaunchResult(resonite_pid=11, renderer_pid=22)
+
+    monkeypatch.setattr("resoio.launcher.launch", _fake_launch)
+    rc = await _amain(_build_parser().parse_args(["launch", "--vanilla"]))
+
+    assert rc == 0
+    assert captured["name"] is None

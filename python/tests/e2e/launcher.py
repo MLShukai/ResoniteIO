@@ -80,13 +80,6 @@ class TestLauncher:
             assert _find_engine_pids(install) == [result.resonite_pid]
             assert _find_renderer_pids(install) == [result.renderer_pid]
 
-            # Relaunching while running is refused (single-instance guard).
-            try:
-                launch(wait_timeout=5.0)
-                raise AssertionError("expected launch to refuse a second instance")
-            except Exception as exc:  # noqa: BLE001
-                assert "already running" in str(exc)
-
             # Once the mod binds its UDS the engine is rendering; grab a shot.
             sock = _wait_for_socket(_SOCKET_APPEAR_TIMEOUT_S)
             assert sock is not None, "engine never bound its UDS after launch"

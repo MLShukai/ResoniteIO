@@ -49,6 +49,7 @@ from resoio.launcher import (
     LaunchResult,
     launch,
     terminate,
+    terminate_all,
 )
 from resoio.lifecycle import LifecycleClient, shutdown
 from resoio.locomotion import (
@@ -165,5 +166,6 @@ __all__ = [
     "launch",
     "shutdown",
     "terminate",
+    "terminate_all",
     "wait_for_ready",
 ]

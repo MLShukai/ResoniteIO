@@ -9,6 +9,20 @@ GitHub Release body. The format follows
 
 ### ✨ Added
 
+- **`resoio launch` runs multiple instances**: `launch` no longer refuses when a
+  Resonite is already running — start as many as you like by giving each its own
+  `--data-path` (so they don't share a database). `--name <label>` is a
+  convenience that auto-allocates an isolated data tree under
+  `~/.resonite-io/instances/<label>/` — a separate WINEPREFIX, `-DataPath` /
+  `-CachePath` / `-LogsPath`, and a private Camera IPC queue token (so concurrent
+  instances neither share Resonite data nor cross-talk on the renderer frame
+  queue). Explicit `--prefix` / `--data-path` still win over the label defaults;
+  `--name` imposes no guard. Target a specific instance with
+  `--socket ~/.resonite-io/resonite-{pid}.sock`.
+- **`resoio terminate-all`**: stop every running Resonite instance in one call
+  (`SIGTERM` → `SIGKILL` per process), printing one engine/renderer pair per
+  instance (`--format human|json`). The multi-instance counterpart to the
+  single-instance `terminate` (whose pid-only output is unchanged).
 - **Typed Resonite launch options (`resoio.LaunchOptions`)**: pass Resonite's
   own command-line launch arguments to `launch(options=...)` as a typed,
   immutable value object — `data_path` (`-DataPath`), `cache_path` (`-CachePath`),
@@ -33,6 +47,22 @@ GitHub Release body. The format follows
 
 ### 🐛 Fixed
 
+- **Camera froze right after the engine and renderer came up (no `--name`, and
+  on direct Gale / Steam launches)**: the engine self-generated a Camera IPC
+  queue token at runtime that the renderer (a separately-spawned Wine child)
+  never inherited, so the two bound different queues and the client hung waiting
+  for frames. The engine no longer self-generates a token. Instead the token is
+  always placed in the environment **before exec**: `resoio launch` injects a
+  unique one per instance (named or not), and a direct Gale / Steam launch sets
+  nothing, so the engine and renderer both fall back to the same fixed default
+  queue name. Either way both ends agree on one queue. (`--name` was already
+  unaffected because it injected the token before exec.)
+- **`resoio terminate-all` reported a single instance as two**: it paired an
+  engine with its renderer only when the renderer appeared in the engine's host
+  process subtree, but Wine often reparents the renderer out of it, so one
+  instance came back as two `pid=0` rows. Pairing now keys off the Camera IPC
+  queue token the engine and renderer share (falling back to the process tree),
+  so a single instance is reported as one engine/renderer pair.
 - **`resoio launch` hung on a host install under `$HOME`**: the renderer never
   started (and the engine waited forever) when launching from a Steam install
   beneath `$HOME`. umu/Proton's game-drive feature maps `$HOME` onto a Wine drive

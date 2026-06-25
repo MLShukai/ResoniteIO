@@ -81,6 +81,15 @@ public sealed class ResoniteIOPlugin : BasePlugin
     {
         Log = base.Log;
 
+        // Camera IPC queue token (RESONITE_IO_CAMERA_QUEUE) はここでは生成しない。
+        // engine が runtime に Environment.SetEnvironmentVariable で set しても、その値は
+        // 別プロセスとして起動する renderer に届かず (engine/renderer が別 queue を掴んで
+        // client が frame 待ちでハングする)。代わりに token は exec 前に env へ載せる:
+        //   - `resoio launch` 経由: launcher が起動前に instance 固有 token を注入し、
+        //     engine と renderer (Wine 子プロセス) が同じ env を継承して queue を分離する。
+        //   - Gale / Steam 直接起動: 何も set されず、両側が IpcSocketPaths.QueueName の
+        //     固定デフォルト名に fallback して一致する (単一インスタンス)。
+
         // resolver は Core 型に触れる前に attach する必要があるため、ManualLogSource を
         // 直接渡し ILogSink を経由しない (上記 remarks 参照)。
         var pluginDirectory =

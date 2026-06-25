@@ -8,11 +8,12 @@ matchers key off — ``<install>/dotnet-runtime/dotnet`` for the engine and
 ``<install>/Renderer/Renderite.Renderer.exe`` for the renderer). The full
 ``launch`` happy path (spawning umu-run) needs a real Resonite and lives in the
 e2e suite (``tests/e2e/launcher.py``); here we cover argument/path resolution,
-command construction, the already-running guard, and the kill/detection logic.
+command construction, per-instance isolation, and the kill/detection logic.
 """
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import os
 import shutil
@@ -34,10 +35,14 @@ from resoio.launcher import (
     _build_command,
     _find_engine_pids,
     _find_renderer_pids,
+    _resolve_instance_paths,
     _resolve_mod_path,
     _resolve_resonite_exe,
+    _validate_instance_name,
+    _wait_for_new,
     launch,
     terminate,
+    terminate_all,
 )
 
 _SLEEP = shutil.which("sleep") or "/bin/sleep"
@@ -76,11 +81,12 @@ def spawn() -> Iterator[Callable[..., int]]:
     """Spawn tracked child processes and reap them at teardown."""
     procs: list[subprocess.Popen[bytes]] = []
 
-    def _spawn(path: Path | str, *args: str) -> int:
+    def _spawn(path: Path | str, *args: str, env: dict[str, str] | None = None) -> int:
         proc = subprocess.Popen(
             [str(path), *args],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=env,
         )
         procs.append(proc)
         return proc.pid
@@ -746,11 +752,389 @@ def test_terminate_no_args_errors_on_multiple_instances(
         terminate()
 
 
-def test_launch_refuses_when_already_running(tmp_path: Path, spawn: Callable[..., int]):
+# ---------------------------------------------------------------------------
+# Multi-instance: _wait_for_new (PID set-difference)
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_new_returns_pid_absent_from_before(
+    tmp_path: Path, spawn: Callable[..., int]
+):
+    # An engine PID already present in `before` is ignored; only the PID spawned
+    # afterwards (the one this launch created) is returned.
+    install = _make_install(tmp_path)
+    existing = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
+    before = {existing}
+
+    fresh = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
+
+    deadline = time.monotonic() + 5.0
+    new_pid = _wait_for_new(
+        lambda: _find_engine_pids(str(install)),
+        before,
+        "engine",
+        deadline,
+        0.02,
+    )
+
+    assert new_pid == fresh
+
+
+def test_wait_for_new_raises_when_multiple_new_appear(
+    tmp_path: Path, spawn: Callable[..., int]
+):
+    # Two engines not in `before` means an unexpected concurrent launch; the
+    # set-difference can no longer pick a single owner, so it errors.
     install = _make_install(tmp_path)
     spawn(install / "dotnet-runtime" / "dotnet", "60")
-    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
+    spawn(install / "dotnet-runtime" / "dotnet", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
 
-    # The already-running guard fires before umu/mod resolution, so vanilla is fine.
-    with pytest.raises(LauncherError, match="already running"):
-        launch(resonite_exe=str(install / "Resonite.exe"), vanilla=True)
+    deadline = time.monotonic() + 5.0
+    with pytest.raises(LauncherError, match="multiple new"):
+        _wait_for_new(
+            lambda: _find_engine_pids(str(install)),
+            set(),
+            "engine",
+            deadline,
+            0.02,
+        )
+
+
+def test_wait_for_new_times_out_when_no_new_appears(tmp_path: Path):
+    # No new engine ever appears; once the deadline passes the wait gives up with
+    # a timeout error rather than blocking forever.
+    install = _make_install(tmp_path)
+    deadline = time.monotonic() - 1.0  # already expired
+
+    with pytest.raises(LauncherError, match="timed out"):
+        _wait_for_new(
+            lambda: _find_engine_pids(str(install)),
+            set(),
+            "engine",
+            deadline,
+            0.02,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Multi-instance: label validation / path isolation / queue token
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["a", "agent1", "agent-1", "A_b-2", "0"])
+def test_validate_instance_name_accepts_safe(name: str):
+    _validate_instance_name(name)  # does not raise
+
+
+@pytest.mark.parametrize(
+    "name", ["", "-leading", "../escape", "a/b", "a..b", "a b", "a.b", "héllo"]
+)
+def test_validate_instance_name_rejects_unsafe(name: str):
+    with pytest.raises(LauncherError, match="invalid instance name"):
+        _validate_instance_name(name)
+
+
+def test_resolve_instance_paths_allocates_label_dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # With nothing explicit, the four isolation dirs are created under the label
+    # and wired into prefix + options; the token is label-derived and unique.
+    monkeypatch.setenv("RESONITE_IO_INSTANCES_DIR", str(tmp_path / "instances"))
+    instance_dir = tmp_path / "instances" / "a"
+    prefix, opts, token = _resolve_instance_paths("a", None, None)
+
+    assert prefix == str(instance_dir / "prefix")
+    assert opts.data_path == str(instance_dir / "data")
+    assert opts.cache_path == str(instance_dir / "cache")
+    assert opts.logs_path == str(instance_dir / "logs")
+    for sub in ("prefix", "data", "cache", "logs"):
+        assert (instance_dir / sub).is_dir()
+    assert token.startswith("resonite-io-camera-a-")
+    # A second allocation yields a different token (private queue per launch).
+    _, _, token2 = _resolve_instance_paths("a", None, None)
+    assert token2 != token
+
+
+def test_resolve_instance_paths_respects_explicit_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Explicit caller values win over the label-auto defaults (explicit > auto).
+    monkeypatch.setenv("RESONITE_IO_INSTANCES_DIR", str(tmp_path / "instances"))
+    instance_dir = tmp_path / "instances" / "a"
+    explicit_opts = LaunchOptions(data_path="/custom/data")
+    prefix, opts, _ = _resolve_instance_paths("a", "/custom/prefix", explicit_opts)
+
+    assert prefix == "/custom/prefix"
+    assert opts.data_path == "/custom/data"
+    # The unset cache/logs still fall back to the label dirs.
+    assert opts.cache_path == str(instance_dir / "cache")
+    assert opts.logs_path == str(instance_dir / "logs")
+
+
+def test_build_command_injects_camera_queue_env(tmp_path: Path, fake_umu: Path):
+    install = _make_install(tmp_path)
+    _, env_with, _ = _build_command(
+        str(install / "Resonite.exe"),
+        str(install),
+        None,
+        True,
+        (),
+        camera_queue="resonite-io-camera-a-deadbeef",
+    )
+    assert env_with["RESONITE_IO_CAMERA_QUEUE"] == "resonite-io-camera-a-deadbeef"
+
+    _, env_without, _ = _build_command(
+        str(install / "Resonite.exe"), str(install), None, True, ()
+    )
+    assert "RESONITE_IO_CAMERA_QUEUE" not in env_without
+
+
+# ---------------------------------------------------------------------------
+# Multi-instance: launch never guards on an already-running instance
+# ---------------------------------------------------------------------------
+
+
+def _fake_umu_spawning(tmp_path: Path, engine_path: Path, renderer_path: Path) -> Path:
+    """A stand-in ``umu-run`` that detaches fresh engine + renderer copies.
+
+    ``setsid`` + ``start_new_session`` means they outlive the script, so a
+    ``launch`` PID-diff sees them as the new pair without a real Resonite.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    umu = bindir / "umu-run"
+    umu.write_text(
+        "#!/bin/sh\n"
+        f"setsid '{engine_path}' 60 </dev/null >/dev/null 2>&1 &\n"
+        f"setsid '{renderer_path}' 60 </dev/null >/dev/null 2>&1 &\n"
+        "exit 0\n"
+    )
+    umu.chmod(0o755)
+    return bindir
+
+
+def _reap_extra(install: Path, keep: set[int]) -> None:
+    for pid in (
+        set(_find_engine_pids(str(install))) | set(_find_renderer_pids(str(install)))
+    ) - keep:
+        with contextlib.suppress(psutil.NoSuchProcess):
+            psutil.Process(pid).kill()
+
+
+def test_launch_unnamed_starts_beside_a_running_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # No guard: an *unnamed* launch must start a second instance even with one
+    # already running (the caller separates data with --data-path). It returns
+    # the freshly spawned pair, identified by the before/after PID diff.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    existing_engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    existing_renderer = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 1)
+
+    bindir = _fake_umu_spawning(
+        tmp_path,
+        install / "dotnet-runtime" / "dotnet",
+        install / "Renderer" / "Renderite.Renderer.exe",
+    )
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    try:
+        result = launch(
+            resonite_exe=str(install / "Resonite.exe"),
+            vanilla=True,
+            wait_timeout=10.0,
+            poll_interval=0.05,
+        )
+        assert result.resonite_pid != existing_engine
+        assert result.renderer_pid != existing_renderer
+    finally:
+        _reap_extra(install, {existing_engine, existing_renderer})
+
+
+def test_launch_unnamed_injects_a_camera_queue_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Regression: an unnamed launch must inject a unique RESONITE_IO_CAMERA_QUEUE
+    # *before exec* so the engine and renderer bind the same Camera IPC queue.
+    # Without it the engine self-generates a token at runtime that the renderer
+    # (a Wine child) never inherits -> mismatched queues -> the client froze after
+    # both processes came up. The token is captured by a fake umu-run that records
+    # the env it was launched with; it must be non-empty and not the fixed default.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    monkeypatch.delenv("RESONITE_IO_CAMERA_QUEUE", raising=False)
+    env_dump = tmp_path / "umu_camera_queue.txt"
+    engine = install / "dotnet-runtime" / "dotnet"
+    renderer = install / "Renderer" / "Renderite.Renderer.exe"
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    umu = bindir / "umu-run"
+    umu.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s" "$RESONITE_IO_CAMERA_QUEUE" > "{env_dump}"\n'
+        f"setsid '{engine}' 60 </dev/null >/dev/null 2>&1 &\n"
+        f"setsid '{renderer}' 60 </dev/null >/dev/null 2>&1 &\n"
+        "exit 0\n"
+    )
+    umu.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    try:
+        launch(
+            resonite_exe=str(install / "Resonite.exe"),
+            vanilla=True,
+            wait_timeout=10.0,
+            poll_interval=0.05,
+        )
+        token = env_dump.read_text()
+        assert token, "no RESONITE_IO_CAMERA_QUEUE was injected for an unnamed launch"
+        assert token != "resonite-io-camera-frames"  # not the fixed engine default
+        assert token.startswith("resonite-io-camera-")
+    finally:
+        _reap_extra(install, set())
+
+
+def test_launch_named_starts_beside_a_running_instance_and_allocates_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # A *named* launch is identical except it auto-allocates the label data tree.
+    # It still does not guard on an already-running instance (--name is a
+    # convenience, not a lock).
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    monkeypatch.setenv("RESONITE_IO_INSTANCES_DIR", str(tmp_path / "instances"))
+
+    existing_engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    existing_renderer = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 1)
+
+    bindir = _fake_umu_spawning(
+        tmp_path,
+        install / "dotnet-runtime" / "dotnet",
+        install / "Renderer" / "Renderite.Renderer.exe",
+    )
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    try:
+        result = launch(
+            resonite_exe=str(install / "Resonite.exe"),
+            vanilla=True,
+            name="b",
+            wait_timeout=10.0,
+            poll_interval=0.05,
+        )
+        assert result.resonite_pid != existing_engine
+        assert result.renderer_pid != existing_renderer
+        # The label data tree was allocated (no lock file is written).
+        instance_dir = tmp_path / "instances" / "b"
+        for sub in ("prefix", "data", "cache", "logs"):
+            assert (instance_dir / sub).is_dir()
+        assert not (instance_dir / "launch.lock").exists()
+    finally:
+        _reap_extra(install, {existing_engine, existing_renderer})
+
+
+def test_launch_named_relaunch_of_same_label_is_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # Re-launching the same label while it runs is NOT rejected (no per-label
+    # guard); it simply reuses the label's data tree and spawns another instance.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    monkeypatch.setenv("RESONITE_IO_INSTANCES_DIR", str(tmp_path / "instances"))
+    existing_engine = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    existing_renderer = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 1)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 1)
+
+    bindir = _fake_umu_spawning(
+        tmp_path,
+        install / "dotnet-runtime" / "dotnet",
+        install / "Renderer" / "Renderite.Renderer.exe",
+    )
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    try:
+        result = launch(
+            resonite_exe=str(install / "Resonite.exe"),
+            vanilla=True,
+            name="a",  # same label as a notional running "a"; must not raise
+            wait_timeout=10.0,
+            poll_interval=0.05,
+        )
+        assert result.resonite_pid != existing_engine
+    finally:
+        _reap_extra(install, {existing_engine, existing_renderer})
+
+
+# ---------------------------------------------------------------------------
+# Multi-instance: terminate_all
+# ---------------------------------------------------------------------------
+
+
+def test_terminate_all_kills_every_running_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # terminate_all stops every running engine/renderer (not just a single
+    # instance) and reports each PID it signalled across the returned pairs.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    engine_a = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    engine_b = spawn(install / "dotnet-runtime" / "dotnet", "60")
+    renderer_a = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    renderer_b = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60")
+    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 2)
+
+    killed = terminate_all(timeout=3.0)
+
+    signalled = {r.resonite_pid for r in killed} | {r.renderer_pid for r in killed}
+    signalled.discard(0)
+    assert signalled == {engine_a, engine_b, renderer_a, renderer_b}
+    assert _wait_pids(lambda: _find_engine_pids(str(install)), 0) == []
+    assert _wait_pids(lambda: _find_renderer_pids(str(install)), 0) == []
+
+
+def test_terminate_all_returns_empty_when_nothing_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # With no instance running, terminate_all is a no-op that reports an empty
+    # list rather than erroring.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+
+    assert terminate_all(timeout=3.0) == []
+
+
+def test_terminate_all_pairs_engine_and_renderer_by_camera_queue_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # An engine and its renderer share RESONITE_IO_CAMERA_QUEUE; the renderer is
+    # not reliably a host child of the engine (Wine reparents it), so terminate_all
+    # must pair them by that token rather than the process tree. A single instance
+    # must come back as ONE pair (engine + renderer), not two pid=0 rows, and two
+    # instances must pair correctly by their distinct tokens.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    env_a = {**os.environ, "RESONITE_IO_CAMERA_QUEUE": "resonite-io-camera-a-1111"}
+    env_b = {**os.environ, "RESONITE_IO_CAMERA_QUEUE": "resonite-io-camera-b-2222"}
+    engine_a = spawn(install / "dotnet-runtime" / "dotnet", "60", env=env_a)
+    renderer_a = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60", env=env_a)
+    engine_b = spawn(install / "dotnet-runtime" / "dotnet", "60", env=env_b)
+    renderer_b = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60", env=env_b)
+    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 2)
+
+    killed = terminate_all(timeout=3.0)
+
+    pairs = {(r.resonite_pid, r.renderer_pid) for r in killed}
+    assert pairs == {(engine_a, renderer_a), (engine_b, renderer_b)}
+    assert _wait_pids(lambda: _find_engine_pids(str(install)), 0) == []
+    assert _wait_pids(lambda: _find_renderer_pids(str(install)), 0) == []

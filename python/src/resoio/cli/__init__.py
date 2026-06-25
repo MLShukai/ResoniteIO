@@ -39,6 +39,7 @@ from resoio.cli import (
     session,
     shutdown,
     terminate,
+    terminate_all,
     wait,
     world,
 )
@@ -66,6 +67,7 @@ _COMMAND_MODULES: list[ModuleType] = [
     launch,
     shutdown,
     terminate,
+    terminate_all,
 ]
 
 
