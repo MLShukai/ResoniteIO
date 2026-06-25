@@ -35,11 +35,13 @@ from __future__ import annotations
 import enum
 import logging
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import cast
 
@@ -53,6 +55,7 @@ __all__ = [
     "LauncherError",
     "launch",
     "terminate",
+    "terminate_all",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -535,6 +538,7 @@ def _build_command(
     options: LaunchOptions | None = None,
     prefix: str | None = None,
     proton_path: str | None = None,
+    camera_queue: str | None = None,
 ) -> tuple[list[str], dict[str, str], str | None]:
     """Build the umu-run argv, environment, and log path.
 
@@ -572,6 +576,13 @@ def _build_command(
     # PROTONPATH は GE-Proton のような論理名も取るので abspath しない (WINEPREFIX のみ abspath)。
     if prefix is not None:
         env["WINEPREFIX"] = os.path.abspath(prefix)
+    # Per-instance Camera IPC queue token (multi-launch). The engine mod also
+    # self-generates one in its earliest load hook when this is unset, so single
+    # launches stay on the default queue; injecting it here keeps the token
+    # deterministic (label-derived) and lets the renderer child inherit the same
+    # value through the shared Wine session env.
+    if camera_queue is not None:
+        env["RESONITE_IO_CAMERA_QUEUE"] = camera_queue
     log_path: str | None = None
 
     if not vanilla:
@@ -618,23 +629,34 @@ def _build_command(
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_single(
-    finder: Callable[[], list[int]], label: str, deadline: float, poll_interval: float
+def _wait_for_new(
+    finder: Callable[[], list[int]],
+    before: set[int],
+    label: str,
+    deadline: float,
+    poll_interval: float,
 ) -> int:
-    """Poll ``finder`` until it returns exactly one PID; return it.
+    """Poll until a PID not in ``before`` appears; return it.
 
-    Raises :class:`LauncherError` if more than one is ever seen (the
-    single-instance assumption is violated) or if none appears by ``deadline``.
+    The ``before`` set difference identifies the individual process *this* launch
+    spawned, so it works even when other instances of the same install are already
+    running (the argv0-based finders cannot tell two instances apart). For a
+    single launch with nothing else running, ``before`` is empty and this is
+    equivalent to "wait for exactly one". More than one new PID = an unexpected
+    concurrent launch, which is an error.
+
+    Raises :class:`LauncherError` if more than one new PID appears or if none
+    appears by ``deadline``.
     """
     while True:
-        pids = finder()
-        if len(pids) > 1:
+        new = [pid for pid in finder() if pid not in before]
+        if len(new) > 1:
             raise LauncherError(
-                f"multiple {label} processes detected ({pids}); expected exactly "
-                "one. Stop the extra Resonite instances and retry."
+                f"multiple new {label} processes appeared ({new}); "
+                "expected exactly one from this launch."
             )
-        if len(pids) == 1:
-            return pids[0]
+        if len(new) == 1:
+            return new[0]
         if time.monotonic() >= deadline:
             raise LauncherError(
                 f"timed out waiting for the Resonite {label} process to appear. "
@@ -642,6 +664,106 @@ def _wait_for_single(
                 "mod log (just log)."
             )
         time.sleep(poll_interval)
+
+
+# ---------------------------------------------------------------------------
+# Instance isolation (multi-launch)
+# ---------------------------------------------------------------------------
+
+# Instance labels become directory names and a Camera-IPC queue token, so keep
+# them to a filesystem- and shell-safe charset and forbid path traversal.
+_INSTANCE_NAME_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]*\Z")
+
+
+def _validate_instance_name(name: str) -> None:
+    """Reject instance names that are unsafe as a directory / queue token."""
+    if not _INSTANCE_NAME_RE.match(name):
+        raise LauncherError(
+            f"invalid instance name {name!r}: use only letters, digits, '-' and "
+            "'_' (and it must start with a letter or digit)."
+        )
+
+
+def _instances_base_dir() -> str:
+    """Base directory holding per-instance ``<label>/`` data trees.
+
+    ``RESONITE_IO_INSTANCES_DIR`` overrides the default ``~/.resonite-io/instances``.
+    The gRPC socket dir is separate (``~/.resonite-io/``, pid-named per engine).
+    """
+    return os.environ.get("RESONITE_IO_INSTANCES_DIR") or str(
+        Path.home() / ".resonite-io" / "instances"
+    )
+
+
+def _resolve_instance_paths(
+    name: str,
+    instance_dir: Path,
+    prefix: str | None,
+    options: LaunchOptions | None,
+) -> tuple[str, LaunchOptions, str]:
+    """Create the per-label data tree and fill any unset isolation path.
+
+    Lays out ``<instance_dir>/{prefix,data,cache,logs}`` and resolves each of the
+    WINEPREFIX / ``-DataPath`` / ``-CachePath`` / ``-LogsPath`` slots with the
+    precedence **explicit caller value > label-auto > unset**. Returns the
+    effective WINEPREFIX, the (possibly updated) options, and a per-launch Camera
+    IPC queue token so each instance's renderer frames stay on a private queue.
+    """
+    subdirs = {sub: instance_dir / sub for sub in ("prefix", "data", "cache", "logs")}
+    for path in subdirs.values():
+        path.mkdir(parents=True, exist_ok=True)
+
+    effective_prefix = prefix if prefix is not None else str(subdirs["prefix"])
+    opts = options or LaunchOptions()
+    opts = replace(
+        opts,
+        data_path=opts.data_path
+        if opts.data_path is not None
+        else str(subdirs["data"]),
+        cache_path=(
+            opts.cache_path if opts.cache_path is not None else str(subdirs["cache"])
+        ),
+        logs_path=opts.logs_path
+        if opts.logs_path is not None
+        else str(subdirs["logs"]),
+    )
+    token = f"resonite-io-camera-{name}-{secrets.token_hex(4)}"
+    return effective_prefix, opts, token
+
+
+def _instance_lock_path(instance_dir: Path) -> Path:
+    return instance_dir / "launch.lock"
+
+
+def _reject_if_instance_running(instance_dir: Path, name: str) -> None:
+    """Raise if this label's engine (recorded in ``launch.lock``) is still
+    alive.
+
+    A stale lock (no file, unreadable, or a PID that is gone / belongs
+    to a non-engine process after PID reuse) is treated as free-to-
+    launch. This guards only the *same* label against a double launch;
+    different labels are independent and may run concurrently.
+    """
+    try:
+        recorded = int(_instance_lock_path(instance_dir).read_text().strip())
+    except (OSError, ValueError):
+        return
+    try:
+        proc = psutil.Process(recorded)
+    except psutil.NoSuchProcess:
+        return
+    if _argv0_endswith(proc, _ENGINE_ARGV0_SUFFIX):
+        raise LauncherError(
+            f"Resonite instance {name!r} is already running (engine pid "
+            f"{recorded}). Stop it with `resoio terminate` (or `resoio "
+            "terminate-all`) before relaunching this instance."
+        )
+
+
+def _write_instance_lock(instance_dir: Path, engine_pid: int) -> None:
+    """Record this label's engine PID so a later same-label launch can detect
+    it."""
+    _instance_lock_path(instance_dir).write_text(str(engine_pid))
 
 
 def launch(
@@ -653,6 +775,7 @@ def launch(
     extra_args: Sequence[str] = (),
     prefix: str | None = None,
     proton_path: str | None = None,
+    name: str | None = None,
     wait_timeout: float = 60.0,
     poll_interval: float = 0.5,
 ) -> LaunchResult:
@@ -681,6 +804,17 @@ def launch(
         proton_path: Proton build (``PROTONPATH``) — a compat-tools name like
             ``GE-Proton`` or a path. ``None`` resolves it from ``PROTONPATH``,
             then ``GE-Proton``.
+        name: Instance label for **multi-launch**. When given, an isolated data
+            tree is allocated under ``RESONITE_IO_INSTANCES_DIR`` (default
+            ``~/.resonite-io/instances/<name>/``): the WINEPREFIX and the
+            ``-DataPath`` / ``-CachePath`` / ``-LogsPath`` slots are auto-filled
+            from it (explicit ``prefix`` / ``options`` values still win), and a
+            per-instance Camera IPC queue token is injected so concurrent
+            instances do not share Resonite data or cross-talk on the camera
+            queue. Relaunching the *same* label while it is still running is
+            rejected. ``None`` keeps the legacy single-instance behaviour: shared
+            default paths and a guard that refuses to start if any engine is
+            already running.
         wait_timeout: Seconds to wait for both processes to appear.
         poll_interval: Seconds between process-table polls.
 
@@ -689,17 +823,30 @@ def launch(
 
     Raises:
         LauncherError: Resonite.exe / the mod / ``umu-run`` is missing, an
-            instance is already running, more than one engine/renderer is
-            detected, or a process did not appear before ``wait_timeout``.
+            instance is already running (the unnamed guard, or the same label),
+            more than one new engine/renderer appears from this launch, or a
+            process did not appear before ``wait_timeout``.
     """
     exe = _resolve_resonite_exe(resonite_exe)
     install_dir = os.path.dirname(os.path.realpath(exe))
 
-    already = _find_engine_pids(install_dir)
-    if already:
-        raise LauncherError(
-            f"Resonite is already running (engine pid(s) {already}). Stop it first "
-            "with `resoio terminate` before launching a new instance."
+    camera_queue: str | None = None
+    instance_dir: Path | None = None
+    if name is None:
+        # Legacy single-instance guard: refuse to start beside any running engine.
+        already = _find_engine_pids(install_dir)
+        if already:
+            raise LauncherError(
+                f"Resonite is already running (engine pid(s) {already}). Stop it "
+                "first with `resoio terminate`, or pass name=... / --name to launch "
+                "an isolated additional instance."
+            )
+    else:
+        _validate_instance_name(name)
+        instance_dir = Path(_instances_base_dir()) / name
+        _reject_if_instance_running(instance_dir, name)
+        prefix, options, camera_queue = _resolve_instance_paths(
+            name, instance_dir, prefix, options
         )
 
     argv, env, log_path = _build_command(
@@ -711,8 +858,15 @@ def launch(
         options=options,
         prefix=prefix,
         proton_path=proton_path,
+        camera_queue=camera_queue,
     )
     _logger.info("launching Resonite: %s (cwd=%s)", " ".join(argv), install_dir)
+
+    # Snapshot existing engine/renderer PIDs so _wait_for_new can pick out the
+    # ones this launch spawns by set difference (argv0 matching cannot tell two
+    # instances of the same install apart).
+    before_engines = set(_find_engine_pids(install_dir))
+    before_renderers = set(_find_renderer_pids(install_dir))
 
     # Detach fully: new session + closed stdio so the parent (CLI / caller) can
     # exit without signalling Resonite. PROTON_SET_GAME_DRIVE=0 (set in
@@ -739,12 +893,22 @@ def launch(
             log_handle.close()
 
     deadline = time.monotonic() + wait_timeout
-    resonite_pid = _wait_for_single(
-        lambda: _find_engine_pids(install_dir), "engine", deadline, poll_interval
+    resonite_pid = _wait_for_new(
+        lambda: _find_engine_pids(install_dir),
+        before_engines,
+        "engine",
+        deadline,
+        poll_interval,
     )
-    renderer_pid = _wait_for_single(
-        lambda: _find_renderer_pids(install_dir), "renderer", deadline, poll_interval
+    renderer_pid = _wait_for_new(
+        lambda: _find_renderer_pids(install_dir),
+        before_renderers,
+        "renderer",
+        deadline,
+        poll_interval,
     )
+    if instance_dir is not None:
+        _write_instance_lock(instance_dir, resonite_pid)
     _logger.info(
         "Resonite launched: resonite_pid=%d renderer_pid=%d", resonite_pid, renderer_pid
     )
@@ -834,3 +998,69 @@ def terminate(
         else 0
     )
     return LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
+
+
+def _engine_child_renderer(engine_pid: int, renderer_pids: set[int]) -> int | None:
+    """The renderer host PID parented under ``engine_pid``, if any.
+
+    Resonite's engine spawns the renderer (``RenderSystem.StartRenderer`` →
+    ``Process.Start``), so the renderer usually appears somewhere in the engine's
+    host process subtree. Used only to *group* a kill into engine/renderer pairs;
+    grouping is best-effort and never affects which processes get killed.
+    """
+    try:
+        children = psutil.Process(engine_pid).children(recursive=True)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+    for child in children:
+        if child.pid in renderer_pids:
+            return child.pid
+    return None
+
+
+def terminate_all(*, timeout: float = 3.0) -> list[LaunchResult]:
+    """Stop **every** running Resonite instance and return the pairs signalled.
+
+    Unlike :func:`terminate` (a single instance), this detects all engine and
+    renderer processes for the configured install and stages ``SIGTERM`` →
+    ``SIGKILL`` on each. Engines are grouped with their child renderer where the
+    process tree makes that visible; any renderer without a matching engine is
+    still killed and reported on its own (``resonite_pid=0``). Idempotent: PIDs
+    already gone are skipped and excluded from the result.
+
+    Args:
+        timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL`` (per PID).
+
+    Returns:
+        One :class:`LaunchResult` per instance actually signalled, in detection
+        order; an empty list means nothing was running.
+
+    Raises:
+        LauncherError: a detected PID is alive but is no longer the expected
+            Resonite process (a reused PID).
+    """
+    install_dir = _install_dir_for_detection()
+    renderers = set(_find_renderer_pids(install_dir))
+    paired: set[int] = set()
+    results: list[LaunchResult] = []
+
+    for engine_pid in _find_engine_pids(install_dir):
+        child = _engine_child_renderer(engine_pid, renderers)
+        killed_engine = _kill_pid(engine_pid, _ENGINE_ARGV0_SUFFIX, "engine", timeout)
+        killed_renderer = 0
+        if child is not None:
+            paired.add(child)
+            killed_renderer = _kill_pid(
+                child, _RENDERER_ARGV0_SUFFIX, "renderer", timeout
+            )
+        if killed_engine or killed_renderer:
+            results.append(
+                LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
+            )
+
+    for renderer_pid in sorted(renderers - paired):
+        killed = _kill_pid(renderer_pid, _RENDERER_ARGV0_SUFFIX, "renderer", timeout)
+        if killed:
+            results.append(LaunchResult(resonite_pid=0, renderer_pid=killed))
+
+    return results

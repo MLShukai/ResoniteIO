@@ -180,3 +180,43 @@ async def test_launch_passes_default_options_when_paths_unset(
 
     assert rc == 0
     assert captured["options"] == LaunchOptions()
+
+
+async def test_launch_forwards_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # --name on the CLI must reach launch() as name= so the launcher allocates an
+    # isolated per-instance data tree.
+    captured: dict[str, object] = {}
+
+    def _fake_launch(**kwargs: object):
+        captured.update(kwargs)
+        from resoio.launcher import LaunchResult
+
+        return LaunchResult(resonite_pid=11, renderer_pid=22)
+
+    monkeypatch.setattr("resoio.launcher.launch", _fake_launch)
+    args = _build_parser().parse_args(["launch", "--vanilla", "--name", "agent1"])
+    rc = await _amain(args)
+
+    assert rc == 0
+    assert captured["name"] == "agent1"
+
+
+async def test_launch_passes_none_name_when_unset(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Without --name, launch() receives name=None (single-instance default).
+    captured: dict[str, object] = {}
+
+    def _fake_launch(**kwargs: object):
+        captured.update(kwargs)
+        from resoio.launcher import LaunchResult
+
+        return LaunchResult(resonite_pid=11, renderer_pid=22)
+
+    monkeypatch.setattr("resoio.launcher.launch", _fake_launch)
+    rc = await _amain(_build_parser().parse_args(["launch", "--vanilla"]))
+
+    assert rc == 0
+    assert captured["name"] is None

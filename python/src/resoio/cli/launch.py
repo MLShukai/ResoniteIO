@@ -65,6 +65,16 @@ def register(
         ),
     )
     parser.add_argument(
+        "--name",
+        default=None,
+        help=(
+            "Instance label for multi-launch. Allocates an isolated data tree "
+            "(WINEPREFIX + data/cache/logs) and a private camera queue under "
+            "~/.resonite-io/instances/<name>/, so several instances run side by "
+            "side without sharing data. Omit for the single-instance default."
+        ),
+    )
+    parser.add_argument(
         "--data-path",
         default=None,
         help="Resonite database directory (-DataPath).",
@@ -117,6 +127,7 @@ async def _run(args: argparse.Namespace) -> int:
             extra_args=args.args,
             prefix=args.prefix,
             proton_path=args.proton_path,
+            name=args.name,
             wait_timeout=args.timeout,
         )
     except LauncherError as exc:
