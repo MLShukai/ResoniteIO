@@ -47,13 +47,16 @@ GitHub Release body. The format follows
 
 ### 🐛 Fixed
 
-- **`resoio launch` (without `--name`) froze right after the engine and renderer
-  came up**: an unnamed launch did not inject a Camera IPC queue token, so the
-  engine self-generated one at runtime that the renderer (a Wine child) never
-  inherited — the two bound different queues and the client hung waiting for
-  frames (`--name` was unaffected because it injects the token before exec).
-  `launch` now always injects a unique token before exec, so the engine and
-  renderer always agree on the queue.
+- **Camera froze right after the engine and renderer came up (no `--name`, and
+  on direct Gale / Steam launches)**: the engine self-generated a Camera IPC
+  queue token at runtime that the renderer (a separately-spawned Wine child)
+  never inherited, so the two bound different queues and the client hung waiting
+  for frames. The engine no longer self-generates a token. Instead the token is
+  always placed in the environment **before exec**: `resoio launch` injects a
+  unique one per instance (named or not), and a direct Gale / Steam launch sets
+  nothing, so the engine and renderer both fall back to the same fixed default
+  queue name. Either way both ends agree on one queue. (`--name` was already
+  unaffected because it injected the token before exec.)
 - **`resoio terminate-all` reported a single instance as two**: it paired an
   engine with its renderer only when the renderer appeared in the engine's host
   process subtree, but Wine often reparents the renderer out of it, so one

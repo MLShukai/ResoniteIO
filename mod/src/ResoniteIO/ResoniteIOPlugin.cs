@@ -81,26 +81,14 @@ public sealed class ResoniteIOPlugin : BasePlugin
     {
         Log = base.Log;
 
-        // 多重起動時の Camera IPC queue 衝突を防ぐため、インスタンス固有の queue token を
-        // 生成して自プロセス env に set する。renderer は engine の子プロセス
-        // (RenderSystem.StartRenderer の Process.Start, UseShellExecute=false) として
-        // この env を継承するので両側が同じ token を読む。renderer spawn は engine 起動の
-        // 早い段階 (OnEngineReady より前) なので set は必ず Load() で行う必要がある。
-        // launcher が外から token を注入済みならそれを尊重 (上書きしない)。
-        // QueueNameEnvVar は const のためインライン化され RendererShared を早期ロードしない。
-        if (
-            string.IsNullOrEmpty(
-                Environment.GetEnvironmentVariable(RendererShared.IpcSocketPaths.QueueNameEnvVar)
-            )
-        )
-        {
-            var token = "resonite-io-camera-" + Guid.NewGuid().ToString("N");
-            Environment.SetEnvironmentVariable(
-                RendererShared.IpcSocketPaths.QueueNameEnvVar,
-                token
-            );
-            Log.LogInfo($"Camera IPC queue token generated: {token}");
-        }
+        // Camera IPC queue token (RESONITE_IO_CAMERA_QUEUE) はここでは生成しない。
+        // engine が runtime に Environment.SetEnvironmentVariable で set しても、その値は
+        // 別プロセスとして起動する renderer に届かず (engine/renderer が別 queue を掴んで
+        // client が frame 待ちでハングする)。代わりに token は exec 前に env へ載せる:
+        //   - `resoio launch` 経由: launcher が起動前に instance 固有 token を注入し、
+        //     engine と renderer (Wine 子プロセス) が同じ env を継承して queue を分離する。
+        //   - Gale / Steam 直接起動: 何も set されず、両側が IpcSocketPaths.QueueName の
+        //     固定デフォルト名に fallback して一致する (単一インスタンス)。
 
         // resolver は Core 型に触れる前に attach する必要があるため、ManualLogSource を
         // 直接渡し ILogSink を経由しない (上記 remarks 参照)。
