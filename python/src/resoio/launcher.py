@@ -78,6 +78,13 @@ _DEFAULT_RESONITE_EXE: str = str(
 _ENGINE_ARGV0_SUFFIX: str = os.path.join("dotnet-runtime", "dotnet")
 _RENDERER_ARGV0_SUFFIX: str = os.path.join("Renderer", "Renderite.Renderer.exe")
 
+# Env var carrying the per-instance Camera IPC queue token shared by an engine and
+# its renderer (mirrors C# ``IpcSocketPaths.QueueNameEnvVar``). :func:`launch`
+# injects a unique value per instance *before exec* so it lands in both processes'
+# environment (the renderer inherits it as the engine's Wine child);
+# :func:`terminate_all` reads it back to pair an engine with its renderer.
+_CAMERA_QUEUE_ENV: str = "RESONITE_IO_CAMERA_QUEUE"
+
 
 class LauncherError(RuntimeError):
     """A ``resoio launch`` / ``terminate`` operation could not be completed.
@@ -576,13 +583,14 @@ def _build_command(
     # PROTONPATH は GE-Proton のような論理名も取るので abspath しない (WINEPREFIX のみ abspath)。
     if prefix is not None:
         env["WINEPREFIX"] = os.path.abspath(prefix)
-    # Per-instance Camera IPC queue token (multi-launch). The engine mod also
-    # self-generates one in its earliest load hook when this is unset, so single
-    # launches stay on the default queue; injecting it here keeps the token
-    # deterministic (label-derived) and lets the renderer child inherit the same
-    # value through the shared Wine session env.
+    # Per-instance Camera IPC queue token. :func:`launch` always injects one
+    # (named or not) so the engine and its renderer agree on the queue: setting it
+    # here, before exec, lands it in both processes' env (the renderer inherits it
+    # as the engine's Wine child). The engine mod only self-generates a token when
+    # this is unset — i.e. for a launch that did not go through this launcher (Gale
+    # / Steam directly), where setting the env at runtime is the only option left.
     if camera_queue is not None:
-        env["RESONITE_IO_CAMERA_QUEUE"] = camera_queue
+        env[_CAMERA_QUEUE_ENV] = camera_queue
     log_path: str | None = None
 
     if not vanilla:
@@ -775,13 +783,13 @@ def launch(
             isolated data tree under ``RESONITE_IO_INSTANCES_DIR`` (default
             ``~/.resonite-io/instances/<name>/``): the WINEPREFIX and the
             ``-DataPath`` / ``-CachePath`` / ``-LogsPath`` slots are auto-filled
-            from it (explicit ``prefix`` / ``options`` values still win), and a
-            per-instance Camera IPC queue token is injected so concurrent
-            instances do not share Resonite data or cross-talk on the camera
-            queue. It does **not** gate launching. ``None`` simply leaves those
-            paths at their defaults — run several instances yourself by passing a
-            distinct ``--data-path`` (and prefix) per launch. Either way ``launch``
-            never refuses just because another instance is already running.
+            from it (explicit ``prefix`` / ``options`` values still win). It does
+            **not** gate launching. ``None`` simply leaves those paths at their
+            defaults — run several instances yourself by passing a distinct
+            ``--data-path`` (and prefix) per launch. Either way ``launch`` always
+            injects a unique per-instance Camera IPC queue token (so the engine and
+            renderer agree on the queue and concurrent instances do not cross-talk),
+            and never refuses just because another instance is already running.
         wait_timeout: Seconds to wait for both processes to appear.
         poll_interval: Seconds between process-table polls.
 
@@ -797,10 +805,18 @@ def launch(
     exe = _resolve_resonite_exe(resonite_exe)
     install_dir = os.path.dirname(os.path.realpath(exe))
 
-    camera_queue: str | None = None
+    # Always inject a unique Camera IPC queue token so the engine and its renderer
+    # bind the same queue. A named launch derives it from the label data tree; an
+    # unnamed launch gets a random one. The token MUST be in the env before exec:
+    # the engine mod would otherwise self-generate one at runtime, which the
+    # renderer (a Wine child) never inherits, so the two bind different queues and
+    # the client freezes after both processes start.
+    camera_queue: str
     if name is not None:
         _validate_instance_name(name)
         prefix, options, camera_queue = _resolve_instance_paths(name, prefix, options)
+    else:
+        camera_queue = f"resonite-io-camera-{secrets.token_hex(8)}"
 
     argv, env, log_path = _build_command(
         exe,
@@ -951,13 +967,33 @@ def terminate(
     return LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
 
 
+def _instance_token(pid: int) -> str | None:
+    """The Camera IPC queue token in ``pid``'s environment, or ``None``.
+
+    An engine and its renderer share ``RESONITE_IO_CAMERA_QUEUE`` because
+    :func:`launch` injects a unique value per instance *before exec*, so it lands
+    in both processes' ``/proc/<pid>/environ`` (the renderer inherits it as the
+    engine's Wine child). This is the reliable key for pairing an engine with its
+    renderer in :func:`terminate_all`: the renderer is **not** always under the
+    engine in the host process tree (Wine reparents it), so the tree heuristic can
+    miss the pair and report one instance as two. ``None`` for a process without
+    the token (e.g. a launch that did not go through this launcher).
+    """
+    try:
+        token = psutil.Process(pid).environ().get(_CAMERA_QUEUE_ENV)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+    return token or None
+
+
 def _engine_child_renderer(engine_pid: int, renderer_pids: set[int]) -> int | None:
     """The renderer host PID parented under ``engine_pid``, if any.
 
     Resonite's engine spawns the renderer (``RenderSystem.StartRenderer`` →
-    ``Process.Start``), so the renderer usually appears somewhere in the engine's
-    host process subtree. Used only to *group* a kill into engine/renderer pairs;
-    grouping is best-effort and never affects which processes get killed.
+    ``Process.Start``), so the renderer *sometimes* appears in the engine's host
+    process subtree. This is the **fallback** pairing for a renderer that carries
+    no Camera IPC queue token (see :func:`_instance_token`); used only to *group* a
+    kill into engine/renderer pairs, never to decide which processes get killed.
     """
     try:
         children = psutil.Process(engine_pid).children(recursive=True)
@@ -969,15 +1005,37 @@ def _engine_child_renderer(engine_pid: int, renderer_pids: set[int]) -> int | No
     return None
 
 
+def _match_renderer(
+    engine_pid: int,
+    renderers: list[int],
+    renderers_by_token: dict[str, list[int]],
+    paired: set[int],
+) -> int | None:
+    """Pick the renderer belonging to ``engine_pid``, skipping ``paired`` ones.
+
+    Primary key is the shared Camera IPC queue token (reliable across Wine's
+    process-tree reparenting); falls back to the engine's host-process subtree for
+    a token-less instance. Returns ``None`` when no renderer can be attributed.
+    """
+    token = _instance_token(engine_pid)
+    if token is not None:
+        for candidate in renderers_by_token.get(token, ()):
+            if candidate not in paired:
+                return candidate
+    return _engine_child_renderer(engine_pid, set(renderers) - paired)
+
+
 def terminate_all(*, timeout: float = 3.0) -> list[LaunchResult]:
     """Stop **every** running Resonite instance and return the pairs signalled.
 
     Unlike :func:`terminate` (a single instance), this detects all engine and
     renderer processes for the configured install and stages ``SIGTERM`` →
-    ``SIGKILL`` on each. Engines are grouped with their child renderer where the
-    process tree makes that visible; any renderer without a matching engine is
-    still killed and reported on its own (``resonite_pid=0``). Idempotent: PIDs
-    already gone are skipped and excluded from the result.
+    ``SIGKILL`` on each. Engines are paired with their renderer by the shared
+    Camera IPC queue token (see :func:`_instance_token`; a single instance is one
+    pair, not two ``pid=0`` rows), falling back to the host process tree for a
+    token-less instance; any renderer that still has no matching engine is killed
+    and reported on its own (``resonite_pid=0``). Idempotent: PIDs already gone are
+    skipped and excluded from the result.
 
     Args:
         timeout: Seconds to wait after ``SIGTERM`` before ``SIGKILL`` (per PID).
@@ -991,25 +1049,38 @@ def terminate_all(*, timeout: float = 3.0) -> list[LaunchResult]:
             Resonite process (a reused PID).
     """
     install_dir = _install_dir_for_detection()
-    renderers = set(_find_renderer_pids(install_dir))
-    paired: set[int] = set()
+    engines = _find_engine_pids(install_dir)
+    renderers = _find_renderer_pids(install_dir)
     results: list[LaunchResult] = []
+    paired: set[int] = set()
 
-    for engine_pid in _find_engine_pids(install_dir):
-        child = _engine_child_renderer(engine_pid, renderers)
+    # Index renderers by their instance token so an engine can claim the renderer
+    # that shares its Camera IPC queue — the renderer is not reliably under the
+    # engine in the host process tree (Wine reparents it), so the token is what
+    # keeps a single instance from being reported as two ``pid=0`` rows.
+    renderers_by_token: dict[str, list[int]] = {}
+    for renderer_pid in renderers:
+        token = _instance_token(renderer_pid)
+        if token is not None:
+            renderers_by_token.setdefault(token, []).append(renderer_pid)
+
+    for engine_pid in engines:
+        renderer_pid = _match_renderer(
+            engine_pid, renderers, renderers_by_token, paired
+        )
         killed_engine = _kill_pid(engine_pid, _ENGINE_ARGV0_SUFFIX, "engine", timeout)
         killed_renderer = 0
-        if child is not None:
-            paired.add(child)
+        if renderer_pid is not None:
+            paired.add(renderer_pid)
             killed_renderer = _kill_pid(
-                child, _RENDERER_ARGV0_SUFFIX, "renderer", timeout
+                renderer_pid, _RENDERER_ARGV0_SUFFIX, "renderer", timeout
             )
         if killed_engine or killed_renderer:
             results.append(
                 LaunchResult(resonite_pid=killed_engine, renderer_pid=killed_renderer)
             )
 
-    for renderer_pid in sorted(renderers - paired):
+    for renderer_pid in sorted(set(renderers) - paired):
         killed = _kill_pid(renderer_pid, _RENDERER_ARGV0_SUFFIX, "renderer", timeout)
         if killed:
             results.append(LaunchResult(resonite_pid=0, renderer_pid=killed))

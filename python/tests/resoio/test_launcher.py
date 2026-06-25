@@ -81,11 +81,12 @@ def spawn() -> Iterator[Callable[..., int]]:
     """Spawn tracked child processes and reap them at teardown."""
     procs: list[subprocess.Popen[bytes]] = []
 
-    def _spawn(path: Path | str, *args: str) -> int:
+    def _spawn(path: Path | str, *args: str, env: dict[str, str] | None = None) -> int:
         proc = subprocess.Popen(
             [str(path), *args],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=env,
         )
         procs.append(proc)
         return proc.pid
@@ -956,6 +957,49 @@ def test_launch_unnamed_starts_beside_a_running_instance(
         _reap_extra(install, {existing_engine, existing_renderer})
 
 
+def test_launch_unnamed_injects_a_camera_queue_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Regression: an unnamed launch must inject a unique RESONITE_IO_CAMERA_QUEUE
+    # *before exec* so the engine and renderer bind the same Camera IPC queue.
+    # Without it the engine self-generates a token at runtime that the renderer
+    # (a Wine child) never inherits -> mismatched queues -> the client froze after
+    # both processes came up. The token is captured by a fake umu-run that records
+    # the env it was launched with; it must be non-empty and not the fixed default.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    monkeypatch.delenv("RESONITE_IO_CAMERA_QUEUE", raising=False)
+    env_dump = tmp_path / "umu_camera_queue.txt"
+    engine = install / "dotnet-runtime" / "dotnet"
+    renderer = install / "Renderer" / "Renderite.Renderer.exe"
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    umu = bindir / "umu-run"
+    umu.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s" "$RESONITE_IO_CAMERA_QUEUE" > "{env_dump}"\n'
+        f"setsid '{engine}' 60 </dev/null >/dev/null 2>&1 &\n"
+        f"setsid '{renderer}' 60 </dev/null >/dev/null 2>&1 &\n"
+        "exit 0\n"
+    )
+    umu.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    try:
+        launch(
+            resonite_exe=str(install / "Resonite.exe"),
+            vanilla=True,
+            wait_timeout=10.0,
+            poll_interval=0.05,
+        )
+        token = env_dump.read_text()
+        assert token, "no RESONITE_IO_CAMERA_QUEUE was injected for an unnamed launch"
+        assert token != "resonite-io-camera-frames"  # not the fixed engine default
+        assert token.startswith("resonite-io-camera-")
+    finally:
+        _reap_extra(install, set())
+
+
 def test_launch_named_starts_beside_a_running_instance_and_allocates_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
 ):
@@ -1067,3 +1111,30 @@ def test_terminate_all_returns_empty_when_nothing_running(
     monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
 
     assert terminate_all(timeout=3.0) == []
+
+
+def test_terminate_all_pairs_engine_and_renderer_by_camera_queue_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn: Callable[..., int]
+):
+    # An engine and its renderer share RESONITE_IO_CAMERA_QUEUE; the renderer is
+    # not reliably a host child of the engine (Wine reparents it), so terminate_all
+    # must pair them by that token rather than the process tree. A single instance
+    # must come back as ONE pair (engine + renderer), not two pid=0 rows, and two
+    # instances must pair correctly by their distinct tokens.
+    install = _make_install(tmp_path)
+    monkeypatch.setenv("RESONITE_EXE", str(install / "Resonite.exe"))
+    env_a = {**os.environ, "RESONITE_IO_CAMERA_QUEUE": "resonite-io-camera-a-1111"}
+    env_b = {**os.environ, "RESONITE_IO_CAMERA_QUEUE": "resonite-io-camera-b-2222"}
+    engine_a = spawn(install / "dotnet-runtime" / "dotnet", "60", env=env_a)
+    renderer_a = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60", env=env_a)
+    engine_b = spawn(install / "dotnet-runtime" / "dotnet", "60", env=env_b)
+    renderer_b = spawn(install / "Renderer" / "Renderite.Renderer.exe", "60", env=env_b)
+    _wait_pids(lambda: _find_engine_pids(str(install)), 2)
+    _wait_pids(lambda: _find_renderer_pids(str(install)), 2)
+
+    killed = terminate_all(timeout=3.0)
+
+    pairs = {(r.resonite_pid, r.renderer_pid) for r in killed}
+    assert pairs == {(engine_a, renderer_a), (engine_b, renderer_b)}
+    assert _wait_pids(lambda: _find_engine_pids(str(install)), 0) == []
+    assert _wait_pids(lambda: _find_renderer_pids(str(install)), 0) == []

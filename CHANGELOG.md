@@ -47,6 +47,19 @@ GitHub Release body. The format follows
 
 ### 🐛 Fixed
 
+- **`resoio launch` (without `--name`) froze right after the engine and renderer
+  came up**: an unnamed launch did not inject a Camera IPC queue token, so the
+  engine self-generated one at runtime that the renderer (a Wine child) never
+  inherited — the two bound different queues and the client hung waiting for
+  frames (`--name` was unaffected because it injects the token before exec).
+  `launch` now always injects a unique token before exec, so the engine and
+  renderer always agree on the queue.
+- **`resoio terminate-all` reported a single instance as two**: it paired an
+  engine with its renderer only when the renderer appeared in the engine's host
+  process subtree, but Wine often reparents the renderer out of it, so one
+  instance came back as two `pid=0` rows. Pairing now keys off the Camera IPC
+  queue token the engine and renderer share (falling back to the process tree),
+  so a single instance is reported as one engine/renderer pair.
 - **`resoio launch` hung on a host install under `$HOME`**: the renderer never
   started (and the engine waited forever) when launching from a Steam install
   beneath `$HOME`. umu/Proton's game-drive feature maps `$HOME` onto a Wine drive
