@@ -29,18 +29,26 @@ resoio --help
 | `resoio contact` | Contact | unary | Browse and manage contacts (friends) via nested subcommands: `list` (`--search` / `--filter all\|accepted\|requests` / `--include-hidden`), `get`, `search` (`--exact`), `add` (`--username`), `accept`, `remove`. `list` hides dash-hidden (ignored / blocked) contacts by default; `--include-hidden` shows them. The mutating ops (`add` / `accept` / `remove`) write the real cloud contact list. |
 | `resoio auth` | Auth | unary | Resonite cloud sign-in via nested subcommands: `login` (credential positional; password via env/stdin/prompt, never a flag), `logout`, `status`. |
 | `resoio cursor` | Cursor | unary | Set / center / get / release the desktop cursor. `set` and `center` hold the position until `release`. |
-| `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. `--prefix` (`WINEPREFIX`) and `--proton-path` (`PROTONPATH`, default `GE-Proton`) pick the Wine prefix and Proton build. `--data-path` / `--cache-path` / `--logs-path` relocate Resonite's database / cache / logs; any other Resonite launch option goes after `--` (e.g. `-- -Screen -Verbose`). Non-gRPC. |
-| `resoio terminate` | — (signals) | local process | Force-stop Resonite by killing the engine + renderer (`SIGTERM` → `SIGKILL`). Takes `[resonite_pid] [renderer_pid]` (from `launch`) or auto-detects the single running instance. Non-gRPC. |
+| `resoio launch` | — (umu-launcher) | local process | Start Resonite (engine + renderer) via umu-launcher and print both host PIDs. `-e/--exe` / `RESONITE_EXE` and `-p/--profile` / `MOD_PATH` select the install + mod profile; `--vanilla` skips the mod. `--prefix` (`WINEPREFIX`) and `--proton-path` (`PROTONPATH`, default `GE-Proton`) pick the Wine prefix and Proton build. `--data-path` / `--cache-path` / `--logs-path` relocate Resonite's database / cache / logs; any other Resonite launch option goes after `--` (e.g. `-- -Screen -Verbose`). `--name <label>` runs a **second instance** isolated under `~/.resonite-io/instances/<label>/` (own WINEPREFIX + data + Camera queue). Non-gRPC. |
+| `resoio terminate` | — (signals) | local process | Force-stop a single Resonite instance by killing the engine + renderer (`SIGTERM` → `SIGKILL`). Takes `[resonite_pid] [renderer_pid]` (from `launch`) or auto-detects the single running instance. Non-gRPC. |
+| `resoio terminate-all` | — (signals) | local process | Force-stop **every** running Resonite instance (`SIGTERM` → `SIGKILL` per process); prints one engine/renderer pair per instance (`--format human\|json`). The multi-instance counterpart to `terminate`. Non-gRPC. |
 | `resoio shutdown` | Lifecycle | unary | Ask the engine to quit gracefully (`Lifecycle.Shutdown`). Best-effort — on Linux the engine often hangs during teardown and never exits, so follow up with `terminate` when you need a guaranteed stop. Prints the engine's host PID (from `Info`). |
 
 `record` is the Resonite → Python capture command (it pulls Camera and Speaker), while `mic`
 is its independent Python → Resonite counterpart.
 
-`launch` / `terminate` are **local process control** (no gRPC). `launch` spawns the
-umu-launcher chain and waits until the **engine** (`resonite_pid`) and **renderer**
-(`renderer_pid`) host processes appear, printing both; it refuses to start a second instance.
-`terminate` signals those two PIDs (`SIGTERM` → `SIGKILL`); given no PIDs it auto-detects the
-single running instance (and errors if it finds more than one). Because they work from the host
+`launch` / `terminate` / `terminate-all` are **local process control** (no gRPC). `launch` spawns
+the umu-launcher chain and waits until the **engine** (`resonite_pid`) and **renderer**
+(`renderer_pid`) host processes appear, printing both. Without `--name` it is single-instance:
+it refuses to start beside a running engine. Pass `--name <label>` to run **several instances
+side by side** — each label gets an isolated data tree under `~/.resonite-io/instances/<label>/`
+(its own WINEPREFIX, `-DataPath` / `-CachePath` / `-LogsPath`, and a private Camera IPC queue so
+the instances never share data or cross-talk on the renderer queue); relaunching the same label
+while it runs is refused. Each engine binds its own `resonite-{pid}.sock`, so target a specific
+instance with `--socket ~/.resonite-io/resonite-{pid}.sock` (or `RESONITE_IO_SOCKET`).
+`terminate` signals one instance's two PIDs (`SIGTERM` → `SIGKILL`); given no PIDs it auto-detects
+the single running instance (and errors if it finds more than one — use explicit PIDs or
+`terminate-all`). `terminate-all` stops every instance at once. Because they work from the host
 process table they run before the UDS exists and regardless of whether the client is reachable.
 `shutdown`, by contrast, is a pure gRPC call (`Lifecycle.Shutdown`) that asks a **running**
 engine to quit gracefully — use it when the client is up and reachable. It is best-effort,
@@ -182,9 +190,15 @@ resoio launch --format json     # {"resonite_pid": ..., "renderer_pid": ...}
 # Pick a specific Wine prefix and Proton build
 resoio launch --prefix ~/prefixes/resonite --proton-path GE-Proton
 
-# Stop it — by the PIDs from launch, or auto-detect the running instance
+# Run two isolated instances side by side, then talk to a specific one by socket
+resoio launch --name a            # {"resonite_pid": 12345, ...}
+resoio launch --name b            # {"resonite_pid": 23456, ...}
+resoio --socket ~/.resonite-io/resonite-12345.sock ping
+
+# Stop it — by the PIDs from launch, auto-detect the single instance, or stop every instance
 resoio terminate 12345 12399
 resoio terminate
+resoio terminate-all --format json   # [{"resonite_pid": ..., "renderer_pid": ...}, ...]
 
 # ... or ask a running engine to quit gracefully over gRPC (prints the engine host PID)
 resoio shutdown
