@@ -165,7 +165,9 @@ RUN set -eux; \
 # 認証・設定 state を compose volume に載せるため先行作成する。
 # Resonite 用 named volume のマウント先も dev 所有で先行作成:
 #   /opt/resonite     : Resonite インストールコピー (HOME 外に置く理由は entrypoint 参照)
-#   /home/dev/.local/share : SteamRT / Proton + Resonite ユーザーデータ
+#   /home/dev/.local/share/Yellow Dog Man Studios : Resonite ユーザーデータ
+#     (resonite-share volume の実マウント先。ここまで dev 所有で先行作成しないと
+#      空 volume が root 所有で初期化され、engine が DataPath/ を作れず起動失敗する)
 #   /home/dev/prefix  : Wine prefix (WINEPREFIX)
 # /home/dev/.cache は resonite-cache volume のマウント先 (cache-uv とネスト)。
 # /home/dev/.config/gh は gh CLI の認証情報 (hosts.yml) を compose volume に載せ、
@@ -183,6 +185,7 @@ RUN groupadd -g ${USER_GID} dev \
       /opt/resonite \
       /home/dev/.local \
       /home/dev/.local/share \
+      "/home/dev/.local/share/Yellow Dog Man Studios" \
       /home/dev/prefix \
  && chown -R dev:dev /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
