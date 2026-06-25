@@ -1,3 +1,5 @@
+using System;
+
 namespace ResoniteIO.RendererShared;
 
 /// <summary>
@@ -13,7 +15,24 @@ public static class IpcSocketPaths
 {
     public const string OwnerId = "net.mlshukai.resonite-io.camera";
 
-    public const string QueueName = "resonite-io-camera-frames";
+    /// <summary><see cref="QueueName"/> を上書きする環境変数名。</summary>
+    /// <remarks>
+    /// 多重起動時に各インスタンスの queue を分離するための逃げ道。engine プロセスが
+    /// 起動最早期 (<c>ResoniteIOPlugin.Load</c>) でこの env を set し、renderer は
+    /// engine の子プロセスとして同じ値を継承するため、両側が同じ token を読む。
+    /// 未設定時は従来固定名 (<see cref="_defaultQueueName"/>) に fallback し、
+    /// 単一起動・既存デプロイの挙動を保つ。<c>GrpcHost.ResolveSocketPath</c> と同じ
+    /// 「env override → 既定値」パターン。
+    /// </remarks>
+    public const string QueueNameEnvVar = "RESONITE_IO_CAMERA_QUEUE";
+
+    private const string _defaultQueueName = "resonite-io-camera-frames";
+
+    /// <summary>共有メモリ queue の名前。<see cref="QueueNameEnvVar"/> で上書き可能。</summary>
+    public static string QueueName =>
+        Environment.GetEnvironmentVariable(QueueNameEnvVar) is { Length: > 0 } overridden
+            ? overridden
+            : _defaultQueueName;
 
     public const string FrameMessageId = "frame";
 

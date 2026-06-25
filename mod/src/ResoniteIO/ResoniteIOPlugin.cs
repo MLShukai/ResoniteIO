@@ -81,6 +81,27 @@ public sealed class ResoniteIOPlugin : BasePlugin
     {
         Log = base.Log;
 
+        // 多重起動時の Camera IPC queue 衝突を防ぐため、インスタンス固有の queue token を
+        // 生成して自プロセス env に set する。renderer は engine の子プロセス
+        // (RenderSystem.StartRenderer の Process.Start, UseShellExecute=false) として
+        // この env を継承するので両側が同じ token を読む。renderer spawn は engine 起動の
+        // 早い段階 (OnEngineReady より前) なので set は必ず Load() で行う必要がある。
+        // launcher が外から token を注入済みならそれを尊重 (上書きしない)。
+        // QueueNameEnvVar は const のためインライン化され RendererShared を早期ロードしない。
+        if (
+            string.IsNullOrEmpty(
+                Environment.GetEnvironmentVariable(RendererShared.IpcSocketPaths.QueueNameEnvVar)
+            )
+        )
+        {
+            var token = "resonite-io-camera-" + Guid.NewGuid().ToString("N");
+            Environment.SetEnvironmentVariable(
+                RendererShared.IpcSocketPaths.QueueNameEnvVar,
+                token
+            );
+            Log.LogInfo($"Camera IPC queue token generated: {token}");
+        }
+
         // resolver は Core 型に触れる前に attach する必要があるため、ManualLogSource を
         // 直接渡し ILogSink を経由しない (上記 remarks 参照)。
         var pluginDirectory =
