@@ -97,7 +97,7 @@ ______________________________________________________________________
 
 ## 5. devcontainer 内で Resonite を起動 (`just resonite-launch`)
 
-devcontainer 内で Resonite を直接起動できる。ro bind の `/resonite` から書込可能な `/opt/resonite` への rsync は `.devcontainer/entrypoint.sh` が container 起動時に行う (初回は install コピー、2 回目以降は差分のみ)。`resoio launch` (`python/src/resoio/launcher.py`) が `umu-run` (umu-launcher/Proton) で `RESONITE_EXE` (= `/opt/resonite/Resonite.exe`) を起動する。初回は GE-Proton の DL でも時間がかかる。
+devcontainer 内で Resonite を直接起動できる。ro bind の `/resonite` から書込可能な `/opt/resonite` への rsync は `.devcontainer/entrypoint.sh` が container 起動時に行う (初回は install コピー、2 回目以降は差分のみ)。`resoio launch` (`python/src/resoio/launcher.py`) が `umu-run` (umu-launcher/Proton) で `RESONITE_EXE` (= `/opt/resonite/Resonite.exe`) を起動する。GE-Proton はバージョン固定で image に prefetch 済み (`PROTONPATH=/opt/proton/GE-Proton10-34`) なので起動時の Proton DL は発生しない。初回は install コピー (~2GB) で時間がかかる。
 
 起動・停止は以下:
 
